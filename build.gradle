@@ -10,6 +10,7 @@ plugins {
     // Apply the java-library plugin for API and implementation separation.
     id 'java-library'
     id 'com.diffplug.spotless' version '6.0.5'
+    id 'org.checkerframework' version '0.6.4'
 }
 
 repositories {
@@ -41,6 +42,15 @@ task requireJavadoc(type: JavaExec) {
     mainClass = "org.plumelib.javadoc.RequireJavadoc"
     classpath = configurations.requireJavadoc
     args "src/main/java"
+}
+
+checkerFramework {
+    checkers = [
+            'org.checkerframework.checker.nullness.NullnessChecker',
+            'org.checkerframework.checker.resourceleak.ResourceLeakChecker',
+            'org.checkerframework.checker.interning.InterningChecker',
+            'org.checkerframework.checker.signature.SignatureChecker'
+    ]
 }
 
 spotless {
