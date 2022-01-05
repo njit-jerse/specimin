@@ -3,7 +3,7 @@ plugins {
     // Apply the java-library plugin for API and implementation separation.
     id 'java-library'
     id 'com.diffplug.spotless' version '6.0.5'
-    id 'org.checkerframework' version '0.6.4'
+    id 'org.checkerframework' version '0.6.6'
     id("net.ltgt.errorprone") version "2.0.2"
 }
 
@@ -13,6 +13,11 @@ repositories {
 }
 
 dependencies {
+
+    api 'com.github.javaparser:javaparser-symbol-solver-core:3.23.1'
+
+    implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
+
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
 
