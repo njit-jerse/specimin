@@ -52,6 +52,7 @@ checkerFramework {
             'org.checkerframework.checker.interning.InterningChecker',
             'org.checkerframework.checker.signature.SignatureChecker'
     ]
+    excludeTests = true
 }
 
 spotless {
