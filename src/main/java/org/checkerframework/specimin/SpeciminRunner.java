@@ -23,7 +23,7 @@ public class SpeciminRunner {
    *
    * @param args the arguments to Specimin
    */
-  public static void main(String... args) {
+  public static void main(String... args) throws IOException {
     OptionParser optionParser = new OptionParser();
 
     // This option is the root of the source directory of the target files. It is used
@@ -55,6 +55,14 @@ public class SpeciminRunner {
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
       LexicalPreservingPrinter.setup(target.getValue());
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
+      // Create any parts of the directory structure that don't already exist.
+      Path dirContainingOutputFile = targetOutputPath.getParent();
+      // This null test is very defensive and might not be required? I think getParent can
+      // only return null if its input was a single element path, which targetOutputPath
+      // should not be unless the user made an error.
+      if (dirContainingOutputFile != null) {
+        Files.createDirectories(dirContainingOutputFile);
+      }
       try {
         Files.write(
             targetOutputPath,
@@ -74,15 +82,7 @@ public class SpeciminRunner {
    * @return the compilation unit representing the code in the file at the path, or exit with an
    *     error
    */
-  private static CompilationUnit parseJavaFile(String root, String path) {
-    CompilationUnit result = null;
-    try {
-      result = StaticJavaParser.parse(Path.of(root, path));
-    } catch (IOException f) {
-      System.out.println("failed to parse " + path + ". Exiting.");
-      System.out.println("error: " + f);
-      System.exit(1);
-    }
-    return result;
+  private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
+    return StaticJavaParser.parse(Path.of(root, path));
   }
 }

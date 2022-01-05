@@ -19,7 +19,7 @@ import org.junit.Test;
 public class NoDependenciesReturnsSameTest {
   @Test
   @SuppressWarnings("all")
-  public void runTest() {
+  public void runTest() throws IOException {
     // Create output directory
     Path outputDir = null;
     try {
@@ -38,7 +38,7 @@ public class NoDependenciesReturnsSameTest {
         "--outputDirectory",
         outputDir.toAbsolutePath().toString(),
         "--root",
-        Path.of("src/test/resources/nodependenciesreturnsame/input/").toAbsolutePath().toString(),
+        Path.of("src/test/resources/nodependenciesreturnssame/input/").toAbsolutePath().toString(),
         "--targetFiles",
         "com/example/Simple.java");
 
@@ -51,12 +51,10 @@ public class NoDependenciesReturnsSameTest {
       return;
     } else {
       builder.command(
-          "sh",
-          "-c",
           "diff",
           "-r",
           outputDir.toAbsolutePath().toString(),
-          Path.of("src/test/resources/nodependenciesreturnsame/expected")
+          Path.of("src/test/resources/nodependenciesreturnssame/expected")
               .toAbsolutePath()
               .toString());
     }
@@ -68,7 +66,9 @@ public class NoDependenciesReturnsSameTest {
       Assert.fail("cannot start diff process: " + e);
       return;
     }
-    StreamGobbler streamGobbler = new StreamGobbler(process.getInputStream(), System.out::println);
+    StringBuilder processOutput = new StringBuilder();
+    StreamGobbler streamGobbler =
+        new StreamGobbler(process.getInputStream(), s -> processOutput.append(s));
     Executors.newSingleThreadExecutor().submit(streamGobbler);
     int exitCode = 0;
     try {
@@ -77,7 +77,10 @@ public class NoDependenciesReturnsSameTest {
       Assert.fail("diff process interrupted: " + e);
       return;
     }
-    Assert.assertEquals(0, exitCode);
+    Assert.assertEquals(
+        "Diff failed with the following output: " + processOutput.toString() + "\n Error codes: ",
+        0,
+        exitCode);
   }
 
   private static class StreamGobbler implements Runnable {
