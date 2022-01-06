@@ -5,9 +5,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import org.junit.Assert;
 
@@ -79,7 +81,7 @@ public class SpeciminTestExecutor {
     StringBuilder processOutput = new StringBuilder();
     StreamGobbler streamGobbler =
         new StreamGobbler(process.getInputStream(), processOutput::append);
-    Executors.newSingleThreadExecutor().submit(streamGobbler);
+    Future<?> unused_result = Executors.newSingleThreadExecutor().submit(streamGobbler);
     int exitCode;
     try {
       exitCode = process.waitFor();
@@ -105,7 +107,9 @@ public class SpeciminTestExecutor {
 
     @Override
     public void run() {
-      new BufferedReader(new InputStreamReader(inputStream)).lines().forEach(consumer);
+      new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+          .lines()
+          .forEach(consumer);
     }
   }
 }
