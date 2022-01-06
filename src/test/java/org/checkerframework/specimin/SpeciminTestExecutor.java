@@ -32,9 +32,10 @@ public class SpeciminTestExecutor {
    * org.junit.Test} annotation that contains a single call to this method.
    *
    * @param testName the name of the test folder
+   * @param targetFiles the targeted files, separated by spaces
    * @throws IOException if some operation fails
    */
-  public static void runTest(String testName) throws IOException {
+  public static void runTest(String testName, String targetFiles) throws IOException {
     // Create output directory
     Path outputDir = null;
     try {
@@ -54,7 +55,7 @@ public class SpeciminTestExecutor {
         "--root",
         Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString(),
         "--targetFiles",
-        "com/example/Simple.java");
+        targetFiles);
 
     // Diff the files to ensure that specimin's output is what we expect
     ProcessBuilder builder = new ProcessBuilder();

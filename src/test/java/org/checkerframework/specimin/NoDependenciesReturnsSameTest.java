@@ -10,6 +10,6 @@ import org.junit.Test;
 public class NoDependenciesReturnsSameTest {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest("nodependenciesreturnssame");
+    SpeciminTestExecutor.runTest("nodependenciesreturnssame", "com/example/Simple.java");
   }
 }
