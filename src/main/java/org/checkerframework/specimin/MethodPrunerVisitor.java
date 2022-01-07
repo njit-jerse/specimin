@@ -46,12 +46,15 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved)) {
+      System.out.println("trying to keep this method: " + resolved);
       return super.visit(methodDecl, p);
     } else if (methodsToEmpty.contains(resolved)) {
+      System.out.println("trying to replace this method: " + resolved);
       methodDecl.removeBody();
       methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return methodDecl;
     } else {
+      System.out.println("trying to remove this method: " + resolved);
       methodDecl.remove();
       return methodDecl;
     }
