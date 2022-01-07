@@ -67,7 +67,7 @@ public class SpeciminTestExecutor {
     } else {
       builder.command(
           "diff",
-          "-r",
+          "-qr",
           outputDir.toAbsolutePath().toString(),
           Path.of("src/test/resources/" + testName + "/expected").toAbsolutePath().toString());
     }
@@ -91,7 +91,11 @@ public class SpeciminTestExecutor {
       return;
     }
     Assert.assertEquals(
-        "Diff failed with the following output: " + processOutput + "\n Error codes: ",
+        "Diff failed with the following output: "
+            + processOutput
+            + "\n Output directory: "
+            + outputDir
+            + "\n Error codes: ",
         0,
         exitCode);
   }

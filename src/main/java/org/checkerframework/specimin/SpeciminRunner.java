@@ -72,7 +72,7 @@ public class SpeciminRunner {
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
 
-    TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodName);
+    TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodFullName);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);

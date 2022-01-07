@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
@@ -23,14 +24,22 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
    * Creates the pruner. All methods this pruner encounters other than those in its input sets will
    * be removed entirely.
    *
-   * @param methodsToEmpty the set of methods whose bodies should be removed
    * @param methodsToKeep the set of methods whose bodies should be kept intact (usually the target
    *     methods for specimin)
+   * @param methodsToEmpty the set of methods whose bodies should be removed
    */
   public MethodPrunerVisitor(
-      Set<ResolvedMethodDeclaration> methodsToEmpty, Set<ResolvedMethodDeclaration> methodsToKeep) {
-    this.methodsToEmpty = methodsToEmpty;
+      Set<ResolvedMethodDeclaration> methodsToKeep, Set<ResolvedMethodDeclaration> methodsToEmpty) {
     this.methodsToLeaveUnchanged = methodsToKeep;
+    this.methodsToEmpty = methodsToEmpty;
+
+    for (ResolvedMethodDeclaration rmd : methodsToEmpty) {
+      System.out.println("empty this method: " + rmd);
+    }
+
+    for (ResolvedMethodDeclaration rmd : methodsToKeep) {
+      System.out.println("keep this method: " + rmd);
+    }
   }
 
   @Override
@@ -40,6 +49,7 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
       return super.visit(methodDecl, p);
     } else if (methodsToEmpty.contains(resolved)) {
       methodDecl.removeBody();
+      methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return methodDecl;
     } else {
       methodDecl.remove();
