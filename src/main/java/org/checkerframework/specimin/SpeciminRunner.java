@@ -3,6 +3,12 @@ package org.checkerframework.specimin;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
+import com.github.javaparser.symbolsolver.JavaSymbolSolver;
+import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -42,13 +48,42 @@ public class SpeciminRunner {
 
     String root = options.valueOf(rootOption);
     List<String> targetFiles = options.valuesOf(targetFilesOption);
+
+    // Set up the parser's symbol solver, so that we can resolve definitions.
+    TypeSolver typeSolver =
+        new CombinedTypeSolver(
+            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
+    StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
+
     // Keys are paths to files, values are parsed ASTs
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
-    // TODO: actually do stuff here.
+    // TODO: this is just for testing, to figure out what the best input format
+    // for specifying the target method is. Replace it with an option.
+    String targetMethodFullName = "com.example.Simple#bar()";
+    String targetMethodName = "bar";
+    String targetClassName = "com.example.Simple";
+
+    // Use a two-phase approach: the first phase finds the target(s) and records
+    // what specifications they use, and the second phase takes that information
+    // and removes all non-used code.
+
+    TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodName);
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(finder, null);
+    }
+
+    MethodPrunerVisitor methodPruner =
+        new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMethods());
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(methodPruner, null);
+    }
 
     String outputDirectory = options.valueOf(outputDirectoryOption);
 
