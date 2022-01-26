@@ -10,6 +10,7 @@ import org.junit.Test;
 public class OneFileSimpleTest {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest("onefilesimple", "com/example/Simple.java");
+    SpeciminTestExecutor.runTest(
+        "onefilesimple", "com/example/Simple.java", "com.example.Simple#bar()");
   }
 }

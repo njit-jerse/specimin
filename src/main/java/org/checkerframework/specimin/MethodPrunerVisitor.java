@@ -14,47 +14,41 @@ import java.util.Set;
  */
 public class MethodPrunerVisitor extends ModifierVisitor<Void> {
 
-  /** The methods that should NOT be touched by this pruner. */
-  private Set<ResolvedMethodDeclaration> methodsToLeaveUnchanged;
+  /**
+   * The methods that should NOT be touched by this pruner. The strings representing the method are
+   * those returned by ResolvedMethodDeclaration#getQualifiedSignature.
+   */
+  private Set<String> methodsToLeaveUnchanged;
 
-  /** The methods whose bodies should be pruned. */
-  private Set<ResolvedMethodDeclaration> methodsToEmpty;
+  /**
+   * The methods whose bodies should be pruned. The strings representing the method are those
+   * returned by ResolvedMethodDeclaration#getQualifiedSignature.
+   */
+  private Set<String> methodsToEmpty;
 
   /**
    * Creates the pruner. All methods this pruner encounters other than those in its input sets will
-   * be removed entirely.
+   * be removed entirely. For both arguments, the Strings should be in the format produced by
+   * ResolvedMethodDeclaration#getQualifiedSignature.
    *
    * @param methodsToKeep the set of methods whose bodies should be kept intact (usually the target
    *     methods for specimin)
    * @param methodsToEmpty the set of methods whose bodies should be removed
    */
-  public MethodPrunerVisitor(
-      Set<ResolvedMethodDeclaration> methodsToKeep, Set<ResolvedMethodDeclaration> methodsToEmpty) {
+  public MethodPrunerVisitor(Set<String> methodsToKeep, Set<String> methodsToEmpty) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.methodsToEmpty = methodsToEmpty;
-
-    for (ResolvedMethodDeclaration rmd : methodsToEmpty) {
-      System.out.println("empty this method: " + rmd);
-    }
-
-    for (ResolvedMethodDeclaration rmd : methodsToKeep) {
-      System.out.println("keep this method: " + rmd);
-    }
   }
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
-    if (methodsToLeaveUnchanged.contains(resolved)) {
-      System.out.println("trying to keep this method: " + resolved);
+    if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       return super.visit(methodDecl, p);
-    } else if (methodsToEmpty.contains(resolved)) {
-      System.out.println("trying to replace this method: " + resolved);
-      methodDecl.removeBody();
+    } else if (methodsToEmpty.contains(resolved.getQualifiedSignature())) {
       methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return methodDecl;
     } else {
-      System.out.println("trying to remove this method: " + resolved);
       methodDecl.remove();
       return methodDecl;
     }

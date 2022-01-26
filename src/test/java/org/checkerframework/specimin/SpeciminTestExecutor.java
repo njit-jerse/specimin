@@ -33,9 +33,12 @@ public class SpeciminTestExecutor {
    *
    * @param testName the name of the test folder
    * @param targetFiles the targeted files, separated by spaces
+   * @param targetMethods the targeted methods, separated by spaces, each in the format
+   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
    * @throws IOException if some operation fails
    */
-  public static void runTest(String testName, String targetFiles) throws IOException {
+  public static void runTest(String testName, String targetFiles, String targetMethods)
+      throws IOException {
     // Create output directory
     Path outputDir = null;
     try {
@@ -55,7 +58,9 @@ public class SpeciminTestExecutor {
         "--root",
         Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString(),
         "--targetFiles",
-        targetFiles);
+        targetFiles,
+        "--targetMethods",
+        targetMethods);
 
     // Diff the files to ensure that specimin's output is what we expect
     ProcessBuilder builder = new ProcessBuilder();
@@ -95,6 +100,8 @@ public class SpeciminTestExecutor {
             + processOutput
             + "\n Output directory: "
             + outputDir
+            + "\n diff command: "
+            + String.join(" ", builder.command())
             + "\n Error codes: ",
         0,
         exitCode);

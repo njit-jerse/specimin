@@ -5,8 +5,9 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
-import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -31,12 +32,23 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * The methods that were actually used by the targets, and therefore ought to have their
-   * specifications (but not bodies) preserved.
+   * specifications (but not bodies) preserved. The Strings in the set are the fully-qualified
+   * names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
    */
-  private Set<ResolvedMethodDeclaration> usedMethods = new HashSet<>();
+  private final Set<String> usedMethods = new HashSet<>();
 
-  /** The resolved target methods. */
-  private Set<ResolvedMethodDeclaration> targetMethods = new HashSet<>();
+  /**
+   * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
+   * by ResolvedMethodDeclaration#getQualifiedSignature.
+   */
+  private final Set<String> targetMethods = new HashSet<>();
+
+  /**
+   * A local copy of the input list of methods. A method is removed from this copy when it is
+   * located. If the visitor has been run on all source files and this list isn't empty, that
+   * usually indicates an error.
+   */
+  private final List<String> unfoundMethods;
 
   /**
    * Create a new target method finding visitor.
@@ -44,29 +56,40 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param methodNames the names of the target methods, the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
    */
-  public TargetMethodFinderVisitor(String... methodNames) {
+  public TargetMethodFinderVisitor(List<String> methodNames) {
     targetMethodNames = new HashSet<>();
-    for (String methodName : methodNames) {
-      targetMethodNames.add(methodName);
-    }
+    targetMethodNames.addAll(methodNames);
+    unfoundMethods = new ArrayList<>(methodNames);
+  }
+
+  /**
+   * Returns the methods that so far this visitor has not located from its target list. Usually,
+   * this should be checked after running the visitor to ensure that it is empty.
+   *
+   * @return the methods that so far this visitor has not located from its target list
+   */
+  public List<String> getUnfoundMethods() {
+    return unfoundMethods;
   }
 
   /**
    * Get the methods that this visitor has concluded that the target method(s) use, and therefore
-   * ought to be retained.
+   * ought to be retained. The Strings in the set are the fully-qualified names, as returned by
+   * ResolvedMethodDeclaration#getQualifiedSignature.
    *
    * @return the used methods
    */
-  public Set<ResolvedMethodDeclaration> getUsedMethods() {
+  public Set<String> getUsedMethods() {
     return usedMethods;
   }
 
   /**
-   * Get the target methods that this visitor has encountered so far.
+   * Get the target methods that this visitor has encountered so far. The Strings in the set are the
+   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
    *
    * @return the target methods
    */
-  public Set<ResolvedMethodDeclaration> getTargetMethods() {
+  public Set<String> getTargetMethods() {
     return targetMethods;
   }
 
@@ -105,7 +128,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     System.out.println(methodName);
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
-      targetMethods.add(method.resolve());
+      targetMethods.add(method.resolve().getQualifiedSignature());
+      unfoundMethods.remove(methodName);
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
@@ -115,7 +139,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(call.resolve());
+      usedMethods.add(call.resolve().getQualifiedSignature());
     }
     return super.visit(call, p);
   }

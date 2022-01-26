@@ -40,6 +40,11 @@ public class SpeciminRunner {
     // target method(s) - from the root.
     OptionSpec<String> targetFilesOption = optionParser.accepts("targetFiles").withRequiredArg();
 
+    // This option is the target methods, specified in the format
+    // class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+    OptionSpec<String> targetMethodsOption =
+        optionParser.accepts("targetMethods").withRequiredArg();
+
     // The directory in which to output the results.
     OptionSpec<String> outputDirectoryOption =
         optionParser.accepts("outputDirectory").withRequiredArg();
@@ -62,33 +67,38 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
-    // TODO: this is just for testing, to figure out what the best input format
-    // for specifying the target method is. Replace it with an option.
-    String targetMethodFullName = "com.example.Simple#bar()";
-    String targetMethodName = "bar";
-    String targetClassName = "com.example.Simple";
+    List<String> targetMethodNames = options.valuesOf(targetMethodsOption);
 
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
 
-    TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodFullName);
+    TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodNames);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
+    }
+
+    List<String> unfoundMethods = finder.getUnfoundMethods();
+    if (!unfoundMethods.isEmpty()) {
+      throw new RuntimeException(
+          "could not located the following target methods in the target files: "
+              + String.join(", ", unfoundMethods));
     }
 
     MethodPrunerVisitor methodPruner =
         new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMethods());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
+      // This must happen before any modifications to each compilation unit, or
+      // the printer won't know about them. (It registers an observer.)
+      LexicalPreservingPrinter.setup(cu);
       cu.accept(methodPruner, null);
     }
 
     String outputDirectory = options.valueOf(outputDirectoryOption);
 
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
-      LexicalPreservingPrinter.setup(target.getValue());
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
