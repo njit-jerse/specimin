@@ -84,7 +84,7 @@ public class SpeciminRunner {
     List<String> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
-          "could not located the following target methods in the target files: "
+          "Specimin could not locate the following target methods in the target files: "
               + String.join(", ", unfoundMethods));
     }
 
