@@ -8,6 +8,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
@@ -32,12 +34,12 @@ public class SpeciminTestExecutor {
    * org.junit.Test} annotation that contains a single call to this method.
    *
    * @param testName the name of the test folder
-   * @param targetFiles the targeted files, separated by spaces
-   * @param targetMethods the targeted methods, separated by spaces, each in the format
+   * @param targetFiles the targeted files
+   * @param targetMethods the targeted methods, each in the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
    * @throws IOException if some operation fails
    */
-  public static void runTest(String testName, String targetFiles, String targetMethods)
+  public static void runTest(String testName, String[] targetFiles, String[] targetMethods)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -51,16 +53,21 @@ public class SpeciminTestExecutor {
       Assert.fail("temporary directory for output was null");
       return;
     }
+
+    // Construct the list of arguments.
+    List<String> speciminArgs = new ArrayList<>();
+    speciminArgs.add("--outputDirectory");
+    speciminArgs.add(outputDir.toAbsolutePath().toString());
+    speciminArgs.add("--root");
+    speciminArgs.add(
+        Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString());
+    speciminArgs.add("--targetFiles");
+    speciminArgs.addAll(List.of(targetFiles));
+    speciminArgs.add("--targetMethods");
+    speciminArgs.addAll(List.of(targetMethods));
+
     // Run specimin on target
-    SpeciminRunner.main(
-        "--outputDirectory",
-        outputDir.toAbsolutePath().toString(),
-        "--root",
-        Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString(),
-        "--targetFiles",
-        targetFiles,
-        "--targetMethods",
-        targetMethods);
+    SpeciminRunner.main(speciminArgs.toArray(new String[0]));
 
     // Diff the files to ensure that specimin's output is what we expect
     ProcessBuilder builder = new ProcessBuilder();

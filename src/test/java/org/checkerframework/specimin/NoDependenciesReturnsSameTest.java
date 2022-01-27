@@ -11,6 +11,8 @@ public class NoDependenciesReturnsSameTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTest(
-        "nodependenciesreturnssame", "com/example/Simple.java", "com.example.Simple#test()");
+        "nodependenciesreturnssame",
+        new String[] {"com/example/Simple.java"},
+        new String[] {"com.example.Simple#test()"});
   }
 }
