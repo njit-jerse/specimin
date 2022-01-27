@@ -120,7 +120,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
-    // TODO: check whether this is a target method where the "true" is on the next line.
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // The substring here is to remove the method's return type. Return types cannot contain spaces.
     // TODO: test this with annotations
