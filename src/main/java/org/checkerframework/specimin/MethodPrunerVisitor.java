@@ -1,9 +1,11 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import java.util.Set;
 
@@ -51,6 +53,20 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
     } else {
       methodDecl.remove();
       return methodDecl;
+    }
+  }
+
+  @Override
+  public Visitable visit(ConstructorDeclaration constructorDecl, Void p) {
+    ResolvedConstructorDeclaration resolved = constructorDecl.resolve();
+    if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
+      return super.visit(constructorDecl, p);
+    } else if (methodsToEmpty.contains(resolved.getQualifiedSignature())) {
+      constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      return constructorDecl;
+    } else {
+      constructorDecl.remove();
+      return constructorDecl;
     }
   }
 }

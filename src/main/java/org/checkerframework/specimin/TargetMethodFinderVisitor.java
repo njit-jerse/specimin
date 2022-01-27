@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import java.util.ArrayList;
@@ -11,7 +12,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The main visitor for Specimin's' first phase, which locates the target method(s) and compiles
+ * The main visitor for Specimin's first phase, which locates the target method(s) and compiles
  * information on what specifications they use.
  */
 public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
@@ -125,7 +126,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // TODO: test this with annotations
     String methodName =
         this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
-    System.out.println(methodName);
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
@@ -142,5 +142,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       usedMethods.add(call.resolve().getQualifiedSignature());
     }
     return super.visit(call, p);
+  }
+
+  @Override
+  public Visitable visit(ObjectCreationExpr newExpr, Void p) {
+    if (insideTargetMethod) {
+      usedMethods.add(newExpr.resolve().getQualifiedSignature());
+    }
+    return super.visit(newExpr, p);
   }
 }

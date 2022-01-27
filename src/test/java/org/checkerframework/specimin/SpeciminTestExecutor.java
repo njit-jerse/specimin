@@ -61,10 +61,14 @@ public class SpeciminTestExecutor {
     speciminArgs.add("--root");
     speciminArgs.add(
         Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString());
-    speciminArgs.add("--targetFiles");
-    speciminArgs.addAll(List.of(targetFiles));
-    speciminArgs.add("--targetMethods");
-    speciminArgs.addAll(List.of(targetMethods));
+    for (String targetFile : targetFiles) {
+      speciminArgs.add("--targetFile");
+      speciminArgs.add(targetFile);
+    }
+    for (String targetMethod : targetMethods) {
+      speciminArgs.add("--targetMethod");
+      speciminArgs.add(targetMethod);
+    }
 
     // Run specimin on target
     SpeciminRunner.main(speciminArgs.toArray(new String[0]));

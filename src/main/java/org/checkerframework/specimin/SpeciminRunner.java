@@ -38,12 +38,11 @@ public class SpeciminRunner {
 
     // This option is the relative paths to the target file(s) - the .java file(s) containing
     // target method(s) - from the root.
-    OptionSpec<String> targetFilesOption = optionParser.accepts("targetFiles").withRequiredArg();
+    OptionSpec<String> targetFilesOption = optionParser.accepts("targetFile").withRequiredArg();
 
     // This option is the target methods, specified in the format
     // class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
-    OptionSpec<String> targetMethodsOption =
-        optionParser.accepts("targetMethods").withRequiredArg();
+    OptionSpec<String> targetMethodsOption = optionParser.accepts("targetMethod").withRequiredArg();
 
     // The directory in which to output the results.
     OptionSpec<String> outputDirectoryOption =
@@ -99,6 +98,10 @@ public class SpeciminRunner {
     String outputDirectory = options.valueOf(outputDirectoryOption);
 
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
+      if (isEmptyCompilationUnit(target.getValue())) {
+        continue;
+      }
+
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
@@ -117,6 +120,19 @@ public class SpeciminRunner {
         System.out.println("with error: " + e);
       }
     }
+  }
+
+  /**
+   * Checks whether the given compilation unit contains nothing. Should conservatively return false
+   * by default if unsure.
+   *
+   * @param cu any compilation unit
+   * @return true iff this compilation unit is totally empty and can therefore be safely removed
+   *     entirely
+   */
+  private static boolean isEmptyCompilationUnit(CompilationUnit cu) {
+    // TODO: figure out how to implement this
+    return false;
   }
 
   /**
