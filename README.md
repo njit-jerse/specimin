@@ -17,7 +17,17 @@ in the target set.
 
 # Usage instructions
 
-TODO
+Download the project and the project directory in your shell.
+
+To run the tool, use `./gradlew run [OPTIONS]`.
+
+The available options are (required options in **bold**, repeatable options in *italics*):
+* **--root**: specifies the root directory of the target project.
+* ***--targetFile***: a source file in which to search for target methods
+* ***--targetMethod***: a target method that must be preserved, and whose dependencies should be stubbed out. Use the format `class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)`
+* **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
+
+Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
 
 # Input/output examples
 
@@ -177,7 +187,7 @@ class Foo {
       obj.toString();
     }
   }
- 
+
   @Nullable Object getObj() { ... }
 }
 ```
