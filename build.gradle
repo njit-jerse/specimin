@@ -13,7 +13,7 @@ repositories {
 }
 
 application {
-    mainClass = 'org.checkerframework.SpeciminMain'
+    mainClass = 'org.checkerframework.specimin.SpeciminRunner'
 }
 
 dependencies {
