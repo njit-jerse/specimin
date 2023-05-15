@@ -19,7 +19,7 @@ in the target set.
 
 Download the project and the project directory in your shell.
 
-To run the tool, use `./gradlew run [OPTIONS]`.
+To run the tool, use `./gradlew run --args='[OPTIONS]'`.
 
 The available options are (required options in **bold**, repeatable options in *italics*):
 * **--root**: specifies the root directory of the target project.
@@ -28,6 +28,8 @@ The available options are (required options in **bold**, repeatable options in *
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
 
 Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
+
+Here is a sample command to run the tool: `./gradlew run --args='--outputDirectory "tempDir" --root "src/test/resources/twofilesimple/input/" --targetFile "com/example/Foo.java" --targetFile "com/example/Baz.java" --targetMethod "com.example.Foo#bar()"'`
 
 # Input/output examples
 
