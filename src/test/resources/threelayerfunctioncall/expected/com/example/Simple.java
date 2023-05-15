@@ -1,9 +1,14 @@
 package com.example;
 
 class Simple {
-    static int x = 5;
+    static int returnFive() {
+        throw new Error();
+    }
+    static int returnTen() {
+        return returnFive * 2;
+    }
     static void test() {
-        int y = 5/x;
+        int y = returnTen();
         Simple s = new Simple();
     }
 }
