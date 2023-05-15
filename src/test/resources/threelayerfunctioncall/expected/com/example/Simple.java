@@ -1,11 +1,8 @@
 package com.example;
 
 class Simple {
-    static int returnFive() {
-        throw new Error();
-    }
     static int returnTen() {
-        return returnFive * 2;
+        throw new Error();
     }
     static void test() {
         int y = returnTen();
