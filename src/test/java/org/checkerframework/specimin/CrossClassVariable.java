@@ -11,7 +11,7 @@ public class CrossClassVariable {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTest(
-        "crossclassVariable",
+        "crossclassvariable",
         new String[] {"com/example/Foo.java", "com/example/Baz.java"},
         new String[] {"com.example.Foo#bar()"});
   }
