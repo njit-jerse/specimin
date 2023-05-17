@@ -1,12 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks that a simple Java file with no dependencies whatsoever and a single target
- * method is returned unaltered by specimin.
+ * This test checks that if the targetted method in a Java file uses a global variable, the global
+ * variable will be included in the minimized version of the Java file.
  */
 public class GlobalVariables {
   @Test
