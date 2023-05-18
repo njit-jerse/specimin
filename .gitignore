@@ -29,3 +29,6 @@ hs_err_pid*
 build
 
 .idea
+
+# macOS specific file
+.DS_Store
