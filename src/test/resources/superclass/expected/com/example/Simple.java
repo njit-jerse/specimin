@@ -10,6 +10,6 @@ public class Simple extends BigSimple {
     @Override
     public void printMessage() {
         super.printMessage();
-        String y = "It's me";
+        BigSimple obj = new BigSimple();
     }
 }
