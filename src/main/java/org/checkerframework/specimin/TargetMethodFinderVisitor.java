@@ -117,10 +117,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     } else {
       if (!this.classFQName.equals("")) {
         throw new UnsupportedOperationException(
-                "Attempted to enter an unexpected kind of class: "
-                        + decl.getFullyQualifiedName()
-                        + " but already had a set classFQName: "
-                        + classFQName);
+            "Attempted to enter an unexpected kind of class: "
+                + decl.getFullyQualifiedName()
+                + " but already had a set classFQName: "
+                + classFQName);
       }
       // Should always be present.
       this.classFQName = decl.getFullyQualifiedName().orElseThrow();
@@ -140,7 +140,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // The substring here is to remove the method's return type. Return types cannot contain spaces.
     // TODO: test this with annotations
     String methodName =
-            this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
+        this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
