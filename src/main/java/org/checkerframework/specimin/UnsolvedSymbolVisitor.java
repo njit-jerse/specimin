@@ -238,13 +238,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * <<<<<<< HEAD The method to update the synthetic files. After each run, we might have new
-   * synthetic files to be created, or new methods to be added to existing synthetic classes. This
-   * method will delete all the synthetic files from the previous run and re-create those files with
-   * the input from the ======= The method to update synthetic files. After each run, we might have
-   * new synthetic files to be created, or new methods to be added to existing synthetic classes.
-   * This method will delete all the synthetic files from the previous run and re-create those files
-   * with the input from the >>>>>>> 0c756ed9f0907a60a3c895cb01159451a5bd90e9 current run.
+   * The method to update synthetic files. After each run, we might have new synthetic files to be
+   * created, or new methods to be added to existing synthetic classes. This method will delete all
+   * the synthetic files from the previous run and re-create those files with the input from the
+   * current run.
    */
   public void updateSyntheticSourceCode() {
     for (UnsolvedClass missedClass : missingClass) {
