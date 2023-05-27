@@ -39,6 +39,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final Set<String> usedMethods = new HashSet<>();
 
   /**
+   * Classes of the methods that were actually used by the targets. These classes will be included
+   * in the input.
+   */
+  private Set<String> usedClass = new HashSet<>();
+
+  /**
    * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
    * by ResolvedMethodDeclaration#getQualifiedSignature.
    */
@@ -85,6 +91,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Get the classes of the methods that the target method uses. The Strings in the set are the
+   * fully-qualified names.
+   *
+   * @return the used classes
+   */
+  public Set<String> getUsedClass() {
+    return usedClass;
+  }
+
+  /**
    * Get the target methods that this visitor has encountered so far. The Strings in the set are the
    * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
    *
@@ -101,10 +117,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     } else {
       if (!this.classFQName.equals("")) {
         throw new UnsupportedOperationException(
-            "Attempted to enter an unexpected kind of class: "
-                + decl.getFullyQualifiedName()
-                + " but already had a set classFQName: "
-                + classFQName);
+                "Attempted to enter an unexpected kind of class: "
+                        + decl.getFullyQualifiedName()
+                        + " but already had a set classFQName: "
+                        + classFQName);
       }
       // Should always be present.
       this.classFQName = decl.getFullyQualifiedName().orElseThrow();
@@ -124,7 +140,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // The substring here is to remove the method's return type. Return types cannot contain spaces.
     // TODO: test this with annotations
     String methodName =
-        this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
+            this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
@@ -139,6 +155,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       usedMethods.add(call.resolve().getQualifiedSignature());
+      usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
     }
     return super.visit(call, p);
   }
@@ -147,6 +164,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
       usedMethods.add(newExpr.resolve().getQualifiedSignature());
+      usedClass.add(newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
     }
     return super.visit(newExpr, p);
   }
