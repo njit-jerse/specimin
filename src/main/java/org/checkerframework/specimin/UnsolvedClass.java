@@ -9,16 +9,16 @@ import java.util.Set;
  */
 public class UnsolvedClass {
   /** Set of methods belongs to the class */
-  public Set<UnsolvedMethod> methods;
+  private final Set<UnsolvedMethod> methods;
 
   /** The name of the class */
-  public String className;
+  private final String className;
 
   /**
    * The name of the package of the class. We rely on the import statements from the source codes to
    * guess the package name.
    */
-  public String packageName;
+  private final String packageName;
 
   /**
    * Create an instance of UnsolvedClass
@@ -35,6 +35,14 @@ public class UnsolvedClass {
     // MethodPrunerVisitor will take care of it
     UnsolvedMethod constructorMethod = new UnsolvedMethod(className, "");
     methods.add(constructorMethod);
+  }
+
+  public Set<UnsolvedMethod> getMethods() {
+    return methods;
+  }
+
+  public String getClassName() {
+    return className;
   }
 
   /**

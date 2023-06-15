@@ -146,11 +146,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (UnsolvedSymbolException e) {
       UnsolvedClass missedClass = getTheMissingClass(e);
       // NULL means that our exception-messages-based method is not good enough to find them
-      if (!missedClass.className.equals("NULL")) {
+      if (!missedClass.getClassName().equals("NULL")) {
         String methodName = method.getNameAsString();
         // for now, we will have the return type of a missing method the same as the class that
         // method belongs to
-        UnsolvedMethod missedMethod = new UnsolvedMethod(methodName, missedClass.className);
+        UnsolvedMethod missedMethod = new UnsolvedMethod(methodName, missedClass.getClassName());
         missedClass.addMethod(missedMethod);
         this.updateMissingClass(missedClass);
       }
@@ -203,8 +203,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
-      if (e.className.equals(missedClass.className)) {
-        for (UnsolvedMethod method : missedClass.methods) {
+      if (e.getClassName().equals(missedClass.getClassName())) {
+        for (UnsolvedMethod method : missedClass.getMethods()) {
           e.addMethod(method);
         }
         return;
@@ -257,8 +257,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass a synthetic class to be deleted
    */
   public void deleteOldSyntheticClass(UnsolvedClass missedClass) {
-    String classPackage = classAndImportMap.getOrDefault(missedClass.className, this.chosenPackage);
-    String filePathStr = this.rootDirectory + classPackage + "/" + missedClass.className + ".java";
+    String classPackage =
+        classAndImportMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
+    String filePathStr =
+        this.rootDirectory + classPackage + "/" + missedClass.getClassName() + ".java";
     Path filePath = Path.of(filePathStr);
     try {
       Files.delete(filePath);
@@ -277,10 +279,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public void createMissingClass(UnsolvedClass missedClass) {
     StringBuilder fileContent = new StringBuilder();
     fileContent.append(missedClass);
-    String classPackage = classAndImportMap.getOrDefault(missedClass.className, this.chosenPackage);
+    String classPackage =
+        classAndImportMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
-        this.rootDirectory + classDirectory + "/" + missedClass.className + ".java";
+        this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Paths.get(filePathStr);
     createdClass.add(filePath);
     try {

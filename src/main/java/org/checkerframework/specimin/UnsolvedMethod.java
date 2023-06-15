@@ -6,13 +6,13 @@ package org.checkerframework.specimin;
  */
 public class UnsolvedMethod {
   /** The name of the method */
-  public String name;
+  private final String name;
 
   /**
    * The return type of the method. At the moment, we set the return type the same as the class
    * where the method belongs to.
    */
-  public String returnType;
+  private final String returnType;
 
   /**
    * Create an instance of UnsolvedMethod
