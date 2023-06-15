@@ -272,7 +272,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * This method create a synthetic file for a class that is not in the source codes. The class will
    * be created in the root directory of the input. All these synthetic files will be deleted when
-   * Specimin finishes its run. (TO DO: What if Specimin doesn't have the write permission?)
+   * Specimin finishes its run. 
    *
    * @param missedClass the class to be added
    */
