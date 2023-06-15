@@ -226,7 +226,9 @@ public class SpeciminRunner {
   /**
    * Given a directory, this method will delete that directory and recursively delete the parent
    * directories until it meets a non-empty directory. Be careful when making any changes to this
-   * method. This method is used to delete the temporary directory created by UnsolvedSymbolVisitor.
+   * method, as an incorrect conditional statement could result in the deletion of non-empty
+   * directories. This method is used to delete the temporary directory created by
+   * UnsolvedSymbolVisitor.
    *
    * @param fileDir the directory of the file to be deleted
    */
