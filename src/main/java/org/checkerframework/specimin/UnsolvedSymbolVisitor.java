@@ -60,7 +60,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * If there is any import statement that ends with *, this string will be replaced by one of the
    * class from those import statements.
    */
-  private String chosenPackage = "To.Be.Replaced";
+  private String chosenPackage = "";
 
   /**
    * Create a new UnsolvedSymbolVisitor instance
@@ -102,7 +102,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (importParts.length > 0) {
         String className = importParts[importParts.length - 1];
         String packageName = importStatement.replace("." + className, "");
-        if (className.equals("*")) {
+        if (className.equals("")) {
+          if (!chosenPackage.equals("")) {
+            throw new RuntimeException(
+                "Multiple wildcard import statements found. Please use explicit import"
+                    + " statements.");
+          }
           chosenPackage = packageName;
         } else {
           this.classAndImportMap.put(className, packageName);
