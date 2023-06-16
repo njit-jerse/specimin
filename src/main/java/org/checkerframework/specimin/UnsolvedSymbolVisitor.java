@@ -24,7 +24,7 @@ import java.util.Set;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
- * spots out all the methods belonging to classes not in the source codes, and creates synthetic
+ * notices all the methods belonging to classes not in the source codes, and creates synthetic
  * versions of those classes and methods. This preliminary step helps to prevent
  * UnsolvedSymbolException errors for the next phases.
  */
@@ -272,7 +272,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * This method create a synthetic file for a class that is not in the source codes. The class will
    * be created in the root directory of the input. All these synthetic files will be deleted when
-   * Specimin finishes its run. 
+   * Specimin finishes its run.
    *
    * @param missedClass the class to be added
    */
