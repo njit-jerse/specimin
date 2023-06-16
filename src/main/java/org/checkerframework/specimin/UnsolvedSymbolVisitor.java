@@ -31,7 +31,7 @@ import java.util.Set;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /** List of classes not in the source codes */
-  private List<UnsolvedClass> missingClass;
+  private Set<UnsolvedClass> missingClass;
 
   /** The same as the root being used in SpeciminRunner */
   private String rootDirectory;
@@ -69,7 +69,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public UnsolvedSymbolVisitor(String rootDirectory) {
     this.rootDirectory = rootDirectory;
-    this.missingClass = new ArrayList<>();
+    this.missingClass = new HashSet<>();
     this.gotException = true;
     this.importStatement = new ArrayList<>();
     this.classAndImportMap = new HashMap<>();
