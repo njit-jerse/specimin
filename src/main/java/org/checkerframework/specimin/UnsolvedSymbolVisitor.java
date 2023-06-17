@@ -102,7 +102,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (importParts.length > 0) {
         String className = importParts[importParts.length - 1];
         String packageName = importStatement.replace("." + className, "");
-        if (className.equals("")) {
+        if (className.equals("*")) {
           if (!chosenPackage.equals("")) {
             throw new RuntimeException(
                 "Multiple wildcard import statements found. Please use explicit import"
