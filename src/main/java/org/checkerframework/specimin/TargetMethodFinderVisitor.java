@@ -39,6 +39,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final Set<String> usedMethods = new HashSet<>();
 
   /**
+   * Classes of the methods that were actually used by the targets. These classes will be included
+   * in the input.
+   */
+  private Set<String> usedClass = new HashSet<>();
+
+  /**
    * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
    * by ResolvedMethodDeclaration#getQualifiedSignature.
    */
@@ -82,6 +88,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getUsedMethods() {
     return usedMethods;
+  }
+
+  /**
+   * Get the classes of the methods that the target method uses. The Strings in the set are the
+   * fully-qualified names.
+   *
+   * @return the used classes
+   */
+  public Set<String> getUsedClass() {
+    return usedClass;
   }
 
   /**
@@ -139,6 +155,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       usedMethods.add(call.resolve().getQualifiedSignature());
+      usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
     }
     return super.visit(call, p);
   }
@@ -147,6 +164,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
       usedMethods.add(newExpr.resolve().getQualifiedSignature());
+      usedClass.add(newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
     }
     return super.visit(newExpr, p);
   }

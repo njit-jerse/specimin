@@ -17,9 +17,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -69,6 +71,31 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root);
+    /**
+     * The set of path of files that have been created by addMissingClass. We will delete all those
+     * files in the end.
+     */
+    Set<Path> createdClass = new HashSet<>();
+    while (addMissingClass.gettingException()) {
+      addMissingClass.setExceptionToFalse();
+      for (CompilationUnit cu : parsedTargetFiles.values()) {
+        addMissingClass.setImportStatement(cu.getImports());
+        cu.accept(addMissingClass, null);
+      }
+      addMissingClass.updateSyntheticSourceCode();
+      createdClass.addAll(addMissingClass.getCreatedClass());
+      // since the root directory is updated, we need to update the SymbolSolver
+      TypeSolver newTypeSolver =
+          new CombinedTypeSolver(
+              new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+      JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
+      StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
+      parsedTargetFiles = new HashMap<>();
+      for (String targetFile : targetFiles) {
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
+    }
     List<String> targetMethodNames = options.valuesOf(targetMethodsOption);
 
     // Use a two-phase approach: the first phase finds the target(s) and records
@@ -88,6 +115,11 @@ public class SpeciminRunner {
               + String.join(", ", unfoundMethods));
     }
 
+    // add all files related to the targeted methods to the parsedTargetFile
+    for (String classFullName : finder.getUsedClass()) {
+      String directoryOfFile = classFullName.replace(".", "/") + ".java";
+      parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+    }
     MethodPrunerVisitor methodPruner =
         new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMethods());
 
@@ -124,6 +156,8 @@ public class SpeciminRunner {
         System.out.println("with error: " + e);
       }
     }
+    // delete all the temporary files created by UnsolvedSymbolVisitor
+    deleteFiles(createdClass);
   }
 
   /**
@@ -163,5 +197,51 @@ public class SpeciminRunner {
    */
   private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
     return StaticJavaParser.parse(Path.of(root, path));
+  }
+
+  /**
+   * This method delete all files from a set of Paths. If a file is the only file in its parent
+   * directory, this method will recursively delete the parent directories until it meets a
+   * non-empty directory.
+   *
+   * @param fileList the set of Paths of files to be deleted
+   */
+  private static void deleteFiles(Set<Path> fileList) {
+    for (Path filePath : fileList) {
+      try {
+        Files.delete(filePath);
+        File parentDir = filePath.toFile().getParentFile();
+        if (parentDir != null && parentDir.exists() && parentDir.isDirectory()) {
+          String[] fileContained = parentDir.list();
+          if (fileContained != null && fileContained.length == 0) {
+            // Recursive call to delete the parent directory
+            deleteFileFamily(parentDir);
+          }
+        }
+      } catch (Exception e) {
+      }
+    }
+  }
+
+  /**
+   * Given a directory, this method will delete that directory and recursively delete the parent
+   * directories until it meets a non-empty directory. Be careful when making any changes to this
+   * method, as an incorrect conditional statement could result in the deletion of non-empty
+   * directories. This method is used to delete the temporary directory created by
+   * UnsolvedSymbolVisitor.
+   *
+   * @param fileDir the directory of the file to be deleted
+   */
+  private static void deleteFileFamily(File fileDir) {
+    fileDir.delete();
+    File parentDir = fileDir.getParentFile();
+    if (parentDir != null && parentDir.exists() && parentDir.isDirectory()) {
+      String[] fileContained = parentDir.list();
+      // Be cautious when making any changes to this line, you might actually delete important
+      // directories in the project.
+      if (fileContained != null && fileContained.length == 0) {
+        deleteFileFamily(parentDir);
+      }
+    }
   }
 }
