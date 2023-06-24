@@ -36,9 +36,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The same as the root being used in SpeciminRunner */
   private String rootDirectory;
 
-  /** List of classes temporarily created to be the return types of unsolved methods */
-  private Set<String> returnTypeList;
-
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
    * or we still need more.
@@ -77,7 +74,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.importStatement = new ArrayList<>();
     this.classAndImportMap = new HashMap<>();
     this.createdClass = new HashSet<>();
-    this.returnTypeList = new HashSet<>();
   }
 
   /**
@@ -138,10 +134,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return createdClass;
   }
 
-  public Set<String> getReturnTypeList() {
-    return returnTypeList;
-  }
-
   /**
    * Set gotException to false. This method is to be used at the beginning of each iteration of the
    * visitor.
@@ -163,17 +155,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         String methodName = method.getNameAsString();
         // for now, we will have the return type of a missing method the same as the class that
         // method belongs to
-        String capitalizedMethodName =
-            methodName.substring(0, 1).toUpperCase() + methodName.substring(1);
-        UnsolvedClass returnTypeForThisMethod =
-            new UnsolvedClass(
-                capitalizedMethodName + "ReturnType", "org.checkerframework.specimin");
-        UnsolvedMethod missedMethod =
-            new UnsolvedMethod(methodName, returnTypeForThisMethod.getClassName());
+        UnsolvedMethod missedMethod = new UnsolvedMethod(methodName, missedClass.getClassName());
         missedClass.addMethod(missedMethod);
-        this.updateMissingClass(returnTypeForThisMethod);
         this.updateMissingClass(missedClass);
-        returnTypeList.add(returnTypeForThisMethod.getClassName());
       }
     }
     // there are more elegant ways to update gotException, but the compiler will throw an error if
@@ -300,15 +284,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public void createMissingClass(UnsolvedClass missedClass) {
     StringBuilder fileContent = new StringBuilder();
     fileContent.append(missedClass);
-    String className = missedClass.getClassName();
-    String classPackage = "";
-    if (classAndImportMap.containsKey(className)) {
-      classPackage = classAndImportMap.get(className);
-    } else if (returnTypeList.contains(className)) {
-      classPackage = "org.checkerframework.specimin";
-    } else {
-      classPackage = this.chosenPackage;
-    }
+    String classPackage =
+        classAndImportMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
         this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
