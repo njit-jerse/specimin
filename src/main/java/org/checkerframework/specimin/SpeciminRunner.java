@@ -120,20 +120,7 @@ public class SpeciminRunner {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
       parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
     }
-    Set<String> returnTypeOfUnsolvedMethod = addMissingClass.getReturnTypeList();
 
-    // for unsolved methods used by the target method, we need to include the class of their return
-    // types
-    for (String methodName : finder.getSimplifiedUsedMethods()) {
-      String capitalizedMethodName =
-          methodName.substring(0, 1).toUpperCase() + methodName.substring(1);
-      if (returnTypeOfUnsolvedMethod.contains(capitalizedMethodName + "ReturnType")) {
-        String directoryOfFile =
-            "org/checkerframework/specimin/" + capitalizedMethodName + "ReturnType" + ".java";
-        parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
-        System.out.println(directoryOfFile);
-      }
-    }
     MethodPrunerVisitor methodPruner =
         new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMethods());
 
@@ -147,10 +134,11 @@ public class SpeciminRunner {
     String outputDirectory = options.valueOf(outputDirectoryOption);
 
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
-      // If a compilation output's entire body has been removed and it is not the return type for an
-      // unsolved method, do not output it.
-      if (isEmptyCompilationUnit(target.getValue())
-          && !target.getKey().contains("org/checkerframework/specimin")) {
+      // If a compilation output's entire body has been removed (TO DO: After combining
+      // TargetMethodFinderVisitor and UnsolvedSymbolVisitor, if a compilation unit is the return
+      // type for an
+      // unsolved method, do output it even if it is empty)
+      if (isEmptyCompilationUnit(target.getValue())) {
         continue;
       }
 

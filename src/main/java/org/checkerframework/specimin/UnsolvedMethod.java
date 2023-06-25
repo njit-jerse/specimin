@@ -35,8 +35,8 @@ public class UnsolvedMethod {
     this.parameterList = new ArrayList<>();
   }
 
-  public List<String> getParameterList() {
-    return parameterList;
+  public String getReturnType() {
+    return returnType;
   }
   /**
    * Return the content of the method. Note that the body of the method is stubbed out.

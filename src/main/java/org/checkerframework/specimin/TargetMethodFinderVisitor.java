@@ -38,7 +38,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   private final Set<String> usedMethods = new HashSet<>();
 
-  private final Set<String> simplifiedUsedMethods = new HashSet<>();
   /**
    * Classes of the methods that were actually used by the targets. These classes will be included
    * in the input.
@@ -89,10 +88,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getUsedMethods() {
     return usedMethods;
-  }
-
-  public Set<String> getSimplifiedUsedMethods() {
-    return simplifiedUsedMethods;
   }
   ;
 
@@ -161,7 +156,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       usedMethods.add(call.resolve().getQualifiedSignature());
-      simplifiedUsedMethods.add(call.getNameAsString());
       usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
     }
     return super.visit(call, p);
@@ -171,7 +165,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
       usedMethods.add(newExpr.resolve().getQualifiedSignature());
-      simplifiedUsedMethods.add(newExpr.getTypeAsString());
       usedClass.add(newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
     }
     return super.visit(newExpr, p);

@@ -45,6 +45,9 @@ public class UnsolvedClass {
     return className;
   }
 
+  public String getPackageName() {
+    return packageName;
+  }
   /**
    * Add a method to the class
    *
