@@ -55,7 +55,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private List<String> importStatement;
 
   /**
-   * This map the classes in the compilation unit with the related import statements in that unit
+   * This map the classes in the compilation unit with the related package
    */
   private Map<String, String> classAndPackageMap;
 
@@ -216,6 +216,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
   }
 
+  /**
+   * Given a MethodCallExpr instance, this method will return the synthetic class for the method
+   * involved. Thus, make sure that the input method actually belongs to an existing synthetic class
+   * before calling this method.
+   *
+   * @param method the method call to be analyzed
+   * @return the name of the synthetic class of that method
+   */
   public static String getSyntheticClass(MethodCallExpr method) {
     String fullNameOfTheClass = method.getScope().get().calculateResolvedType().describe();
     String shortNameOfTheClass =
