@@ -41,7 +41,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** This instance maps the name of a synthetic method with its synthetic class */
   Map<String, UnsolvedClass> syntheticMethodAndClass;
 
-  private Set<String> classToBeReturnType;
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
    * or we still need more.
@@ -78,7 +77,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.importStatement = new ArrayList<>();
     this.classAndPackageMap = new HashMap<>();
     this.createdClass = new HashSet<>();
-    this.classToBeReturnType = new HashSet<>();
     this.syntheticMethodAndClass = new HashMap<>();
   }
 
@@ -168,7 +166,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
       this.updateMissingClass(missingClass);
       this.updateMissingClass(returnTypeForThisMethod);
-      classToBeReturnType.add(returnTypeForThisMethod.getClassName());
       syntheticMethodAndClass.put(methodSimpleName, missingClass);
     }
 

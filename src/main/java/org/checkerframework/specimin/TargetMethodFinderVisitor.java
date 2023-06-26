@@ -89,7 +89,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Set<String> getUsedMethods() {
     return usedMethods;
   }
-  ;
 
   /**
    * Get the classes of the methods that the target method uses. The Strings in the set are the
