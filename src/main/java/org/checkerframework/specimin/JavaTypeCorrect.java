@@ -7,6 +7,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * This class uses javac to analyze files. If there are any incompatible type errors in those files,
+ * this class can suggest changes to be made to the existing types in the input files to solve all
+ * the type errors. Note: This class can only solve type errors where there are mismatch between
+ * types. For cases where there is type inference failed or unfound symbol, try to use
+ * UnsolvedSymbolVisitor to add the missing files to the input first. {@link UnsolvedSymbolVisitor}
+ */
 class JavaTypeCorrect {
 
   /** List of the files to correct the types */
