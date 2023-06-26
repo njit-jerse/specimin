@@ -149,6 +149,10 @@ public class SpeciminRunner {
     String outputDirectory = options.valueOf(outputDirectoryOption);
 
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
+      // If a compilation output's entire body has been removed, do not output it.
+      if (isEmptyCompilationUnit(target.getValue())) {
+        continue;
+      }
 
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
       // Create any parts of the directory structure that don't already exist.
