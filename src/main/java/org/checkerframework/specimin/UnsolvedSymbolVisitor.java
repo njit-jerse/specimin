@@ -38,6 +38,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The same as the root being used in SpeciminRunner */
   private String rootDirectory;
 
+  /** This instance maps the name of a synthetic method with its synthetic class */
+  Map<String, UnsolvedClass> syntheticMethodAndClass;
+
   private Set<String> classToBeReturnType;
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
@@ -54,9 +57,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** List of import statement from the current compilation unit that is being visited */
   private List<String> importStatement;
 
-  /**
-   * This map the classes in the compilation unit with the related package
-   */
+  /** This map the classes in the compilation unit with the related package */
   private Map<String, String> classAndPackageMap;
 
   /**
@@ -78,6 +79,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.classAndPackageMap = new HashMap<>();
     this.createdClass = new HashSet<>();
     this.classToBeReturnType = new HashSet<>();
+    this.syntheticMethodAndClass = new HashMap<>();
   }
 
   /**
@@ -167,6 +169,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.updateMissingClass(missingClass);
       this.updateMissingClass(returnTypeForThisMethod);
       classToBeReturnType.add(returnTypeForThisMethod.getClassName());
+      syntheticMethodAndClass.put(methodSimpleName, missingClass);
     }
 
     this.gotException =
@@ -219,12 +222,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Given a MethodCallExpr instance, this method will return the synthetic class for the method
    * involved. Thus, make sure that the input method actually belongs to an existing synthetic class
-   * before calling this method.
+   * before calling this method {@link
+   * UnsolvedSymbolVisitor#calledByAnIncompleteSyntheticClass(MethodCallExpr)}}
    *
    * @param method the method call to be analyzed
    * @return the name of the synthetic class of that method
    */
   public static String getSyntheticClass(MethodCallExpr method) {
+    // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
+    // a caller.
     String fullNameOfTheClass = method.getScope().get().calculateResolvedType().describe();
     String shortNameOfTheClass =
         fullNameOfTheClass.substring(fullNameOfTheClass.lastIndexOf('.') + 1);
@@ -233,7 +239,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(Parameter parameter, Void p) {
-    String type = parameter.getNameAsString();
     try {
       parameter.resolve().describeType();
       return super.visit(parameter, p);
@@ -346,6 +351,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     } catch (IOException e) {
       System.out.println("Error creating Java file: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Based on the Map returned by JavaTypeCorrect, this method updates the types of methods in
+   * synthetic classes.
+   *
+   * @param typeToCorrect the Map to be analyzed
+   */
+  public void updateTypes(Map<String, String> typeToCorrect) {
+    for (String incorrectType : typeToCorrect.keySet()) {
+      // convert MethodNameReturnType to methodName
+      String involvedMethod =
+          incorrectType.substring(0, 1).toLowerCase()
+              + incorrectType.substring(1).replace("ReturnType", "");
+      UnsolvedClass relatedClass = syntheticMethodAndClass.get(involvedMethod);
+      if (relatedClass != null) {
+        relatedClass.updateMethodByReturnType(incorrectType, typeToCorrect.get(incorrectType));
+        this.deleteOldSyntheticClass(relatedClass);
+        this.createMissingClass(relatedClass);
+      }
     }
   }
 }

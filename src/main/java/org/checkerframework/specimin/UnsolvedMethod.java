@@ -15,7 +15,7 @@ public class UnsolvedMethod {
    * The return type of the method. At the moment, we set the return type the same as the class
    * where the method belongs to.
    */
-  private final String returnType;
+  private String returnType;
 
   /**
    * The list of parameters of the method. (Right now we won't touch it until the new variant of
@@ -33,6 +33,10 @@ public class UnsolvedMethod {
     this.name = name;
     this.returnType = returnType;
     this.parameterList = new ArrayList<>();
+  }
+
+  public void setReturnType(String returnType) {
+    this.returnType = returnType;
   }
 
   public String getReturnType() {

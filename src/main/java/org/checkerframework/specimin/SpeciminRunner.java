@@ -115,10 +115,25 @@ public class SpeciminRunner {
               + String.join(", ", unfoundMethods));
     }
 
-    // add all files related to the targeted methods to the parsedTargetFile
+    Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
+
+    // add all files related to the targeted methods
     for (String classFullName : finder.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
-      parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+      relatedClass.add(directoryOfFile);
+    }
+
+    // correct the types of all related files before adding them to parsedTargetFiles
+    JavaTypeCorrect typeCorrecter = new JavaTypeCorrect(root, relatedClass);
+    typeCorrecter.correctTypesForAllFiles();
+    addMissingClass.updateTypes(typeCorrecter.getTypeToChange());
+
+    for (String directory : relatedClass) {
+      // directories already in parsedTargetFiles are original files in the root directory, we are
+      // not supposed to update them.
+      if (!parsedTargetFiles.containsKey(directory)) {
+        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+      }
     }
 
     MethodPrunerVisitor methodPruner =
@@ -134,13 +149,6 @@ public class SpeciminRunner {
     String outputDirectory = options.valueOf(outputDirectoryOption);
 
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
-      // If a compilation output's entire body has been removed (TO DO: After combining
-      // TargetMethodFinderVisitor and UnsolvedSymbolVisitor, if a compilation unit is the return
-      // type for an
-      // unsolved method, do output it even if it is empty)
-      if (isEmptyCompilationUnit(target.getValue())) {
-        continue;
-      }
 
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
       // Create any parts of the directory structure that don't already exist.

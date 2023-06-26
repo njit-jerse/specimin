@@ -58,6 +58,21 @@ public class UnsolvedClass {
   }
 
   /**
+   * Update the return type of a method. Note: this method is supposed to be used to update
+   * synthetic methods, where the return type of each method is distinct.
+   *
+   * @param currentReturnType
+   * @param desiredReturnType
+   */
+  public void updateMethodByReturnType(String currentReturnType, String desiredReturnType) {
+    for (UnsolvedMethod method : methods) {
+      if (method.getReturnType().equals(currentReturnType)) {
+        method.setReturnType(desiredReturnType);
+      }
+    }
+  }
+
+  /**
    * Return the content of the class as a compilable Java file.
    *
    * @return the content of the class
@@ -66,7 +81,7 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
-    sb.append("class ").append(className).append(" {\n");
+    sb.append("public class ").append(className).append(" {\n");
     for (UnsolvedMethod method : methods) {
       sb.append(method.toString());
     }
