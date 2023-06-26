@@ -115,11 +115,27 @@ public class SpeciminRunner {
               + String.join(", ", unfoundMethods));
     }
 
-    // add all files related to the targeted methods to the parsedTargetFile
+    Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
+
+    // add all files related to the targeted methods
     for (String classFullName : finder.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
-      parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+      relatedClass.add(directoryOfFile);
     }
+
+    // correct the types of all related files before adding them to parsedTargetFiles
+    JavaTypeCorrect typeCorrecter = new JavaTypeCorrect(root, relatedClass);
+    typeCorrecter.correctTypesForAllFiles();
+    addMissingClass.updateTypes(typeCorrecter.getTypeToChange());
+
+    for (String directory : relatedClass) {
+      // directories already in parsedTargetFiles are original files in the root directory, we are
+      // not supposed to update them.
+      if (!parsedTargetFiles.containsKey(directory)) {
+        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+      }
+    }
+
     MethodPrunerVisitor methodPruner =
         new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMethods());
 

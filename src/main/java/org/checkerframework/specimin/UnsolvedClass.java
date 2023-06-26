@@ -45,6 +45,9 @@ public class UnsolvedClass {
     return className;
   }
 
+  public String getPackageName() {
+    return packageName;
+  }
   /**
    * Add a method to the class
    *
@@ -52,6 +55,21 @@ public class UnsolvedClass {
    */
   public void addMethod(UnsolvedMethod method) {
     this.methods.add(method);
+  }
+
+  /**
+   * Update the return type of a method. Note: this method is supposed to be used to update
+   * synthetic methods, where the return type of each method is distinct.
+   *
+   * @param currentReturnType
+   * @param desiredReturnType
+   */
+  public void updateMethodByReturnType(String currentReturnType, String desiredReturnType) {
+    for (UnsolvedMethod method : methods) {
+      if (method.getReturnType().equals(currentReturnType)) {
+        method.setReturnType(desiredReturnType);
+      }
+    }
   }
 
   /**
@@ -63,7 +81,7 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
-    sb.append("class ").append(className).append(" {\n");
+    sb.append("public class ").append(className).append(" {\n");
     for (UnsolvedMethod method : methods) {
       sb.append(method.toString());
     }

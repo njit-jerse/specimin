@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
@@ -20,6 +21,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -36,6 +38,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The same as the root being used in SpeciminRunner */
   private String rootDirectory;
 
+  /** This instance maps the name of a synthetic method with its synthetic class */
+  Map<String, UnsolvedClass> syntheticMethodAndClass;
+
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
    * or we still need more.
@@ -51,10 +56,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** List of import statement from the current compilation unit that is being visited */
   private List<String> importStatement;
 
-  /**
-   * This map the classes in the compilation unit with the related import statements in that unit
-   */
-  private Map<String, String> classAndImportMap;
+  /** This map the classes in the compilation unit with the related package */
+  private Map<String, String> classAndPackageMap;
 
   /**
    * If there is any import statement that ends with *, this string will be replaced by one of the
@@ -72,13 +75,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.missingClass = new HashSet<>();
     this.gotException = true;
     this.importStatement = new ArrayList<>();
-    this.classAndImportMap = new HashMap<>();
+    this.classAndPackageMap = new HashMap<>();
     this.createdClass = new HashSet<>();
+    this.syntheticMethodAndClass = new HashMap<>();
   }
 
   /**
    * Set importStatement equals to the list of import statements from the current compilation unit.
-   * Also update the classAndImportMap based on this new list.
+   * Also update the classAndPackageMap based on this new list.
    *
    * @param listOfImports NodeList of import statements from the compilation unit
    */
@@ -89,14 +93,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       currentImportList.add(importAsString);
     }
     this.importStatement = currentImportList;
-    this.setClassAndImportMap();
+    this.setclassAndPackageMap();
   }
 
   /**
-   * This method sets the classAndImportMap. This method is called in the method setImportStatement,
-   * as classAndImportMap and importStatements should always be in sync.
+   * This method sets the classAndPackageMap. This method is called in the method
+   * setImportStatement, as classAndPackageMap and importStatements should always be in sync.
    */
-  private void setClassAndImportMap() {
+  private void setclassAndPackageMap() {
     for (String importStatement : this.importStatement) {
       String[] importParts = importStatement.split("\\.");
       if (importParts.length > 0) {
@@ -110,7 +114,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           }
           chosenPackage = packageName;
         } else {
-          this.classAndImportMap.put(className, packageName);
+          this.classAndPackageMap.put(className, packageName);
         }
       }
     }
@@ -144,43 +148,107 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
-    String testString = method.getNameAsString();
-    try {
-      // this line is merely to check if there is UnsolvedSymbolException
-      testString = method.resolve().getClassName();
-    } catch (UnsolvedSymbolException e) {
-      UnsolvedClass missedClass = getTheMissingClass(e);
-      // NULL means that our exception-messages-based method is not good enough to find them
-      if (!missedClass.getClassName().equals("NULL")) {
-        String methodName = method.getNameAsString();
-        // for now, we will have the return type of a missing method the same as the class that
-        // method belongs to
-        UnsolvedMethod missedMethod = new UnsolvedMethod(methodName, missedClass.getClassName());
-        missedClass.addMethod(missedMethod);
-        this.updateMissingClass(missedClass);
-      }
+    String methodSimpleName = method.getNameAsString();
+    String capitalizedMethodName =
+        methodSimpleName.substring(0, 1).toUpperCase() + methodSimpleName.substring(1);
+    if (calledByAnIncompleteSyntheticClass(method)) {
+      String incompleteClassName = getSyntheticClass(method);
+      UnsolvedClass missingClass =
+          new UnsolvedClass(
+              incompleteClassName,
+              classAndPackageMap.getOrDefault(incompleteClassName, this.chosenPackage));
+      UnsolvedClass returnTypeForThisMethod =
+          new UnsolvedClass(capitalizedMethodName + "ReturnType", missingClass.getPackageName());
+      UnsolvedMethod thisMethod =
+          new UnsolvedMethod(methodSimpleName, returnTypeForThisMethod.getClassName());
+      missingClass.addMethod(thisMethod);
+      classAndPackageMap.put(
+          returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
+      this.updateMissingClass(missingClass);
+      this.updateMissingClass(returnTypeForThisMethod);
+      syntheticMethodAndClass.put(methodSimpleName, missingClass);
     }
-    // there are more elegant ways to update gotException, but the compiler will throw an error if
-    // the try block doesn't have any use
-    this.gotException = testString.equals(method.getNameAsString());
+
+    this.gotException =
+        calledByAnUnsolvedSymbol(method) || calledByAnIncompleteSyntheticClass(method);
     return super.visit(method, p);
+  }
+
+  /**
+   * As the name suggests, this method takes a MethodCallExpr instance as the input and checks if
+   * the method in that expression is called by an unsolved symbol.
+   *
+   * @param method the method call to be analyzed
+   * @return true if the method involved is called by an unsolved symbol
+   */
+  public static boolean calledByAnUnsolvedSymbol(MethodCallExpr method) {
+    Optional<Expression> caller = method.getScope();
+    if (!caller.isPresent()) {
+      return false;
+    }
+    Expression callerExpression = caller.get();
+    try {
+      callerExpression.calculateResolvedType();
+      return false;
+    } catch (Exception e) {
+      return true;
+    }
+  }
+
+  /**
+   * This method takes a MethodCallExpr as an instance, and check if the method involved is called
+   * by an incomplete synthetic class. It should be noted that an incomplete synthetic class is
+   * different from a non-existing synthetic class. In this context, an incomplete synthetic class
+   * is a compilable class but missing some methods.
+   *
+   * @param method a MethodCallExpr instance
+   * @return true if the method involved is called by an incomplete synthetic class
+   */
+  public static boolean calledByAnIncompleteSyntheticClass(MethodCallExpr method) {
+    if (calledByAnUnsolvedSymbol(method)) {
+      return false;
+    }
+    try {
+      method.calculateResolvedType();
+      return false;
+    } catch (Exception e) {
+      return true;
+    }
+  }
+
+  /**
+   * Given a MethodCallExpr instance, this method will return the synthetic class for the method
+   * involved. Thus, make sure that the input method actually belongs to an existing synthetic class
+   * before calling this method {@link
+   * UnsolvedSymbolVisitor#calledByAnIncompleteSyntheticClass(MethodCallExpr)}}
+   *
+   * @param method the method call to be analyzed
+   * @return the name of the synthetic class of that method
+   */
+  public static String getSyntheticClass(MethodCallExpr method) {
+    // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
+    // a caller.
+    String fullNameOfTheClass = method.getScope().get().calculateResolvedType().describe();
+    String shortNameOfTheClass =
+        fullNameOfTheClass.substring(fullNameOfTheClass.lastIndexOf('.') + 1);
+    return shortNameOfTheClass;
   }
 
   @Override
   public Visitable visit(Parameter parameter, Void p) {
-    String type = parameter.getNameAsString();
     try {
-      type = parameter.resolve().toString();
+      parameter.resolve().describeType();
+      return super.visit(parameter, p);
     } catch (UnsolvedSymbolException e) {
-      String className = parameter.getNameAsString();
+      String className = parameter.getTypeAsString();
       UnsolvedClass newClass =
           new UnsolvedClass(
-              className, classAndImportMap.getOrDefault(className, this.chosenPackage));
-      missingClass.add(newClass);
+              className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
+      updateMissingClass(newClass);
     }
     // there are more elegant ways to update gotException, but the compiler will throw an error if
     // the try block doesn't have any use
-    gotException = type.equals(parameter.getNameAsString());
+    gotException = true;
     return super.visit(parameter, p);
   }
 
@@ -191,7 +259,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       type = newExpr.resolve().getQualifiedName();
     } catch (UnsolvedSymbolException e) {
       UnsolvedClass newClass =
-          new UnsolvedClass(type, classAndImportMap.getOrDefault(type, this.chosenPackage));
+          new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
       this.updateMissingClass(newClass);
     }
     this.gotException = type.equals(newExpr.getTypeAsString());
@@ -210,36 +278,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass e = iterator.next();
       if (e.getClassName().equals(missedClass.getClassName())) {
         for (UnsolvedMethod method : missedClass.getMethods()) {
-          e.addMethod(method);
+          if (!method.getReturnType().equals("")) {
+            e.addMethod(method);
+          }
         }
         return;
       }
     }
     missingClass.add(missedClass);
-  }
-
-  /**
-   * Based on the exception thrown by JavaParser, this method figure out which class file is missing
-   * in the source codes. This method is temporary and will be replaced by a proper SymbolSolver in
-   * the future.
-   *
-   * @param exceptionMessage the exception to be analyzed
-   * @return an instance of UnsolvedClass correlating to the exception messgae
-   */
-  public UnsolvedClass getTheMissingClass(UnsolvedSymbolException exceptionMessage) {
-    // a null cause means that the exception could not tell us which class file is missing
-    if (exceptionMessage.getCause() == null) {
-      return new UnsolvedClass("NULL", "NULL");
-    }
-    Throwable cause = exceptionMessage.getCause();
-    // This is a bit hard-coding since the Throwable instance of UnsolvedSymbolException has
-    // everything in the form of a message
-    if (cause != null && cause.getMessage() != null) {
-      String className = cause.getMessage().replace("Unsolved symbol : ", "");
-      return new UnsolvedClass(
-          className, this.classAndImportMap.getOrDefault(className, this.chosenPackage));
-    }
-    return new UnsolvedClass("NULL", "NULL");
   }
 
   /**
@@ -263,7 +309,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void deleteOldSyntheticClass(UnsolvedClass missedClass) {
     String classPackage =
-        classAndImportMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
+        classAndPackageMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
     String filePathStr =
         this.rootDirectory + classPackage + "/" + missedClass.getClassName() + ".java";
     Path filePath = Path.of(filePathStr);
@@ -284,8 +330,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public void createMissingClass(UnsolvedClass missedClass) {
     StringBuilder fileContent = new StringBuilder();
     fileContent.append(missedClass);
-    String classPackage =
-        classAndImportMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
+    String classPackage = missedClass.getPackageName();
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
         this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
@@ -303,6 +348,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     } catch (IOException e) {
       System.out.println("Error creating Java file: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Based on the Map returned by JavaTypeCorrect, this method updates the types of methods in
+   * synthetic classes.
+   *
+   * @param typeToCorrect the Map to be analyzed
+   */
+  public void updateTypes(Map<String, String> typeToCorrect) {
+    for (String incorrectType : typeToCorrect.keySet()) {
+      // convert MethodNameReturnType to methodName
+      String involvedMethod =
+          incorrectType.substring(0, 1).toLowerCase()
+              + incorrectType.substring(1).replace("ReturnType", "");
+      UnsolvedClass relatedClass = syntheticMethodAndClass.get(involvedMethod);
+      if (relatedClass != null) {
+        relatedClass.updateMethodByReturnType(incorrectType, typeToCorrect.get(incorrectType));
+        this.deleteOldSyntheticClass(relatedClass);
+        this.createMissingClass(relatedClass);
+      }
     }
   }
 }

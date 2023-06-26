@@ -15,7 +15,7 @@ public class UnsolvedMethod {
    * The return type of the method. At the moment, we set the return type the same as the class
    * where the method belongs to.
    */
-  private final String returnType;
+  private String returnType;
 
   /**
    * The list of parameters of the method. (Right now we won't touch it until the new variant of
@@ -35,8 +35,12 @@ public class UnsolvedMethod {
     this.parameterList = new ArrayList<>();
   }
 
-  public List<String> getParameterList() {
-    return parameterList;
+  public void setReturnType(String returnType) {
+    this.returnType = returnType;
+  }
+
+  public String getReturnType() {
+    return returnType;
   }
   /**
    * Return the content of the method. Note that the body of the method is stubbed out.
