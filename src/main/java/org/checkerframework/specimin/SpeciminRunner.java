@@ -120,7 +120,12 @@ public class SpeciminRunner {
     // add all files related to the targeted methods
     for (String classFullName : finder.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
-      relatedClass.add(directoryOfFile);
+      // if the class is used but its file does not exist in the root directory, then the class
+      // belongs to java.util, java.lang, or something similar
+      File thisFile = new File(root + directoryOfFile);
+      if (thisFile.exists()) {
+        relatedClass.add(directoryOfFile);
+      }
     }
 
     // correct the types of all related files before adding them to parsedTargetFiles
@@ -226,6 +231,11 @@ public class SpeciminRunner {
     for (Path filePath : fileList) {
       try {
         Files.delete(filePath);
+        File classFile = new File(filePath.toString().replace(".java", ".class"));
+        // since javac might leave some .class files
+        if (classFile.exists()) {
+          Files.delete(classFile.toPath());
+        }
         File parentDir = filePath.toFile().getParentFile();
         if (parentDir != null && parentDir.exists() && parentDir.isDirectory()) {
           String[] fileContained = parentDir.list();
@@ -235,6 +245,7 @@ public class SpeciminRunner {
           }
         }
       } catch (Exception e) {
+        throw new RuntimeException("Unresolved file path: " + filePath);
       }
     }
   }
