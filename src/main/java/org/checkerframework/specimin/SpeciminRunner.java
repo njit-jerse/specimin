@@ -120,9 +120,9 @@ public class SpeciminRunner {
     // add all files related to the targeted methods
     for (String classFullName : finder.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
-      // if the class is used but its file does not exist in the root directory, then the class
-      // belongs to java.util, java.lang, or something similar
       File thisFile = new File(root + directoryOfFile);
+      // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
+      // create synthetic files for them
       if (thisFile.exists()) {
         relatedClass.add(directoryOfFile);
       }
