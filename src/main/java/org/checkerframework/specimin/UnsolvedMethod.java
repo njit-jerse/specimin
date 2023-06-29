@@ -35,10 +35,21 @@ public class UnsolvedMethod {
     this.parameterList = new ArrayList<>();
   }
 
+  /**
+   * Set the value of returnType. This method is used when javac tells us that UnsolvedSymbolVisitor
+   * get the return types wrong.
+   *
+   * @param returnType
+   */
   public void setReturnType(String returnType) {
     this.returnType = returnType;
   }
 
+  /**
+   * Get the return type of this method
+   *
+   * @return the value of returnType
+   */
   public String getReturnType() {
     return returnType;
   }

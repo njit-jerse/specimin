@@ -33,17 +33,22 @@ class JavaTypeCorrect {
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
-   * SpeciminRunner
+   * rootDirectory, and rootDirectory is an absolute path
    *
    * @param rootDirectory the root directory of the files to correct types
    * @param fileNameList the list of the relative directory of the files to correct types
    */
   public JavaTypeCorrect(String rootDirectory, Set<String> fileNameList) {
     this.fileNameList = fileNameList;
-    this.sourcePath = rootDirectory;
+    this.sourcePath = new File(rootDirectory).getAbsolutePath();
     this.typeToChange = new HashMap<>();
   }
 
+  /**
+   * Get the value of typeToChange
+   *
+   * @return the value of typeToChange
+   */
   public Map<String, String> getTypeToChange() {
     return typeToChange;
   }
@@ -67,8 +72,7 @@ class JavaTypeCorrect {
   public void runJavacAndUpdateTypes(String filePath) {
     try {
       String command = "javac";
-      File file = new File(filePath);
-      String[] arguments = {command, "-sourcepath", sourcePath, file.getAbsolutePath()};
+      String[] arguments = {command, "-sourcepath", sourcePath, sourcePath + "/" + filePath};
       ProcessBuilder processBuilder = new ProcessBuilder(arguments);
       processBuilder.redirectErrorStream(true);
       Process process = processBuilder.start();

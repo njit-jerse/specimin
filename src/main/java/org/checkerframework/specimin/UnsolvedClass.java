@@ -37,14 +37,29 @@ public class UnsolvedClass {
     methods.add(constructorMethod);
   }
 
+  /**
+   * Get the list of methods from this synthetic class
+   *
+   * @return the list of methods
+   */
   public Set<UnsolvedMethod> getMethods() {
     return methods;
   }
 
+  /**
+   * Get the name of this class.
+   *
+   * @return the name of the class
+   */
   public String getClassName() {
     return className;
   }
 
+  /**
+   * Get the package where this class belongs to
+   *
+   * @return the value of packageName
+   */
   public String getPackageName() {
     return packageName;
   }
