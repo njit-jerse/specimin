@@ -1,7 +1,7 @@
 import org.checkerframework.checker.signature.qual.*;
 
-package com.github.javaparser.ast.expr;
+package com.github.javaparser.resolution.types;
 
-class MethodCallExpr {
-  @ClassGetSimpleName SimpleName getName();
+class ResolvedReferenceType {
+  @FullyQualifiedName String getQualifiedName();
 }
