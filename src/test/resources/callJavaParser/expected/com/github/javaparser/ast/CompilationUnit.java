@@ -1,7 +1,7 @@
 package com.github.javaparser.ast;
+public class CompilationUnit {
 
-class CompilationUnit {
-    public CompilationUnit() {
+    public  CompilationUnit() {
         throw new Error();
     }
 }
