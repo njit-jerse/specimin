@@ -9,6 +9,8 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -23,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
@@ -228,10 +232,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public static String getSyntheticClass(MethodCallExpr method) {
     // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
     // a caller.
-    String fullNameOfTheClass = method.getScope().get().calculateResolvedType().describe();
-    String shortNameOfTheClass =
-        fullNameOfTheClass.substring(fullNameOfTheClass.lastIndexOf('.') + 1);
-    return shortNameOfTheClass;
+    // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
+    // a caller.
+    ResolvedType callerExpression = method.getScope().get().calculateResolvedType();
+    if (callerExpression instanceof ResolvedReferenceType) {
+      ResolvedReferenceType referCaller = (ResolvedReferenceType) callerExpression;
+      @FullyQualifiedName String callerName = referCaller.getQualifiedName();
+      @ClassGetSimpleName String callerSimple = callerName.substring(callerName.lastIndexOf(".") + 1);
+      return callerSimple;
+    } else {
+      throw new RuntimeException("Unexpected expression: " + callerExpression);
+    }
   }
 
   @Override

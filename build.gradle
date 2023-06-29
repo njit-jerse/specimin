@@ -51,6 +51,10 @@ checkerFramework {
             'org.checkerframework.checker.signature.SignatureChecker'
     ]
     excludeTests = true
+
+    extraJavacArgs = [
+            '-Astubs=JavaParser.astub'
+    ]
 }
 
 spotless {
