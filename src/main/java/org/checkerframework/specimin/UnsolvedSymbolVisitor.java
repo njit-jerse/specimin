@@ -6,6 +6,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -153,8 +154,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
     String methodSimpleName = method.getNameAsString();
-    String capitalizedMethodName =
-        methodSimpleName.substring(0, 1).toUpperCase() + methodSimpleName.substring(1);
     if (calledByAnIncompleteSyntheticClass(method)) {
       String incompleteClassName = getSyntheticClass(method);
       UnsolvedClass missingClass =
@@ -162,7 +161,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               incompleteClassName,
               classAndPackageMap.getOrDefault(incompleteClassName, this.chosenPackage));
       UnsolvedClass returnTypeForThisMethod =
-          new UnsolvedClass(capitalizedMethodName + "ReturnType", missingClass.getPackageName());
+          new UnsolvedClass(returnNameForMethod(methodSimpleName), missingClass.getPackageName());
       UnsolvedMethod thisMethod =
           new UnsolvedMethod(methodSimpleName, returnTypeForThisMethod.getClassName());
       missingClass.addMethod(thisMethod);
@@ -229,20 +228,48 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param method the method call to be analyzed
    * @return the name of the synthetic class of that method
    */
-  public static String getSyntheticClass(MethodCallExpr method) {
-    // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
-    // a caller.
+  public static @ClassGetSimpleName String getSyntheticClass(MethodCallExpr method) {
     // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
     // a caller.
     ResolvedType callerExpression = method.getScope().get().calculateResolvedType();
     if (callerExpression instanceof ResolvedReferenceType) {
       ResolvedReferenceType referCaller = (ResolvedReferenceType) callerExpression;
       @FullyQualifiedName String callerName = referCaller.getQualifiedName();
-      @ClassGetSimpleName String callerSimple = callerName.substring(callerName.lastIndexOf(".") + 1);
+      @ClassGetSimpleName String callerSimple = fullyQualifiedToSimple(callerName);
       return callerSimple;
     } else {
       throw new RuntimeException("Unexpected expression: " + callerExpression);
     }
+  }
+
+  /**
+   * This method converts a @FullyQualifiedName classname to a @ClassGetSimpleName classname. Note
+   * that there is warning suppression here. It is safe to claim that if we split
+   * a @FullyQualifiedName name by dot ([.]), then the last part is the @ClassGetSimpleName part.
+   *
+   * @param fullyQualifiedName a @FullyQualifiedName classname
+   * @return the @ClassGetSimpleName version of that class
+   */
+  public static @ClassGetSimpleName String fullyQualifiedToSimple(
+      @FullyQualifiedName String fullyQualifiedName) {
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String simpleName = fullyQualifiedName.substring(fullyQualifiedName.lastIndexOf(".") + 1);
+    return simpleName;
+  }
+
+  /**
+   * Given the name of an unsolved method, this method will return the name of the synthetic return
+   * type for that method. The name is in @ClassGetSimpleName form
+   *
+   * @param methodName the name of a method
+   * @return that name in @ClassGetSimpleName form
+   */
+  public static @ClassGetSimpleName String returnNameForMethod(String methodName) {
+    String capitalizedMethodName =
+        methodName.substring(0, 1).toUpperCase() + methodName.substring(1);
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String returnName = capitalizedMethodName + "ReturnType";
+    return returnName;
   }
 
   @Override
@@ -251,7 +278,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       parameter.resolve().describeType();
       return super.visit(parameter, p);
     } catch (UnsolvedSymbolException e) {
-      String className = parameter.getTypeAsString();
+      // since it is unsolved, it could not be a primitive type
+      @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
       UnsolvedClass newClass =
           new UnsolvedClass(
               className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
@@ -265,7 +293,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
-    String type = newExpr.getTypeAsString();
+    SimpleName typeName = newExpr.getType().getName();
+    String type = typeName.asString();
     try {
       type = newExpr.resolve().getQualifiedName();
     } catch (UnsolvedSymbolException e) {
@@ -368,7 +397,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param typeToCorrect the Map to be analyzed
    */
-  public void updateTypes(Map<String, String> typeToCorrect) {
+  public void updateTypes(
+      Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToCorrect) {
     for (String incorrectType : typeToCorrect.keySet()) {
       // convert MethodNameReturnType to methodName
       String involvedMethod =

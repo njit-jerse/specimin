@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import java.util.HashSet;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
  * An UnsolvedClass instance is a representation of a class that can not be solved by SymbolSolver.
@@ -12,7 +13,7 @@ public class UnsolvedClass {
   private final Set<UnsolvedMethod> methods;
 
   /** The name of the class */
-  private final String className;
+  private final @ClassGetSimpleName String className;
 
   /**
    * The name of the package of the class. We rely on the import statements from the source codes to
@@ -26,7 +27,7 @@ public class UnsolvedClass {
    * @param className the name of the class
    * @param packageName the name of the package
    */
-  public UnsolvedClass(String className, String packageName) {
+  public UnsolvedClass(@ClassGetSimpleName String className, String packageName) {
     this.className = className;
     this.methods = new HashSet<>();
     this.packageName = packageName;
@@ -51,7 +52,7 @@ public class UnsolvedClass {
    *
    * @return the name of the class
    */
-  public String getClassName() {
+  public @ClassGetSimpleName String getClassName() {
     return className;
   }
 
@@ -79,7 +80,8 @@ public class UnsolvedClass {
    * @param currentReturnType
    * @param desiredReturnType
    */
-  public void updateMethodByReturnType(String currentReturnType, String desiredReturnType) {
+  public void updateMethodByReturnType(
+      @ClassGetSimpleName String currentReturnType, @ClassGetSimpleName String desiredReturnType) {
     for (UnsolvedMethod method : methods) {
       if (method.getReturnType().equals(currentReturnType)) {
         method.setReturnType(desiredReturnType);

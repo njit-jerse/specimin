@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
  * This class uses javac to analyze files. If there are any incompatible type errors in those files,
@@ -29,7 +30,7 @@ class JavaTypeCorrect {
    * This map is for type correcting. The key is the name of the current incorrect type, and the
    * value is the name of the desired correct type.
    */
-  private Map<String, String> typeToChange;
+  private Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToChange;
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
@@ -49,7 +50,7 @@ class JavaTypeCorrect {
    *
    * @return the value of typeToChange
    */
-  public Map<String, String> getTypeToChange() {
+  public Map<@ClassGetSimpleName String, @ClassGetSimpleName String> getTypeToChange() {
     return typeToChange;
   }
 
@@ -103,9 +104,29 @@ class JavaTypeCorrect {
      * 2. error: incompatible types: found <type1> required <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      typeToChange.put(splitErrorMessage[4], splitErrorMessage[splitErrorMessage.length - 1]);
+      typeToChange.put(
+          toSimpleName(splitErrorMessage[4]),
+          toSimpleName(splitErrorMessage[splitErrorMessage.length - 1]));
     } else {
-      typeToChange.put(splitErrorMessage[5], splitErrorMessage[splitErrorMessage.length - 1]);
+      typeToChange.put(
+          toSimpleName(splitErrorMessage[5]),
+          toSimpleName(splitErrorMessage[splitErrorMessage.length - 1]));
     }
+  }
+
+  /**
+   * This method takes the name of a class and converts it to the @ClassGetSimpleName type according
+   * to Checker Framework. If the name is already a simple name, this class will not alter it.
+   *
+   * @param className the name of the class to be converted
+   * @return the simple name of the class
+   */
+  @SuppressWarnings("signature")
+  public static @ClassGetSimpleName String toSimpleName(String className) {
+    String[] classNameParts = className.split("[.]");
+    if (classNameParts.length < 2) {
+      return className;
+    }
+    return classNameParts[classNameParts.length - 1];
   }
 }

@@ -5,3 +5,15 @@ package com.github.javaparser.resolution.types;
 class ResolvedReferenceType {
   @FullyQualifiedName String getQualifiedName();
 }
+
+package com.github.javaparser.ast.type;
+
+class ClassOrInterfaceType {
+  @ClassGetSimpleName SimpleName getName();
+}
+
+package com.github.javaparser.ast.expr;
+
+class SimpleName {
+  @ClassGetSimpleName String asString();
+}

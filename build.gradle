@@ -53,7 +53,7 @@ checkerFramework {
     excludeTests = true
 
     extraJavacArgs = [
-            '-Astubs=JavaParser.astub'
+            "-Astubs=${projectDir}/JavaParser.astub"
     ]
 }
 
