@@ -477,6 +477,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
   }
 
+  /**
+   * For a method call that is not simple, this method will take that method as input and create corresponding synthetic class
+   * @param methodCall the method call to be taken as input
+   */
   public void updateClassSetWithNotSimpleMethodCall(String methodCall) {
     String methodCallWithoutParen = methodCall.replace("()", "");
     String[] methodParts = methodCallWithoutParen.split("[^a-zA-Z]+");
