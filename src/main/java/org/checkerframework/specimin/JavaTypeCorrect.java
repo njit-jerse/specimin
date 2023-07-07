@@ -116,11 +116,16 @@ class JavaTypeCorrect {
 
   /**
    * This method takes the name of a class and converts it to the @ClassGetSimpleName type according
-   * to Checker Framework. If the name is already a simple name, this class will not alter it.
+   * to Checker Framework. If the name is already a simple name, this class will not alter it. To
+   * recall a bit, this method belongs to JavaTypeCorrect, where the main job is to correct the
+   * synthetic return type of unsolved methods. UnsolvedSymbolVisitor has take good note of the
+   * details of those synthetic types, so a simple name should be sufficient,
    *
    * @param className the name of the class to be converted
    * @return the simple name of the class
    */
+  // the code is self-explanatory, essentially the last element of a class name is the simple name
+  // of that class
   @SuppressWarnings("signature")
   public static @ClassGetSimpleName String toSimpleName(String className) {
     String[] classNameParts = className.split("[.]");
