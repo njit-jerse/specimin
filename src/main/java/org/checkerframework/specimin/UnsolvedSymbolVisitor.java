@@ -154,7 +154,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
     String methodSimpleName = method.getNameAsString();
-    if (calledByAnIncompleteSyntheticClass(method)) {
+    if (unsolvedAndNotSimple(method)) {
+      updateClassSetWithNotSimpleMethodCall(method.toString());
+    } else if (calledByAnIncompleteSyntheticClass(method)) {
       String incompleteClassName = getSyntheticClass(method);
       UnsolvedClass missingClass =
           new UnsolvedClass(
@@ -171,9 +173,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.updateMissingClass(returnTypeForThisMethod);
       syntheticMethodAndClass.put(methodSimpleName, missingClass);
     }
-
     this.gotException =
-        calledByAnUnsolvedSymbol(method) || calledByAnIncompleteSyntheticClass(method);
+        calledByAnUnsolvedSymbol(method)
+            || calledByAnIncompleteSyntheticClass(method)
+            || unsolvedAndNotSimple(method);
     return super.visit(method, p);
   }
 
@@ -278,12 +281,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       parameter.resolve().describeType();
       return super.visit(parameter, p);
     } catch (UnsolvedSymbolException e) {
-      // since it is unsolved, it could not be a primitive type
-      @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-      UnsolvedClass newClass =
-          new UnsolvedClass(
-              className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
-      updateMissingClass(newClass);
+      String parameterInString = parameter.toString();
+      if (isAClassPath(parameterInString)) {
+        UnsolvedClass newClass = getSimpleSyntheticClassFromClassPath(parameterInString);
+        updateMissingClass(newClass);
+      } else {
+        // since it is unsolved, it could not be a primitive type
+        @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
+        UnsolvedClass newClass =
+            new UnsolvedClass(
+                className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
+        updateMissingClass(newClass);
+      }
     }
     // there are more elegant ways to update gotException, but the compiler will throw an error if
     // the try block doesn't have any use
@@ -389,6 +398,111 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (IOException e) {
       System.out.println("Error creating Java file: " + e.getMessage());
     }
+  }
+
+  /**
+   * This method capitalizes a string. For example, "hello" will become "Hello".
+   *
+   * @param string the string to be capitalized
+   * @return the capitalized version of the string
+   */
+  public static String toCapital(String string) {
+    return string.substring(0, 1).toUpperCase() + string.substring(1);
+  }
+
+  /**
+   * This method checks if a string is capitalized
+   *
+   * @param string the string to be checked
+   * @return true if the string is capitalized
+   */
+  public static boolean isCapital(String string) {
+    String capitalizedString = toCapital(string);
+    return string.equals(capitalizedString);
+  }
+
+  /**
+   * This method checks if a string is a class path.
+   *
+   * @param potentialClassPath the string to be checked
+   * @return true if the string is a class path
+   */
+  public static boolean isAClassPath(String potentialClassPath) {
+    String[] elements = potentialClassPath.split(".");
+    int elementsCount = elements.length;
+    return elementsCount > 1 && isCapital(elements[elementsCount - 1]);
+  }
+
+  /**
+   * Given a class path, this method will create a simple instance of UnsolvedClass for that class
+   * path
+   *
+   * @param classPath the class path
+   * @return the corresponding instance of UnsolvedClass
+   */
+  public static UnsolvedClass getSimpleSyntheticClassFromClassPath(String classPath) {
+    if (!isAClassPath(classPath)) {
+      throw new RuntimeException(
+          "Check with isAClassPath first before using getSimpleSyntheticClassFromClassPath");
+    }
+    String[] elements = classPath.split(".");
+    // the last element of a class path is the simple name of that class
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String className = elements[elements.length - 1];
+    String packageName = classPath.replace("." + className, "");
+    return new UnsolvedClass(className, packageName);
+  }
+
+  /**
+   * This method checks if a method call is not-simple and unsolved. In this context, we declare a
+   * not-simple method call as a method that is directly called by a qualified class name. For
+   * example, for this call org.package.Class.methodFirst().methodSecond(),
+   * "org.package.Class.methodFirst()" is a not-simple method call, but
+   * "org.package.Class.methodFirst().methodSecond()" is a simple one.
+   *
+   * @param method the method call to be checked
+   * @return true if the method call is not simple and unsolved
+   */
+  public static boolean unsolvedAndNotSimple(MethodCallExpr method) {
+    try {
+      method.resolve().getReturnType();
+      return false;
+    } catch (Exception e) {
+      Optional<Expression> callerExpression = method.getScope();
+      if (callerExpression.isEmpty()) {
+        return false;
+      }
+      String callerToString = callerExpression.get().toString();
+      return isAClassPath(callerToString);
+    }
+  }
+
+  public void updateClassSetWithNotSimpleMethodCall(String methodCall) {
+    String methodCallWithoutParen = methodCall.replace("()", "");
+    String[] methodParts = methodCallWithoutParen.split("[^a-zA-Z]+");
+    int lengthMethodParts = methodParts.length;
+    if (lengthMethodParts <= 2) {
+      throw new RuntimeException(
+          "Need to check the method call with unsolvedAndNotSimple before using"
+              + " updateClassSetWithNotSimpleMethodCall");
+    }
+    String returnTypeClassName = methodParts[0];
+    String packageName = methodParts[0];
+    String methodName = methodParts[lengthMethodParts - 1];
+    for (int i = 1; i < lengthMethodParts - 1; i++) {
+      returnTypeClassName = returnTypeClassName + toCapital(methodParts[i]);
+      packageName = packageName + "." + methodParts[i];
+    }
+    returnTypeClassName = returnTypeClassName + toCapital(methodName) + "ReturnType";
+    // if the method call is org.package.Class.method(), then the return type of this method will be
+    // orgPackageClassMethodReturnType, which is a @ClassGetSimpleName
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String thisReturnType = returnTypeClassName;
+    UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
+    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType);
+    newClass.addMethod(newMethod);
+    syntheticMethodAndClass.put(newMethod.toString(), newClass);
+    this.updateMissingClass(newClass);
   }
 
   /**
