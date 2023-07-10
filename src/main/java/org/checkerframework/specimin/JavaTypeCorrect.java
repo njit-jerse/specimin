@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 
 /**
  * This class uses javac to analyze files. If there are any incompatible type errors in those files,
@@ -104,13 +105,18 @@ class JavaTypeCorrect {
      * 2. error: incompatible types: found <type1> required <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      typeToChange.put(
-          toSimpleName(splitErrorMessage[4]),
-          toSimpleName(splitErrorMessage[splitErrorMessage.length - 1]));
+      // since this is from javac, we know that these will be dot-separated identifiers.
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage[4];
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String correctType = splitErrorMessage[splitErrorMessage.length - 1];
+      typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
     } else {
-      typeToChange.put(
-          toSimpleName(splitErrorMessage[5]),
-          toSimpleName(splitErrorMessage[splitErrorMessage.length - 1]));
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage[5];
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String correctType = splitErrorMessage[splitErrorMessage.length - 1];
+      typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
     }
   }
 
@@ -123,9 +129,10 @@ class JavaTypeCorrect {
    * @return the simple name of the class
    */
   // the code is self-explanatory, essentially the last element of a class name is the simple name
-  // of that class
+  // of that class. This method takes the input from the error message of javac, so we know that
+  // className will be a dot-separated identifier.
   @SuppressWarnings("signature")
-  public static @ClassGetSimpleName String toSimpleName(String className) {
+  public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
     String[] classNameParts = className.split("[.]");
     if (classNameParts.length < 2) {
       return className;
