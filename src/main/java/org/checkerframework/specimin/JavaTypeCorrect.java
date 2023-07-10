@@ -6,6 +6,8 @@ import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 
 /**
  * This class uses javac to analyze files. If there are any incompatible type errors in those files,
@@ -29,7 +31,7 @@ class JavaTypeCorrect {
    * This map is for type correcting. The key is the name of the current incorrect type, and the
    * value is the name of the desired correct type.
    */
-  private Map<String, String> typeToChange;
+  private Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToChange;
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
@@ -49,7 +51,7 @@ class JavaTypeCorrect {
    *
    * @return the value of typeToChange
    */
-  public Map<String, String> getTypeToChange() {
+  public Map<@ClassGetSimpleName String, @ClassGetSimpleName String> getTypeToChange() {
     return typeToChange;
   }
 
@@ -103,9 +105,38 @@ class JavaTypeCorrect {
      * 2. error: incompatible types: found <type1> required <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      typeToChange.put(splitErrorMessage[4], splitErrorMessage[splitErrorMessage.length - 1]);
+      // since this is from javac, we know that these will be dot-separated identifiers.
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage[4];
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String correctType = splitErrorMessage[splitErrorMessage.length - 1];
+      typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
     } else {
-      typeToChange.put(splitErrorMessage[5], splitErrorMessage[splitErrorMessage.length - 1]);
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage[5];
+      @SuppressWarnings("signature")
+      @DotSeparatedIdentifiers String correctType = splitErrorMessage[splitErrorMessage.length - 1];
+      typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
     }
+  }
+
+  /**
+   * This method takes the name of a class and converts it to the @ClassGetSimpleName type according
+   * to Checker Framework. If the name is already in the @ClassGetSimpleName form, this method will
+   * not make any changes
+   *
+   * @param className the name of the class to be converted
+   * @return the simple name of the class
+   */
+  // the code is self-explanatory, essentially the last element of a class name is the simple name
+  // of that class. This method takes the input from the error message of javac, so we know that
+  // className will be a dot-separated identifier.
+  @SuppressWarnings("signature")
+  public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
+    String[] classNameParts = className.split("[.]");
+    if (classNameParts.length < 2) {
+      return className;
+    }
+    return classNameParts[classNameParts.length - 1];
   }
 }

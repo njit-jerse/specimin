@@ -6,9 +6,12 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -23,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
@@ -149,16 +154,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
     String methodSimpleName = method.getNameAsString();
-    String capitalizedMethodName =
-        methodSimpleName.substring(0, 1).toUpperCase() + methodSimpleName.substring(1);
-    if (calledByAnIncompleteSyntheticClass(method)) {
+    if (unsolvedAndNotSimple(method)) {
+      updateClassSetWithNotSimpleMethodCall(method.toString());
+    } else if (calledByAnIncompleteSyntheticClass(method)) {
       String incompleteClassName = getSyntheticClass(method);
       UnsolvedClass missingClass =
           new UnsolvedClass(
               incompleteClassName,
               classAndPackageMap.getOrDefault(incompleteClassName, this.chosenPackage));
       UnsolvedClass returnTypeForThisMethod =
-          new UnsolvedClass(capitalizedMethodName + "ReturnType", missingClass.getPackageName());
+          new UnsolvedClass(returnNameForMethod(methodSimpleName), missingClass.getPackageName());
       UnsolvedMethod thisMethod =
           new UnsolvedMethod(methodSimpleName, returnTypeForThisMethod.getClassName());
       missingClass.addMethod(thisMethod);
@@ -168,9 +173,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.updateMissingClass(returnTypeForThisMethod);
       syntheticMethodAndClass.put(methodSimpleName, missingClass);
     }
-
     this.gotException =
-        calledByAnUnsolvedSymbol(method) || calledByAnIncompleteSyntheticClass(method);
+        calledByAnUnsolvedSymbol(method)
+            || calledByAnIncompleteSyntheticClass(method)
+            || unsolvedAndNotSimple(method);
     return super.visit(method, p);
   }
 
@@ -225,13 +231,48 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param method the method call to be analyzed
    * @return the name of the synthetic class of that method
    */
-  public static String getSyntheticClass(MethodCallExpr method) {
+  public static @ClassGetSimpleName String getSyntheticClass(MethodCallExpr method) {
     // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
     // a caller.
-    String fullNameOfTheClass = method.getScope().get().calculateResolvedType().describe();
-    String shortNameOfTheClass =
-        fullNameOfTheClass.substring(fullNameOfTheClass.lastIndexOf('.') + 1);
-    return shortNameOfTheClass;
+    ResolvedType callerExpression = method.getScope().get().calculateResolvedType();
+    if (callerExpression instanceof ResolvedReferenceType) {
+      ResolvedReferenceType referCaller = (ResolvedReferenceType) callerExpression;
+      @FullyQualifiedName String callerName = referCaller.getQualifiedName();
+      @ClassGetSimpleName String callerSimple = fullyQualifiedToSimple(callerName);
+      return callerSimple;
+    } else {
+      throw new RuntimeException("Unexpected expression: " + callerExpression);
+    }
+  }
+
+  /**
+   * This method converts a @FullyQualifiedName classname to a @ClassGetSimpleName classname. Note
+   * that there is warning suppression here. It is safe to claim that if we split
+   * a @FullyQualifiedName name by dot ([.]), then the last part is the @ClassGetSimpleName part.
+   *
+   * @param fullyQualifiedName a @FullyQualifiedName classname
+   * @return the @ClassGetSimpleName version of that class
+   */
+  public static @ClassGetSimpleName String fullyQualifiedToSimple(
+      @FullyQualifiedName String fullyQualifiedName) {
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String simpleName = fullyQualifiedName.substring(fullyQualifiedName.lastIndexOf(".") + 1);
+    return simpleName;
+  }
+
+  /**
+   * Given the name of an unsolved method, this method will return the name of the synthetic return
+   * type for that method. The name is in @ClassGetSimpleName form
+   *
+   * @param methodName the name of a method
+   * @return that name in @ClassGetSimpleName form
+   */
+  public static @ClassGetSimpleName String returnNameForMethod(String methodName) {
+    String capitalizedMethodName =
+        methodName.substring(0, 1).toUpperCase() + methodName.substring(1);
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String returnName = capitalizedMethodName + "ReturnType";
+    return returnName;
   }
 
   @Override
@@ -240,11 +281,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       parameter.resolve().describeType();
       return super.visit(parameter, p);
     } catch (UnsolvedSymbolException e) {
-      String className = parameter.getTypeAsString();
-      UnsolvedClass newClass =
-          new UnsolvedClass(
-              className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
-      updateMissingClass(newClass);
+      String parameterInString = parameter.toString();
+      if (isAClassPath(parameterInString)) {
+        // parameterInString needs to be a fully-qualified name. As this parameter has a form of
+        // class path, we can say that it is a fully-qualified name
+        @SuppressWarnings("signature")
+        UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
+        updateMissingClass(newClass);
+      } else {
+        // since it is unsolved, it could not be a primitive type
+        @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
+        UnsolvedClass newClass =
+            new UnsolvedClass(
+                className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
+        updateMissingClass(newClass);
+      }
     }
     // there are more elegant ways to update gotException, but the compiler will throw an error if
     // the try block doesn't have any use
@@ -254,7 +305,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
-    String type = newExpr.getTypeAsString();
+    SimpleName typeName = newExpr.getType().getName();
+    String type = typeName.asString();
     try {
       type = newExpr.resolve().getQualifiedName();
     } catch (UnsolvedSymbolException e) {
@@ -352,12 +404,123 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * This method capitalizes a string. For example, "hello" will become "Hello".
+   *
+   * @param string the string to be capitalized
+   * @return the capitalized version of the string
+   */
+  public static String toCapital(String string) {
+    return string.substring(0, 1).toUpperCase() + string.substring(1);
+  }
+
+  /**
+   * This method checks if a string is capitalized
+   *
+   * @param string the string to be checked
+   * @return true if the string is capitalized
+   */
+  public static boolean isCapital(String string) {
+    Character first = string.charAt(0);
+    return Character.isUpperCase(first);
+  }
+
+  /**
+   * This method checks if a string has the form of a class path.
+   *
+   * @param potentialClassPath the string to be checked
+   * @return true if the string is a class path
+   */
+  public static boolean isAClassPath(String potentialClassPath) {
+    String[] elements = potentialClassPath.split(".");
+    int elementsCount = elements.length;
+    return elementsCount > 1 && isCapital(elements[elementsCount - 1]);
+  }
+
+  /**
+   * Given the name of a class in the @FullyQualifiedName, this method will create a synthetic class
+   * for that class
+   *
+   * @param fullyName the fully-qualified name of the class
+   * @return the corresponding instance of UnsolvedClass
+   */
+  public static UnsolvedClass getSimpleSyntheticClassFromFullyQualifiedName(
+      @FullyQualifiedName String fullyName) {
+    if (!isAClassPath(fullyName)) {
+      throw new RuntimeException(
+          "Check with isAClassPath first before using"
+              + " getSimpleSyntheticClassFromFullyQualifiedName");
+    }
+    String className = fullyQualifiedToSimple(fullyName);
+    String packageName = fullyName.replace("." + className, "");
+    return new UnsolvedClass(className, packageName);
+  }
+
+  /**
+   * This method checks if a method call is not-simple and unsolved. In this context, we declare a
+   * not-simple method call as a method that is directly called by a qualified class name. For
+   * example, for this call org.package.Class.methodFirst().methodSecond(),
+   * "org.package.Class.methodFirst()" is a not-simple method call, but
+   * "org.package.Class.methodFirst().methodSecond()" is a simple one.
+   *
+   * @param method the method call to be checked
+   * @return true if the method call is not simple and unsolved
+   */
+  public static boolean unsolvedAndNotSimple(MethodCallExpr method) {
+    try {
+      method.resolve().getReturnType();
+      return false;
+    } catch (Exception e) {
+      Optional<Expression> callerExpression = method.getScope();
+      if (callerExpression.isEmpty()) {
+        return false;
+      }
+      String callerToString = callerExpression.get().toString();
+      return isAClassPath(callerToString);
+    }
+  }
+
+  /**
+   * For a method call that is not simple, this method will take that method as input and create
+   * corresponding synthetic class
+   *
+   * @param methodCall the method call to be taken as input
+   */
+  public void updateClassSetWithNotSimpleMethodCall(String methodCall) {
+    String methodCallWithoutParen = methodCall.replace("()", "");
+    String[] methodParts = methodCallWithoutParen.split("[.]");
+    int lengthMethodParts = methodParts.length;
+    if (lengthMethodParts <= 2) {
+      throw new RuntimeException(
+          "Need to check the method call with unsolvedAndNotSimple before using"
+              + " updateClassSetWithNotSimpleMethodCall");
+    }
+    String returnTypeClassName = methodParts[0];
+    String packageName = methodParts[0];
+    String methodName = methodParts[lengthMethodParts - 1];
+    for (int i = 1; i < lengthMethodParts - 1; i++) {
+      returnTypeClassName = returnTypeClassName + toCapital(methodParts[i]);
+      packageName = packageName + "." + methodParts[i];
+    }
+    returnTypeClassName = returnTypeClassName + toCapital(methodName) + "ReturnType";
+    // if the method call is org.package.Class.method(), then the return type of this method will be
+    // orgPackageClassMethodReturnType, which is a @ClassGetSimpleName
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String thisReturnType = returnTypeClassName;
+    UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
+    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType);
+    newClass.addMethod(newMethod);
+    syntheticMethodAndClass.put(newMethod.toString(), newClass);
+    this.updateMissingClass(newClass);
+  }
+
+  /**
    * Based on the Map returned by JavaTypeCorrect, this method updates the types of methods in
    * synthetic classes.
    *
    * @param typeToCorrect the Map to be analyzed
    */
-  public void updateTypes(Map<String, String> typeToCorrect) {
+  public void updateTypes(
+      Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToCorrect) {
     for (String incorrectType : typeToCorrect.keySet()) {
       // convert MethodNameReturnType to methodName
       String involvedMethod =
