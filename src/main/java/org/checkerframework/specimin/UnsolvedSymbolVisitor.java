@@ -283,7 +283,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (UnsolvedSymbolException e) {
       String parameterInString = parameter.toString();
       if (isAClassPath(parameterInString)) {
-        UnsolvedClass newClass = getSimpleSyntheticClassFromClassPath(parameterInString);
+        // parameterInString needs to be a fully-qualified name. As this parameter has a form of
+        // class path, we can say that it is a fully-qualified name
+        @SuppressWarnings("signature")
+        UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
         updateMissingClass(newClass);
       } else {
         // since it is unsolved, it could not be a primitive type
@@ -417,12 +420,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the string is capitalized
    */
   public static boolean isCapital(String string) {
-    String capitalizedString = toCapital(string);
-    return string.equals(capitalizedString);
+    Character first = string.charAt(0);
+    return Character.isUpperCase(first);
   }
 
   /**
-   * This method checks if a string is a class path.
+   * This method checks if a string has the form of a class path.
    *
    * @param potentialClassPath the string to be checked
    * @return true if the string is a class path
@@ -434,22 +437,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a class path, this method will create a simple instance of UnsolvedClass for that class
-   * path
+   * Given the name of a class in the @FullyQualifiedName, this method will create a synthetic class
+   * for that class
    *
-   * @param classPath the class path
+   * @param fullyName the fully-qualified name of the class
    * @return the corresponding instance of UnsolvedClass
    */
-  public static UnsolvedClass getSimpleSyntheticClassFromClassPath(String classPath) {
-    if (!isAClassPath(classPath)) {
+  public static UnsolvedClass getSimpleSyntheticClassFromFullyQualifiedName(
+      @FullyQualifiedName String fullyName) {
+    if (!isAClassPath(fullyName)) {
       throw new RuntimeException(
-          "Check with isAClassPath first before using getSimpleSyntheticClassFromClassPath");
+          "Check with isAClassPath first before using"
+              + " getSimpleSyntheticClassFromFullyQualifiedName");
     }
-    String[] elements = classPath.split(".");
-    // the last element of a class path is the simple name of that class
-    @SuppressWarnings("signature")
-    @ClassGetSimpleName String className = elements[elements.length - 1];
-    String packageName = classPath.replace("." + className, "");
+    String className = fullyQualifiedToSimple(fullyName);
+    String packageName = fullyName.replace("." + className, "");
     return new UnsolvedClass(className, packageName);
   }
 
@@ -478,12 +480,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * For a method call that is not simple, this method will take that method as input and create corresponding synthetic class
+   * For a method call that is not simple, this method will take that method as input and create
+   * corresponding synthetic class
+   *
    * @param methodCall the method call to be taken as input
    */
   public void updateClassSetWithNotSimpleMethodCall(String methodCall) {
     String methodCallWithoutParen = methodCall.replace("()", "");
-    String[] methodParts = methodCallWithoutParen.split("[^a-zA-Z]+");
+    String[] methodParts = methodCallWithoutParen.split("[.]");
     int lengthMethodParts = methodParts.length;
     if (lengthMethodParts <= 2) {
       throw new RuntimeException(
