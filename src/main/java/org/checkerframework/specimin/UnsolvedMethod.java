@@ -69,9 +69,12 @@ public class UnsolvedMethod {
         arguments = arguments + ", ";
       }
     }
+    String returnTypeInString = "";
+    if (!returnType.equals("")) {
+      returnTypeInString = returnType + " ";
+    }
     return "\n    public "
-        + returnType
-        + " "
+        + returnTypeInString
         + name
         + "("
         + arguments
