@@ -69,7 +69,6 @@ public class UnsolvedMethod {
         arguments = arguments + ", ";
       }
     }
-    System.out.println(arguments);
     return "\n    public "
         + returnType
         + " "
