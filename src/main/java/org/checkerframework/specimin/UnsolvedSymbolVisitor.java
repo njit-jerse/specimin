@@ -159,7 +159,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(method, p);
     }
     if (unsolvedAndNotSimple(method)) {
-      updateClassSetWithNotSimpleMethodCall(method.toString());
+      updateClassSetWithNotSimpleMethodCall(method);
     } else if (calledByAnIncompleteSyntheticClass(method)) {
       String incompleteClassName = getSyntheticClass(method);
       UnsolvedClass missingClass =
@@ -561,7 +561,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param methodCall the method call to be taken as input
    */
-  public void updateClassSetWithNotSimpleMethodCall(String methodCall) {
+  public void updateClassSetWithNotSimpleMethodCall(MethodCallExpr method) {
+    String methodCall = method.toString();
     String methodCallWithoutParen = methodCall.replace("()", "");
     String[] methodParts = methodCallWithoutParen.split("[.]");
     int lengthMethodParts = methodParts.length;
@@ -583,7 +584,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
     UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
-    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType);
+    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
     newClass.addMethod(newMethod);
     syntheticMethodAndClass.put(newMethod.toString(), newClass);
     this.updateMissingClass(newClass);
