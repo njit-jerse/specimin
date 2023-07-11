@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -154,8 +155,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
     String methodSimpleName = method.getNameAsString();
+    if (!canSolveParameters(method)) {
+      return super.visit(method, p);
+    }
     if (unsolvedAndNotSimple(method)) {
-      updateClassSetWithNotSimpleMethodCall(method.toString());
+      updateClassSetWithNotSimpleMethodCall(method);
     } else if (calledByAnIncompleteSyntheticClass(method)) {
       String incompleteClassName = getSyntheticClass(method);
       UnsolvedClass missingClass =
@@ -165,7 +169,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass returnTypeForThisMethod =
           new UnsolvedClass(returnNameForMethod(methodSimpleName), missingClass.getPackageName());
       UnsolvedMethod thisMethod =
-          new UnsolvedMethod(methodSimpleName, returnTypeForThisMethod.getClassName());
+          new UnsolvedMethod(
+              methodSimpleName,
+              returnTypeForThisMethod.getClassName(),
+              getArgumentsFromMethodCall(method));
       missingClass.addMethod(thisMethod);
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
@@ -178,6 +185,72 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             || calledByAnIncompleteSyntheticClass(method)
             || unsolvedAndNotSimple(method);
     return super.visit(method, p);
+  }
+
+  /**
+   * This method checks if the current run of UnsolvedSymbolVisitor can solve the parameters' types
+   * of a method call
+   *
+   * @param method the method call to be checked
+   * @return true if UnsolvedSymbolVisitor can solve the types of parameters of method
+   */
+  public static boolean canSolveParameters(MethodCallExpr method) {
+    NodeList<Expression> paraList = method.getArguments();
+    if (paraList.isEmpty()) {
+      return true;
+    }
+    for (Expression parameter : paraList) {
+      try {
+        String type = parameter.calculateResolvedType().describe();
+      } catch (Exception e) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Given a method call, this method returns the list of types of the parameters of that method
+   *
+   * @param method the method to be analyzed
+   * @return the types of parameters of method
+   */
+  public static List<String> getArgumentsFromMethodCall(MethodCallExpr method) {
+    List<String> parametersList = new ArrayList<>();
+    NodeList<Expression> paraList = method.getArguments();
+    for (Expression parameter : paraList) {
+      ResolvedType type = parameter.calculateResolvedType();
+
+      // for reference type, we need the fully-qualified name to avoid having to add additional
+      // import statements.
+      if (type.isReferenceType()) {
+        parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
+      } else if (type.isPrimitive()) {
+        parametersList.add(type.describe());
+      }
+    }
+    return parametersList;
+  }
+
+  /**
+   * Given a new object creation, this method returns the list of types of the parameters of that
+   * call
+   *
+   * @param creationExpr the object creation call
+   * @return the types of parameters of the object creation method
+   */
+  public static List<String> getArgumentsFromObjectCreation(ObjectCreationExpr creationExpr) {
+    List<String> parametersList = new ArrayList<>();
+    NodeList<Expression> paraList = creationExpr.getArguments();
+    for (Expression parameter : paraList) {
+      ResolvedType type = parameter.calculateResolvedType();
+      if (type instanceof ResolvedReferenceType) {
+        parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
+      } else if (type instanceof PrimitiveType) {
+        parametersList.add(type.asPrimitive().name());
+      }
+    }
+    return parametersList;
   }
 
   /**
@@ -310,9 +383,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       type = newExpr.resolve().getQualifiedName();
     } catch (UnsolvedSymbolException e) {
-      UnsolvedClass newClass =
-          new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
-      this.updateMissingClass(newClass);
+      try {
+        List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
+        UnsolvedMethod creationMethod = new UnsolvedMethod(type, "", argumentsCreation);
+        UnsolvedClass newClass =
+            new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
+        newClass.addMethod(creationMethod);
+        this.updateMissingClass(newClass);
+      } catch (Exception q) {
+        this.gotException = true;
+        return super.visit(newExpr, p);
+      }
     }
     this.gotException = type.equals(newExpr.getTypeAsString());
     return super.visit(newExpr, p);
@@ -485,7 +566,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param methodCall the method call to be taken as input
    */
-  public void updateClassSetWithNotSimpleMethodCall(String methodCall) {
+  public void updateClassSetWithNotSimpleMethodCall(MethodCallExpr method) {
+    String methodCall = method.toString();
     String methodCallWithoutParen = methodCall.replace("()", "");
     String[] methodParts = methodCallWithoutParen.split("[.]");
     int lengthMethodParts = methodParts.length;
@@ -507,7 +589,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
     UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
-    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType);
+    UnsolvedMethod newMethod =
+        new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
     newClass.addMethod(newMethod);
     syntheticMethodAndClass.put(newMethod.toString(), newClass);
     this.updateMissingClass(newClass);
