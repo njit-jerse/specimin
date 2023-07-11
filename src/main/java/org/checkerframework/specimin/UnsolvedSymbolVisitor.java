@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.checker.signature.qual.PrimitiveType;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
@@ -154,6 +155,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
     String methodSimpleName = method.getNameAsString();
+    if (!canSolveParameters(method)) {
+      return super.visit(method, p);
+    }
     if (unsolvedAndNotSimple(method)) {
       updateClassSetWithNotSimpleMethodCall(method.toString());
     } else if (calledByAnIncompleteSyntheticClass(method)) {
@@ -178,6 +182,70 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             || calledByAnIncompleteSyntheticClass(method)
             || unsolvedAndNotSimple(method);
     return super.visit(method, p);
+  }
+
+
+  /**
+   * This method checks if the current run of UnsolvedSymbolVisitor can solve the parameters' types
+   * of a method call
+   *
+   * @param method the method call to be checked
+   * @return true if UnsolvedSymbolVisitor can solve the types of parameters of method
+   */
+  public static boolean canSolveParameters(MethodCallExpr method) {
+    NodeList<Expression> paraList = method.getArguments();
+    if (paraList.isEmpty()) {
+      return true;
+    }
+    for (Expression parameter : paraList) {
+      try {
+        String type = parameter.calculateResolvedType().describe();
+      } catch (Exception e) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Given a method call, this method returns the list of types of the parameters of that method
+   *
+   * @param method the method to be analyzed
+   * @return the types of parameters of method
+   */
+  public static List<String> getArgumentsFromMethodCall(MethodCallExpr method) {
+    List<String> parametersList = new ArrayList<>();
+    NodeList<Expression> paraList = method.getArguments();
+    for (Expression parameter : paraList) {
+      ResolvedType type = parameter.calculateResolvedType();
+      if (type instanceof ResolvedReferenceType) {
+        parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
+      } else if (type instanceof PrimitiveType) {
+        parametersList.add(type.asPrimitive().name());
+      }
+    }
+    return parametersList;
+  }
+
+  /**
+   * Given a new object creation, this method returns the list of types of the parameters of that
+   * call
+   *
+   * @param creationExpr the object creation call
+   * @return the types of parameters of the object creation method
+   */
+  public static List<String> getArgumentsFromObjectCreation(ObjectCreationExpr creationExpr) {
+    List<String> parametersList = new ArrayList<>();
+    NodeList<Expression> paraList = creationExpr.getArguments();
+    for (Expression parameter : paraList) {
+      ResolvedType type = parameter.calculateResolvedType();
+      if (type instanceof ResolvedReferenceType) {
+        parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
+      } else if (type instanceof PrimitiveType) {
+        parametersList.add(type.asPrimitive().name());
+      }
+    }
+    return parametersList;
   }
 
   /**
@@ -310,9 +378,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       type = newExpr.resolve().getQualifiedName();
     } catch (UnsolvedSymbolException e) {
-      UnsolvedClass newClass =
-          new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
-      this.updateMissingClass(newClass);
+      try {
+        List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
+        UnsolvedMethod creationMethod = new UnsolvedMethod(type, "", argumentsCreation);
+        UnsolvedClass newClass =
+                new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
+        newClass.addMethod(creationMethod);
+        this.updateMissingClass(newClass);
+      } catch (Exception q) {
+        this.gotException = true;
+        return super.visit(newExpr, p);
+      }
     }
     this.gotException = type.equals(newExpr.getTypeAsString());
     return super.visit(newExpr, p);
