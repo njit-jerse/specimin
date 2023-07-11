@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -28,7 +29,6 @@ import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
-import org.checkerframework.checker.signature.qual.PrimitiveType;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
@@ -220,10 +220,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     NodeList<Expression> paraList = method.getArguments();
     for (Expression parameter : paraList) {
       ResolvedType type = parameter.calculateResolvedType();
-      if (type instanceof ResolvedReferenceType) {
+
+      // for reference type, we need the fully-qualified name to avoid having to add additional
+      // import statements.
+      if (type.isReferenceType()) {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
-      } else if (type instanceof PrimitiveType) {
-        parametersList.add(type.asPrimitive().name());
+      } else if (type.isPrimitive()) {
+        parametersList.add(type.describe());
       }
     }
     return parametersList;
