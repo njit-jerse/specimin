@@ -1,6 +1,5 @@
 package org.checkerframework.specimin;
 
-import java.util.ArrayList;
 import java.util.List;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
@@ -61,23 +60,16 @@ public class UnsolvedMethod {
    * @return the content of the method with the body stubbed out
    */
   public String toString() {
-    List<String> letters = new ArrayList<>();
-
-    for (char c = 'a'; c <= 'z'; c++) {
-      letters.add(String.valueOf(c));
-    }
     String arguments = "";
     for (int i = 0; i < parameterList.size(); i++) {
       String parameter = parameterList.get(i);
-      if (i > letters.size()) {
-        throw new RuntimeException("Too much arguments in this method: " + name);
-      }
-      String parameterName = letters.get(i);
+      String parameterName = "parameter" + i;
       arguments = arguments + parameter + " " + parameterName;
       if (i < parameterList.size() - 1) {
         arguments = arguments + ", ";
       }
     }
+    System.out.println(arguments);
     return "\n    public "
         + returnType
         + " "
