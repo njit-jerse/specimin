@@ -169,7 +169,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass returnTypeForThisMethod =
           new UnsolvedClass(returnNameForMethod(methodSimpleName), missingClass.getPackageName());
       UnsolvedMethod thisMethod =
-          new UnsolvedMethod(methodSimpleName, returnTypeForThisMethod.getClassName(), getArgumentsFromMethodCall(method));
+          new UnsolvedMethod(
+              methodSimpleName,
+              returnTypeForThisMethod.getClassName(),
+              getArgumentsFromMethodCall(method));
       missingClass.addMethod(thisMethod);
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
@@ -183,7 +186,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             || unsolvedAndNotSimple(method);
     return super.visit(method, p);
   }
-
 
   /**
    * This method checks if the current run of UnsolvedSymbolVisitor can solve the parameters' types
@@ -382,7 +384,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
         UnsolvedMethod creationMethod = new UnsolvedMethod(type, "", argumentsCreation);
         UnsolvedClass newClass =
-                new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
+            new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
         newClass.addMethod(creationMethod);
         this.updateMissingClass(newClass);
       } catch (Exception q) {
@@ -584,7 +586,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
     UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
-    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
+    UnsolvedMethod newMethod =
+        new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
     newClass.addMethod(newMethod);
     syntheticMethodAndClass.put(newMethod.toString(), newClass);
     this.updateMissingClass(newClass);

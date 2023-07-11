@@ -31,7 +31,7 @@ public class UnsolvedMethod {
    * @param returnType the return type of the method
    */
   public UnsolvedMethod(
-          String name, @ClassGetSimpleName String returnType, List<String> parameterList) {
+      String name, @ClassGetSimpleName String returnType, List<String> parameterList) {
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
@@ -79,11 +79,11 @@ public class UnsolvedMethod {
       }
     }
     return "\n    public "
-            + returnType
-            + " "
-            + name
-            + "("
-            + arguments
-            + ") {\n        throw new Error();\n    }\n";
+        + returnType
+        + " "
+        + name
+        + "("
+        + arguments
+        + ") {\n        throw new Error();\n    }\n";
   }
 }

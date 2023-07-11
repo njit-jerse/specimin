@@ -31,11 +31,6 @@ public class UnsolvedClass {
     this.className = className;
     this.methods = new HashSet<>();
     this.packageName = packageName;
-    // It is simpler to just add the method here than to figure out that it is needed and add it
-    // later during the visitor's phase. And if it turns out that the method is not used,
-    // MethodPrunerVisitor will take care of it
-    UnsolvedMethod constructorMethod = new UnsolvedMethod(className, "");
-    methods.add(constructorMethod);
   }
 
   /**
