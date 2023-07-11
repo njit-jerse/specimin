@@ -30,10 +30,11 @@ public class UnsolvedMethod {
    * @param name the name of the method
    * @param returnType the return type of the method
    */
-  public UnsolvedMethod(String name, @ClassGetSimpleName String returnType) {
+  public UnsolvedMethod(
+          String name, @ClassGetSimpleName String returnType, List<String> parameterList) {
     this.name = name;
     this.returnType = returnType;
-    this.parameterList = new ArrayList<>();
+    this.parameterList = parameterList;
   }
 
   /**
@@ -60,6 +61,29 @@ public class UnsolvedMethod {
    * @return the content of the method with the body stubbed out
    */
   public String toString() {
-    return "\n    public " + returnType + " " + name + "() {\n        throw new Error();\n    }\n";
+    List<String> letters = new ArrayList<>();
+
+    for (char c = 'a'; c <= 'z'; c++) {
+      letters.add(String.valueOf(c));
+    }
+    String arguments = "";
+    for (int i = 0; i < parameterList.size(); i++) {
+      String parameter = parameterList.get(i);
+      if (i > letters.size()) {
+        throw new RuntimeException("Too much arguments in this method: " + name);
+      }
+      String parameterName = letters.get(i);
+      arguments = arguments + parameter + " " + parameterName;
+      if (i < parameterList.size() - 1) {
+        arguments = arguments + ", ";
+      }
+    }
+    return "\n    public "
+            + returnType
+            + " "
+            + name
+            + "("
+            + arguments
+            + ") {\n        throw new Error();\n    }\n";
   }
 }

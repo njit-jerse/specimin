@@ -169,7 +169,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass returnTypeForThisMethod =
           new UnsolvedClass(returnNameForMethod(methodSimpleName), missingClass.getPackageName());
       UnsolvedMethod thisMethod =
-          new UnsolvedMethod(methodSimpleName, returnTypeForThisMethod.getClassName());
+          new UnsolvedMethod(methodSimpleName, returnTypeForThisMethod.getClassName(), getArgumentsFromMethodCall(method));
       missingClass.addMethod(thisMethod);
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
