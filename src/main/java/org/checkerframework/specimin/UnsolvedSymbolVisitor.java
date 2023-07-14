@@ -2,12 +2,21 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.PackageDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.type.PrimitiveType;
+import com.github.javaparser.ast.type.ReferenceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -28,6 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
@@ -38,6 +48,26 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
  */
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
+  /**
+   * The parent class of this current class file. If there is no parent class, then the value of
+   * this variable is an empty string
+   */
+  private @ClassGetSimpleName String parentClass = "";
+
+  /** The package of this class */
+  private String currentPackage = "";
+
+  /**
+   * This map will map the name of variables in the current class and its corresponding declaration
+   */
+  private Map<String, String> variablesAndDeclaration;
+
+  /**
+   * Based on the method declarations in the current class, this map will map the name of the
+   * methods with their corresponding return types
+   */
+  private Map<String, @ClassGetSimpleName String> methodAndReturnType;
+
   /** List of classes not in the source codes */
   private Set<UnsolvedClass> missingClass;
 
@@ -45,7 +75,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String rootDirectory;
 
   /** This instance maps the name of a synthetic method with its synthetic class */
-  Map<String, UnsolvedClass> syntheticMethodAndClass;
+  private Map<String, UnsolvedClass> syntheticMethodAndClass;
 
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
@@ -84,6 +114,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.classAndPackageMap = new HashMap<>();
     this.createdClass = new HashSet<>();
     this.syntheticMethodAndClass = new HashMap<>();
+    this.methodAndReturnType = new HashMap<>();
+    this.variablesAndDeclaration = new HashMap<>();
   }
 
   /**
@@ -127,6 +159,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Get the value of parentclass
+   *
+   * @return parentClass the value of parentClass
+   */
+  public String getParentClass() {
+    return parentClass;
+  }
+
+  /**
    * Get the value of gotException
    *
    * @return gotException the value of gotException
@@ -153,38 +194,285 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(PackageDeclaration node, Void arg) {
+    this.currentPackage = node.getNameAsString();
+    return super.visit(node, arg);
+  }
+
+  @Override
+  public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
+    if (node.getExtendedTypes().isNonEmpty()) {
+      // note that since Specimin does not have access to the class paths of the project, all the
+      // unsolved methods related to inheritance will be placed in the parent class, even if there
+      // is a grandparent class and so forth.
+      SimpleName parentClassSimpleName = node.getExtendedTypes().get(0).getName();
+      parentClass = parentClassSimpleName.asString();
+    }
+    return super.visit(node, arg);
+  }
+
+  @Override
+  public Visitable visit(ExplicitConstructorInvocationStmt node, Void arg) {
+    NodeList<Expression> arguments = node.getArguments();
+    List<String> parametersList = new ArrayList<>();
+    for (Expression parameter : arguments) {
+      if (!canBeSolved(parameter)) {
+        return super.visit(node, arg);
+      }
+      ResolvedType type = parameter.calculateResolvedType();
+      if (type instanceof PrimitiveType) {
+        parametersList.add(type.asPrimitive().name());
+      } else if (type instanceof ReferenceType) {
+        parametersList.add(type.asReferenceType().getQualifiedName());
+      }
+    }
+    UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
+    // if the parent class can not be found in the import statements, Specimin assumes it is in the
+    // same package as the child class, which is also the current class
+    UnsolvedClass parentClass =
+        new UnsolvedClass(
+            this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
+    parentClass.addMethod(constructorMethod);
+    updateMissingClass(parentClass);
+    return super.visit(node, arg);
+  }
+
+  @Override
+  public Visitable visit(FieldDeclaration node, Void arg) {
+    for (VariableDeclarator var : node.getVariables()) {
+      String variableName = var.getNameAsString();
+      String variableType = node.getElementType().asString();
+      Optional<Expression> potentialValue = var.getInitializer();
+      String variableDeclaration = variableType + " " + variableName;
+      if (!potentialValue.isEmpty()) {
+        String variableValue = potentialValue.get().toString();
+        variableDeclaration += " = " + variableValue;
+      }
+      variablesAndDeclaration.put(variableName, variableDeclaration);
+    }
+    return super.visit(node, arg);
+  }
+
+  @Override
+  public Visitable visit(MethodDeclaration node, Void arg) {
+    Type nodeType = node.getType();
+    // since this is a return type of a method, it is a dot-separated identifier
+    @SuppressWarnings("signature")
+    @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
+    @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
+    methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
+    return super.visit(node, arg);
+  }
+
+  public Visitable visit(FieldAccessExpr node, Void p) {
+    if (isASuperCall(node) && !canBeSolved(node)) {
+      updateSyntheticClassForSuperCall(node);
+    }
+    return super.visit(node, p);
+  }
+
+  @Override
   public Visitable visit(MethodCallExpr method, Void p) {
-    String methodSimpleName = method.getNameAsString();
+    if (isASuperCall(method) && !canBeSolved(method)) {
+      updateSyntheticClassForSuperCall(method);
+      return super.visit(method, p);
+    }
+    // we will wait for the next run to solve this method call
     if (!canSolveParameters(method)) {
       return super.visit(method, p);
     }
     if (unsolvedAndNotSimple(method)) {
       updateClassSetWithNotSimpleMethodCall(method);
     } else if (calledByAnIncompleteSyntheticClass(method)) {
-      String incompleteClassName = getSyntheticClass(method);
-      UnsolvedClass missingClass =
-          new UnsolvedClass(
-              incompleteClassName,
-              classAndPackageMap.getOrDefault(incompleteClassName, this.chosenPackage));
-      UnsolvedClass returnTypeForThisMethod =
-          new UnsolvedClass(returnNameForMethod(methodSimpleName), missingClass.getPackageName());
-      UnsolvedMethod thisMethod =
-          new UnsolvedMethod(
-              methodSimpleName,
-              returnTypeForThisMethod.getClassName(),
-              getArgumentsFromMethodCall(method));
-      missingClass.addMethod(thisMethod);
-      classAndPackageMap.put(
-          returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
-      this.updateMissingClass(missingClass);
-      this.updateMissingClass(returnTypeForThisMethod);
-      syntheticMethodAndClass.put(methodSimpleName, missingClass);
+      @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
+      updateUnsolvedClassWithMethodCall(method, incompleteClassName, "");
     }
     this.gotException =
         calledByAnUnsolvedSymbol(method)
             || calledByAnIncompleteSyntheticClass(method)
             || unsolvedAndNotSimple(method);
     return super.visit(method, p);
+  }
+
+  @Override
+  public Visitable visit(Parameter parameter, Void p) {
+    try {
+      parameter.resolve().describeType();
+      return super.visit(parameter, p);
+    } catch (UnsolvedSymbolException e) {
+      String parameterInString = parameter.toString();
+      if (isAClassPath(parameterInString)) {
+        // parameterInString needs to be a fully-qualified name. As this parameter has a form of
+        // class path, we can say that it is a fully-qualified name
+        @SuppressWarnings("signature")
+        UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
+        updateMissingClass(newClass);
+      } else {
+        // since it is unsolved, it could not be a primitive type
+        @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
+        UnsolvedClass newClass =
+            new UnsolvedClass(
+                className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
+        updateMissingClass(newClass);
+      }
+    }
+    gotException = true;
+    return super.visit(parameter, p);
+  }
+
+  @Override
+  public Visitable visit(ObjectCreationExpr newExpr, Void p) {
+    SimpleName typeName = newExpr.getType().getName();
+    String type = typeName.asString();
+    Expression asExpression = newExpr;
+    if (canBeSolved(asExpression)) {
+      return super.visit(newExpr, p);
+    }
+    this.gotException = true;
+    try {
+      List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
+      UnsolvedMethod creationMethod = new UnsolvedMethod(type, "", argumentsCreation);
+      UnsolvedClass newClass =
+          new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
+      newClass.addMethod(creationMethod);
+      this.updateMissingClass(newClass);
+    } catch (Exception q) {
+      // can not solve the parameters for this object creation in this current run
+      return super.visit(newExpr, p);
+    }
+    return super.visit(newExpr, p);
+  }
+
+  /**
+   * Given a class name that can either be fully-qualified or simple, this method will convert that
+   * class name to a simple name.
+   *
+   * @param className the class name to be converted
+   * @return the simple form of that class name
+   */
+  // We can have certainty that this method is true as the last element of a class name is the
+  // simple form of that name
+  @SuppressWarnings("signature")
+  public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
+    String[] elements = className.split(".");
+    if (elements.length < 2) {
+      return className;
+    }
+    return elements[elements.length - 1];
+  }
+
+  /**
+   * This method will add a new method declaration to a synthetic class based on the unsolved method
+   * call in the original input. User can choose the desired return type for the added method. The
+   * desired return type can be an empty string, and in that case, Specimin will create another
+   * synthetic class to be the return type of that method.
+   *
+   * @param method the method call in the original input
+   * @param className the name of the synthetic class
+   * @param desiredReturnType the desired return type for this method
+   */
+  public void updateUnsolvedClassWithMethodCall(
+      MethodCallExpr method,
+      @ClassGetSimpleName String className,
+      @ClassGetSimpleName String desiredReturnType) {
+    String methodName = method.getNameAsString();
+    String returnType = "";
+    if (desiredReturnType.equals("")) {
+      returnType = returnNameForMethod(methodName);
+    } else {
+      returnType = desiredReturnType;
+    }
+    UnsolvedClass missingClass =
+        new UnsolvedClass(
+            className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
+    UnsolvedMethod thisMethod =
+        new UnsolvedMethod(methodName, returnType, getArgumentsFromMethodCall(method));
+    missingClass.addMethod(thisMethod);
+    syntheticMethodAndClass.put(methodName, missingClass);
+    this.updateMissingClass(missingClass);
+    if (desiredReturnType.equals("")) {
+      UnsolvedClass returnTypeForThisMethod =
+          new UnsolvedClass(returnType, missingClass.getPackageName());
+      this.updateMissingClass(returnTypeForThisMethod);
+      classAndPackageMap.put(
+          returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
+    }
+  }
+
+  /**
+   * This method checks if an expression is called by the super keyword. For example, super.visit()
+   * is such an expression.
+   *
+   * @param node the expression to be checked
+   * @return true if method is a super call
+   */
+  public static boolean isASuperCall(Expression node) {
+    if (node instanceof MethodCallExpr) {
+      Optional<Expression> caller = node.asMethodCallExpr().getScope();
+      if (caller.isEmpty()) {
+        return false;
+      }
+      return caller.get().isSuperExpr();
+    } else if (node instanceof FieldAccessExpr) {
+      Expression caller = node.asFieldAccessExpr().getScope();
+      return caller.isSuperExpr();
+    } else {
+      throw new RuntimeException("Unforeseen expression: " + node);
+    }
+  }
+
+  /**
+   * For a super call, this method will update the corresponding synthetic class
+   *
+   * @param expr the super call expression to be taken as input
+   */
+  public void updateSyntheticClassForSuperCall(Expression expr) {
+    if (!isASuperCall(expr)) {
+      throw new RuntimeException(
+          "Check if isASuperCall returns true before calling updateSyntheticClassForSuperCall");
+    }
+    if (expr instanceof MethodCallExpr) {
+      updateUnsolvedClassWithMethodCall(
+          expr.asMethodCallExpr(),
+          this.parentClass,
+          methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
+    } else {
+      updateUnsolvedClassWithVariables(
+          expr.asFieldAccessExpr().getNameAsString(),
+          parentClass,
+          classAndPackageMap.getOrDefault(parentClass, this.currentPackage));
+    }
+  }
+
+  /**
+   * This method will add a new variable declaration to a synthetic class. This class is mainly used
+   * for unsolved parent class. The declaration of the variable in the parent class will be the same
+   * as the declaration in the child class since Specimin does not have access to much information.
+   * If the variable is not found in the child class, Specimin will create a synthetic class to be
+   * the type of that variable.
+   *
+   * @param var the variable to be added
+   * @param className the name of the synthetic class
+   * @param packageName the package of the synthetic class
+   */
+  public void updateUnsolvedClassWithVariables(
+      String var, @ClassGetSimpleName String className, String packageName) {
+    UnsolvedClass relatedClass = new UnsolvedClass(className, packageName);
+    if (variablesAndDeclaration.containsKey(var)) {
+      String variableExpression = variablesAndDeclaration.get(var);
+      relatedClass.addVariables(variableExpression);
+      updateMissingClass(relatedClass);
+    } else {
+      // since it is just simple string combination, it is a simple name
+      @SuppressWarnings("signature")
+      @ClassGetSimpleName String variableType = "SyntheticTypeFor" + toCapital(var);
+      UnsolvedClass varType = new UnsolvedClass(variableType, packageName);
+      String variableExpression =
+          String.format("%s %s = new %s();", variableType, var, variableType);
+      relatedClass.addVariables(variableExpression);
+      updateMissingClass(relatedClass);
+      updateMissingClass(varType);
+    }
   }
 
   /**
@@ -200,9 +488,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return true;
     }
     for (Expression parameter : paraList) {
-      try {
-        String type = parameter.calculateResolvedType().describe();
-      } catch (Exception e) {
+      if (!canBeSolved(parameter)) {
         return false;
       }
     }
@@ -220,7 +506,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     NodeList<Expression> paraList = method.getArguments();
     for (Expression parameter : paraList) {
       ResolvedType type = parameter.calculateResolvedType();
-
       // for reference type, we need the fully-qualified name to avoid having to add additional
       // import statements.
       if (type.isReferenceType()) {
@@ -266,11 +551,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return false;
     }
     Expression callerExpression = caller.get();
+    return canBeSolved(callerExpression);
+  }
+
+  /**
+   * This methods check if an Expression instance can be solved by SymbolSolver of JavaParser. If
+   * the Expression instance can be solved, there is no need to create any synthetic method or class
+   * for it.
+   *
+   * @param expr the expression to be checked
+   * @return true if the expression can be solved
+   */
+  public static boolean canBeSolved(Expression expr) {
     try {
-      callerExpression.calculateResolvedType();
-      return false;
-    } catch (Exception e) {
+      expr.calculateResolvedType().describe();
       return true;
+    } catch (Exception e) {
+      return false;
     }
   }
 
@@ -348,57 +645,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return returnName;
   }
 
-  @Override
-  public Visitable visit(Parameter parameter, Void p) {
-    try {
-      parameter.resolve().describeType();
-      return super.visit(parameter, p);
-    } catch (UnsolvedSymbolException e) {
-      String parameterInString = parameter.toString();
-      if (isAClassPath(parameterInString)) {
-        // parameterInString needs to be a fully-qualified name. As this parameter has a form of
-        // class path, we can say that it is a fully-qualified name
-        @SuppressWarnings("signature")
-        UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
-        updateMissingClass(newClass);
-      } else {
-        // since it is unsolved, it could not be a primitive type
-        @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-        UnsolvedClass newClass =
-            new UnsolvedClass(
-                className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
-        updateMissingClass(newClass);
-      }
-    }
-    // there are more elegant ways to update gotException, but the compiler will throw an error if
-    // the try block doesn't have any use
-    gotException = true;
-    return super.visit(parameter, p);
-  }
-
-  @Override
-  public Visitable visit(ObjectCreationExpr newExpr, Void p) {
-    SimpleName typeName = newExpr.getType().getName();
-    String type = typeName.asString();
-    try {
-      type = newExpr.resolve().getQualifiedName();
-    } catch (UnsolvedSymbolException e) {
-      try {
-        List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
-        UnsolvedMethod creationMethod = new UnsolvedMethod(type, "", argumentsCreation);
-        UnsolvedClass newClass =
-            new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
-        newClass.addMethod(creationMethod);
-        this.updateMissingClass(newClass);
-      } catch (Exception q) {
-        this.gotException = true;
-        return super.visit(newExpr, p);
-      }
-    }
-    this.gotException = type.equals(newExpr.getTypeAsString());
-    return super.visit(newExpr, p);
-  }
-
   /**
    * This method is to update the missingClass list. The reason we have this update is to add a
    * method to an existing class.
@@ -414,6 +660,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           if (!method.getReturnType().equals("")) {
             e.addMethod(method);
           }
+        }
+        for (String variablesDescription : missedClass.getClassVariables()) {
+          e.addVariables(variablesDescription);
         }
         return;
       }
@@ -564,7 +813,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * For a method call that is not simple, this method will take that method as input and create
    * corresponding synthetic class
    *
-   * @param methodCall the method call to be taken as input
+   * @param method the method call to be taken as input
    */
   public void updateClassSetWithNotSimpleMethodCall(MethodCallExpr method) {
     String methodCall = method.toString();
