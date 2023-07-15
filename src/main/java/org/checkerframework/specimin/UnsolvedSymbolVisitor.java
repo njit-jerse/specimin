@@ -267,6 +267,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return super.visit(node, arg);
   }
 
+  @Override
   public Visitable visit(FieldAccessExpr node, Void p) {
     if (isASuperCall(node) && !canBeSolved(node)) {
       updateSyntheticClassForSuperCall(node);
