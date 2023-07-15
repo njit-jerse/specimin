@@ -247,6 +247,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (!potentialValue.isEmpty()) {
         String variableValue = potentialValue.get().toString();
         variableDeclaration += " = " + variableValue;
+      } else {
+        variableDeclaration =
+            this.setInitialValueForVariableDeclaration(variableType, variableDeclaration);
       }
       variablesAndDeclaration.put(variableName, variableDeclaration);
     }
@@ -287,6 +290,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
       updateUnsolvedClassWithMethodCall(method, incompleteClassName, "");
     }
+    System.out.println(calledByAnUnsolvedSymbol(method));
+    System.out.println(calledByAnIncompleteSyntheticClass(method));
+    System.out.println(unsolvedAndNotSimple(method));
     this.gotException =
         calledByAnUnsolvedSymbol(method)
             || calledByAnIncompleteSyntheticClass(method)
@@ -341,6 +347,39 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(newExpr, p);
     }
     return super.visit(newExpr, p);
+  }
+
+  /**
+   * Given the variable type and the basic declaration of that variable (such as "int x", "boolean
+   * y", "Car redTruck",...), this methods will add an initial value to that declaration of the
+   * variable. The way the initial value is chosen is based on the document of the Java Language:
+   * https://docs.oracle.com/javase/specs/jls/se7/html/jls-4.html#jls-4.12.5
+   *
+   * @param variableType the type of the variable
+   * @param variableDeclaration the basic declaration of that variable
+   * @return the declaration of the variable with an initial value
+   */
+  public static String setInitialValueForVariableDeclaration(
+      String variableType, String variableDeclaration) {
+    if (variableType.equals("byte")) {
+      return variableDeclaration + " = (byte)0";
+    } else if (variableType.equals("short")) {
+      return variableDeclaration + " = (short)0";
+    } else if (variableType.equals("int")) {
+      return variableDeclaration + " = 0";
+    } else if (variableType.equals("long")) {
+      return variableDeclaration + " = 0L";
+    } else if (variableType.equals("float")) {
+      return variableDeclaration + " = 0.0f";
+    } else if (variableType.equals("double")) {
+      return variableDeclaration + " = 0.0d";
+    } else if (variableType.equals("char")) {
+      return variableDeclaration + " = '\\u0000'";
+    } else if (variableType.equals("boolean")) {
+      return variableDeclaration + " = false";
+    } else {
+      return variableDeclaration + " = null";
+    }
   }
 
   /**
@@ -551,7 +590,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return false;
     }
     Expression callerExpression = caller.get();
-    return canBeSolved(callerExpression);
+    return !canBeSolved(callerExpression);
   }
 
   /**
@@ -567,6 +606,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       expr.calculateResolvedType().describe();
       return true;
     } catch (Exception e) {
+      System.out.println(e);
       return false;
     }
   }
