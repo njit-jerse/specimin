@@ -606,7 +606,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       expr.calculateResolvedType().describe();
       return true;
     } catch (Exception e) {
-      System.out.println(e);
       return false;
     }
   }

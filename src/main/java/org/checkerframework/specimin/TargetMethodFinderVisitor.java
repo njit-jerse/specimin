@@ -3,11 +3,18 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * The main visitor for Specimin's first phase, which locates the target method(s) and compiles
@@ -54,12 +61,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * usually indicates an error.
    */
   private final List<String> unfoundMethods;
-
-  /** The package of this current class */
-  private String packageName = "";
-
-  /** The parent class of this class, if any. */
-  private String parentClass = "";
 
   /**
    * Create a new target method finding visitor.

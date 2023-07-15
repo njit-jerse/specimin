@@ -77,7 +77,6 @@ public class SpeciminRunner {
      * files in the end.
      */
     Set<Path> createdClass = new HashSet<>();
-    System.out.println("Get in the loop");
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
       for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -98,7 +97,6 @@ public class SpeciminRunner {
       }
     }
     List<String> targetMethodNames = options.valuesOf(targetMethodsOption);
-    System.out.println("Get out the loop");
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
