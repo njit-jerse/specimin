@@ -154,10 +154,11 @@ public class SpeciminRunner {
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
       // If a compilation output's entire body has been removed, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
-        // These classes are synthetic return types of unsolved methods. Even if their bodies are
-        // empty, they are needed in order for the codes to compile
-        if (!target.getKey().contains("ReturnType")
-            && !target.getKey().contains(addMissingClass.getParentClass())) {
+        boolean isASyntheticReturnType = target.getKey().contains("ReturnType");
+        boolean isASyntheticSuperClass =
+            !addMissingClass.getParentClass().equals("")
+                && target.getKey().contains(addMissingClass.getParentClass());
+        if (!isASyntheticSuperClass && !isASyntheticReturnType) {
           continue;
         }
       }
