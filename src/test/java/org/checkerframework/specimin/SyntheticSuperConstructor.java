@@ -4,15 +4,15 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks that if Specimin will work properly where there are two classes with the same
- * name
+ * This test checks that if Specimin will work properly where there is a super constructor while the
+ * parent class file is not in the root directory physically
  */
-public class SameClassName {
+public class SyntheticSuperConstructor {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTest(
-        "sameclassname",
-        new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#secondCalculator()"});
+        "syntheticsuperconstructor",
+        new String[] {"com/example/Car.java"},
+        new String[] {"com.example.Car#Car()"});
   }
 }
