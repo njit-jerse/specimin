@@ -291,9 +291,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
       updateUnsolvedClassWithMethodCall(method, incompleteClassName, "");
     }
-    System.out.println(calledByAnUnsolvedSymbol(method));
-    System.out.println(calledByAnIncompleteSyntheticClass(method));
-    System.out.println(unsolvedAndNotSimple(method));
     this.gotException =
         calledByAnUnsolvedSymbol(method)
             || calledByAnIncompleteSyntheticClass(method)
