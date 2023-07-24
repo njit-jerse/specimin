@@ -26,6 +26,8 @@ The available options are (required options in **bold**, repeatable options in *
 * ***--targetFile***: a source file in which to search for target methods
 * ***--targetMethod***: a target method that must be preserved, and whose dependencies should be stubbed out. Use the format `class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)`
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
+* *--jarPath*: the path of a Jar file for Specimin to take as input. 
+
 
 Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
 
