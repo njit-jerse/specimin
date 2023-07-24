@@ -3,17 +3,14 @@ package org.checkerframework.specimin;
 import java.io.IOException;
 import org.junit.Test;
 
-/**
- * This test checks that a simple Java file with no dependencies whatsoever and a single target
- * method is returned unaltered by specimin.
- */
-public class NoDependenciesReturnsSameTest {
+/** This test checks if Specimin can handle jar files as input */
+public class JarFileTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTest(
         "nodependenciesreturnssame",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#test()"},
-        new String[] {});
+        new String[] {"src/test/resources/jarfile/input/Book.jar"});
   }
 }

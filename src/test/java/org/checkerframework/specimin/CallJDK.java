@@ -14,6 +14,7 @@ public class CallJDK {
     SpeciminTestExecutor.runTest(
         "callJDK",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#test()"});
+        new String[] {"com.example.Simple#test()"},
+        new String[] {});
   }
 }

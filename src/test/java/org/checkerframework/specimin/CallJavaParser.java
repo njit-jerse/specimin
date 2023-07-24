@@ -14,6 +14,7 @@ public class CallJavaParser {
     SpeciminTestExecutor.runTest(
         "callJavaParser",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#test()"});
+        new String[] {"com.example.Simple#test()"},
+        new String[] {});
   }
 }

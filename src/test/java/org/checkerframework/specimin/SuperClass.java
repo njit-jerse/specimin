@@ -14,6 +14,7 @@ public class SuperClass {
     SpeciminTestExecutor.runTest(
         "superclass",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#printMessage()"});
+        new String[] {"com.example.Simple#printMessage()"},
+        new String[] {});
   }
 }

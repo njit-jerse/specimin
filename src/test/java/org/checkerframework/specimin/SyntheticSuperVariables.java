@@ -13,6 +13,7 @@ public class SyntheticSuperVariables {
     SpeciminTestExecutor.runTest(
         "syntheticsupervariables",
         new String[] {"com/example/Dog.java"},
-        new String[] {"com.example.Dog#Dog()"});
+        new String[] {"com.example.Dog#Dog()"},
+        new String[] {});
   }
 }

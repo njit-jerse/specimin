@@ -13,6 +13,7 @@ public class SameClassName {
     SpeciminTestExecutor.runTest(
         "sameclassname",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#secondCalculator()"});
+        new String[] {"com.example.Simple#secondCalculator()"},
+        new String[] {});
   }
 }

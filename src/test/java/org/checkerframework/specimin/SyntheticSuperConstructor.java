@@ -13,6 +13,7 @@ public class SyntheticSuperConstructor {
     SpeciminTestExecutor.runTest(
         "syntheticsuperconstructor",
         new String[] {"com/example/Car.java"},
-        new String[] {"com.example.Car#Car()"});
+        new String[] {"com.example.Car#Car()"},
+        new String[] {});
   }
 }

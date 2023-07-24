@@ -39,7 +39,8 @@ public class SpeciminTestExecutor {
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
    * @throws IOException if some operation fails
    */
-  public static void runTest(String testName, String[] targetFiles, String[] targetMethods)
+  public static void runTest(
+      String testName, String[] targetFiles, String[] targetMethods, String[] jarPaths)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -68,6 +69,10 @@ public class SpeciminTestExecutor {
     for (String targetMethod : targetMethods) {
       speciminArgs.add("--targetMethod");
       speciminArgs.add(targetMethod);
+    }
+    for (String jarPath : jarPaths) {
+      speciminArgs.add("--jarPath");
+      speciminArgs.add(jarPath);
     }
 
     // Run specimin on target

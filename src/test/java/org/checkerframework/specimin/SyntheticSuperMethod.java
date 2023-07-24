@@ -13,6 +13,7 @@ public class SyntheticSuperMethod {
     SpeciminTestExecutor.runTest(
         "syntheticsupermethod",
         new String[] {"com/example/Car.java"},
-        new String[] {"com.example.Car#getWheels()"});
+        new String[] {"com.example.Car#getWheels()"},
+        new String[] {});
   }
 }

@@ -13,6 +13,7 @@ public class CrossClassVariable {
     SpeciminTestExecutor.runTest(
         "crossclassvariable",
         new String[] {"com/example/Foo.java", "com/example/Baz.java"},
-        new String[] {"com.example.Foo#bar()"});
+        new String[] {"com.example.Foo#bar()"},
+        new String[] {});
   }
 }

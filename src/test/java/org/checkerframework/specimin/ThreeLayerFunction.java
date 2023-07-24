@@ -15,6 +15,7 @@ public class ThreeLayerFunction {
     SpeciminTestExecutor.runTest(
         "threelayerfunctioncall",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#test()"});
+        new String[] {"com.example.Simple#test()"},
+        new String[] {});
   }
 }

@@ -14,6 +14,7 @@ public class TwoFileSimpleTest {
     SpeciminTestExecutor.runTest(
         "twofilesimple",
         new String[] {"com/example/Foo.java", "com/example/Baz.java"},
-        new String[] {"com.example.Foo#bar()"});
+        new String[] {"com.example.Foo#bar()"},
+        new String[] {});
   }
 }

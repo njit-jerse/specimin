@@ -14,6 +14,7 @@ public class HiddenTypeTest {
     SpeciminTestExecutor.runTest(
         "hiddenType",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#isVoidType(MethodDeclaration)"});
+        new String[] {"com.example.Simple#isVoidType(MethodDeclaration)"},
+        new String[] {});
   }
 }

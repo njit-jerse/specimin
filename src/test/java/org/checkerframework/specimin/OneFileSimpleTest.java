@@ -13,6 +13,7 @@ public class OneFileSimpleTest {
     SpeciminTestExecutor.runTest(
         "onefilesimple",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar()"});
+        new String[] {"com.example.Simple#bar()"},
+        new String[] {});
   }
 }

@@ -17,3 +17,9 @@ package com.github.javaparser.ast.expr;
 class SimpleName {
   @ClassGetSimpleName String asString();
 }
+
+package com.github.javaparser.resolution.declarations;
+
+interface ResolvedMethodDeclaration {
+   @DotSeparatedIdentifiers String getClassName();
+}

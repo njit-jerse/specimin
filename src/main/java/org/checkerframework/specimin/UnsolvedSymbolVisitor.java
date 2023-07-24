@@ -20,22 +20,19 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
@@ -101,6 +98,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private String chosenPackage = "";
 
+  private Set<JarTypeSolver> solversGroup = new HashSet<>();
+
+  private CombinedTypeSolver solver = new CombinedTypeSolver();
+
+  private Set<String> classesFromJar = new HashSet<>();
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -134,6 +137,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.setclassAndPackageMap();
   }
 
+  public void setThisSolver(List<String> jarPaths) {
+    for (String path : jarPaths) {
+      try {
+        classesFromJar.addAll(new JarTypeSolver(path).getKnownClasses());
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
   /**
    * This method sets the classAndPackageMap. This method is called in the method
    * setImportStatement, as classAndPackageMap and importStatements should always be in sync.
@@ -213,28 +225,34 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt node, Void arg) {
-    NodeList<Expression> arguments = node.getArguments();
-    List<String> parametersList = new ArrayList<>();
-    for (Expression parameter : arguments) {
-      if (!canBeSolved(parameter)) {
-        return super.visit(node, arg);
+    try {
+      node.resolve().getQualifiedSignature();
+      return super.visit(node, arg);
+    } catch (Exception e) {
+      NodeList<Expression> arguments = node.getArguments();
+      List<String> parametersList = new ArrayList<>();
+      for (Expression parameter : arguments) {
+        if (!canBeSolved(parameter)) {
+          return super.visit(node, arg);
+        }
+        ResolvedType type = parameter.calculateResolvedType();
+        if (type instanceof PrimitiveType) {
+          parametersList.add(type.asPrimitive().name());
+        } else if (type instanceof ReferenceType) {
+          parametersList.add(type.asReferenceType().getQualifiedName());
+        }
       }
-      ResolvedType type = parameter.calculateResolvedType();
-      if (type instanceof PrimitiveType) {
-        parametersList.add(type.asPrimitive().name());
-      } else if (type instanceof ReferenceType) {
-        parametersList.add(type.asReferenceType().getQualifiedName());
-      }
+      UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
+      // if the parent class can not be found in the import statements, Specimin assumes it is in
+      // the
+      // same package as the child class, which is also the current class
+      UnsolvedClass parentClass =
+          new UnsolvedClass(
+              this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
+      parentClass.addMethod(constructorMethod);
+      updateMissingClass(parentClass);
+      return super.visit(node, arg);
     }
-    UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
-    // if the parent class can not be found in the import statements, Specimin assumes it is in the
-    // same package as the child class, which is also the current class
-    UnsolvedClass parentClass =
-        new UnsolvedClass(
-            this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
-    parentClass.addMethod(constructorMethod);
-    updateMissingClass(parentClass);
-    return super.visit(node, arg);
   }
 
   @Override
@@ -277,6 +295,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
+    if (canBeSolved(method) && isFromAJarFile(method)) {
+      updateClassesFromJarSourcesForMethodCall(method);
+      return super.visit(method, p);
+    }
     if (isASuperCall(method) && !canBeSolved(method)) {
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
@@ -328,8 +350,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     SimpleName typeName = newExpr.getType().getName();
     String type = typeName.asString();
-    Expression asExpression = newExpr;
-    if (canBeSolved(asExpression)) {
+    if (canBeSolved(newExpr)) {
+      if (isFromAJarFile(newExpr)) {
+        updateClassesFromJarSourcesForObjectCreation(newExpr);
+      }
       return super.visit(newExpr, p);
     }
     this.gotException = true;
@@ -391,7 +415,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   // simple form of that name
   @SuppressWarnings("signature")
   public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    String[] elements = className.split(".");
+    String[] elements = className.split("[.]");
     if (elements.length < 2) {
       return className;
     }
@@ -434,6 +458,108 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
     }
+  }
+
+  /**
+   * This method checks if an expression is solvable by JavaParser yet the source codes for that
+   * expression is not in the root directory. For example, if class A is solvable by JavaParser but
+   * A.java is not in the root directory, then this method will return true when taking class A as
+   * an input. This method is used to recognize elements from jar files.
+   *
+   * @param expr the expression to be checked
+   * @return true if expr is solvable and the source codes of expr is not in the root directory
+   */
+  public boolean isFromAJarFile(Expression expr) {
+    String className;
+    if (expr instanceof MethodCallExpr) {
+      className =
+          ((MethodCallExpr) expr).resolve().getPackageName()
+              + "."
+              + ((MethodCallExpr) expr).resolve().getClassName();
+    } else if (expr instanceof ObjectCreationExpr) {
+      String shortName = ((ObjectCreationExpr) expr).getTypeAsString();
+      String packageName = classAndPackageMap.getOrDefault(shortName, this.chosenPackage);
+      className = packageName + "." + shortName;
+    } else {
+      throw new RuntimeException("Unexpected call: " + expr + ". Contact developers!");
+    }
+    return classesFromJar.contains(className);
+  }
+
+  /**
+   * This method updates a synthetic file based on a solvable expression. The input expression is
+   * solvable because its data is in the jar files that Specimin taks as input.
+   *
+   * @param expr the expression to be used
+   */
+  @SuppressWarnings(
+      "signature") // the assumptions made here are not correct, since a @ClassGetSimpleName is not
+  // a @DotSeparatedIdentifiers
+  public void updateClassesFromJarSourcesForMethodCall(MethodCallExpr expr) {
+    if (!isFromAJarFile(expr)) {
+      throw new RuntimeException(
+          "Check with isFromAJarFile first before using updateClassesFromJarSources");
+    }
+    String methodName = expr.getNameAsString();
+    ResolvedMethodDeclaration methodSolved = expr.resolve();
+    String className = methodSolved.getClassName();
+    String packageName = methodSolved.getPackageName();
+    String returnType = methodSolved.getReturnType().describe();
+    List<String> argumentsList = getArgumentsFromMethodCall(expr);
+    UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
+    UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
+    missingClass.addMethod(thisMethod);
+    syntheticMethodAndClass.put(methodName, missingClass);
+    this.updateMissingClass(missingClass);
+  }
+
+  /**
+   * This method updates a synthetic file based on a solvable expression. The input expression is
+   * solvable because its data is in the jar files that Specimin taks as input.
+   *
+   * @param expr the expression to be used
+   */
+  @SuppressWarnings(
+      "signature") // the assumptions made here are not correct, since a @ClassGetSimpleName is not
+  // a @DotSeparatedIdentifiers
+  public void updateClassesFromJarSourcesForObjectCreation(ObjectCreationExpr expr) {
+    if (!isFromAJarFile(expr)) {
+      throw new RuntimeException(
+          "Check with isFromAJarFile first before using updateClassesFromJarSources");
+    }
+    String objectName = expr.getType().getName().asString();
+    ResolvedReferenceTypeDeclaration objectSolved = expr.resolve().declaringType();
+    String className = objectSolved.getClassName();
+    String packageName = objectSolved.getPackageName();
+    List<String> argumentsList = getArgumentsFromObjectCreation(expr);
+    UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
+    UnsolvedMethod thisMethod = new UnsolvedMethod(objectName, "", argumentsList);
+    missingClass.addMethod(thisMethod);
+    this.updateMissingClass(missingClass);
+  }
+
+  /** */
+  public ResolvedReferenceTypeDeclaration getResolvedDeclarationFromJarForExpression(
+      Expression expr) {
+    String name;
+    if (expr instanceof MethodCallExpr) {
+      name = ((MethodCallExpr) expr).getNameAsString();
+    } else if (expr instanceof ObjectCreationExpr) {
+      name = ((ObjectCreationExpr) expr).getTypeAsString();
+    } else {
+      throw new RuntimeException("Unexpected call: " + expr + ". Contact developers!");
+    }
+    String packageName = classAndPackageMap.getOrDefault(name, this.chosenPackage);
+    String fullName = packageName + "." + name;
+    for (JarTypeSolver solver : solversGroup) {
+      try {
+        return solver.solveType(fullName);
+      } catch (Exception e) {
+      }
+    }
+    throw new RuntimeException(
+        "Expression can't be solved. Make sure isFromJarFile returns true for this expression"
+            + " before using getResolvedDeclarationFromJarForMethodCall");
   }
 
   /**
@@ -566,10 +692,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     NodeList<Expression> paraList = creationExpr.getArguments();
     for (Expression parameter : paraList) {
       ResolvedType type = parameter.calculateResolvedType();
-      if (type instanceof ResolvedReferenceType) {
+      if (type.isReferenceType()) {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
-      } else if (type instanceof PrimitiveType) {
-        parametersList.add(type.asPrimitive().name());
+      } else if (type.isPrimitive()) {
+        parametersList.add(type.describe());
       }
     }
     return parametersList;
@@ -601,7 +727,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public static boolean canBeSolved(Expression expr) {
     try {
-      expr.calculateResolvedType().describe();
+      expr.calculateResolvedType();
       return true;
     } catch (Exception e) {
       return false;
