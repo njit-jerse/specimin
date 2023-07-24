@@ -469,8 +469,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method checks if an expression is solvable by JavaParser yet the source codes for that
-   * expression is not in the root directory.
+   * This method checks if an expression is solvable by JavaParser because its source codes is from
+   * the jar files input.
    *
    * @param expr the expression to be checked
    * @return true if expr is from jar files
