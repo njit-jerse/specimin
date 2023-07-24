@@ -140,7 +140,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.setclassAndPackageMap();
   }
 
-  public void setThisSolver(List<String> jarPaths) {
+  /**
+   * This method sets the value of classesFromJar based on the known class of jar type solvers
+   *
+   * @param jarPaths
+   */
+  public void setClassesFromJar(List<String> jarPaths) {
     for (String path : jarPaths) {
       try {
         classesFromJar.addAll(new JarTypeSolver(path).getKnownClasses());
