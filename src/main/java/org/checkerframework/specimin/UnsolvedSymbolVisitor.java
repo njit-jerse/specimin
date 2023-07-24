@@ -24,7 +24,6 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -105,10 +104,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private String chosenPackage = "";
 
-  private Set<JarTypeSolver> solversGroup = new HashSet<>();
-
-  private CombinedTypeSolver solver = new CombinedTypeSolver();
-
+  /** This set has classes that come from jar files input */
   private Set<String> classesFromJar = new HashSet<>();
 
   /**
@@ -469,12 +465,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method checks if an expression is solvable by JavaParser yet the source codes for that
-   * expression is not in the root directory. For example, if class A is solvable by JavaParser but
-   * A.java is not in the root directory, then this method will return true when taking class A as
-   * an input. This method is used to recognize elements from jar files.
+   * expression is not in the root directory.
    *
    * @param expr the expression to be checked
-   * @return true if expr is solvable and the source codes of expr is not in the root directory
+   * @return true if expr is from jar files
    */
   public boolean isFromAJarFile(Expression expr) {
     String className;
@@ -543,30 +537,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedMethod thisMethod = new UnsolvedMethod(objectName, "", argumentsList);
     missingClass.addMethod(thisMethod);
     this.updateMissingClass(missingClass);
-  }
-
-  /** */
-  public ResolvedReferenceTypeDeclaration getResolvedDeclarationFromJarForExpression(
-      Expression expr) {
-    String name;
-    if (expr instanceof MethodCallExpr) {
-      name = ((MethodCallExpr) expr).getNameAsString();
-    } else if (expr instanceof ObjectCreationExpr) {
-      name = ((ObjectCreationExpr) expr).getTypeAsString();
-    } else {
-      throw new RuntimeException("Unexpected call: " + expr + ". Contact developers!");
-    }
-    String packageName = classAndPackageMap.getOrDefault(name, this.chosenPackage);
-    String fullName = packageName + "." + name;
-    for (JarTypeSolver solver : solversGroup) {
-      try {
-        return solver.solveType(fullName);
-      } catch (Exception e) {
-      }
-    }
-    throw new RuntimeException(
-        "Expression can't be solved. Make sure isFromJarFile returns true for this expression"
-            + " before using getResolvedDeclarationFromJarForMethodCall");
   }
 
   /**
