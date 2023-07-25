@@ -104,8 +104,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private String chosenPackage = "";
 
-  /** This set has classes that come from jar files input */
-  private Set<String> classesFromJar = new HashSet<>();
+  /** This set has fully-qualified class names that come from jar files input */
+  private Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
 
   /**
    * Create a new UnsolvedSymbolVisitor instance
