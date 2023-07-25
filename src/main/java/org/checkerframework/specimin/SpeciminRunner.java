@@ -79,7 +79,7 @@ public class SpeciminRunner {
     }
 
     UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root);
-    addMissingClass.setThisSolver(jarPaths);
+    addMissingClass.setClassesFromJar(jarPaths);
     /**
      * The set of path of files that have been created by addMissingClass. We will delete all those
      * files in the end.
