@@ -234,6 +234,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt node, Void arg) {
     try {
+      // check if the symbol is solvable. If it is, then there's no need to create a synthetic file.
       node.resolve().getQualifiedSignature();
       return super.visit(node, arg);
     } catch (Exception e) {
@@ -252,8 +253,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
       UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
       // if the parent class can not be found in the import statements, Specimin assumes it is in
-      // the
-      // same package as the child class, which is also the current class
+      // the same package as the child class.
       UnsolvedClass parentClass =
           new UnsolvedClass(
               this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
@@ -469,11 +469,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method checks if an expression is solvable by JavaParser because its source codes is from
-   * the jar files input.
+   * Checks if the given expression is solvable because the class file containing its symbol is
+   * found in one of the jar files provided via the {@code --jarPath} option.
    *
-   * @param expr the expression to be checked
-   * @return true if expr is from jar files
+   * @param expr The expression to be checked for solvability.
+   * @return true iff the expression is solvable because its class file was found in one of the jar
+   *     files.
    */
   public boolean isFromAJarFile(Expression expr) {
     String className;
@@ -498,9 +499,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param expr the expression to be used
    */
-  @SuppressWarnings(
-      "signature") // the assumptions made here are not correct, since a @ClassGetSimpleName is not
-  // a @DotSeparatedIdentifiers
   public void updateClassesFromJarSourcesForMethodCall(MethodCallExpr expr) {
     if (!isFromAJarFile(expr)) {
       throw new RuntimeException(
@@ -508,9 +506,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     String methodName = expr.getNameAsString();
     ResolvedMethodDeclaration methodSolved = expr.resolve();
-    String className = methodSolved.getClassName();
+    @SuppressWarnings(
+        "signature") // this is not a precise assumption, as getClassName() will return a
+    // @FullyQualifiedName if the class is not of primitive type. However, this is
+    // favorable, since we don't have to write any additional import statements.
+    @ClassGetSimpleName String className = methodSolved.getClassName();
     String packageName = methodSolved.getPackageName();
-    String returnType = methodSolved.getReturnType().describe();
+    @SuppressWarnings(
+        "signature") // this is not a precise assumption, as getReturnType().describe() will return
+    // a @FullyQualifiedName if the class is not of primitive type. However, this
+    // is favorable, since we don't have to write any additional import statements.
+    @ClassGetSimpleName String returnType = methodSolved.getReturnType().describe();
     List<String> argumentsList = getArgumentsFromMethodCall(expr);
     UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
@@ -525,9 +531,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param expr the expression to be used
    */
-  @SuppressWarnings(
-      "signature") // the assumptions made here are not correct, since a @ClassGetSimpleName is not
-  // a @DotSeparatedIdentifiers
   public void updateClassesFromJarSourcesForObjectCreation(ObjectCreationExpr expr) {
     if (!isFromAJarFile(expr)) {
       throw new RuntimeException(
@@ -535,7 +538,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     String objectName = expr.getType().getName().asString();
     ResolvedReferenceTypeDeclaration objectSolved = expr.resolve().declaringType();
-    String className = objectSolved.getClassName();
+    @SuppressWarnings(
+        "signature") // this is not a precise assumption, as getClassName() will return a
+    // @FullyQualifiedName if the class is not of primitive type. However, this is
+    // favorable, since we don't have to write any additional import statements.
+    @ClassGetSimpleName String className = objectSolved.getClassName();
     String packageName = objectSolved.getPackageName();
     List<String> argumentsList = getArgumentsFromObjectCreation(expr);
     UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
