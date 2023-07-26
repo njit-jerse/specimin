@@ -10,7 +10,7 @@ import org.junit.Test;
 public class NoDependenciesReturnsSameTest {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "nodependenciesreturnssame",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#test()"});

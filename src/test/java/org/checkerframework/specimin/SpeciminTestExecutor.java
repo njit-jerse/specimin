@@ -37,9 +37,11 @@ public class SpeciminTestExecutor {
    * @param targetFiles the targeted files
    * @param targetMethods the targeted methods, each in the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * @param jarPaths the path of jar files for Specimin to solve symbols
    * @throws IOException if some operation fails
    */
-  public static void runTest(String testName, String[] targetFiles, String[] targetMethods)
+  public static void runTest(
+      String testName, String[] targetFiles, String[] targetMethods, String[] jarPaths)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -68,6 +70,10 @@ public class SpeciminTestExecutor {
     for (String targetMethod : targetMethods) {
       speciminArgs.add("--targetMethod");
       speciminArgs.add(targetMethod);
+    }
+    for (String jarPath : jarPaths) {
+      speciminArgs.add("--jarPath");
+      speciminArgs.add(jarPath);
     }
 
     // Run specimin on target
@@ -116,6 +122,20 @@ public class SpeciminTestExecutor {
             + "\n Error codes: ",
         0,
         exitCode);
+  }
+
+  /**
+   * This method call the method runTest without an array of jar paths.
+   *
+   * @param testName the name of the test folder
+   * @param targetFiles the targeted files
+   * @param targetMethods the targeted methods, each in the format
+   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * @throws IOException if some operation fails
+   */
+  public static void runTestWithoutJarPaths(
+      String testName, String[] targetFiles, String[] targetMethods) throws IOException {
+    runTest(testName, targetFiles, targetMethods, new String[] {});
   }
 
   /** Code borrowed from https://www.baeldung.com/run-shell-command-in-java. */

@@ -11,7 +11,7 @@ import org.junit.Test;
 public class SuperClass {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "superclass",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#printMessage()"});

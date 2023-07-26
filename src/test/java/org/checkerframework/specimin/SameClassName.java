@@ -10,7 +10,7 @@ import org.junit.Test;
 public class SameClassName {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "sameclassname",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#secondCalculator()"});

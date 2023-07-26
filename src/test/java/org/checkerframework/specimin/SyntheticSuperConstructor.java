@@ -10,7 +10,7 @@ import org.junit.Test;
 public class SyntheticSuperConstructor {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "syntheticsuperconstructor",
         new String[] {"com/example/Car.java"},
         new String[] {"com.example.Car#Car()"});

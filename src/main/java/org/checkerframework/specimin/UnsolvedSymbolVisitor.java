@@ -20,8 +20,11 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -101,6 +104,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private String chosenPackage = "";
 
+  /** This set has fully-qualified class names that come from jar files input */
+  private Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -134,6 +140,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.setclassAndPackageMap();
   }
 
+  /**
+   * This method sets the value of classesFromJar based on the known class of jar type solvers
+   *
+   * @param jarPaths
+   */
+  public void setClassesFromJar(List<String> jarPaths) {
+    for (String path : jarPaths) {
+      try {
+        classesFromJar.addAll(new JarTypeSolver(path).getKnownClasses());
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
   /**
    * This method sets the classAndPackageMap. This method is called in the method
    * setImportStatement, as classAndPackageMap and importStatements should always be in sync.
@@ -213,28 +233,34 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt node, Void arg) {
-    NodeList<Expression> arguments = node.getArguments();
-    List<String> parametersList = new ArrayList<>();
-    for (Expression parameter : arguments) {
-      if (!canBeSolved(parameter)) {
-        return super.visit(node, arg);
+    try {
+      // check if the symbol is solvable. If it is, then there's no need to create a synthetic file.
+      node.resolve().getQualifiedSignature();
+      return super.visit(node, arg);
+    } catch (Exception e) {
+      NodeList<Expression> arguments = node.getArguments();
+      List<String> parametersList = new ArrayList<>();
+      for (Expression parameter : arguments) {
+        if (!canBeSolved(parameter)) {
+          return super.visit(node, arg);
+        }
+        ResolvedType type = parameter.calculateResolvedType();
+        if (type instanceof PrimitiveType) {
+          parametersList.add(type.asPrimitive().name());
+        } else if (type instanceof ReferenceType) {
+          parametersList.add(type.asReferenceType().getQualifiedName());
+        }
       }
-      ResolvedType type = parameter.calculateResolvedType();
-      if (type instanceof PrimitiveType) {
-        parametersList.add(type.asPrimitive().name());
-      } else if (type instanceof ReferenceType) {
-        parametersList.add(type.asReferenceType().getQualifiedName());
-      }
+      UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
+      // if the parent class can not be found in the import statements, Specimin assumes it is in
+      // the same package as the child class.
+      UnsolvedClass parentClass =
+          new UnsolvedClass(
+              this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
+      parentClass.addMethod(constructorMethod);
+      updateMissingClass(parentClass);
+      return super.visit(node, arg);
     }
-    UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
-    // if the parent class can not be found in the import statements, Specimin assumes it is in the
-    // same package as the child class, which is also the current class
-    UnsolvedClass parentClass =
-        new UnsolvedClass(
-            this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
-    parentClass.addMethod(constructorMethod);
-    updateMissingClass(parentClass);
-    return super.visit(node, arg);
   }
 
   @Override
@@ -277,6 +303,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
+    if (canBeSolved(method) && isFromAJarFile(method)) {
+      updateClassesFromJarSourcesForMethodCall(method);
+      return super.visit(method, p);
+    }
     if (isASuperCall(method) && !canBeSolved(method)) {
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
@@ -328,8 +358,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     SimpleName typeName = newExpr.getType().getName();
     String type = typeName.asString();
-    Expression asExpression = newExpr;
-    if (canBeSolved(asExpression)) {
+    if (canBeSolved(newExpr)) {
+      if (isFromAJarFile(newExpr)) {
+        updateClassesFromJarSourcesForObjectCreation(newExpr);
+      }
       return super.visit(newExpr, p);
     }
     this.gotException = true;
@@ -391,7 +423,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   // simple form of that name
   @SuppressWarnings("signature")
   public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    String[] elements = className.split(".");
+    String[] elements = className.split("[.]");
     if (elements.length < 2) {
       return className;
     }
@@ -434,6 +466,89 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
     }
+  }
+
+  /**
+   * Checks if the given expression is solvable because the class file containing its symbol is
+   * found in one of the jar files provided via the {@code --jarPath} option.
+   *
+   * @param expr The expression to be checked for solvability.
+   * @return true iff the expression is solvable because its class file was found in one of the jar
+   *     files.
+   */
+  public boolean isFromAJarFile(Expression expr) {
+    String className;
+    if (expr instanceof MethodCallExpr) {
+      className =
+          ((MethodCallExpr) expr).resolve().getPackageName()
+              + "."
+              + ((MethodCallExpr) expr).resolve().getClassName();
+    } else if (expr instanceof ObjectCreationExpr) {
+      String shortName = ((ObjectCreationExpr) expr).getTypeAsString();
+      String packageName = classAndPackageMap.getOrDefault(shortName, this.chosenPackage);
+      className = packageName + "." + shortName;
+    } else {
+      throw new RuntimeException("Unexpected call: " + expr + ". Contact developers!");
+    }
+    return classesFromJar.contains(className);
+  }
+
+  /**
+   * This method updates a synthetic file based on a solvable expression. The input expression is
+   * solvable because its data is in the jar files that Specimin taks as input.
+   *
+   * @param expr the expression to be used
+   */
+  public void updateClassesFromJarSourcesForMethodCall(MethodCallExpr expr) {
+    if (!isFromAJarFile(expr)) {
+      throw new RuntimeException(
+          "Check with isFromAJarFile first before using updateClassesFromJarSources");
+    }
+    String methodName = expr.getNameAsString();
+    ResolvedMethodDeclaration methodSolved = expr.resolve();
+    @SuppressWarnings(
+        "signature") // this is not a precise assumption, as getClassName() will return a
+    // @FullyQualifiedName if the class is not of primitive type. However, this is
+    // favorable, since we don't have to write any additional import statements.
+    @ClassGetSimpleName String className = methodSolved.getClassName();
+    String packageName = methodSolved.getPackageName();
+    @SuppressWarnings(
+        "signature") // this is not a precise assumption, as getReturnType().describe() will return
+    // a @FullyQualifiedName if the class is not of primitive type. However, this
+    // is favorable, since we don't have to write any additional import statements.
+    @ClassGetSimpleName String returnType = methodSolved.getReturnType().describe();
+    List<String> argumentsList = getArgumentsFromMethodCall(expr);
+    UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
+    UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
+    missingClass.addMethod(thisMethod);
+    syntheticMethodAndClass.put(methodName, missingClass);
+    this.updateMissingClass(missingClass);
+  }
+
+  /**
+   * This method updates a synthetic file based on a solvable expression. The input expression is
+   * solvable because its data is in the jar files that Specimin taks as input.
+   *
+   * @param expr the expression to be used
+   */
+  public void updateClassesFromJarSourcesForObjectCreation(ObjectCreationExpr expr) {
+    if (!isFromAJarFile(expr)) {
+      throw new RuntimeException(
+          "Check with isFromAJarFile first before using updateClassesFromJarSources");
+    }
+    String objectName = expr.getType().getName().asString();
+    ResolvedReferenceTypeDeclaration objectSolved = expr.resolve().declaringType();
+    @SuppressWarnings(
+        "signature") // this is not a precise assumption, as getClassName() will return a
+    // @FullyQualifiedName if the class is not of primitive type. However, this is
+    // favorable, since we don't have to write any additional import statements.
+    @ClassGetSimpleName String className = objectSolved.getClassName();
+    String packageName = objectSolved.getPackageName();
+    List<String> argumentsList = getArgumentsFromObjectCreation(expr);
+    UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
+    UnsolvedMethod thisMethod = new UnsolvedMethod(objectName, "", argumentsList);
+    missingClass.addMethod(thisMethod);
+    this.updateMissingClass(missingClass);
   }
 
   /**
@@ -566,10 +681,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     NodeList<Expression> paraList = creationExpr.getArguments();
     for (Expression parameter : paraList) {
       ResolvedType type = parameter.calculateResolvedType();
-      if (type instanceof ResolvedReferenceType) {
+      if (type.isReferenceType()) {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
-      } else if (type instanceof PrimitiveType) {
-        parametersList.add(type.asPrimitive().name());
+      } else if (type.isPrimitive()) {
+        parametersList.add(type.describe());
       }
     }
     return parametersList;
@@ -601,7 +716,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public static boolean canBeSolved(Expression expr) {
     try {
-      expr.calculateResolvedType().describe();
+      expr.calculateResolvedType();
       return true;
     } catch (Exception e) {
       return false;
