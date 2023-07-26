@@ -10,10 +10,9 @@ import org.junit.Test;
 public class SyntheticSuperVariables {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "syntheticsupervariables",
         new String[] {"com/example/Dog.java"},
-        new String[] {"com.example.Dog#Dog()"},
-        new String[] {});
+        new String[] {"com.example.Dog#Dog()"});
   }
 }

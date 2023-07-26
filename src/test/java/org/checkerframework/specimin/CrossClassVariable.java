@@ -10,10 +10,9 @@ import org.junit.Test;
 public class CrossClassVariable {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "crossclassvariable",
         new String[] {"com/example/Foo.java", "com/example/Baz.java"},
-        new String[] {"com.example.Foo#bar()"},
-        new String[] {});
+        new String[] {"com.example.Foo#bar()"});
   }
 }

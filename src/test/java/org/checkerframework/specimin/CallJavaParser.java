@@ -11,10 +11,9 @@ import org.junit.Test;
 public class CallJavaParser {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "callJavaParser",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#test()"},
-        new String[] {});
+        new String[] {"com.example.Simple#test()"});
   }
 }

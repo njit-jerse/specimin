@@ -10,10 +10,9 @@ import org.junit.Test;
 public class SyntheticSuperMethod {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "syntheticsupermethod",
         new String[] {"com/example/Car.java"},
-        new String[] {"com.example.Car#getWheels()"},
-        new String[] {});
+        new String[] {"com.example.Car#getWheels()"});
   }
 }

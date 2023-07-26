@@ -11,10 +11,9 @@ import org.junit.Test;
 public class TwoFileSimpleTest {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "twofilesimple",
         new String[] {"com/example/Foo.java", "com/example/Baz.java"},
-        new String[] {"com.example.Foo#bar()"},
-        new String[] {});
+        new String[] {"com.example.Foo#bar()"});
   }
 }

@@ -10,10 +10,9 @@ import org.junit.Test;
 public class GlobalVariables {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "globalvariables",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#test()"},
-        new String[] {});
+        new String[] {"com.example.Simple#test()"});
   }
 }
