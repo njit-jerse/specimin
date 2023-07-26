@@ -49,8 +49,8 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * The parent class of this current class file. If there is no parent class, then the value of
-   * this variable is an empty string
+   * The unsolved parent class of this current class file. If there is no unsolved parent class,
+   * then the value of this variable is an empty string
    */
   private @ClassGetSimpleName String parentClass = "";
 
@@ -482,13 +482,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method will add a new variable declaration to a synthetic class. This class is mainly used
-   * for unsolved parent class. The declaration of the variable in the parent class will be the same
-   * as the declaration in the child class since Specimin does not have access to much information.
-   * If the variable is not found in the child class, Specimin will create a synthetic class to be
-   * the type of that variable.
+   * This method will add a new field declaration to a synthetic class. This class is mainly used
+   * for unsolved parent class. The declaration of the field in the parent class will be the same as
+   * the declaration in the child class since Specimin does not have access to much information. If
+   * the field is not found in the child class, Specimin will create a synthetic class to be the
+   * type of that field.
    *
-   * @param var the variable to be added
+   * @param var the field to be added
    * @param className the name of the synthetic class
    * @param packageName the package of the synthetic class
    */
@@ -497,7 +497,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClass relatedClass = new UnsolvedClass(className, packageName);
     if (variablesAndDeclaration.containsKey(var)) {
       String variableExpression = variablesAndDeclaration.get(var);
-      relatedClass.addVariables(variableExpression);
+      relatedClass.addFields(variableExpression);
       updateMissingClass(relatedClass);
     } else {
       // since it is just simple string combination, it is a simple name
@@ -506,7 +506,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass varType = new UnsolvedClass(variableType, packageName);
       String variableExpression =
           String.format("%s %s = new %s();", variableType, var, variableType);
-      relatedClass.addVariables(variableExpression);
+      relatedClass.addFields(variableExpression);
       updateMissingClass(relatedClass);
       updateMissingClass(varType);
     }
@@ -698,8 +698,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             e.addMethod(method);
           }
         }
-        for (String variablesDescription : missedClass.getClassVariables()) {
-          e.addVariables(variablesDescription);
+        for (String variablesDescription : missedClass.getClassFields()) {
+          e.addFields(variablesDescription);
         }
         return;
       }

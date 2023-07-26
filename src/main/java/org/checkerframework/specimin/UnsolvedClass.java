@@ -15,8 +15,8 @@ public class UnsolvedClass {
   /** The name of the class */
   private final @ClassGetSimpleName String className;
 
-  /** The variables of this class */
-  private final Set<String> classVariables;
+  /** The fields of this class */
+  private final Set<String> classFields;
 
   /**
    * The name of the package of the class. We rely on the import statements from the source codes to
@@ -34,7 +34,7 @@ public class UnsolvedClass {
     this.className = className;
     this.methods = new HashSet<>();
     this.packageName = packageName;
-    this.classVariables = new HashSet<>();
+    this.classFields = new HashSet<>();
   }
 
   /**
@@ -65,12 +65,12 @@ public class UnsolvedClass {
   }
 
   /**
-   * Get the variables of this current class
+   * Get the fields of this current class
    *
    * @return classVariables
    */
-  public Set<String> getClassVariables() {
-    return classVariables;
+  public Set<String> getClassFields() {
+    return classFields;
   }
 
   /**
@@ -83,13 +83,13 @@ public class UnsolvedClass {
   }
 
   /**
-   * Add variables expression to the class. We expect something like "int i" or "String y" instead
-   * of just "i" and "y"
+   * Add field declaration to the class. We expect something like "int i" or "String y" instead of
+   * just "i" and "y"
    *
    * @param variableExpression the expression of the variables to be added
    */
-  public void addVariables(String variableExpression) {
-    this.classVariables.add(variableExpression);
+  public void addFields(String variableExpression) {
+    this.classFields.add(variableExpression);
   }
 
   /**
@@ -118,7 +118,7 @@ public class UnsolvedClass {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
     sb.append("public class ").append(className).append(" {\n");
-    for (String variableDeclarations : classVariables) {
+    for (String variableDeclarations : classFields) {
       sb.append("    " + variableDeclarations + ";\n");
     }
     for (UnsolvedMethod method : methods) {
