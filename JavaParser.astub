@@ -17,3 +17,16 @@ package com.github.javaparser.ast.expr;
 class SimpleName {
   @ClassGetSimpleName String asString();
 }
+
+package com.github.javaparser.resolution.declarations;
+
+interface ResolvedMethodDeclaration {
+   @DotSeparatedIdentifiers String getClassName();
+}
+
+package com.github.javaparser.symbolsolver.resolution.typesolvers;
+
+class JarTypeSolver {
+   // this method lists all the names of classes solved by JarTypeSolver. All the names are in fully-qualified names.
+   Set<@FullyQualifiedName String> getKnownClasses();
+}

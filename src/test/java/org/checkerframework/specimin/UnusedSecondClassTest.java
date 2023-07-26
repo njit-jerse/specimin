@@ -10,7 +10,7 @@ import org.junit.Test;
 public class UnusedSecondClassTest {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "unusedsecondclass",
         new String[] {"com/example/Foo.java", "com/example/Baz.java"},
         new String[] {"com.example.Foo#bar()"});

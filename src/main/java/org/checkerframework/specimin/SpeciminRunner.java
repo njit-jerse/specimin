@@ -9,6 +9,7 @@ import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinte
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import java.io.File;
@@ -41,6 +42,8 @@ public class SpeciminRunner {
     // for symbol resolution from source code and to organize the output directory.
     OptionSpec<String> rootOption = optionParser.accepts("root").withRequiredArg();
 
+    OptionSpec<String> jarPath = optionParser.accepts("jarPath").withOptionalArg();
+
     // This option is the relative paths to the target file(s) - the .java file(s) containing
     // target method(s) - from the root.
     OptionSpec<String> targetFilesOption = optionParser.accepts("targetFile").withRequiredArg();
@@ -57,11 +60,15 @@ public class SpeciminRunner {
 
     String root = options.valueOf(rootOption);
     List<String> targetFiles = options.valuesOf(targetFilesOption);
+    List<String> jarPaths = options.valuesOf(jarPath);
 
     // Set up the parser's symbol solver, so that we can resolve definitions.
-    TypeSolver typeSolver =
+    CombinedTypeSolver typeSolver =
         new CombinedTypeSolver(
             new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+    for (String path : jarPaths) {
+      typeSolver.add(new JarTypeSolver(path));
+    }
     JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
     StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
 
@@ -72,6 +79,7 @@ public class SpeciminRunner {
     }
 
     UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root);
+    addMissingClass.setClassesFromJar(jarPaths);
     /**
      * The set of path of files that have been created by addMissingClass. We will delete all those
      * files in the end.

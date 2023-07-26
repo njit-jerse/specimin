@@ -10,7 +10,7 @@ import org.junit.Test;
 public class OneFileSimpleTest {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTest(
+    SpeciminTestExecutor.runTestWithoutJarPaths(
         "onefilesimple",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar()"});
