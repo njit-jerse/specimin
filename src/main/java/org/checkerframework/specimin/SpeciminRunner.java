@@ -162,7 +162,7 @@ public class SpeciminRunner {
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
       // If a compilation output's entire body has been removed, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
-        boolean isASyntheticReturnType = target.getKey().contains("ReturnType");
+        boolean isASyntheticReturnType = addMissingClass.isASyntheticReturnType(target.getKey());
         boolean isASyntheticSuperClass =
             !addMissingClass.getParentClass().equals("")
                 && target.getKey().contains(addMissingClass.getParentClass());

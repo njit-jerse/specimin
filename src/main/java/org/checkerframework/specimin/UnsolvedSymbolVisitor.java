@@ -108,6 +108,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
 
   /**
+   * This set has the fully-qualfied name of the synthetic return types created by this instance of
+   * UnsolvedSymbolVisitor
+   */
+  private Set<String> syntheticReturnTypes = new HashSet<>();
+
+  /**
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
@@ -211,6 +217,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void setExceptionToFalse() {
     gotException = false;
+  }
+
+  /**
+   * Check if a class is a synthetic return type created by this instance of UnsolvedSymbolVisitor
+   *
+   * @param className the name of the class to be checked
+   * @return true if the class is a synthetic return type created by this UnsolvedSymbolVisitor
+   */
+  public boolean isASyntheticReturnType(String className) {
+    return syntheticReturnTypes.contains(className);
   }
 
   @Override
@@ -460,6 +476,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     syntheticMethodAndClass.put(methodName, missingClass);
     this.updateMissingClass(missingClass);
     if (desiredReturnType.equals("")) {
+      @SuppressWarnings(
+          "signature") // returnType is a @ClassGetSimpleName, so combining it with the package will
+      // give us the fully-qualified name
+      @FullyQualifiedName String packageName = missingClass.getPackageName() + "." + returnType;
+      syntheticReturnTypes.add(packageName);
       UnsolvedClass returnTypeForThisMethod =
           new UnsolvedClass(returnType, missingClass.getPackageName());
       this.updateMissingClass(returnTypeForThisMethod);
@@ -994,6 +1015,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
     newClass.addMethod(newMethod);
     syntheticMethodAndClass.put(newMethod.toString(), newClass);
+    @SuppressWarnings(
+        "signature") // thisReturnType is a @ClassGetSimpleName, so combining it with the
+    // packageName will give us the @FullyQualifiedName
+    @FullyQualifiedName String returnTypeFullName = packageName + "." + thisReturnType;
+    syntheticReturnTypes.add(returnTypeFullName);
     this.updateMissingClass(newClass);
   }
 
