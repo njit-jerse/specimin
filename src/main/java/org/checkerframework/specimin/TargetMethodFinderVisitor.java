@@ -143,10 +143,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ConstructorDeclaration method, Void p) {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
-    String methodName =
-        this.classFQName
-            + "#"
-            + constructorMethodAsString.substring(constructorMethodAsString.indexOf(' ') + 1);
+    String methodName = this.classFQName + "#" + constructorMethodAsString;
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
