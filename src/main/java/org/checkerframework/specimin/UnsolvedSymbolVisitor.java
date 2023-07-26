@@ -52,10 +52,10 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * The unsolved parent class of this current class file. If there is no unsolved parent class,
-   * then the value of this variable is an empty string
+   * The unsolved superclass of this current class file. If there is no unsolved superclass, then
+   * the value of this variable is an empty string
    */
-  private @ClassGetSimpleName String parentClass = "";
+  private @ClassGetSimpleName String superClass = "";
 
   /** The package of this class */
   private String currentPackage = "";
@@ -185,12 +185,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get the value of parentclass
+   * Get the value of superClass
    *
-   * @return parentClass the value of parentClass
+   * @return superClass the value of superClass
    */
-  public String getParentClass() {
-    return parentClass;
+  public String getSuperClass() {
+    return superClass;
   }
 
   /**
@@ -239,10 +239,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
     if (node.getExtendedTypes().isNonEmpty()) {
       // note that since Specimin does not have access to the class paths of the project, all the
-      // unsolved methods related to inheritance will be placed in the parent class, even if there
+      // unsolved methods related to inheritance will be placed in the parent class (the nearest
+      // superclass), even if there
       // is a grandparent class and so forth.
-      SimpleName parentClassSimpleName = node.getExtendedTypes().get(0).getName();
-      parentClass = parentClassSimpleName.asString();
+      SimpleName superClassSimpleName = node.getExtendedTypes().get(0).getName();
+      superClass = superClassSimpleName.asString();
     }
     return super.visit(node, arg);
   }
@@ -267,14 +268,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           parametersList.add(type.asReferenceType().getQualifiedName());
         }
       }
-      UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
-      // if the parent class can not be found in the import statements, Specimin assumes it is in
+      UnsolvedMethod constructorMethod = new UnsolvedMethod(this.superClass, "", parametersList);
+      // if the superclass can not be found in the import statements, Specimin assumes it is in
       // the same package as the child class.
-      UnsolvedClass parentClass =
+      UnsolvedClass superClass =
           new UnsolvedClass(
-              this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
-      parentClass.addMethod(constructorMethod);
-      updateMissingClass(parentClass);
+              this.superClass, classAndPackageMap.getOrDefault(this.superClass, currentPackage));
+      superClass.addMethod(constructorMethod);
+      updateMissingClass(superClass);
       return super.visit(node, arg);
     }
   }
@@ -607,22 +608,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (expr instanceof MethodCallExpr) {
       updateUnsolvedClassWithMethodCall(
           expr.asMethodCallExpr(),
-          this.parentClass,
+          this.superClass,
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
     } else {
       updateUnsolvedClassWithFields(
           expr.asFieldAccessExpr().getNameAsString(),
-          parentClass,
-          classAndPackageMap.getOrDefault(parentClass, this.currentPackage));
+          superClass,
+          classAndPackageMap.getOrDefault(superClass, this.currentPackage));
     }
   }
 
   /**
-   * This method will add a new field declaration to a synthetic class. This method is mainly used
-   * for unsolved parent class. The declaration of the field in the parent class will be the same as
-   * the declaration in the child class since Specimin does not have access to much information. If
-   * the field is not found in the child class, Specimin will create a synthetic class to be the
-   * type of that field.
+   * This method will add a new field declaration to a synthetic class. This method is intended to
+   * be used for unsolved superclass. The declaration of the field in the superclass will be the
+   * same as the declaration in the child class since Specimin does not have access to much
+   * information. If the field is not found in the child class, Specimin will create a synthetic
+   * class to be the type of that field.
    *
    * @param var the field to be added
    * @param className the name of the synthetic class
