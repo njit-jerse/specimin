@@ -589,7 +589,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           this.parentClass,
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
     } else {
-      updateUnsolvedClassWithVariables(
+      updateUnsolvedClassWithFields(
           expr.asFieldAccessExpr().getNameAsString(),
           parentClass,
           classAndPackageMap.getOrDefault(parentClass, this.currentPackage));
@@ -597,7 +597,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method will add a new field declaration to a synthetic class. This class is mainly used
+   * This method will add a new field declaration to a synthetic class. This method is mainly used
    * for unsolved parent class. The declaration of the field in the parent class will be the same as
    * the declaration in the child class since Specimin does not have access to much information. If
    * the field is not found in the child class, Specimin will create a synthetic class to be the
@@ -607,7 +607,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param className the name of the synthetic class
    * @param packageName the package of the synthetic class
    */
-  public void updateUnsolvedClassWithVariables(
+  public void updateUnsolvedClassWithFields(
       String var, @ClassGetSimpleName String className, String packageName) {
     UnsolvedClass relatedClass = new UnsolvedClass(className, packageName);
     if (variablesAndDeclaration.containsKey(var)) {
