@@ -13,6 +13,6 @@ public class SyntheticSuperVariables {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "syntheticsupervariables",
         new String[] {"com/example/Dog.java"},
-        new String[] {"com.example.Dog#Dog()"});
+        new String[] {"com.example.Dog#setUp()"});
   }
 }
