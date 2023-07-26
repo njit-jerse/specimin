@@ -142,6 +142,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ConstructorDeclaration method, Void p) {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
+    // the methodName will be something like this: "com.example.Car#Car()"
     String methodName =
         this.classFQName
             + "#"
