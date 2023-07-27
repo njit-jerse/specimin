@@ -63,22 +63,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * This map will map the name of variables in the current class and its corresponding declaration
    */
-  private Map<String, String> variablesAndDeclaration;
+  private final Map<String, String> variablesAndDeclaration = new HashMap<>();
 
   /**
    * Based on the method declarations in the current class, this map will map the name of the
    * methods with their corresponding return types
    */
-  private Map<String, @ClassGetSimpleName String> methodAndReturnType;
+  private final Map<String, @ClassGetSimpleName String> methodAndReturnType = new HashMap<>();
 
   /** List of classes not in the source codes */
-  private Set<UnsolvedClass> missingClass;
+  private final Set<UnsolvedClass> missingClass = new HashSet<>();
 
   /** The same as the root being used in SpeciminRunner */
   private String rootDirectory;
 
   /** This instance maps the name of a synthetic method with its synthetic class */
-  private Map<String, UnsolvedClass> syntheticMethodAndClass;
+  private final Map<String, UnsolvedClass> syntheticMethodAndClass = new HashMap<>();
 
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
@@ -90,13 +90,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * The list of classes that have been created. We use this list to delete all the temporary
    * synthetic classes when Specimin finishes its run
    */
-  private Set<Path> createdClass;
+  private final Set<Path> createdClass = new HashSet<>();
 
   /** List of import statement from the current compilation unit that is being visited */
-  private List<String> importStatement;
+  private List<String> importStatement = new ArrayList<>();
 
   /** This map the classes in the compilation unit with the related package */
-  private Map<String, String> classAndPackageMap;
+  private final Map<String, String> classAndPackageMap = new HashMap<>();
 
   /**
    * If there is any import statement that ends with *, this string will be replaced by one of the
@@ -105,13 +105,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String chosenPackage = "";
 
   /** This set has fully-qualified class names that come from jar files input */
-  private Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
+  private final Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
 
   /**
    * This set has the fully-qualfied name of the synthetic return types created by this instance of
    * UnsolvedSymbolVisitor
    */
-  private Set<String> syntheticReturnTypes = new HashSet<>();
+  private final Set<String> syntheticReturnTypes = new HashSet<>();
 
   /**
    * Create a new UnsolvedSymbolVisitor instance
@@ -120,14 +120,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public UnsolvedSymbolVisitor(String rootDirectory) {
     this.rootDirectory = rootDirectory;
-    this.missingClass = new HashSet<>();
     this.gotException = true;
-    this.importStatement = new ArrayList<>();
-    this.classAndPackageMap = new HashMap<>();
-    this.createdClass = new HashSet<>();
-    this.syntheticMethodAndClass = new HashMap<>();
-    this.methodAndReturnType = new HashMap<>();
-    this.variablesAndDeclaration = new HashMap<>();
   }
 
   /**
