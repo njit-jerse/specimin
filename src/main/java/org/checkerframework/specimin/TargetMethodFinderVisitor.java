@@ -1,9 +1,14 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import java.util.ArrayList;
@@ -135,6 +140,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(ConstructorDeclaration method, Void p) {
+    String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
+    // the methodName will be something like this: "com.example.Car#Car()"
+    String methodName = this.classFQName + "#" + constructorMethodAsString;
+    if (this.targetMethodNames.contains(methodName)) {
+      insideTargetMethod = true;
+      targetMethods.add(method.resolve().getQualifiedSignature());
+      unfoundMethods.remove(methodName);
+    }
+    Visitable result = super.visit(method, p);
+    insideTargetMethod = false;
+    return result;
+  }
+
+  @Override
   public Visitable visit(MethodDeclaration method, Void p) {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // The substring here is to remove the method's return type. Return types cannot contain spaces.
@@ -167,5 +187,23 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       usedClass.add(newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
     }
     return super.visit(newExpr, p);
+  }
+
+  @Override
+  public Visitable visit(ExplicitConstructorInvocationStmt expr, Void p) {
+    if (insideTargetMethod) {
+      usedMethods.add(expr.resolve().getQualifiedSignature());
+      usedClass.add(expr.resolve().getPackageName() + "." + expr.resolve().getClassName());
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(FieldAccessExpr expr, Void p) {
+    Expression caller = expr.getScope();
+    if (caller instanceof SuperExpr) {
+      usedClass.add(caller.calculateResolvedType().describe());
+    }
+    return super.visit(expr, p);
   }
 }
