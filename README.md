@@ -1,6 +1,6 @@
 # Specimin: the specification slicer
 
-**Note: Specimin is a work in progress, and is not yet functional. Please check
+**Note: Specimin is a work in progress, and is not yet fully functional. Please check
 back later or contact the authors if you want to use the tool.**
 
 This document describes **Specimin** (SPECIfication MINimizer).
