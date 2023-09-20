@@ -621,12 +621,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           this.superClass,
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
     } else if (expr instanceof FieldAccessExpr) {
-      updateUnsolvedClassWithVariables(
+      updateUnsolvedClassWithFields(
           expr.asFieldAccessExpr().getNameAsString(),
           superClass,
           classAndPackageMap.getOrDefault(superClass, this.currentPackage));
     } else if (expr instanceof NameExpr) {
-      updateUnsolvedClassWithVariables(
+      updateUnsolvedClassWithFields(
           expr.asNameExpr().getNameAsString(),
           superClass,
           classAndPackageMap.getOrDefault(superClass, this.currentPackage));
@@ -636,17 +636,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method will add a new variable declaration to a synthetic class. This class is mainly used
-   * for unsolved parent class. The declaration of the variable in the parent class will be the same
-   * as the declaration in the child class since Specimin does not have access to much information.
-   * If the variable is not found in the child class, Specimin will create a synthetic class to be
-   * the type of that variable.
+   * This method will add a new field declaration to a synthetic class. This method is intended to
+   * be used for unsolved superclass. The declaration of the field in the superclass will be the
+   * same as the declaration in the child class since Specimin does not have access to much
+   * information. If the field is not found in the child class, Specimin will create a synthetic
+   * class to be the type of that field.
    *
-   * @param var the variable to be added
+   * @param var the field to be added
    * @param className the name of the synthetic class
    * @param packageName the package of the synthetic class
    */
-  public void updateUnsolvedClassWithVariables(
+  public void updateUnsolvedClassWithFields(
       String var, @ClassGetSimpleName String className, String packageName) {
     UnsolvedClass relatedClass = new UnsolvedClass(className, packageName);
     if (variablesAndDeclaration.containsKey(var)) {
