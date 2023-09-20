@@ -3,11 +3,8 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
@@ -36,6 +33,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   /** The fully-qualified name of the class currently being visited. */
   private String classFQName = "";
 
+  /** The simple name of the parent class of the class currently being visited */
+  private String parentClass = "";
+
   /**
    * The methods that were actually used by the targets, and therefore ought to have their
    * specifications (but not bodies) preserved. The Strings in the set are the fully-qualified
@@ -48,6 +48,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * in the input.
    */
   private Set<String> usedClass = new HashSet<>();
+
+  /** Set of variables declared in this current class */
+  private final Set<String> declaredNames = new HashSet<>();
 
   /**
    * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
@@ -117,6 +120,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    if (decl.getExtendedTypes().isNonEmpty()) {
+      // note that since Specimin does not have access to the class paths of the project, all the
+      // unsolved methods related to inheritance will be placed in the parent class, even if there
+      // is a grandparent class and so forth.
+      parentClass = decl.getExtendedTypes().get(0).resolve().getQualifiedName();
+    }
+
     if (decl.isInnerClass()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
@@ -142,8 +152,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ConstructorDeclaration method, Void p) {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
-    // the methodName will be something like this: "com.example.Car#Car()"
-    String methodName = this.classFQName + "#" + constructorMethodAsString;
+    String methodName =
+        this.classFQName
+            + "#"
+            + constructorMethodAsString.substring(constructorMethodAsString.indexOf(' ') + 1);
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
@@ -152,6 +164,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
     return result;
+  }
+
+  @Override
+  public Visitable visit(VariableDeclarator node, Void arg) {
+    declaredNames.add(node.getNameAsString());
+    return super.visit(node, arg);
   }
 
   @Override
@@ -200,9 +218,20 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
+    if (insideTargetMethod) {
+      usedMethods.add(classFQName + "#" + expr.getName().asString());
+    }
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
       usedClass.add(caller.calculateResolvedType().describe());
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(NameExpr expr, Void p) {
+    if (!declaredNames.contains(expr.getNameAsString())) {
+      usedClass.add(parentClass);
     }
     return super.visit(expr, p);
   }

@@ -108,6 +108,20 @@ public class UnsolvedClass {
     }
   }
 
+  public void updateFieldByReturnType(String currentType, String correctType) {
+    for (String fieldExpression : classFields) {
+      String[] elements = fieldExpression.split(" ");
+      String fieldType = elements[0];
+      String fieldName = elements[1];
+      if (fieldType.equals(currentType)) {
+        classFields.remove(fieldExpression);
+        classFields.add(
+            UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
+                correctType, correctType + " " + fieldName));
+      }
+    }
+  }
+
   /**
    * Return the content of the class as a compilable Java file.
    *
@@ -119,7 +133,7 @@ public class UnsolvedClass {
     sb.append("package ").append(packageName).append(";\n");
     sb.append("public class ").append(className).append(" {\n");
     for (String variableDeclarations : classFields) {
-      sb.append("    " + variableDeclarations + ";\n");
+      sb.append("    " + "public " + variableDeclarations + ";\n");
     }
     for (UnsolvedMethod method : methods) {
       sb.append(method.toString());
