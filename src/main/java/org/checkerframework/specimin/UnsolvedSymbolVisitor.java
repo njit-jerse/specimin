@@ -52,10 +52,10 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * The parent class of this current class file. If there is no parent class, then the value of
-   * this variable is an empty string
+   * The unsolved superclass of this current class file. If there is no unsolved superclass, then
+   * the value of this variable is an empty string
    */
-  private @ClassGetSimpleName String parentClass = "";
+  private @ClassGetSimpleName String superClass = "";
 
   /** The package of this class */
   private String currentPackage = "";
@@ -63,22 +63,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * This map will map the name of variables in the current class and its corresponding declaration
    */
-  private Map<String, String> variablesAndDeclaration;
+  private final Map<String, String> variablesAndDeclaration = new HashMap<>();
 
   /**
    * Based on the method declarations in the current class, this map will map the name of the
    * methods with their corresponding return types
    */
-  private Map<String, @ClassGetSimpleName String> methodAndReturnType;
+  private final Map<String, @ClassGetSimpleName String> methodAndReturnType = new HashMap<>();
 
   /** List of classes not in the source codes */
-  private Set<UnsolvedClass> missingClass;
+  private final Set<UnsolvedClass> missingClass = new HashSet<>();
 
   /** The same as the root being used in SpeciminRunner */
   private String rootDirectory;
 
   /** This instance maps the name of a synthetic method with its synthetic class */
-  private Map<String, UnsolvedClass> syntheticMethodAndClass;
+  private final Map<String, UnsolvedClass> syntheticMethodAndClass = new HashMap<>();
 
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
@@ -90,13 +90,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * The list of classes that have been created. We use this list to delete all the temporary
    * synthetic classes when Specimin finishes its run
    */
-  private Set<Path> createdClass;
+  private final Set<Path> createdClass = new HashSet<>();
 
   /** List of import statement from the current compilation unit that is being visited */
-  private List<String> importStatement;
+  private List<String> importStatement = new ArrayList<>();
 
   /** This map the classes in the compilation unit with the related package */
-  private Map<String, String> classAndPackageMap;
+  private final Map<String, String> classAndPackageMap = new HashMap<>();
 
   /**
    * If there is any import statement that ends with *, this string will be replaced by one of the
@@ -105,7 +105,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String chosenPackage = "";
 
   /** This set has fully-qualified class names that come from jar files input */
-  private Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
+  private final Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
+
+  /**
+   * This set has the fully-qualfied name of the synthetic return types created by this instance of
+   * UnsolvedSymbolVisitor
+   */
+  private final Set<String> syntheticReturnTypes = new HashSet<>();
 
   /**
    * This set has all the name of synthetic types created by this visitor. These types represent the
@@ -119,14 +125,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public UnsolvedSymbolVisitor(String rootDirectory) {
     this.rootDirectory = rootDirectory;
-    this.missingClass = new HashSet<>();
     this.gotException = true;
-    this.importStatement = new ArrayList<>();
-    this.classAndPackageMap = new HashMap<>();
-    this.createdClass = new HashSet<>();
-    this.syntheticMethodAndClass = new HashMap<>();
-    this.methodAndReturnType = new HashMap<>();
-    this.variablesAndDeclaration = new HashMap<>();
   }
 
   /**
@@ -184,12 +183,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get the value of parentclass
+   * Get the value of superClass
    *
-   * @return parentClass the value of parentClass
+   * @return superClass the value of superClass
    */
-  public String getParentClass() {
-    return parentClass;
+  public String getSuperClass() {
+    return superClass;
   }
 
   /**
@@ -218,6 +217,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     gotException = false;
   }
 
+  /**
+   * Check if a class is a synthetic return type created by this instance of UnsolvedSymbolVisitor
+   *
+   * @param className the name of the class to be checked
+   * @return true if the class is a synthetic return type created by this UnsolvedSymbolVisitor
+   */
+  public boolean isASyntheticReturnType(String className) {
+    return syntheticReturnTypes.contains(className);
+  }
+
   @Override
   public Visitable visit(PackageDeclaration node, Void arg) {
     this.currentPackage = node.getNameAsString();
@@ -230,8 +239,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // note that since Specimin does not have access to the class paths of the project, all the
       // unsolved methods related to inheritance will be placed in the parent class, even if there
       // is a grandparent class and so forth.
-      SimpleName parentClassSimpleName = node.getExtendedTypes().get(0).getName();
-      parentClass = parentClassSimpleName.asString();
+      SimpleName superClassSimpleName = node.getExtendedTypes().get(0).getName();
+      superClass = superClassSimpleName.asString();
     }
     return super.visit(node, arg);
   }
@@ -256,14 +265,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           parametersList.add(type.asReferenceType().getQualifiedName());
         }
       }
-      UnsolvedMethod constructorMethod = new UnsolvedMethod(this.parentClass, "", parametersList);
+      UnsolvedMethod constructorMethod = new UnsolvedMethod(this.superClass, "", parametersList);
       // if the parent class can not be found in the import statements, Specimin assumes it is in
       // the same package as the child class.
-      UnsolvedClass parentClass =
+      UnsolvedClass superClass =
           new UnsolvedClass(
-              this.parentClass, classAndPackageMap.getOrDefault(this.parentClass, currentPackage));
-      parentClass.addMethod(constructorMethod);
-      updateMissingClass(parentClass);
+              this.superClass, classAndPackageMap.getOrDefault(this.superClass, currentPackage));
+      superClass.addMethod(constructorMethod);
+      updateMissingClass(superClass);
       return super.visit(node, arg);
     }
   }
@@ -475,6 +484,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     syntheticMethodAndClass.put(methodName, missingClass);
     this.updateMissingClass(missingClass);
     if (desiredReturnType.equals("")) {
+      @SuppressWarnings(
+          "signature") // returnType is a @ClassGetSimpleName, so combining it with the package will
+      // give us the fully-qualified name
+      @FullyQualifiedName String packageName = missingClass.getPackageName() + "." + returnType;
+      syntheticReturnTypes.add(packageName);
       UnsolvedClass returnTypeForThisMethod =
           new UnsolvedClass(returnType, missingClass.getPackageName());
       this.updateMissingClass(returnTypeForThisMethod);
@@ -604,18 +618,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (expr instanceof MethodCallExpr) {
       updateUnsolvedClassWithMethodCall(
           expr.asMethodCallExpr(),
-          this.parentClass,
+          this.superClass,
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
     } else if (expr instanceof FieldAccessExpr) {
       updateUnsolvedClassWithVariables(
           expr.asFieldAccessExpr().getNameAsString(),
-          parentClass,
-          classAndPackageMap.getOrDefault(parentClass, this.currentPackage));
+          superClass,
+          classAndPackageMap.getOrDefault(superClass, this.currentPackage));
     } else if (expr instanceof NameExpr) {
       updateUnsolvedClassWithVariables(
           expr.asNameExpr().getNameAsString(),
-          parentClass,
-          classAndPackageMap.getOrDefault(parentClass, this.currentPackage));
+          superClass,
+          classAndPackageMap.getOrDefault(superClass, this.currentPackage));
     } else {
       throw new RuntimeException("Unexpected expression: " + expr);
     }
@@ -1023,6 +1037,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
     newClass.addMethod(newMethod);
     syntheticMethodAndClass.put(newMethod.toString(), newClass);
+    @SuppressWarnings(
+        "signature") // thisReturnType is a @ClassGetSimpleName, so combining it with the
+    // packageName will give us the @FullyQualifiedName
+    @FullyQualifiedName String returnTypeFullName = packageName + "." + thisReturnType;
+    syntheticReturnTypes.add(returnTypeFullName);
     this.updateMissingClass(newClass);
   }
 
@@ -1049,29 +1068,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // fields of the parent class rather than the return type of some methods
       else {
         for (UnsolvedClass unsolClass : missingClass) {
-          if (unsolClass.getClassName().equals(parentClass)) {
-            unsolClass.updateFieldByReturnType(incorrectType, typeToCorrect.get(incorrectType));
+          if (unsolClass.getClassName().equals(superClass)) {
+            unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
             this.deleteOldSyntheticClass(unsolClass);
             this.createMissingClass(unsolClass);
           }
         }
       }
     }
-  }
-
-  /**
-   * This method checks if a class name is the name of a synthetic class created by this visitor to
-   * represent a missing return type.
-   *
-   * @param className the name of the class to be examined
-   * @return true if that this the name of a synthetic class created for a missing return type
-   */
-  public boolean isASyntheticReturnType(String className) {
-    for (UnsolvedClass syntheticType : syntheticMethodAndClass.values()) {
-      if (syntheticType.getClassName().equals(className)) {
-        return true;
-      }
-    }
-    return false;
   }
 }

@@ -4,7 +4,12 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
@@ -152,10 +157,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ConstructorDeclaration method, Void p) {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
-    String methodName =
-        this.classFQName
-            + "#"
-            + constructorMethodAsString.substring(constructorMethodAsString.indexOf(' ') + 1);
+    // the methodName will be something like this: "com.example.Car#Car()"
+    String methodName = this.classFQName + "#" + constructorMethodAsString;
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());

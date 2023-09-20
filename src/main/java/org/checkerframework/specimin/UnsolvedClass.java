@@ -108,7 +108,13 @@ public class UnsolvedClass {
     }
   }
 
-  public void updateFieldByReturnType(String currentType, String correctType) {
+  /**
+   * This method updates the types of fields in this class
+   *
+   * @param currentType the current type
+   * @param correctType the desired type
+   */
+  public void updateFieldByType(String currentType, String correctType) {
     for (String fieldExpression : classFields) {
       String[] elements = fieldExpression.split(" ");
       String fieldType = elements[0];
