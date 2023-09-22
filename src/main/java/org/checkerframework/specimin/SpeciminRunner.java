@@ -164,8 +164,8 @@ public class SpeciminRunner {
       if (isEmptyCompilationUnit(target.getValue())) {
         boolean isASyntheticReturnType = addMissingClass.isASyntheticReturnType(target.getKey());
         boolean isASyntheticSuperClass =
-            !addMissingClass.getSuperClass().equals("")
-                && target.getKey().contains(addMissingClass.getSuperClass());
+            !addMissingClass.getSuperClass().isEmpty()
+                && addMissingClass.getSuperClass().contains(target.getKey());
         if (!isASyntheticSuperClass && !isASyntheticReturnType) {
           continue;
         }

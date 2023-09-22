@@ -32,6 +32,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -55,10 +56,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * The unsolved superclass of this current class file. If there is no unsolved superclass, then
    * the value of this variable is an empty string
    */
-  private @ClassGetSimpleName String superClass = "";
+  private final Map<String, @ClassGetSimpleName String> classAndItsParent = new HashMap<>();
 
   /** The package of this class */
   private String currentPackage = "";
+
+  /** The name of the class currently visited */
+  private String className = "";
 
   /**
    * This map will map the name of variables in the current class and its corresponding declaration
@@ -187,8 +191,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @return superClass the value of superClass
    */
-  public String getSuperClass() {
-    return superClass;
+  public Collection<@ClassGetSimpleName String> getSuperClass() {
+    return classAndItsParent.values();
   }
 
   /**
@@ -235,12 +239,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
+    className = node.getNameAsString();
     if (node.getExtendedTypes().isNonEmpty()) {
       // note that since Specimin does not have access to the class paths of the project, all the
       // unsolved methods related to inheritance will be placed in the parent class, even if there
       // is a grandparent class and so forth.
       SimpleName superClassSimpleName = node.getExtendedTypes().get(0).getName();
-      superClass = superClassSimpleName.asString();
+      classAndItsParent.put(className, superClassSimpleName.asString());
     }
     return super.visit(node, arg);
   }
@@ -265,12 +270,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           parametersList.add(type.asReferenceType().getQualifiedName());
         }
       }
-      UnsolvedMethod constructorMethod = new UnsolvedMethod(this.superClass, "", parametersList);
+      UnsolvedMethod constructorMethod =
+          new UnsolvedMethod(getParentClass(className), "", parametersList);
       // if the parent class can not be found in the import statements, Specimin assumes it is in
       // the same package as the child class.
       UnsolvedClass superClass =
           new UnsolvedClass(
-              this.superClass, classAndPackageMap.getOrDefault(this.superClass, currentPackage));
+              getParentClass(className),
+              classAndPackageMap.getOrDefault(getParentClass(className), currentPackage));
       superClass.addMethod(constructorMethod);
       updateMissingClass(superClass);
       return super.visit(node, arg);
@@ -308,6 +315,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
+    ClassOrInterfaceDeclaration classNode =
+        (ClassOrInterfaceDeclaration) node.getParentNode().get();
+    className = classNode.getNameAsString();
     Type nodeType = node.getType();
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
@@ -618,18 +628,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (expr instanceof MethodCallExpr) {
       updateUnsolvedClassWithMethodCall(
           expr.asMethodCallExpr(),
-          this.superClass,
+          getParentClass(className),
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
     } else if (expr instanceof FieldAccessExpr) {
       updateUnsolvedClassWithFields(
           expr.asFieldAccessExpr().getNameAsString(),
-          superClass,
-          classAndPackageMap.getOrDefault(superClass, this.currentPackage));
+          getParentClass(className),
+          classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
     } else if (expr instanceof NameExpr) {
       updateUnsolvedClassWithFields(
           expr.asNameExpr().getNameAsString(),
-          superClass,
-          classAndPackageMap.getOrDefault(superClass, this.currentPackage));
+          getParentClass(className),
+          classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
     } else {
       throw new RuntimeException("Unexpected expression: " + expr);
     }
@@ -659,9 +669,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @ClassGetSimpleName String variableType = "SyntheticTypeFor" + toCapital(var);
       UnsolvedClass varType = new UnsolvedClass(variableType, packageName);
       syntheticTypes.add(variableType);
-      String variableExpression =
-          String.format("%s %s = new %s();", variableType, var, variableType);
-      relatedClass.addFields(variableExpression);
+      relatedClass.addFields(
+          setInitialValueForVariableDeclaration(variableType, variableType + " " + var));
       updateMissingClass(relatedClass);
       updateMissingClass(varType);
     }
@@ -1068,13 +1077,30 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // fields of the parent class rather than the return type of some methods
       else {
         for (UnsolvedClass unsolClass : missingClass) {
-          if (unsolClass.getClassName().equals(superClass)) {
-            unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
-            this.deleteOldSyntheticClass(unsolClass);
-            this.createMissingClass(unsolClass);
+          for (String parentClass : classAndItsParent.values()) {
+            if (unsolClass.getClassName().equals(parentClass)) {
+              unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
+              this.deleteOldSyntheticClass(unsolClass);
+              this.createMissingClass(unsolClass);
+            }
           }
         }
       }
+    }
+  }
+
+  /**
+   * Given the name of a class, this method will based on the map classAndItsParent to find the name
+   * of the super class of the input class
+   *
+   * @param className the name of the class to be taken as the input
+   * @return the name of the super class of the input class
+   */
+  public @ClassGetSimpleName String getParentClass(String className) {
+    if (classAndItsParent.containsKey(className)) {
+      return classAndItsParent.get(className);
+    } else {
+      throw new RuntimeException("Unfound parent for this class: " + className);
     }
   }
 }

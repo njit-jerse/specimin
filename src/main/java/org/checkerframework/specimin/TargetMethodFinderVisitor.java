@@ -13,6 +13,8 @@ import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -233,8 +235,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr expr, Void p) {
-    if (!declaredNames.contains(expr.getNameAsString())) {
-      usedClass.add(parentClass);
+    ResolvedValueDeclaration exprDecl = expr.resolve();
+    if (exprDecl instanceof ResolvedFieldDeclaration) {
+      usedClass.add(exprDecl.asField().declaringType().getQualifiedName());
     }
     return super.visit(expr, p);
   }
