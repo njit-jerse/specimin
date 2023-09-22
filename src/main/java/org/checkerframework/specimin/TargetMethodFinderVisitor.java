@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -18,6 +19,7 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -235,9 +237,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr expr, Void p) {
-    ResolvedValueDeclaration exprDecl = expr.resolve();
-    if (exprDecl instanceof ResolvedFieldDeclaration) {
-      usedClass.add(exprDecl.asField().declaringType().getQualifiedName());
+    Optional<Node> parentNode = expr.getParentNode();
+    if (parentNode.isEmpty()
+        || !(parentNode.get() instanceof MethodCallExpr
+            || parentNode.get() instanceof FieldAccessExpr)) {
+      ResolvedValueDeclaration exprDecl = expr.resolve();
+      if (exprDecl instanceof ResolvedFieldDeclaration) {
+        usedClass.add(exprDecl.asField().declaringType().getQualifiedName());
+      }
     }
     return super.visit(expr, p);
   }

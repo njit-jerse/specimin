@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -287,9 +288,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(NameExpr node, Void arg) {
     if (!canBeSolved(node)) {
-      // for an unsolved name expression, we assume that the declaration for that instance must be
-      // in the parent class
-      updateSyntheticClassForSuperCall(node);
+      Optional<Node> parentNode = node.getParentNode();
+      // we take care of the two latter cases in other visit methods
+      if (parentNode.isEmpty()
+          || !(parentNode.get() instanceof MethodCallExpr
+              || parentNode.get() instanceof FieldAccessExpr)) {
+        updateSyntheticClassForSuperCall(node);
+      }
     }
     return super.visit(node, arg);
   }
