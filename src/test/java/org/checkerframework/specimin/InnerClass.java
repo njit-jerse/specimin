@@ -1,19 +1,18 @@
 package org.checkerframework.specimin;
 
-import java.io.IOException;
 import org.junit.Test;
 
+import java.io.IOException;
+
 /**
- * This test checks that if Specimin will work properly where there is a super variables call while
- * the parent class file is not in the root directory physically and the field is not declared in
- * the current class
+ * This test checks that if Specimin will work properly where there are innerclasses in the input code
  */
-public class SyntheticSuperUndeclaredVariables {
+public class InnerClass {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "syntheticsuperundeclaredvariables",
-        new String[] {"com/example/Dog.java"},
-        new String[] {"com.example.Dog#isBornFromEggs()"});
+        "innerclass",
+        new String[] {"com/example/OuterFamily.java"},
+        new String[] {"com.example.OuterFamily#getLastName()", "com.example.OuterFamily.InnerFamily#getLastName()"});
   }
 }
