@@ -21,6 +21,7 @@ import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -242,7 +243,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
     className = node.getNameAsString();
     if (node.getExtendedTypes().isNonEmpty()) {
-      // note that since Specimin does not have access to the class paths of the project, all the
+      // note that since Specimin does not have access to the classpaths of the project, all the
       // unsolved methods related to inheritance will be placed in the parent class, even if there
       // is a grandparent class and so forth.
       SimpleName superClassSimpleName = node.getExtendedTypes().get(0).getName();
@@ -372,7 +373,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       parameter.resolve().describeType();
       return super.visit(parameter, p);
-    } catch (Exception e) {
+    } catch (UnsolvedSymbolException e) {
       String parameterInString = parameter.toString();
       if (isAClassPath(parameterInString)) {
         // parameterInString needs to be a fully-qualified name. As this parameter has a form of
@@ -636,13 +637,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           getParentClass(className),
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
     } else if (expr instanceof FieldAccessExpr) {
+      String nameAsString = expr.asFieldAccessExpr().getNameAsString();
       updateUnsolvedClassWithFields(
-          expr.asFieldAccessExpr().getNameAsString(),
+          nameAsString,
           getParentClass(className),
           classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
     } else if (expr instanceof NameExpr) {
+      String nameAsString = expr.asNameExpr().getNameAsString();
       updateUnsolvedClassWithFields(
-          expr.asNameExpr().getNameAsString(),
+          nameAsString,
           getParentClass(className),
           classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
     } else {
