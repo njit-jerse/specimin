@@ -42,15 +42,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   /** The fully-qualified name of the class currently being visited. */
   private String classFQName = "";
 
-  /** The simple name of the parent class of the class currently being visited */
-  private String parentClass = "";
-
   /**
-   * The methods that were actually used by the targets, and therefore ought to have their
-   * specifications (but not bodies) preserved. The Strings in the set are the fully-qualified
-   * names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
+   * The members (methods and fields) that were actually used by the targets, and therefore ought to
+   * have their specifications (but not bodies) preserved. The Strings in the set are the
+   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature for
+   * methods and FieldAccessExpr#getName for fields.
    */
-  private final Set<String> usedMethods = new HashSet<>();
+  private final Set<String> usedMembers = new HashSet<>();
 
   /**
    * Classes of the methods that were actually used by the targets. These classes will be included
@@ -103,8 +101,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *
    * @return the used methods
    */
-  public Set<String> getUsedMethods() {
-    return usedMethods;
+  public Set<String> getUsedMembers() {
+    return usedMembers;
   }
 
   /**
@@ -129,13 +127,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
-    if (decl.getExtendedTypes().isNonEmpty()) {
-      // note that since Specimin does not have access to the class paths of the project, all the
-      // unsolved methods related to inheritance will be placed in the parent class, even if there
-      // is a grandparent class and so forth.
-      parentClass = decl.getExtendedTypes().get(0).resolve().getQualifiedName();
-    }
-
     if (decl.isInnerClass()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
@@ -199,7 +190,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(call.resolve().getQualifiedSignature());
+      usedMembers.add(call.resolve().getQualifiedSignature());
       usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
     }
     return super.visit(call, p);
@@ -208,7 +199,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(newExpr.resolve().getQualifiedSignature());
+      usedMembers.add(newExpr.resolve().getQualifiedSignature());
       usedClass.add(newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
     }
     return super.visit(newExpr, p);
@@ -217,7 +208,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt expr, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(expr.resolve().getQualifiedSignature());
+      usedMembers.add(expr.resolve().getQualifiedSignature());
       usedClass.add(expr.resolve().getPackageName() + "." + expr.resolve().getClassName());
     }
     return super.visit(expr, p);
@@ -226,7 +217,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(classFQName + "#" + expr.getName().asString());
+      usedMembers.add(classFQName + "#" + expr.getName().asString());
     }
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
