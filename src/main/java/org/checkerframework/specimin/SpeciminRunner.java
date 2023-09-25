@@ -17,15 +17,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -163,9 +160,9 @@ public class SpeciminRunner {
       // If a compilation output's entire body has been removed, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
         boolean isASyntheticReturnType = addMissingClass.isASyntheticReturnType(target.getKey());
+        Collection<@ClassGetSimpleName String> listOfSuperClass = addMissingClass.getSuperClass();
         boolean isASyntheticSuperClass =
-            !addMissingClass.getSuperClass().isEmpty()
-                && addMissingClass.getSuperClass().contains(target.getKey());
+            !listOfSuperClass.isEmpty() && listOfSuperClass.contains(target.getKey());
         if (!isASyntheticSuperClass && !isASyntheticReturnType) {
           continue;
         }

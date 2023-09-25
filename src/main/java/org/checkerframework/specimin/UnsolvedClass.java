@@ -116,9 +116,10 @@ public class UnsolvedClass {
    */
   public void updateFieldByType(String currentType, String correctType) {
     for (String fieldExpression : classFields) {
-      // fieldExpression is guaranteed not to have an annotation, because it's part of a synthetic
-      // class
       String[] elements = fieldExpression.split(" ");
+      // fieldExpression is guaranteed to have the form "TYPE FIELD_NAME". Since this field
+      // expression is from a synthetic class, there is no annotation involved, so TYPE has no
+      // space.
       String fieldType = elements[0];
       String fieldName = elements[1];
       if (fieldType.equals(currentType)) {

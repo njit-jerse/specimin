@@ -55,16 +55,18 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * The unsolved superclass of this current class file. If there is no unsolved superclass, then
-   * the value of this variable is an empty string
+   * This map associates class names with their respective superclasses. The keys in this map
+   * represent the classes of the currently visited file. Due to the potential presence of inner
+   * classes, there may be multiple pairs of class and superclass entries in this map. This map can
+   * also be empty if there are no superclasses involved in the currently visited file.
    */
   private final Map<String, @ClassGetSimpleName String> classAndItsParent = new HashMap<>();
 
   /** The package of this class */
   private String currentPackage = "";
 
-  /** The name of the class currently visited */
-  private String className = "";
+  /** The simple name of the class currently visited */
+  private @ClassGetSimpleName String className = "";
 
   /**
    * This map will map the name of variables in the current class and its corresponding declaration
@@ -189,9 +191,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get the value of superClass
+   * Get the collection of superclasses. It's important to note that due to the potential presence
+   * of inner classes, this method returns a collection, as there can be multiple superclasses
+   * involved in a single file.
    *
-   * @return superClass the value of superClass
+   * @return the collection of superclasses
    */
   public Collection<@ClassGetSimpleName String> getSuperClass() {
     return classAndItsParent.values();
@@ -241,7 +245,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
-    className = node.getNameAsString();
+    SimpleName nodeName = node.getName();
+    className = nodeName.asString();
     if (node.getExtendedTypes().isNonEmpty()) {
       // note that since Specimin does not have access to the classpaths of the project, all the
       // unsolved methods related to inheritance will be placed in the parent class, even if there
@@ -323,7 +328,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodDeclaration node, Void arg) {
     ClassOrInterfaceDeclaration classNode =
         (ClassOrInterfaceDeclaration) node.getParentNode().get();
-    className = classNode.getNameAsString();
+    SimpleName classNodeSimpleName = classNode.getName();
+    className = classNodeSimpleName.asString();
     Type nodeType = node.getType();
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
