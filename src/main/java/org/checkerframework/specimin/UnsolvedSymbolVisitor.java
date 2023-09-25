@@ -58,7 +58,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * This map associates class names with their respective superclasses. The keys in this map
    * represent the classes of the currently visited file. Due to the potential presence of inner
    * classes, there may be multiple pairs of class and superclass entries in this map. This map can
-   * also be empty if there are no superclasses involved in the currently visited file.
+   * also be empty if there are no superclasses other than java.lang.Object involved in the
+   * currently visited file.
    */
   private final Map<String, @ClassGetSimpleName String> classAndItsParent = new HashMap<>();
 
@@ -191,9 +192,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get the collection of superclasses. It's important to note that due to the potential presence
-   * of inner classes, this method returns a collection, as there can be multiple superclasses
-   * involved in a single file.
+   * Get the collection of superclasses. Due to the potential presence of inner classes, this method
+   * returns a collection, as there can be multiple superclasses involved in a single file.
    *
    * @return the collection of superclasses
    */
