@@ -1,19 +1,25 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -37,17 +43,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private String classFQName = "";
 
   /**
-   * The methods that were actually used by the targets, and therefore ought to have their
-   * specifications (but not bodies) preserved. The Strings in the set are the fully-qualified
-   * names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
+   * The members (methods and fields) that were actually used by the targets, and therefore ought to
+   * have their specifications (but not bodies) preserved. The Strings in the set are the
+   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature for
+   * methods and FieldAccessExpr#getName for fields.
    */
-  private final Set<String> usedMethods = new HashSet<>();
+  private final Set<String> usedMembers = new HashSet<>();
 
   /**
    * Classes of the methods that were actually used by the targets. These classes will be included
    * in the input.
    */
   private Set<String> usedClass = new HashSet<>();
+
+  /** Set of variables declared in this current class */
+  private final Set<String> declaredNames = new HashSet<>();
 
   /**
    * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
@@ -91,8 +101,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *
    * @return the used methods
    */
-  public Set<String> getUsedMethods() {
-    return usedMethods;
+  public Set<String> getUsedMembers() {
+    return usedMembers;
   }
 
   /**
@@ -155,6 +165,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(VariableDeclarator node, Void arg) {
+    declaredNames.add(node.getNameAsString());
+    return super.visit(node, arg);
+  }
+
+  @Override
   public Visitable visit(MethodDeclaration method, Void p) {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // The substring here is to remove the method's return type. Return types cannot contain spaces.
@@ -174,7 +190,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(call.resolve().getQualifiedSignature());
+      usedMembers.add(call.resolve().getQualifiedSignature());
       usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
     }
     return super.visit(call, p);
@@ -183,7 +199,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(newExpr.resolve().getQualifiedSignature());
+      usedMembers.add(newExpr.resolve().getQualifiedSignature());
       usedClass.add(newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
     }
     return super.visit(newExpr, p);
@@ -192,7 +208,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt expr, Void p) {
     if (insideTargetMethod) {
-      usedMethods.add(expr.resolve().getQualifiedSignature());
+      usedMembers.add(expr.resolve().getQualifiedSignature());
       usedClass.add(expr.resolve().getPackageName() + "." + expr.resolve().getClassName());
     }
     return super.visit(expr, p);
@@ -200,9 +216,26 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
+    if (insideTargetMethod) {
+      usedMembers.add(classFQName + "#" + expr.getName().asString());
+    }
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
       usedClass.add(caller.calculateResolvedType().describe());
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(NameExpr expr, Void p) {
+    Optional<Node> parentNode = expr.getParentNode();
+    if (parentNode.isEmpty()
+        || !(parentNode.get() instanceof MethodCallExpr
+            || parentNode.get() instanceof FieldAccessExpr)) {
+      ResolvedValueDeclaration exprDecl = expr.resolve();
+      if (exprDecl instanceof ResolvedFieldDeclaration) {
+        usedClass.add(exprDecl.asField().declaringType().getQualifiedName());
+      }
     }
     return super.visit(expr, p);
   }

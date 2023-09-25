@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -26,6 +27,7 @@ import java.util.Set;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -148,7 +150,7 @@ public class SpeciminRunner {
     }
 
     MethodPrunerVisitor methodPruner =
-        new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMethods());
+        new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMembers());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       // This must happen before any modifications to each compilation unit, or
@@ -163,9 +165,9 @@ public class SpeciminRunner {
       // If a compilation output's entire body has been removed, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
         boolean isASyntheticReturnType = addMissingClass.isASyntheticReturnType(target.getKey());
+        Collection<@ClassGetSimpleName String> listOfSuperClass = addMissingClass.getSuperClass();
         boolean isASyntheticSuperClass =
-            !addMissingClass.getSuperClass().equals("")
-                && target.getKey().contains(addMissingClass.getSuperClass());
+            !listOfSuperClass.isEmpty() && listOfSuperClass.contains(target.getKey());
         if (!isASyntheticSuperClass && !isASyntheticReturnType) {
           continue;
         }
