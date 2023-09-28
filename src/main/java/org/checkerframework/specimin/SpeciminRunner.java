@@ -69,9 +69,9 @@ public class SpeciminRunner {
   }
 
   /**
-   * This method provides a simplified way for users to perform the minimization job using Specimin.
-   * Users can call this method directly instead of invoking the main method of Specimin to initiate
-   * the minimization process.
+   * This method acts as an API for users who want to incorporate Specimin as a library into their
+   * projects. It offers an easy way to do the minimization job without needing to directly call
+   * Specimin's main method.
    *
    * @param root The root directory of the input files.
    * @param targetFiles A list of files that contain the target methods.
