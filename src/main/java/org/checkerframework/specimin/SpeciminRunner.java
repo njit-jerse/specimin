@@ -59,10 +59,33 @@ public class SpeciminRunner {
         optionParser.accepts("outputDirectory").withRequiredArg();
 
     OptionSet options = optionParser.parse(args);
+    String output = options.valueOf(outputDirectoryOption);
+    performMinimization(
+        options.valueOf(rootOption),
+        options.valuesOf(targetFilesOption),
+        options.valuesOf(jarPath),
+        options.valuesOf(targetMethodsOption),
+        options.valueOf(outputDirectoryOption));
+  }
 
-    String root = options.valueOf(rootOption);
-    List<String> targetFiles = options.valuesOf(targetFilesOption);
-    List<String> jarPaths = options.valuesOf(jarPath);
+  /**
+   * This method acts as an API for users who want to incorporate Specimin as a library into their
+   * projects. It offers an easy way to do the minimization job without needing to directly call
+   * Specimin's main method.
+   *
+   * @param root The root directory of the input files.
+   * @param targetFiles A list of files that contain the target methods.
+   * @param jarPaths Paths to relevant JAR files.
+   * @param targetMethodNames A set of target method names to be preserved.
+   * @param outputDirectory The directory for the output.
+   */
+  public static void performMinimization(
+      String root,
+      List<String> targetFiles,
+      List<String> jarPaths,
+      List<String> targetMethodNames,
+      String outputDirectory)
+      throws IOException {
 
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
@@ -106,7 +129,6 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
     }
-    List<String> targetMethodNames = options.valuesOf(targetMethodsOption);
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
@@ -158,9 +180,6 @@ public class SpeciminRunner {
       LexicalPreservingPrinter.setup(cu);
       cu.accept(methodPruner, null);
     }
-
-    String outputDirectory = options.valueOf(outputDirectoryOption);
-
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
       // If a compilation output's entire body has been removed, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
