@@ -13,6 +13,7 @@ plugins {
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
+    mavenLocal()
 }
 
 application {
@@ -93,51 +94,16 @@ java {
     withSourcesJar()
 }
 
+// Add `mavenLocal()` in `repositories`, then run `./gradlew publishToMavenLocal`
+// to publish Specimin to your local Maven repository.
 publishing {
     publications {
-        mavenJava(MavenPublication) {
-            artifactId = 'Specimin'
+        maven(MavenPublication) {
+            groupId = 'edu.njit.jerse'
+            artifactId = 'specimin'
+            version = '0.1'
+
             from components.java
-            versionMapping {
-                usage('java-api') {
-                    fromResolutionOf('runtimeClasspath')
-                }
-                usage('java-runtime') {
-                    fromResolutionResult()
-                }
-            }
-            pom {
-                name = 'Specimin'
-                description = 'A specification minimizer for Java language'
-                url = ''
-                licenses {
-                    license {
-                        name = 'The Apache License, Version 2.0'
-                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-                    }
-                }
-                developers {
-                    developer {
-                        // I am not sure which id and email you would like to use
-                        id = ''
-                        name = 'Martin Kellogg'
-                        email = ''
-                    }
-                }
-                scm {
-                    connection = 'scm:git:git@github.com:kelloggm/specimin.git'
-                    developerConnection = 'scm:git:git@github.com:kelloggm/specimin.git'
-                    url = ''
-                }
-            }
-        }
-    }
-    repositories {
-        maven {
-            // I think ultimately these urls should be the Maven repos, though I have no ideas how to create those repos
-            def releasesRepoUrl = layout.buildDirectory.dir('.')
-            def snapshotsRepoUrl = layout.buildDirectory.dir('.')
-            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
         }
     }
 }
