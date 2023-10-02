@@ -94,8 +94,7 @@ java {
     withSourcesJar()
 }
 
-// Add `mavenLocal()` in `repositories`, then run `./gradlew publishToMavenLocal`
-// to publish Specimin to your local Maven repository.
+// Run `./gradlew publishToMavenLocal` to publish Specimin to your local Maven repository.
 publishing {
     publications {
         maven(MavenPublication) {
