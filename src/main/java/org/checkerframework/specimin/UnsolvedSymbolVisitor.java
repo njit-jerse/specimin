@@ -343,7 +343,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       parameter.resolve().describeType();
       return super.visit(parameter, p);
-    } catch (UnsolvedSymbolException e) {
+    }
+    // If the parameter originates from a Java built-in library, such as java.io or java.lang,
+    // an UnsupportedOperationException will be thrown instead.
+    catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       String parameterInString = parameter.toString();
       if (isAClassPath(parameterInString)) {
         // parameterInString needs to be a fully-qualified name. As this parameter has a form of
