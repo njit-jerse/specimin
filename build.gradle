@@ -1,6 +1,9 @@
 
 plugins {
     id 'application'
+    id 'java-library'
+    id 'maven-publish'
+    id 'signing'
     id 'com.diffplug.spotless' version '6.18.0'
     id 'org.checkerframework' version '0.6.27'
     id("net.ltgt.errorprone") version "2.0.2"
@@ -10,6 +13,7 @@ plugins {
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
+    mavenLocal()
 }
 
 application {
@@ -78,3 +82,27 @@ spotless {
 
 compileJava.dependsOn 'spotlessApply'
 check.dependsOn requireJavadoc
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+// Run `./gradlew publishToMavenLocal` to publish Specimin to your local Maven repository.
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = 'edu.njit.jerse'
+            artifactId = 'specimin'
+            version = '0.1'
+
+            from components.java
+        }
+    }
+}
+
+javadoc {
+    if(JavaVersion.current().isJava9Compatible()) {
+        options.addBooleanOption('html5', true)
+    }
+}
