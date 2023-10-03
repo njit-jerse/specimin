@@ -83,12 +83,6 @@ spotless {
 compileJava.dependsOn 'spotlessApply'
 check.dependsOn requireJavadoc
 
-// This groupId is just for temporal use
-group = 'njit.edu'
-version = '1.0'
-
-
-
 java {
     withJavadocJar()
     withSourcesJar()
