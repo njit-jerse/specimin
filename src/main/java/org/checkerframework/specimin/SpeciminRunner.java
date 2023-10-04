@@ -5,7 +5,6 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -175,9 +174,6 @@ public class SpeciminRunner {
         new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMembers());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
-      // This must happen before any modifications to each compilation unit, or
-      // the printer won't know about them. (It registers an observer.)
-      LexicalPreservingPrinter.setup(cu);
       cu.accept(methodPruner, null);
     }
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
