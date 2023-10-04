@@ -14,7 +14,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeS
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -191,20 +191,20 @@ public class SpeciminRunner {
           continue;
         }
       }
-
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
-      // Create any parts of the directory structure that don't already exist.
-      Path dirContainingOutputFile = targetOutputPath.getParent();
-      // This null test is very defensive and might not be required? I think getParent can
-      // only return null if its input was a single element path, which targetOutputPath
-      // should not be unless the user made an error.
-      if (dirContainingOutputFile != null) {
-        Files.createDirectories(dirContainingOutputFile);
-      }
       try {
-        Files.write(
-            targetOutputPath,
-            LexicalPreservingPrinter.print(target.getValue()).getBytes(StandardCharsets.UTF_8));
+        // Create any parts of the directory structure that don't already exist.
+        Path dirContainingOutputFile = targetOutputPath.getParent();
+        // This null test is very defensive and might not be required? I think getParent can
+        // only return null if its input was a single element path, which targetOutputPath
+        // should not be unless the user made an error.
+        if (dirContainingOutputFile != null) {
+          Files.createDirectories(dirContainingOutputFile);
+        }
+        // Write the string representation of CompilationUnit to the file
+        try (PrintWriter writer = new PrintWriter(targetOutputPath.toFile())) {
+          writer.print(target.getValue());
+        }
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
         System.out.println("with error: " + e);
