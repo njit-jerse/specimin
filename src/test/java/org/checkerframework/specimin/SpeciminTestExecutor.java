@@ -90,6 +90,8 @@ public class SpeciminTestExecutor {
       builder.command(
           "diff",
           "-qr",
+          "-w",
+          "-B",
           outputDir.toAbsolutePath().toString(),
           Path.of("src/test/resources/" + testName + "/expected").toAbsolutePath().toString());
     }

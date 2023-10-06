@@ -5,7 +5,6 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -14,7 +13,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeS
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -175,9 +174,6 @@ public class SpeciminRunner {
         new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMembers());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
-      // This must happen before any modifications to each compilation unit, or
-      // the printer won't know about them. (It registers an observer.)
-      LexicalPreservingPrinter.setup(cu);
       cu.accept(methodPruner, null);
     }
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
@@ -191,7 +187,6 @@ public class SpeciminRunner {
           continue;
         }
       }
-
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
@@ -201,10 +196,11 @@ public class SpeciminRunner {
       if (dirContainingOutputFile != null) {
         Files.createDirectories(dirContainingOutputFile);
       }
+      // Write the string representation of CompilationUnit to the file
       try {
-        Files.write(
-            targetOutputPath,
-            LexicalPreservingPrinter.print(target.getValue()).getBytes(StandardCharsets.UTF_8));
+        PrintWriter writer = new PrintWriter(targetOutputPath.toFile());
+        writer.print(target.getValue());
+        writer.close();
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
         System.out.println("with error: " + e);
