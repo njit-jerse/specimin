@@ -12,6 +12,8 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.type.ReferenceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
@@ -181,6 +183,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
+      Type returnType = method.getType();
+      if (returnType instanceof ReferenceType) {
+        usedClass.add(returnType.resolve().asReferenceType().getQualifiedName());
+      }
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;

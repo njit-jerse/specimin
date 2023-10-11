@@ -127,6 +127,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * type of fields in the parent class of the current class.
    */
   private final Set<String> syntheticTypes = new HashSet<>();
+
+  /**
+   * A mapping of field names to the @ClassGetSimpleName name of the classes in which they are
+   * declared.
+   */
+  private Map<String, @ClassGetSimpleName String> fieldAndItsClass = new HashMap<>();
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -192,6 +199,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * This method sets up the value of fieldsAndItsClass by using the result obtained from
+   * FieldDeclarationsVisitor
+   *
+   * @param fieldAndItsClass the value of fieldsAndItsClass from FieldDeclarationsVisitor
+   */
+  public void setFieldAndItsClass(Map<String, @ClassGetSimpleName String> fieldAndItsClass) {
+    this.fieldAndItsClass = fieldAndItsClass;
+  }
+
+  /**
    * Get the collection of superclasses. Due to the potential presence of inner classes, this method
    * returns a collection, as there can be multiple superclasses involved in a single file.
    *
@@ -225,16 +242,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void setExceptionToFalse() {
     gotException = false;
-  }
-
-  /**
-   * Check if a class is a synthetic return type created by this instance of UnsolvedSymbolVisitor
-   *
-   * @param className the name of the class to be checked
-   * @return true if the class is a synthetic return type created by this UnsolvedSymbolVisitor
-   */
-  public boolean isASyntheticReturnType(String className) {
-    return syntheticReturnTypes.contains(className);
   }
 
   @Override
@@ -293,13 +300,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr node, Void arg) {
+    //  This method explicitly handles NameExpr instances that represent fields of classes but are
+    // not explicitly shown in the code. For example, if "number" is a field of a class, then
+    // "return number;" is an expression that this method will address. If the NameExpr instance is
+    // not a field of any class, or if it is a field of a class but is explicitly referenced, such
+    // as "Math.number," we handle it in other visit methods.
     if (!canBeSolved(node)) {
       Optional<Node> parentNode = node.getParentNode();
-      // we take care of the two latter cases in other visit methods
+      // we take care of MethodCallExpr and FieldAccessExpr cases in other visit methods
       if (parentNode.isEmpty()
           || !(parentNode.get() instanceof MethodCallExpr
               || parentNode.get() instanceof FieldAccessExpr)) {
-        updateSyntheticClassForSuperCall(node);
+        String fieldName = node.getNameAsString();
+        if (!fieldAndItsClass.containsKey(fieldName)
+            || !fieldAndItsClass.get(fieldName).equals(className)) {
+          updateSyntheticClassForSuperCall(node);
+        }
       }
     }
     return super.visit(node, arg);
@@ -336,6 +352,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
     @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
     methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
+    try {
+      nodeType.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      UnsolvedClass syntheticType =
+          new UnsolvedClass(
+              nodeTypeSimpleForm,
+              classAndPackageMap.getOrDefault(nodeTypeSimpleForm, this.chosenPackage));
+      this.updateMissingClass(syntheticType);
+    }
     return super.visit(node, arg);
   }
 
