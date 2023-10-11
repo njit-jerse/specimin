@@ -39,6 +39,11 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
     }
   }
 
+  /**
+   * Get the value of fieldAndItsClass
+   *
+   * @return the value of fieldAndItsClass
+   */
   public Map<String, @ClassGetSimpleName String> getFieldAndItsClass() {
     return fieldAndItsClass;
   }
