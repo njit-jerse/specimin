@@ -115,7 +115,7 @@ public class SpeciminRunner {
         // file for each execution of the loop
         FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
         cu.accept(getDeclarations, null);
-        addMissingClass.setFieldAndItsClass(getDeclarations.getFieldAndItsClass());
+        addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
         cu.accept(addMissingClass, null);
       }
       addMissingClass.updateSyntheticSourceCode();

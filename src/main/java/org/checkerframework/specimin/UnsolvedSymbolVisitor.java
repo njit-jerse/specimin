@@ -75,6 +75,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The package of this class */
   private String currentPackage = "";
 
+  /** The symbol table to keep track of local variables in the current input file */
   private Stack<HashSet<String>> localVariables = new Stack<>();
 
   /** The simple name of the class currently visited */
@@ -140,10 +141,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Set<String> syntheticTypes = new HashSet<>();
 
   /**
-   * A mapping of field names to the @ClassGetSimpleName name of the classes in which they are
-   * declared.
+   * A mapping of field name to the name of the class currently being visited and its inner classes
    */
-  private Map<String, @ClassGetSimpleName String> fieldAndItsClass = new HashMap<>();
+  private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
   /**
    * Create a new UnsolvedSymbolVisitor instance
@@ -213,10 +213,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * This method sets up the value of fieldsAndItsClass by using the result obtained from
    * FieldDeclarationsVisitor
    *
-   * @param fieldAndItsClass the value of fieldsAndItsClass from FieldDeclarationsVisitor
+   * @param fieldNameToClassNameMap the value of fieldsAndItsClass from FieldDeclarationsVisitor
    */
-  public void setFieldAndItsClass(Map<String, @ClassGetSimpleName String> fieldAndItsClass) {
-    this.fieldAndItsClass = fieldAndItsClass;
+  public void setFieldNameToClassNameMap(
+      Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap) {
+    this.fieldNameToClassNameMap = fieldNameToClassNameMap;
   }
 
   /**
@@ -403,10 +404,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(NameExpr node, Void arg) {
     String fieldName = node.getNameAsString();
-    if (fieldAndItsClass.containsKey(fieldName)) {
+    if (fieldNameToClassNameMap.containsKey(fieldName)) {
       return super.visit(node, arg);
     }
-    //  This method explicitly handles NameExpr instances that represent fields of classes but are
+    // This method explicitly handles NameExpr instances that represent fields of classes but are
     // not explicitly shown in the code. For example, if "number" is a field of a class, then
     // "return number;" is an expression that this method will address. If the NameExpr instance is
     // not a field of any class, or if it is a field of a class but is explicitly referenced, such

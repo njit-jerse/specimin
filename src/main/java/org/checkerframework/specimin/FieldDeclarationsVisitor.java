@@ -21,11 +21,11 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
    * A mapping of field names to the @ClassGetSimpleName name of the classes in which they are
    * declared. Since inner classes can be involved, a map is used instead of a simple list.
    */
-  Map<String, @ClassGetSimpleName String> fieldAndItsClass;
+  Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap;
 
   /** Constructs a new FieldDeclarationsVisitor. */
   public FieldDeclarationsVisitor() {
-    fieldAndItsClass = new HashMap<>();
+    fieldNameToClassNameMap = new HashMap<>();
   }
 
   @Override
@@ -35,7 +35,7 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
     SimpleName classNodeSimpleName = classNode.getName();
     String className = classNodeSimpleName.asString();
     for (VariableDeclarator var : decl.getVariables()) {
-      fieldAndItsClass.put(var.getNameAsString(), className);
+      fieldNameToClassNameMap.put(var.getNameAsString(), className);
     }
   }
 
@@ -45,6 +45,6 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
    * @return the value of fieldAndItsClass
    */
   public Map<String, @ClassGetSimpleName String> getFieldAndItsClass() {
-    return fieldAndItsClass;
+    return fieldNameToClassNameMap;
   }
 }
