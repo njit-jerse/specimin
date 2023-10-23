@@ -54,6 +54,16 @@ public class UnsolvedMethod {
   public @ClassGetSimpleName String getReturnType() {
     return returnType;
   }
+
+  /**
+   * Get the name of this method
+   *
+   * @return the name of this method
+   */
+  public String getName() {
+    return name;
+  }
+
   /**
    * Return the content of the method. Note that the body of the method is stubbed out.
    *

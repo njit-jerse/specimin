@@ -15,7 +15,15 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.TryStmt;
+import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
@@ -42,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Stack;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
@@ -65,6 +74,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /** The package of this class */
   private String currentPackage = "";
+
+  private Stack<HashSet<String>> localVariables = new Stack<>();
 
   /** The simple name of the class currently visited */
   private @ClassGetSimpleName String className = "";
@@ -299,7 +310,102 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(ForStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  @SuppressWarnings(
+      "nullness") // this method could return null, and the setElstStmt method could accept a null
+  // value as parameter. So this SupressWarnings is to avoid the complains of
+  // CheckerFramework
+  public Visitable visit(IfStmt n, Void arg) {
+    HashSet<String> localVarInCon = new HashSet<>();
+    localVariables.push(localVarInCon);
+    Expression condition = (Expression) n.getCondition().accept(this, arg);
+    localVariables.pop();
+    localVarInCon = new HashSet<>();
+    localVariables.push(localVarInCon);
+    Statement elseStmt = n.getElseStmt().map(s -> (Statement) s.accept(this, arg)).orElse(null);
+    localVariables.pop();
+    localVarInCon = new HashSet<>();
+    localVariables.push(localVarInCon);
+    Statement thenStmt = (Statement) n.getThenStmt().accept(this, arg);
+    localVariables.pop();
+    if (condition == null || thenStmt == null) return null;
+    n.setCondition(condition);
+    n.setElseStmt(elseStmt);
+    n.setThenStmt(thenStmt);
+    return n;
+  }
+
+  @Override
+  public Visitable visit(WhileStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(SwitchExpr node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(SwitchEntry node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(TryStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(CatchClause node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(VariableDeclarator decl, Void p) {
+    // if there is no list of local variables, then the current VariableDeclarator visited is a
+    // field declaration
+    if (this.localVariables.size() != 0) {
+      HashSet<String> currentListOfLocals = localVariables.pop();
+      currentListOfLocals.add(decl.getName().asString());
+      localVariables.push(currentListOfLocals);
+    }
+    return super.visit(decl, p);
+  }
+
+  @Override
   public Visitable visit(NameExpr node, Void arg) {
+    String fieldName = node.getNameAsString();
+    if (fieldAndItsClass.containsKey(fieldName)) {
+      return super.visit(node, arg);
+    }
     //  This method explicitly handles NameExpr instances that represent fields of classes but are
     // not explicitly shown in the code. For example, if "number" is a field of a class, then
     // "return number;" is an expression that this method will address. If the NameExpr instance is
@@ -311,9 +417,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parentNode.isEmpty()
           || !(parentNode.get() instanceof MethodCallExpr
               || parentNode.get() instanceof FieldAccessExpr)) {
-        String fieldName = node.getNameAsString();
-        if (!fieldAndItsClass.containsKey(fieldName)
-            || !fieldAndItsClass.get(fieldName).equals(className)) {
+        boolean isALocalVar = false;
+        Iterator<HashSet<String>> value = localVariables.iterator();
+        while (value.hasNext()) {
+          if (value.next().contains(fieldName)) {
+            isALocalVar = true;
+            break;
+          }
+        }
+        if (!isALocalVar) {
           updateSyntheticClassForSuperCall(node);
         }
       }
@@ -361,7 +473,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               classAndPackageMap.getOrDefault(nodeTypeSimpleForm, this.chosenPackage));
       this.updateMissingClass(syntheticType);
     }
-    return super.visit(node, arg);
+
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, arg);
+    localVariables.pop();
+    return node;
   }
 
   @Override
@@ -441,7 +558,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.gotException = true;
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
-      UnsolvedMethod creationMethod = new UnsolvedMethod(type, "", argumentsCreation);
+      UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
       UnsolvedClass newClass =
           new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
       newClass.addMethod(creationMethod);
@@ -902,11 +1019,24 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
       if (e.getClassName().equals(missedClass.getClassName())) {
+
+        // add new methods
         for (UnsolvedMethod method : missedClass.getMethods()) {
-          if (!method.getReturnType().equals("")) {
+          boolean alreadyHad = false;
+          for (UnsolvedMethod classMethod : e.getMethods()) {
+            if (classMethod.getReturnType().equals(method.getReturnType())) {
+              if (classMethod.getName().equals(method.getName())) {
+                alreadyHad = true;
+                break;
+              }
+            }
+          }
+          if (!alreadyHad) {
             e.addMethod(method);
           }
         }
+
+        // add new fields
         for (String variablesDescription : missedClass.getClassFields()) {
           e.addFields(variablesDescription);
         }
