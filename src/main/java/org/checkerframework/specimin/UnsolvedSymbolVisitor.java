@@ -16,6 +16,7 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
@@ -51,6 +52,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
@@ -320,10 +322,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
-  @SuppressWarnings(
-      "nullness") // this method could return null, and the setElstStmt method could accept a null
-  // value as parameter. So this SupressWarnings is to avoid the complains of
-  // CheckerFramework
   public Visitable visit(IfStmt n, Void arg) {
     HashSet<String> localVarInCon = new HashSet<>();
     localVariables.push(localVarInCon);
@@ -337,9 +335,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     localVariables.push(localVarInCon);
     Statement thenStmt = (Statement) n.getThenStmt().accept(this, arg);
     localVariables.pop();
-    if (condition == null || thenStmt == null) return null;
+    if (condition == null || thenStmt == null) {
+      return null;
+    }
     n.setCondition(condition);
-    n.setElseStmt(elseStmt);
+    @SuppressWarnings(
+        "nullness") // elseStmt could actually be null, according to the document of setElseStmt.
+    // This part is to avoid the false warnings of Checker Framework
+    @NonNull Statement nullableElseStme = elseStmt;
+    n.setElseStmt(nullableElseStme);
     n.setThenStmt(thenStmt);
     return n;
   }
@@ -382,6 +386,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(CatchClause node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(BlockStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.push(currentLocalVariables);
     super.visit(node, p);
