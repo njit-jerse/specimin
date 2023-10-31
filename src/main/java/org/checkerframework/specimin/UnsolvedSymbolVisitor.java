@@ -15,7 +15,16 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.stmt.ForStmt;
+import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.TryStmt;
+import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
@@ -42,6 +51,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Stack;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
@@ -66,6 +77,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The package of this class */
   private String currentPackage = "";
 
+  /** The symbol table to keep track of local variables in the current input file */
+  private final Stack<HashSet<String>> localVariables = new Stack<>();
+
   /** The simple name of the class currently visited */
   private @ClassGetSimpleName String className = "";
 
@@ -84,7 +98,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Set<UnsolvedClass> missingClass = new HashSet<>();
 
   /** The same as the root being used in SpeciminRunner */
-  private String rootDirectory;
+  private final String rootDirectory;
+
+  /**
+   * This boolean tracks whether the element currently being visited is inside an object creation.
+   * It is set by {@link #visit(ObjectCreationExpr, Void)}. This boolean helps UnsolvedSymbolVisitor
+   * recognize anonymous class.
+   */
+  private boolean insideAnObjectCreation = false;
 
   /** This instance maps the name of a synthetic method with its synthetic class */
   private final Map<String, UnsolvedClass> syntheticMethodAndClass = new HashMap<>();
@@ -127,6 +148,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * type of fields in the parent class of the current class.
    */
   private final Set<String> syntheticTypes = new HashSet<>();
+
+  /**
+   * A mapping of field name to the name of the class currently being visited and its inner classes
+   */
+  private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -192,6 +219,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * This method sets up the value of fieldsAndItsClass by using the result obtained from
+   * FieldDeclarationsVisitor
+   *
+   * @param fieldNameToClassNameMap the value of fieldsAndItsClass from FieldDeclarationsVisitor
+   */
+  public void setFieldNameToClassNameMap(
+      Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap) {
+    this.fieldNameToClassNameMap = fieldNameToClassNameMap;
+  }
+
+  /**
    * Get the collection of superclasses. Due to the potential presence of inner classes, this method
    * returns a collection, as there can be multiple superclasses involved in a single file.
    *
@@ -225,16 +263,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void setExceptionToFalse() {
     gotException = false;
-  }
-
-  /**
-   * Check if a class is a synthetic return type created by this instance of UnsolvedSymbolVisitor
-   *
-   * @param className the name of the class to be checked
-   * @return true if the class is a synthetic return type created by this UnsolvedSymbolVisitor
-   */
-  public boolean isASyntheticReturnType(String className) {
-    return syntheticReturnTypes.contains(className);
   }
 
   @Override
@@ -292,14 +320,125 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(ForStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  @SuppressWarnings("nullness:override")
+  public @Nullable Visitable visit(IfStmt n, Void arg) {
+    HashSet<String> localVarInCon = new HashSet<>();
+    localVariables.push(localVarInCon);
+    Expression condition = (Expression) n.getCondition().accept(this, arg);
+    localVariables.pop();
+    localVarInCon = new HashSet<>();
+    localVariables.push(localVarInCon);
+    Statement elseStmt = n.getElseStmt().map(s -> (Statement) s.accept(this, arg)).orElse(null);
+    localVariables.pop();
+    localVarInCon = new HashSet<>();
+    localVariables.push(localVarInCon);
+    Statement thenStmt = (Statement) n.getThenStmt().accept(this, arg);
+    localVariables.pop();
+    if (condition == null || thenStmt == null) {
+      return null;
+    }
+    n.setCondition(condition);
+    n.setElseStmt(elseStmt);
+    n.setThenStmt(thenStmt);
+    return n;
+  }
+
+  @Override
+  public Visitable visit(WhileStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(SwitchExpr node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(SwitchEntry node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(TryStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(CatchClause node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(BlockStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, p);
+    localVariables.pop();
+    return node;
+  }
+
+  @Override
+  public Visitable visit(VariableDeclarator decl, Void p) {
+    boolean isAField =
+        (!decl.getParentNode().isEmpty())
+            && (decl.getParentNode().get() instanceof FieldDeclaration);
+    if (!isAField) {
+      HashSet<String> currentListOfLocals = localVariables.pop();
+      currentListOfLocals.add(decl.getNameAsString());
+      localVariables.push(currentListOfLocals);
+    }
+    return super.visit(decl, p);
+  }
+
+  @Override
   public Visitable visit(NameExpr node, Void arg) {
+    String name = node.getNameAsString();
+    if (fieldNameToClassNameMap.containsKey(name)) {
+      return super.visit(node, arg);
+    }
+    // This method explicitly handles NameExpr instances that represent fields of classes but are
+    // not explicitly shown in the code. For example, if "number" is a field of a class, then
+    // "return number;" is an expression that this method will address. If the NameExpr instance is
+    // not a field of any class, or if it is a field of a class but is explicitly referenced, such
+    // as "Math.number," we handle it in other visit methods.
     if (!canBeSolved(node)) {
       Optional<Node> parentNode = node.getParentNode();
-      // we take care of the two latter cases in other visit methods
+      // we take care of MethodCallExpr and FieldAccessExpr cases in other visit methods
       if (parentNode.isEmpty()
           || !(parentNode.get() instanceof MethodCallExpr
               || parentNode.get() instanceof FieldAccessExpr)) {
-        updateSyntheticClassForSuperCall(node);
+        if (!isALocalVar(name)) {
+          updateSyntheticClassForSuperCall(node);
+        }
       }
     }
     return super.visit(node, arg);
@@ -326,17 +465,46 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
-    ClassOrInterfaceDeclaration classNode =
-        (ClassOrInterfaceDeclaration) node.getParentNode().get();
-    SimpleName classNodeSimpleName = classNode.getName();
-    className = classNodeSimpleName.asString();
+    // a MethodDeclaration instance will have parent node
+    Node parentNode = node.getParentNode().get();
     Type nodeType = node.getType();
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
     @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
     @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
-    methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
-    return super.visit(node, arg);
+    try {
+      nodeType.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      UnsolvedClass syntheticType =
+          new UnsolvedClass(
+              nodeTypeSimpleForm,
+              classAndPackageMap.getOrDefault(nodeTypeSimpleForm, this.chosenPackage));
+      this.updateMissingClass(syntheticType);
+    }
+
+    if (!insideAnObjectCreation) {
+      SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+      className = classNodeSimpleName.asString();
+      methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
+    }
+    // node is a method declaration inside an anonymous class
+    else {
+      try {
+        // since this method declaration is inside an anonymous class, its parent will be an
+        // ObjectCreationExpr
+        ((ObjectCreationExpr) parentNode).resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
+        String nameOfClass = classNodeSimpleName.asString();
+        updateUnsolvedClassWithMethod(node, nameOfClass, toSimpleName(nodeTypeAsString));
+      }
+    }
+
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.push(currentLocalVariables);
+    super.visit(node, arg);
+    localVariables.pop();
+    return node;
   }
 
   @Override
@@ -365,7 +533,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateClassSetWithNotSimpleMethodCall(method);
     } else if (calledByAnIncompleteSyntheticClass(method)) {
       @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
-      updateUnsolvedClassWithMethodCall(method, incompleteClassName, "");
+      updateUnsolvedClassWithMethod(method, incompleteClassName, "");
     }
     this.gotException =
         calledByAnUnsolvedSymbol(method)
@@ -411,21 +579,26 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isFromAJarFile(newExpr)) {
         updateClassesFromJarSourcesForObjectCreation(newExpr);
       }
-      return super.visit(newExpr, p);
+      insideAnObjectCreation = true;
+      super.visit(newExpr, p);
+      insideAnObjectCreation = false;
+      return newExpr;
     }
     this.gotException = true;
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
-      UnsolvedMethod creationMethod = new UnsolvedMethod(type, "", argumentsCreation);
+      UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
       UnsolvedClass newClass =
           new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
       newClass.addMethod(creationMethod);
       this.updateMissingClass(newClass);
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
-      return super.visit(newExpr, p);
     }
-    return super.visit(newExpr, p);
+    insideAnObjectCreation = true;
+    super.visit(newExpr, p);
+    insideAnObjectCreation = false;
+    return newExpr;
   }
 
   /**
@@ -481,19 +654,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method will add a new method declaration to a synthetic class based on the unsolved method
-   * call in the original input. User can choose the desired return type for the added method. The
-   * desired return type can be an empty string, and in that case, Specimin will create another
-   * synthetic class to be the return type of that method.
+   * call or method declaration in the original input. User can choose the desired return type for
+   * the added method. The desired return type can be an empty string, and in that case, Specimin
+   * will create another synthetic class to be the return type of that method.
    *
-   * @param method the method call in the original input
+   * @param method the method call or method declaration in the original input
    * @param className the name of the synthetic class
    * @param desiredReturnType the desired return type for this method
    */
-  public void updateUnsolvedClassWithMethodCall(
-      MethodCallExpr method,
+  public void updateUnsolvedClassWithMethod(
+      Node method,
       @ClassGetSimpleName String className,
       @ClassGetSimpleName String desiredReturnType) {
-    String methodName = method.getNameAsString();
+    String methodName = "";
+    List<String> listOfParameters = new ArrayList<>();
+    if (method instanceof MethodCallExpr) {
+      methodName = ((MethodCallExpr) method).getNameAsString();
+      listOfParameters = getArgumentsFromMethodCall(((MethodCallExpr) method));
+    }
+    // method is a MethodDeclaration
+    else {
+      methodName = ((MethodDeclaration) method).getNameAsString();
+      for (Parameter para : ((MethodDeclaration) method).getParameters()) {
+        listOfParameters.add(para.getNameAsString());
+      }
+    }
     String returnType = "";
     if (desiredReturnType.equals("")) {
       returnType = returnNameForMethod(methodName);
@@ -503,11 +688,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClass missingClass =
         new UnsolvedClass(
             className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
-    UnsolvedMethod thisMethod =
-        new UnsolvedMethod(methodName, returnType, getArgumentsFromMethodCall(method));
+    UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
     missingClass.addMethod(thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
     this.updateMissingClass(missingClass);
+
+    // if the return type is not specified, a synthetic return type will be created. This part of
+    // codes creates the corresponding class for that synthetic return type
     if (desiredReturnType.equals("")) {
       @SuppressWarnings(
           "signature") // returnType is a @ClassGetSimpleName, so combining it with the package will
@@ -641,7 +828,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           "Check if isASuperCall returns true before calling updateSyntheticClassForSuperCall");
     }
     if (expr instanceof MethodCallExpr) {
-      updateUnsolvedClassWithMethodCall(
+      updateUnsolvedClassWithMethod(
           expr.asMethodCallExpr(),
           getParentClass(className),
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
@@ -691,6 +878,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateMissingClass(relatedClass);
       updateMissingClass(varType);
     }
+  }
+
+  /**
+   * This method checks if a variable is local.
+   *
+   * @param variableName the name of the variable
+   * @return true if that variable is local
+   */
+  public boolean isALocalVar(String variableName) {
+    for (HashSet<String> varSet : localVariables) {
+      // for anonymous classes, it is assumed that any matching local variable either belongs to the
+      // class itself or is a final variable in the enclosing scope.
+      if (varSet.contains(variableName)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -877,11 +1081,26 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
       if (e.getClassName().equals(missedClass.getClassName())) {
+
+        // add new methods
         for (UnsolvedMethod method : missedClass.getMethods()) {
-          if (!method.getReturnType().equals("")) {
+          // this boolean checks if the required method is already inside the related synthetic
+          // class. In that case, no need to add another one.
+          boolean alreadyHad = false;
+          for (UnsolvedMethod classMethod : e.getMethods()) {
+            if (classMethod.getReturnType().equals(method.getReturnType())) {
+              if (classMethod.getName().equals(method.getName())) {
+                alreadyHad = true;
+                break;
+              }
+            }
+          }
+          if (!alreadyHad) {
             e.addMethod(method);
           }
         }
+
+        // add new fields
         for (String variablesDescription : missedClass.getClassFields()) {
           e.addFields(variablesDescription);
         }

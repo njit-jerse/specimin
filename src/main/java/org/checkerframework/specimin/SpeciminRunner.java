@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -26,7 +25,6 @@ import java.util.Set;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -113,6 +111,11 @@ public class SpeciminRunner {
       addMissingClass.setExceptionToFalse();
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
+        // it's important to make sure that getDeclarations and addMissingClass will visit the same
+        // file for each execution of the loop
+        FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
+        cu.accept(getDeclarations, null);
+        addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
         cu.accept(addMissingClass, null);
       }
       addMissingClass.updateSyntheticSourceCode();
@@ -177,13 +180,13 @@ public class SpeciminRunner {
       cu.accept(methodPruner, null);
     }
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
-      // If a compilation output's entire body has been removed, do not output it.
+      // If a compilation output's entire body has been removed and the related class is not used by
+      // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
-        boolean isASyntheticReturnType = addMissingClass.isASyntheticReturnType(target.getKey());
-        Collection<@ClassGetSimpleName String> listOfSuperClass = addMissingClass.getSuperClass();
-        boolean isASyntheticSuperClass =
-            !listOfSuperClass.isEmpty() && listOfSuperClass.contains(target.getKey());
-        if (!isASyntheticSuperClass && !isASyntheticReturnType) {
+        // target key will have this form: "path/of/package/ClassName.java"
+        String classFullyQualfiedName = target.getKey().replace("/", ".");
+        classFullyQualfiedName = classFullyQualfiedName.replace(".java", "");
+        if (!finder.getUsedClass().contains(classFullyQualfiedName)) {
           continue;
         }
       }

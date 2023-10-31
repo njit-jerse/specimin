@@ -12,8 +12,11 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.type.ReferenceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.ArrayList;
@@ -177,10 +180,24 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // TODO: test this with annotations
     String methodName =
         this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
+    // this method belongs to an anonymous class inside the target method
+    if (insideTargetMethod) {
+      ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
+      ResolvedConstructorDeclaration resolved = parentExpression.resolve();
+      String methodPackage = resolved.getPackageName();
+      String methodClass = resolved.getClassName();
+      usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
+      usedClass.add(methodPackage + "." + methodClass);
+    }
+
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
+      Type returnType = method.getType();
+      if (returnType instanceof ReferenceType) {
+        usedClass.add(returnType.resolve().asReferenceType().getQualifiedName());
+      }
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
