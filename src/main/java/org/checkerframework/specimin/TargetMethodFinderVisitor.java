@@ -183,8 +183,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
-      // since this is a method inside an anonymous class, we can't use getQualifiedSignature()
-      // directly.
       ResolvedConstructorDeclaration resolved = parentExpression.resolve();
       String methodPackage = resolved.getPackageName();
       String methodClass = resolved.getClassName();

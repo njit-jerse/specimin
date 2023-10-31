@@ -1,5 +1,4 @@
 import org.checkerframework.checker.signature.qual.*;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 package com.github.javaparser.resolution.types;
 
