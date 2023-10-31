@@ -52,7 +52,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
-import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
@@ -348,11 +347,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return null;
     }
     n.setCondition(condition);
-    @SuppressWarnings(
-        "nullness") // elseStmt could actually be null, according to the document of setElseStmt.
-    // This part is to avoid the false warnings of Checker Framework
-    @NonNull Statement nullableElseStme = elseStmt;
-    n.setElseStmt(nullableElseStme);
+    n.setElseStmt(elseStmt);
     n.setThenStmt(thenStmt);
     return n;
   }
@@ -413,12 +408,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(VariableDeclarator decl, Void p) {
-    boolean isAField = false;
-    if (!decl.getParentNode().isEmpty()) {
-      if (decl.getParentNode().get() instanceof FieldDeclaration) {
-        isAField = true;
-      }
-    }
+    boolean isAField =
+        (!decl.getParentNode().isEmpty())
+            && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
       HashSet<String> currentListOfLocals = localVariables.pop();
       currentListOfLocals.add(decl.getNameAsString());
@@ -429,8 +421,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr node, Void arg) {
-    String fieldName = node.getNameAsString();
-    if (fieldNameToClassNameMap.containsKey(fieldName)) {
+    String name = node.getNameAsString();
+    if (fieldNameToClassNameMap.containsKey(name)) {
       return super.visit(node, arg);
     }
     // This method explicitly handles NameExpr instances that represent fields of classes but are
@@ -444,7 +436,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parentNode.isEmpty()
           || !(parentNode.get() instanceof MethodCallExpr
               || parentNode.get() instanceof FieldAccessExpr)) {
-        if (!isALocalVar(fieldName)) {
+        if (!isALocalVar(name)) {
           updateSyntheticClassForSuperCall(node);
         }
       }
@@ -891,14 +883,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * This method checks if a variable is local.
    *
-   * @param fieldName the name of the variable
+   * @param variableName the name of the variable
    * @return true if that variable is local
    */
-  public boolean isALocalVar(String fieldName) {
+  public boolean isALocalVar(String variableName) {
     for (HashSet<String> varSet : localVariables) {
       // for anonymous classes, it is assumed that any matching local variable either belongs to the
       // class itself or is a final variable in the enclosing scope.
-      if (varSet.contains(fieldName)) {
+      if (varSet.contains(variableName)) {
         return true;
       }
     }
@@ -1092,6 +1084,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
         // add new methods
         for (UnsolvedMethod method : missedClass.getMethods()) {
+          // this boolean checks if the required method is already inside the related synthetic
+          // class. In that case, no need to add another one.
           boolean alreadyHad = false;
           for (UnsolvedMethod classMethod : e.getMethods()) {
             if (classMethod.getReturnType().equals(method.getReturnType())) {
