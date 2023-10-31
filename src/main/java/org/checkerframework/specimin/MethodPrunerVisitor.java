@@ -29,6 +29,12 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
   private Set<String> methodsToEmpty;
 
   /**
+   * This boolean tracks whether the element currently being visited is inside a target method. It
+   * is set by {@link #visit(MethodDeclaration, Void)}.
+   */
+  private boolean insideTargetMethod = false;
+
+  /**
    * Creates the pruner. All methods this pruner encounters other than those in its input sets will
    * be removed entirely. For both arguments, the Strings should be in the format produced by
    * ResolvedMethodDeclaration#getQualifiedSignature.
@@ -46,12 +52,19 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
-      return super.visit(methodDecl, p);
+      insideTargetMethod = true;
+      Visitable result = super.visit(methodDecl, p);
+      insideTargetMethod = false;
+      return result;
     } else if (methodsToEmpty.contains(resolved.getQualifiedSignature())) {
       methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return methodDecl;
     } else {
-      methodDecl.remove();
+      // if insideTargetMethod is true, this current method declaration belongs to an anonnymous
+      // class inside the target method.
+      if (!insideTargetMethod) {
+        methodDecl.remove();
+      }
       return methodDecl;
     }
   }
