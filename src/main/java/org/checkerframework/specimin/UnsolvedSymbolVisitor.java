@@ -36,12 +36,15 @@ import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclar
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
+import com.google.common.base.Splitter;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -51,7 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Stack;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
@@ -78,7 +80,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String currentPackage = "";
 
   /** The symbol table to keep track of local variables in the current input file */
-  private final Stack<HashSet<String>> localVariables = new Stack<>();
+  private final ArrayDeque<HashSet<String>> localVariables = new ArrayDeque<>();
 
   /** The simple name of the class currently visited */
   private @ClassGetSimpleName String className = "";
@@ -183,7 +185,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * This method sets the value of classesFromJar based on the known class of jar type solvers
    *
-   * @param jarPaths
+   * @param jarPaths a list of path of jar files
    */
   public void setClassesFromJar(List<String> jarPaths) {
     for (String path : jarPaths) {
@@ -200,9 +202,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private void setclassAndPackageMap() {
     for (String importStatement : this.importStatement) {
-      String[] importParts = importStatement.split("\\.");
-      if (importParts.length > 0) {
-        String className = importParts[importParts.length - 1];
+      List<String> importParts = Splitter.on('.').splitToList(importStatement);
+      if (importParts.size() > 0) {
+        String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
         if (className.equals("*")) {
           if (!chosenPackage.equals("")) {
@@ -322,9 +324,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ForStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, p);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
@@ -332,17 +334,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @SuppressWarnings("nullness:override")
   public @Nullable Visitable visit(IfStmt n, Void arg) {
     HashSet<String> localVarInCon = new HashSet<>();
-    localVariables.push(localVarInCon);
+    localVariables.addFirst(localVarInCon);
     Expression condition = (Expression) n.getCondition().accept(this, arg);
-    localVariables.pop();
+    localVariables.removeFirst();
     localVarInCon = new HashSet<>();
-    localVariables.push(localVarInCon);
+    localVariables.addFirst(localVarInCon);
     Statement elseStmt = n.getElseStmt().map(s -> (Statement) s.accept(this, arg)).orElse(null);
-    localVariables.pop();
+    localVariables.removeFirst();
     localVarInCon = new HashSet<>();
-    localVariables.push(localVarInCon);
+    localVariables.addFirst(localVarInCon);
     Statement thenStmt = (Statement) n.getThenStmt().accept(this, arg);
-    localVariables.pop();
+    localVariables.removeFirst();
     if (condition == null || thenStmt == null) {
       return null;
     }
@@ -355,66 +357,65 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(WhileStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, p);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
   @Override
   public Visitable visit(SwitchExpr node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, p);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
   @Override
   public Visitable visit(SwitchEntry node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, p);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
   @Override
   public Visitable visit(TryStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, p);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
   @Override
   public Visitable visit(CatchClause node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, p);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
   @Override
   public Visitable visit(BlockStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, p);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
   @Override
   public Visitable visit(VariableDeclarator decl, Void p) {
     boolean isAField =
-        (!decl.getParentNode().isEmpty())
-            && (decl.getParentNode().get() instanceof FieldDeclaration);
+        !decl.getParentNode().isEmpty() && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
-      HashSet<String> currentListOfLocals = localVariables.pop();
+      HashSet<String> currentListOfLocals = localVariables.removeFirst();
       currentListOfLocals.add(decl.getNameAsString());
-      localVariables.push(currentListOfLocals);
+      localVariables.addFirst(currentListOfLocals);
     }
     return super.visit(decl, p);
   }
@@ -451,7 +452,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String variableType = node.getElementType().asString();
       Optional<Expression> potentialValue = var.getInitializer();
       String variableDeclaration = variableType + " " + variableName;
-      if (!potentialValue.isEmpty()) {
+      if (potentialValue.isPresent()) {
         String variableValue = potentialValue.get().toString();
         variableDeclaration += " = " + variableValue;
       } else {
@@ -501,9 +502,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
 
     HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.push(currentLocalVariables);
+    localVariables.addFirst(currentLocalVariables);
     super.visit(node, arg);
-    localVariables.pop();
+    localVariables.removeFirst();
     return node;
   }
 
@@ -645,11 +646,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   // simple form of that name
   @SuppressWarnings("signature")
   public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    String[] elements = className.split("[.]");
-    if (elements.length < 2) {
+    List<String> elements = Splitter.onPattern("[.]").splitToList(className);
+    if (elements.size() < 2) {
       return className;
     }
-    return elements[elements.length - 1];
+    return elements.get(elements.size() - 1);
   }
 
   /**
@@ -1163,7 +1164,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parentPath != null && !Files.exists(parentPath)) {
         Files.createDirectories(parentPath);
       }
-      try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath.toFile()))) {
+      try (BufferedWriter writer =
+          new BufferedWriter(new FileWriter(filePath.toFile(), StandardCharsets.UTF_8))) {
         writer.write(fileContent.toString());
       } catch (Exception e) {
         throw new Error(e.getMessage());
@@ -1201,9 +1203,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the string is a class path
    */
   public static boolean isAClassPath(String potentialClassPath) {
-    String[] elements = potentialClassPath.split(".");
-    int elementsCount = elements.length;
-    return elementsCount > 1 && isCapital(elements[elementsCount - 1]);
+    List<String> elements = Splitter.onPattern("\\.").splitToList(potentialClassPath);
+    ;
+    int elementsCount = elements.size();
+    return elementsCount > 1 && isCapital(elements.get(elementsCount - 1));
   }
 
   /**
@@ -1258,19 +1261,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public void updateClassSetWithNotSimpleMethodCall(MethodCallExpr method) {
     String methodCall = method.toString();
     String methodCallWithoutParen = methodCall.replace("()", "");
-    String[] methodParts = methodCallWithoutParen.split("[.]");
-    int lengthMethodParts = methodParts.length;
+    List<String> methodParts = Splitter.onPattern("[.]").splitToList(methodCallWithoutParen);
+    int lengthMethodParts = methodParts.size();
     if (lengthMethodParts <= 2) {
       throw new RuntimeException(
           "Need to check the method call with unsolvedAndNotSimple before using"
               + " updateClassSetWithNotSimpleMethodCall");
     }
-    String returnTypeClassName = methodParts[0];
-    String packageName = methodParts[0];
-    String methodName = methodParts[lengthMethodParts - 1];
+    String returnTypeClassName = methodParts.get(0);
+    String packageName = methodParts.get(0);
+    String methodName = methodParts.get(lengthMethodParts - 1);
     for (int i = 1; i < lengthMethodParts - 1; i++) {
-      returnTypeClassName = returnTypeClassName + toCapital(methodParts[i]);
-      packageName = packageName + "." + methodParts[i];
+      returnTypeClassName = returnTypeClassName + toCapital(methodParts.get(i));
+      packageName = packageName + "." + methodParts.get(i);
     }
     returnTypeClassName = returnTypeClassName + toCapital(methodName) + "ReturnType";
     // if the method call is org.package.Class.method(), then the return type of this method will be
