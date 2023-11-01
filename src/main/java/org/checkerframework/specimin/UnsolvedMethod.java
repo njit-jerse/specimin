@@ -28,6 +28,7 @@ public class UnsolvedMethod {
    *
    * @param name the name of the method
    * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
    */
   public UnsolvedMethod(
       String name, @ClassGetSimpleName String returnType, List<String> parameterList) {

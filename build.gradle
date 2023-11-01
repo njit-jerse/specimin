@@ -80,6 +80,10 @@ spotless {
     }
 }
 
+compileJava {
+    options.compilerArgs += ['-Werror']
+}
+
 compileJava.dependsOn 'spotlessApply'
 check.dependsOn requireJavadoc
 

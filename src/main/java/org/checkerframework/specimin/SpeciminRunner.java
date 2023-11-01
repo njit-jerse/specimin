@@ -34,6 +34,7 @@ public class SpeciminRunner {
    * The main entry point for Specimin.
    *
    * @param args the arguments to Specimin
+   * @throws IOException if there is an exception
    */
   public static void main(String... args) throws IOException {
     OptionParser optionParser = new OptionParser();
@@ -75,6 +76,7 @@ public class SpeciminRunner {
    * @param jarPaths Paths to relevant JAR files.
    * @param targetMethodNames A set of target method names to be preserved.
    * @param outputDirectory The directory for the output.
+   * @throws IOException if there is an exception
    */
   public static void performMinimization(
       String root,
