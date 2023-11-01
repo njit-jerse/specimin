@@ -130,7 +130,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
-    if (decl.isInnerClass()) {
+    if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
       if (!this.classFQName.equals("")) {
@@ -144,7 +144,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       this.classFQName = decl.getFullyQualifiedName().orElseThrow();
     }
     Visitable result = super.visit(decl, p);
-    if (decl.isInnerClass()) {
+    if (decl.isNestedType()) {
       this.classFQName = this.classFQName.substring(0, this.classFQName.lastIndexOf('.'));
     } else {
       this.classFQName = "";
@@ -180,6 +180,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // TODO: test this with annotations
     String methodName =
         this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
+    System.out.println("We got this: " + methodName);
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
