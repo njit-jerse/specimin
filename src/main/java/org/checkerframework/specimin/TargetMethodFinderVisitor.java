@@ -180,7 +180,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // TODO: test this with annotations
     String methodName =
         this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
-    System.out.println("We got this: " + methodName);
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
