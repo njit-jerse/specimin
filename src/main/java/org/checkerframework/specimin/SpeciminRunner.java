@@ -14,6 +14,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeS
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -33,6 +34,7 @@ public class SpeciminRunner {
    * The main entry point for Specimin.
    *
    * @param args the arguments to Specimin
+   * @throws IOException if there is an exception
    */
   public static void main(String... args) throws IOException {
     OptionParser optionParser = new OptionParser();
@@ -56,7 +58,6 @@ public class SpeciminRunner {
         optionParser.accepts("outputDirectory").withRequiredArg();
 
     OptionSet options = optionParser.parse(args);
-    String output = options.valueOf(outputDirectoryOption);
     performMinimization(
         options.valueOf(rootOption),
         options.valuesOf(targetFilesOption),
@@ -75,6 +76,7 @@ public class SpeciminRunner {
    * @param jarPaths Paths to relevant JAR files.
    * @param targetMethodNames A set of target method names to be preserved.
    * @param outputDirectory The directory for the output.
+   * @throws IOException if there is an exception
    */
   public static void performMinimization(
       String root,
@@ -201,7 +203,8 @@ public class SpeciminRunner {
       }
       // Write the string representation of CompilationUnit to the file
       try {
-        PrintWriter writer = new PrintWriter(targetOutputPath.toFile());
+        PrintWriter writer =
+            new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8.name());
         writer.print(target.getValue());
         writer.close();
       } catch (IOException e) {

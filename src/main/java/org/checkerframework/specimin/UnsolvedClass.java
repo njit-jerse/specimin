@@ -1,6 +1,9 @@
 package org.checkerframework.specimin;
 
+import com.google.common.base.Splitter;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
@@ -96,8 +99,8 @@ public class UnsolvedClass {
    * Update the return type of a method. Note: this method is supposed to be used to update
    * synthetic methods, where the return type of each method is distinct.
    *
-   * @param currentReturnType
-   * @param desiredReturnType
+   * @param currentReturnType the current return type of this method
+   * @param desiredReturnType the new return type
    */
   public void updateMethodByReturnType(
       @ClassGetSimpleName String currentReturnType, @ClassGetSimpleName String desiredReturnType) {
@@ -115,19 +118,25 @@ public class UnsolvedClass {
    * @param correctType the desired type
    */
   public void updateFieldByType(String currentType, String correctType) {
-    for (String fieldExpression : classFields) {
-      String[] elements = fieldExpression.split(" ");
+    Iterator<String> iterator = classFields.iterator();
+    Set<String> newFields = new HashSet<>();
+    while (iterator.hasNext()) {
+      List<String> elements = Splitter.on(' ').splitToList(iterator.next());
       // fieldExpression is guaranteed to have the form "TYPE FIELD_NAME". Since this field
       // expression is from a synthetic class, there is no annotation involved, so TYPE has no
       // space.
-      String fieldType = elements[0];
-      String fieldName = elements[1];
+      String fieldType = elements.get(0);
+      String fieldName = elements.get(1);
       if (fieldType.equals(currentType)) {
-        classFields.remove(fieldExpression);
-        classFields.add(
+        iterator.remove();
+        newFields.add(
             UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
                 correctType, correctType + " " + fieldName));
       }
+    }
+
+    for (String field : newFields) {
+      classFields.add(field);
     }
   }
 

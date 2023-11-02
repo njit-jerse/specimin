@@ -6,7 +6,7 @@ plugins {
     id 'signing'
     id 'com.diffplug.spotless' version '6.18.0'
     id 'org.checkerframework' version '0.6.34'
-    id("net.ltgt.errorprone") version "2.0.2"
+    id("net.ltgt.errorprone") version "3.1.0"
     id 'com.adarshr.test-logger' version '3.1.0'
 }
 
@@ -78,6 +78,10 @@ spotless {
         googleJavaFormat().reflowLongStrings()
         formatAnnotations()
     }
+}
+
+compileJava {
+    options.compilerArgs += ['-Werror']
 }
 
 compileJava.dependsOn 'spotlessApply'

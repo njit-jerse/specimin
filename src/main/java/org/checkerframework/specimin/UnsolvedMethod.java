@@ -28,6 +28,7 @@ public class UnsolvedMethod {
    *
    * @param name the name of the method
    * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
    */
   public UnsolvedMethod(
       String name, @ClassGetSimpleName String returnType, List<String> parameterList) {
@@ -40,7 +41,7 @@ public class UnsolvedMethod {
    * Set the value of returnType. This method is used when javac tells us that UnsolvedSymbolVisitor
    * get the return types wrong.
    *
-   * @param returnType
+   * @param returnType the return type to bet set for this method
    */
   public void setReturnType(@ClassGetSimpleName String returnType) {
     this.returnType = returnType;
@@ -69,6 +70,7 @@ public class UnsolvedMethod {
    *
    * @return the content of the method with the body stubbed out
    */
+  @Override
   public String toString() {
     String arguments = "";
     for (int i = 0; i < parameterList.size(); i++) {

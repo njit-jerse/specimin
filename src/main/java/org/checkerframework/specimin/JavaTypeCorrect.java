@@ -1,9 +1,12 @@
 package org.checkerframework.specimin;
 
+import com.google.common.base.Splitter;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -78,7 +81,9 @@ class JavaTypeCorrect {
       ProcessBuilder processBuilder = new ProcessBuilder(arguments);
       processBuilder.redirectErrorStream(true);
       Process process = processBuilder.start();
-      BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+      BufferedReader reader =
+          new BufferedReader(
+              new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
       String line;
       while ((line = reader.readLine()) != null) {
         if (line.contains("error: incompatible types")) {
@@ -86,7 +91,7 @@ class JavaTypeCorrect {
         }
       }
     } catch (Exception e) {
-      e.printStackTrace();
+      System.out.println(e);
     }
   }
 
@@ -96,8 +101,8 @@ class JavaTypeCorrect {
    * @param errorMessage the error message to be analyzed
    */
   private void updateTypeToChange(String errorMessage) {
-    String[] splitErrorMessage = errorMessage.split("\\s+");
-    if (splitErrorMessage.length < 7) {
+    List<String> splitErrorMessage = Splitter.onPattern("\\s+").splitToList(errorMessage);
+    if (splitErrorMessage.size() < 7) {
       throw new RuntimeException("Unexpected type error messages: " + errorMessage);
     }
     /* There are two possible forms of error messages here:
@@ -107,15 +112,15 @@ class JavaTypeCorrect {
     if (errorMessage.contains("cannot be converted to")) {
       // since this is from javac, we know that these will be dot-separated identifiers.
       @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage[4];
+      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage.get(4);
       @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String correctType = splitErrorMessage[splitErrorMessage.length - 1];
+      @DotSeparatedIdentifiers String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
       typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
     } else {
       @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage[5];
+      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage.get(5);
       @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String correctType = splitErrorMessage[splitErrorMessage.length - 1];
+      @DotSeparatedIdentifiers String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
       typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
     }
   }
@@ -133,10 +138,10 @@ class JavaTypeCorrect {
   // className will be a dot-separated identifier.
   @SuppressWarnings("signature")
   public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    String[] classNameParts = className.split("[.]");
-    if (classNameParts.length < 2) {
+    List<String> classNameParts = Splitter.onPattern("[.]").splitToList(className);
+    if (classNameParts.size() < 2) {
       return className;
     }
-    return classNameParts[classNameParts.length - 1];
+    return classNameParts.get(classNameParts.size() - 1);
   }
 }
