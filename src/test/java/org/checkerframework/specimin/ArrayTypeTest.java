@@ -4,8 +4,7 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks that a simple Java file with no dependencies and a single target method with one
- * method that it depends on results in that depended-on method being replaced by an empty body.
+ * This test checks if Specimin will work for array types
  */
 public class ArrayTypeTest {
   @Test
