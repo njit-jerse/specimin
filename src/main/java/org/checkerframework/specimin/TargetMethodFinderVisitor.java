@@ -12,13 +12,13 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
-import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -195,7 +195,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
       Type returnType = method.getType();
-      if (returnType instanceof ReferenceType) {
+      if (returnType.resolve() instanceof ResolvedReferenceType) {
         usedClass.add(returnType.resolve().asReferenceType().getQualifiedName());
       }
     }
