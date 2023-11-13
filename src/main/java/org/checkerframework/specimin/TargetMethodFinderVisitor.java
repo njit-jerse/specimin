@@ -195,6 +195,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
       Type returnType = method.getType();
+      // JavaParser may misinterpret unresolved array types as reference types.
+      // To ensure accuracy, we resolve the type before proceeding with the check.
       if (returnType.resolve() instanceof ResolvedReferenceType) {
         usedClass.add(returnType.resolve().asReferenceType().getQualifiedName());
       }
