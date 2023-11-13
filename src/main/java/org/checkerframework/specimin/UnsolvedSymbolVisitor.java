@@ -130,12 +130,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** This map the classes in the compilation unit with the related package */
   private final Map<String, String> classAndPackageMap = new HashMap<>();
 
-  /**
-   * If there is any import statement that ends with *, this string will be replaced by one of the
-   * class from those import statements.
-   */
-  private String chosenPackage = "";
-
   /** This set has fully-qualified class names that come from jar files input */
   private final Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
 
@@ -207,12 +201,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
         if (className.equals("*")) {
-          if (!chosenPackage.equals("")) {
-            throw new RuntimeException(
-                "Multiple wildcard import statements found. Please use explicit import"
-                    + " statements.");
-          }
-          chosenPackage = packageName;
+          throw new RuntimeException(
+              "A wildcard import statement found. Please use explicit import" + " statements.");
         } else {
           this.classAndPackageMap.put(className, packageName);
         }
@@ -476,11 +466,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       nodeType.resolve();
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      UnsolvedClass syntheticType =
-          new UnsolvedClass(
-              nodeTypeSimpleForm,
-              classAndPackageMap.getOrDefault(nodeTypeSimpleForm, this.chosenPackage));
-      this.updateMissingClass(syntheticType);
+      if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
+        UnsolvedClass syntheticType =
+            new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
+        this.updateMissingClass(syntheticType);
+      } else {
+        throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
+      }
     }
 
     if (!insideAnObjectCreation) {
@@ -567,10 +559,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else {
         // since it is unsolved, it could not be a primitive type
         @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-        UnsolvedClass newClass =
-            new UnsolvedClass(
-                className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
-        updateMissingClass(newClass);
+        if (classAndPackageMap.containsKey(className)) {
+          UnsolvedClass newClass = new UnsolvedClass(className, classAndPackageMap.get(className));
+          updateMissingClass(newClass);
+        } else {
+          throw new RuntimeException("Unexpected class: " + className);
+        }
       }
     }
     gotException = true;
@@ -594,10 +588,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
-      UnsolvedClass newClass =
-          new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
-      newClass.addMethod(creationMethod);
-      this.updateMissingClass(newClass);
+      if (classAndPackageMap.containsKey(type)) {
+        UnsolvedClass newClass = new UnsolvedClass(type, classAndPackageMap.get(type));
+        newClass.addMethod(creationMethod);
+        this.updateMissingClass(newClass);
+      } else {
+        throw new RuntimeException("Unexpected class: " + type);
+      }
+
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
@@ -691,9 +689,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    UnsolvedClass missingClass =
-        new UnsolvedClass(
-            className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
+    if (!classAndPackageMap.containsKey(className)) {
+      throw new RuntimeException("Unexpected class: " + className);
+    }
+    UnsolvedClass missingClass = new UnsolvedClass(className, classAndPackageMap.get(className));
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
     missingClass.addMethod(thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
@@ -732,7 +731,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               + ((MethodCallExpr) expr).resolve().getClassName();
     } else if (expr instanceof ObjectCreationExpr) {
       String shortName = ((ObjectCreationExpr) expr).getTypeAsString();
-      String packageName = classAndPackageMap.getOrDefault(shortName, this.chosenPackage);
+      String packageName = classAndPackageMap.get(shortName);
       className = packageName + "." + shortName;
     } else {
       throw new RuntimeException("Unexpected call: " + expr + ". Contact developers!");
@@ -1136,8 +1135,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass a synthetic class to be deleted
    */
   public void deleteOldSyntheticClass(UnsolvedClass missedClass) {
-    String classPackage =
-        classAndPackageMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
+    String classPackage = classAndPackageMap.get(missedClass.getClassName());
     String filePathStr =
         this.rootDirectory + classPackage + "/" + missedClass.getClassName() + ".java";
     Path filePath = Path.of(filePathStr);
