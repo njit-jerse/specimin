@@ -531,10 +531,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(method, p);
     }
     if (unsolvedAndNotSimple(method)) {
-      updateClassSetWithNotSimpleMethodCall(method);
+      updateClassSetWithNotSimpleMethodCall(method.toString(), getArgumentsFromMethodCall(method));
     } else if (calledByAnIncompleteSyntheticClass(method)) {
       @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
       updateUnsolvedClassWithMethod(method, incompleteClassName, "");
+    }
+    if (unsolvedAndCalledByASimpleClassName(method)) {
+      String methodFullyQualifiedCall = toFullyQualifiedCall(method);
+      updateClassSetWithNotSimpleMethodCall(
+          methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
     }
     this.gotException =
         calledByAnUnsolvedSymbol(method)
@@ -1229,6 +1234,43 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Checks whether a method call, invoked by a simple class name, is unsolved.
+   *
+   * @param method the method call to be examined
+   * @return true if the method is unsolved and called by a simple class name, otherwise false
+   */
+  public boolean unsolvedAndCalledByASimpleClassName(MethodCallExpr method) {
+    try {
+      method.resolve();
+      return false;
+    } catch (Exception e) {
+      Optional<Expression> callerExpression = method.getScope();
+      if (callerExpression.isEmpty()) {
+        return false;
+      }
+      return classAndPackageMap.containsKey(callerExpression.get().toString());
+    }
+  }
+
+  /**
+   * Returns the fully-qualified class name version of a method call invoked by a simple class name.
+   *
+   * @param method the method call invoked by a simple class name
+   * @return the String representation of the method call with a fully-qualified class name
+   */
+  public String toFullyQualifiedCall(MethodCallExpr method) {
+    if (!unsolvedAndCalledByASimpleClassName(method)) {
+      throw new RuntimeException(
+          "Before running convertSimpleCallToFullyQualifiedCall, check if the method call is called"
+              + " by a simple class name with calledByASimpleClassName");
+    }
+    String methodCall = method.toString();
+    String classCaller = method.getScope().get().toString();
+    String packageOfClass = this.classAndPackageMap.get(classCaller);
+    return packageOfClass + "." + methodCall;
+  }
+
+  /**
    * This method checks if a method call is not-simple and unsolved. In this context, we declare a
    * not-simple method call as a method that is directly called by a qualified class name. For
    * example, for this call org.package.Class.methodFirst().methodSecond(),
@@ -1256,10 +1298,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * For a method call that is not simple, this method will take that method as input and create
    * corresponding synthetic class
    *
-   * @param method the method call to be taken as input
+   * @param methodCall the method call to be taken as input
+   * @param methodAgruments the list of agruments for this method call
    */
-  public void updateClassSetWithNotSimpleMethodCall(MethodCallExpr method) {
-    String methodCall = method.toString();
+  public void updateClassSetWithNotSimpleMethodCall(
+      String methodCall, List<String> methodAgruments) {
     String methodCallWithoutParen = methodCall.replace("()", "");
     List<String> methodParts = Splitter.onPattern("[.]").splitToList(methodCallWithoutParen);
     int lengthMethodParts = methodParts.size();
@@ -1281,8 +1324,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
     UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
-    UnsolvedMethod newMethod =
-        new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
+    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodAgruments);
     newClass.addMethod(newMethod);
     syntheticMethodAndClass.put(newMethod.toString(), newClass);
     @SuppressWarnings(
