@@ -1312,7 +1312,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (lengthMethodParts <= 2) {
       throw new RuntimeException(
           "Need to check the method call with unsolvedAndNotSimple before using"
-              + " updateClassSetWithNotSimpleMethodCall");
+              + " isAnUnsolvedStaticMethodCalledByAQualifiedClassName");
     }
     String returnTypeClassName = toCapital(methodParts.get(0));
     String packageName = methodParts.get(0);
