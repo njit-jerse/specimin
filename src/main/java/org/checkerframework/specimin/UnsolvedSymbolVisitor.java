@@ -1271,9 +1271,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method checks if a method call is static method that is called by a qualified class name.
-   * For example, for this call org.package.Class.methodFirst().methodSecond(),
-   * "org.package.Class.methodFirst()" is a not-simple method call, but
-   * "org.package.Class.methodFirst().methodSecond()" is a simple one.
+   * For example, for this call org.package.Class.methodFirst().methodSecond(), this method will
+   * return true for "org.package.Class.methodFirst()", but not for
+   * "org.package.Class.methodFirst().methodSecond()".
    *
    * @param method the method call to be checked
    * @return true if the method call is not simple and unsolved
