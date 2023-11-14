@@ -527,12 +527,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else if (calledByAnIncompleteSyntheticClass(method)) {
       @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
       updateUnsolvedClassWithMethod(method, incompleteClassName, "");
-    }
-    if (unsolvedAndCalledByASimpleClassName(method)) {
+    } else if (unsolvedAndCalledByASimpleClassName(method)) {
       String methodFullyQualifiedCall = toFullyQualifiedCall(method);
       updateClassSetWithNotSimpleMethodCall(
           methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
     }
+
     this.gotException =
         calledByAnUnsolvedSymbol(method)
             || calledByAnIncompleteSyntheticClass(method)
@@ -1219,7 +1219,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param fullyName the fully-qualified name of the class
    * @return the corresponding instance of UnsolvedClass
    */
-  public static UnsolvedClass getSimpleSyntheticClassFromFullyQualifiedName(
+  public UnsolvedClass getSimpleSyntheticClassFromFullyQualifiedName(
       @FullyQualifiedName String fullyName) {
     if (!isAClassPath(fullyName)) {
       throw new RuntimeException(
@@ -1278,7 +1278,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param method the method call to be checked
    * @return true if the method call is not simple and unsolved
    */
-  public static boolean unsolvedAndNotSimple(MethodCallExpr method) {
+  public boolean unsolvedAndNotSimple(MethodCallExpr method) {
     try {
       method.resolve().getReturnType();
       return false;
@@ -1294,13 +1294,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * For a method call that is not simple, this method will take that method as input and create
-   * corresponding synthetic class
+   * corresponding synthetic class.
    *
    * @param methodCall the method call to be taken as input
    * @param methodAgruments the list of agruments for this method call
    */
   public void updateClassSetWithNotSimpleMethodCall(
       String methodCall, List<String> methodAgruments) {
+    // As this code involves complex string operations, we'll use a method call as an example,
+    // following its progression through the code.
+    // Suppose this is our method call: com.example.MyClass.process()
+    // At this point, our method call become: com.example.MyClass.process
     String methodCallWithoutParen = methodCall.replace("()", "");
     List<String> methodParts = Splitter.onPattern("[.]").splitToList(methodCallWithoutParen);
     int lengthMethodParts = methodParts.size();
@@ -1309,28 +1313,39 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           "Need to check the method call with unsolvedAndNotSimple before using"
               + " updateClassSetWithNotSimpleMethodCall");
     }
-    String returnTypeClassName = methodParts.get(0);
+    String returnTypeClassName = toCapital(methodParts.get(0));
     String packageName = methodParts.get(0);
+    // According to the above example, methodName will be process
     String methodName = methodParts.get(lengthMethodParts - 1);
-    for (int i = 1; i < lengthMethodParts - 1; i++) {
+    @SuppressWarnings(
+        "signature") // this className is from the second-to-last part of a fully-qualified method
+    // call, which is the simple name of a class. In this case, it is MyClass.
+    @ClassGetSimpleName String className = methodParts.get(lengthMethodParts - 2);
+    // After this loop: returnTypeClassName will be ComExample, and packageName will be com.example
+    for (int i = 1; i < lengthMethodParts - 2; i++) {
       returnTypeClassName = returnTypeClassName + toCapital(methodParts.get(i));
       packageName = packageName + "." + methodParts.get(i);
     }
-    returnTypeClassName = returnTypeClassName + toCapital(methodName) + "ReturnType";
-    // if the method call is org.package.Class.method(), then the return type of this method will be
-    // orgPackageClassMethodReturnType, which is a @ClassGetSimpleName
+    // At this point, returnTypeClassName will be ComExampleMyClassProcessReturnType
+    returnTypeClassName =
+        returnTypeClassName + toCapital(className) + toCapital(methodName) + "ReturnType";
+    // since returnTypeClassName is just a single long string without any dot in the middle, it will
+    // be a simple name.
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
-    UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
+    UnsolvedClass returnClass = new UnsolvedClass(thisReturnType, packageName);
     UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodAgruments);
-    newClass.addMethod(newMethod);
-    syntheticMethodAndClass.put(newMethod.toString(), newClass);
+    UnsolvedClass classThatContainMethod = new UnsolvedClass(className, packageName);
+    newMethod.setStatic();
+    classThatContainMethod.addMethod(newMethod);
+    syntheticMethodAndClass.put(newMethod.toString(), classThatContainMethod);
     @SuppressWarnings(
         "signature") // thisReturnType is a @ClassGetSimpleName, so combining it with the
     // packageName will give us the @FullyQualifiedName
     @FullyQualifiedName String returnTypeFullName = packageName + "." + thisReturnType;
     syntheticReturnTypes.add(returnTypeFullName);
-    this.updateMissingClass(newClass);
+    this.updateMissingClass(returnClass);
+    this.updateMissingClass(classThatContainMethod);
   }
 
   /**
