@@ -1219,7 +1219,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param fullyName the fully-qualified name of the class
    * @return the corresponding instance of UnsolvedClass
    */
-  public UnsolvedClass getSimpleSyntheticClassFromFullyQualifiedName(
+  public static UnsolvedClass getSimpleSyntheticClassFromFullyQualifiedName(
       @FullyQualifiedName String fullyName) {
     if (!isAClassPath(fullyName)) {
       throw new RuntimeException(
@@ -1305,7 +1305,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // following its progression through the code.
     // Suppose this is our method call: com.example.MyClass.process()
     // At this point, our method call become: com.example.MyClass.process
-    String methodCallWithoutParen = methodCall.replace("()", "");
+    String methodCallWithoutParen = methodCall.substring(0, methodCall.indexOf('('));
     List<String> methodParts = Splitter.onPattern("[.]").splitToList(methodCallWithoutParen);
     int lengthMethodParts = methodParts.size();
     if (lengthMethodParts <= 2) {

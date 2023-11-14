@@ -2,7 +2,7 @@ package com.example;
 
 public class MyClass {
 
-    public static ComExampleMyClassProcessReturnType process() {
+    public static ComExampleMyClassProcessReturnType process(int parameter0) {
         throw new Error();
     }
 }

@@ -4,8 +4,7 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks if Specimin will work for input files that contain unsolved static methods that
- * invoked by a simple class name.
+ * This test checks if Specimin will work for input files that contain unsolved static methods.
  */
 public class UnsolvedStaticMethod {
   @Test

@@ -1,11 +1,15 @@
 package com.example;
 
 import com.example.MyClass;
+import unreal.pack.AClass;
 
 class Simple {
 
     void bar() {
-        MyClass.process();
-        org.testing.ThisClass.process();
+        int x = 5;
+        String y = 7;
+        AClass z = new AClass();
+        MyClass.process(x);
+        org.testing.ThisClass.process(y, z);
     }
 }
