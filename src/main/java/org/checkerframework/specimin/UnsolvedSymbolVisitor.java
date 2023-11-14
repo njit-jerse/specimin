@@ -522,21 +522,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!canSolveParameters(method)) {
       return super.visit(method, p);
     }
-    if (unsolvedAndNotSimple(method)) {
-      updateClassSetWithNotSimpleMethodCall(method.toString(), getArgumentsFromMethodCall(method));
+    if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
+      updateClassSetWithQualifiedStaticMethodCall(
+          method.toString(), getArgumentsFromMethodCall(method));
     } else if (calledByAnIncompleteSyntheticClass(method)) {
       @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
       updateUnsolvedClassWithMethod(method, incompleteClassName, "");
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
       String methodFullyQualifiedCall = toFullyQualifiedCall(method);
-      updateClassSetWithNotSimpleMethodCall(
+      updateClassSetWithQualifiedStaticMethodCall(
           methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
     }
 
     this.gotException =
         calledByAnUnsolvedSymbol(method)
             || calledByAnIncompleteSyntheticClass(method)
-            || unsolvedAndNotSimple(method);
+            || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
     return super.visit(method, p);
   }
 
@@ -1269,16 +1270,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method checks if a method call is not-simple and unsolved. In this context, we declare a
-   * not-simple method call as a method that is directly called by a qualified class name. For
-   * example, for this call org.package.Class.methodFirst().methodSecond(),
+   * This method checks if a method call is static method that is called by a qualified class name.
+   * For example, for this call org.package.Class.methodFirst().methodSecond(),
    * "org.package.Class.methodFirst()" is a not-simple method call, but
    * "org.package.Class.methodFirst().methodSecond()" is a simple one.
    *
    * @param method the method call to be checked
    * @return true if the method call is not simple and unsolved
    */
-  public boolean unsolvedAndNotSimple(MethodCallExpr method) {
+  public boolean isAnUnsolvedStaticMethodCalledByAQualifiedClassName(MethodCallExpr method) {
     try {
       method.resolve().getReturnType();
       return false;
@@ -1293,14 +1293,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * For a method call that is not simple, this method will take that method as input and create
-   * corresponding synthetic class.
+   * Creates a synthetic class corresponding to a static method called by a qualified class name.
+   * Ensure to check with {@link #isAnUnsolvedStaticMethodCalledByAQualifiedClassName} before
+   * calling this method.
    *
-   * @param methodCall the method call to be taken as input
-   * @param methodAgruments the list of agruments for this method call
+   * @param methodCall the method call to be used as input
+   * @param methodArguments the list of arguments for this method call
    */
-  public void updateClassSetWithNotSimpleMethodCall(
-      String methodCall, List<String> methodAgruments) {
+  public void updateClassSetWithQualifiedStaticMethodCall(
+      String methodCall, List<String> methodArguments) {
     // As this code involves complex string operations, we'll use a method call as an example,
     // following its progression through the code.
     // Suppose this is our method call: com.example.MyClass.process()
@@ -1334,7 +1335,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
     UnsolvedClass returnClass = new UnsolvedClass(thisReturnType, packageName);
-    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodAgruments);
+    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodArguments);
     UnsolvedClass classThatContainMethod = new UnsolvedClass(className, packageName);
     newMethod.setStatic();
     classThatContainMethod.addMethod(newMethod);
