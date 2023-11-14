@@ -1,10 +1,11 @@
 package com.example;
 
-import com.example.Class;
+import com.example.MyClass;
 
 class Simple {
     // Target method.
     void bar() {
-        Class.process();
+        MyClass.process();
+        org.testing.ThisClass.process();
     }
 }
