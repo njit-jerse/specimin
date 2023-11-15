@@ -3,9 +3,7 @@ package org.checkerframework.specimin;
 import java.io.IOException;
 import org.junit.Test;
 
-/**
- * This test checks if Specimin will work for array types
- */
+/** This test checks if Specimin will work for Union types */
 public class Issue_38Test {
   @Test
   public void runTest() throws IOException {
