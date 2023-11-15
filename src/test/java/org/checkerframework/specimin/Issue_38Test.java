@@ -1,4 +1,4 @@
-ackage org.checkerframework.specimin;
+package org.checkerframework.specimin;
 
 import java.io.IOException;
 import org.junit.Test;
