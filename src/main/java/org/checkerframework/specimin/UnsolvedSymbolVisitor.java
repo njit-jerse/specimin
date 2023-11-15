@@ -544,7 +544,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(Parameter parameter, Void p) {
     try {
-      parameter.resolve().describeType();
+      if (parameter.getType() instanceof UnionType) {
+        UnionType unionType = parameter.getType().asUnionType();
+        for (var param : unionType.getElements()) {
+          param.resolve().describe();
+        }
+      } else {
+        parameter.resolve().describeType();
+      }
       return super.visit(parameter, p);
     }
     // If the parameter originates from a Java built-in library, such as java.io or java.lang,
