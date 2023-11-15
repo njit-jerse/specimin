@@ -1,6 +1,6 @@
+package com.example;
 
-
-public class Issue_38 {
+public class Issue38 {
 
     static class ExampleClass {
         public ExampleClass(int value) {
