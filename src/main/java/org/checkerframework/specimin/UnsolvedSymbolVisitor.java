@@ -1297,7 +1297,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Ensure to check with {@link #isAnUnsolvedStaticMethodCalledByAQualifiedClassName} before
    * calling this method.
    *
-   * @param methodCall the method call to be used as input
+   * @param methodCall the method call to be used as input. This method call must contain one or
+   *     more dot separated identifiers, followed by a single pair of parentheses containing
+   *     arguments
    * @param methodArguments the list of arguments for this method call
    */
   public void updateClassSetWithQualifiedStaticMethodCall(
