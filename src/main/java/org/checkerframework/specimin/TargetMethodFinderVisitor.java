@@ -19,6 +19,7 @@ import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclarat
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -211,6 +212,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       usedMembers.add(call.resolve().getQualifiedSignature());
       usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
+      ResolvedType methodReturnType = call.resolve().getReturnType();
+      if (methodReturnType instanceof ResolvedReferenceType) {
+        usedClass.add(methodReturnType.asReferenceType().getQualifiedName());
+      }
     }
     return super.visit(call, p);
   }

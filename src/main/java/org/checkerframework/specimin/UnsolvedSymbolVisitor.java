@@ -130,12 +130,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** This map the classes in the compilation unit with the related package */
   private final Map<String, String> classAndPackageMap = new HashMap<>();
 
-  /**
-   * If there is any import statement that ends with *, this string will be replaced by one of the
-   * class from those import statements.
-   */
-  private String chosenPackage = "";
-
   /** This set has fully-qualified class names that come from jar files input */
   private final Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
 
@@ -207,12 +201,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
         if (className.equals("*")) {
-          if (!chosenPackage.equals("")) {
-            throw new RuntimeException(
-                "Multiple wildcard import statements found. Please use explicit import"
-                    + " statements.");
-          }
-          chosenPackage = packageName;
+          throw new RuntimeException(
+              "A wildcard import statement found. Please use explicit import" + " statements.");
         } else {
           this.classAndPackageMap.put(className, packageName);
         }
@@ -476,11 +466,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       nodeType.resolve();
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      UnsolvedClass syntheticType =
-          new UnsolvedClass(
-              nodeTypeSimpleForm,
-              classAndPackageMap.getOrDefault(nodeTypeSimpleForm, this.chosenPackage));
-      this.updateMissingClass(syntheticType);
+      if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
+        UnsolvedClass syntheticType =
+            new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
+        this.updateMissingClass(syntheticType);
+      } else {
+        throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
+      }
     }
 
     if (!insideAnObjectCreation) {
@@ -530,16 +522,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!canSolveParameters(method)) {
       return super.visit(method, p);
     }
-    if (unsolvedAndNotSimple(method)) {
-      updateClassSetWithNotSimpleMethodCall(method);
+    if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
+      updateClassSetWithQualifiedStaticMethodCall(
+          method.toString(), getArgumentsFromMethodCall(method));
     } else if (calledByAnIncompleteSyntheticClass(method)) {
       @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
       updateUnsolvedClassWithMethod(method, incompleteClassName, "");
+    } else if (unsolvedAndCalledByASimpleClassName(method)) {
+      String methodFullyQualifiedCall = toFullyQualifiedCall(method);
+      updateClassSetWithQualifiedStaticMethodCall(
+          methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
     }
+
     this.gotException =
         calledByAnUnsolvedSymbol(method)
             || calledByAnIncompleteSyntheticClass(method)
-            || unsolvedAndNotSimple(method);
+            || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
     return super.visit(method, p);
   }
 
@@ -562,10 +560,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else {
         // since it is unsolved, it could not be a primitive type
         @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-        UnsolvedClass newClass =
-            new UnsolvedClass(
-                className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
-        updateMissingClass(newClass);
+        if (classAndPackageMap.containsKey(className)) {
+          UnsolvedClass newClass = new UnsolvedClass(className, classAndPackageMap.get(className));
+          updateMissingClass(newClass);
+        } else {
+          throw new RuntimeException("Unexpected class: " + className);
+        }
       }
     }
     gotException = true;
@@ -589,10 +589,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
-      UnsolvedClass newClass =
-          new UnsolvedClass(type, classAndPackageMap.getOrDefault(type, this.chosenPackage));
-      newClass.addMethod(creationMethod);
-      this.updateMissingClass(newClass);
+      if (classAndPackageMap.containsKey(type)) {
+        UnsolvedClass newClass = new UnsolvedClass(type, classAndPackageMap.get(type));
+        newClass.addMethod(creationMethod);
+        this.updateMissingClass(newClass);
+      } else {
+        throw new RuntimeException("Unexpected class: " + type);
+      }
+
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
@@ -686,9 +690,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    UnsolvedClass missingClass =
-        new UnsolvedClass(
-            className, classAndPackageMap.getOrDefault(className, this.chosenPackage));
+    if (!classAndPackageMap.containsKey(className)) {
+      throw new RuntimeException("Unexpected class: " + className);
+    }
+    UnsolvedClass missingClass = new UnsolvedClass(className, classAndPackageMap.get(className));
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
     missingClass.addMethod(thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
@@ -727,7 +732,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               + ((MethodCallExpr) expr).resolve().getClassName();
     } else if (expr instanceof ObjectCreationExpr) {
       String shortName = ((ObjectCreationExpr) expr).getTypeAsString();
-      String packageName = classAndPackageMap.getOrDefault(shortName, this.chosenPackage);
+      String packageName = classAndPackageMap.get(shortName);
       className = packageName + "." + shortName;
     } else {
       throw new RuntimeException("Unexpected call: " + expr + ". Contact developers!");
@@ -1131,8 +1136,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass a synthetic class to be deleted
    */
   public void deleteOldSyntheticClass(UnsolvedClass missedClass) {
-    String classPackage =
-        classAndPackageMap.getOrDefault(missedClass.getClassName(), this.chosenPackage);
+    String classPackage = classAndPackageMap.get(missedClass.getClassName());
     String filePathStr =
         this.rootDirectory + classPackage + "/" + missedClass.getClassName() + ".java";
     Path filePath = Path.of(filePathStr);
@@ -1229,16 +1233,52 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method checks if a method call is not-simple and unsolved. In this context, we declare a
-   * not-simple method call as a method that is directly called by a qualified class name. For
-   * example, for this call org.package.Class.methodFirst().methodSecond(),
-   * "org.package.Class.methodFirst()" is a not-simple method call, but
-   * "org.package.Class.methodFirst().methodSecond()" is a simple one.
+   * Checks whether a method call, invoked by a simple class name, is unsolved.
+   *
+   * @param method the method call to be examined
+   * @return true if the method is unsolved and called by a simple class name, otherwise false
+   */
+  public boolean unsolvedAndCalledByASimpleClassName(MethodCallExpr method) {
+    try {
+      method.resolve();
+      return false;
+    } catch (Exception e) {
+      Optional<Expression> callerExpression = method.getScope();
+      if (callerExpression.isEmpty()) {
+        return false;
+      }
+      return classAndPackageMap.containsKey(callerExpression.get().toString());
+    }
+  }
+
+  /**
+   * Returns the fully-qualified class name version of a method call invoked by a simple class name.
+   *
+   * @param method the method call invoked by a simple class name
+   * @return the String representation of the method call with a fully-qualified class name
+   */
+  public String toFullyQualifiedCall(MethodCallExpr method) {
+    if (!unsolvedAndCalledByASimpleClassName(method)) {
+      throw new RuntimeException(
+          "Before running convertSimpleCallToFullyQualifiedCall, check if the method call is called"
+              + " by a simple class name with calledByASimpleClassName");
+    }
+    String methodCall = method.toString();
+    String classCaller = method.getScope().get().toString();
+    String packageOfClass = this.classAndPackageMap.get(classCaller);
+    return packageOfClass + "." + methodCall;
+  }
+
+  /**
+   * This method checks if a method call is static method that is called by a qualified class name.
+   * For example, for this call org.package.Class.methodFirst().methodSecond(), this method will
+   * return true for "org.package.Class.methodFirst()", but not for
+   * "org.package.Class.methodFirst().methodSecond()".
    *
    * @param method the method call to be checked
    * @return true if the method call is not simple and unsolved
    */
-  public static boolean unsolvedAndNotSimple(MethodCallExpr method) {
+  public boolean isAnUnsolvedStaticMethodCalledByAQualifiedClassName(MethodCallExpr method) {
     try {
       method.resolve().getReturnType();
       return false;
@@ -1253,44 +1293,62 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * For a method call that is not simple, this method will take that method as input and create
-   * corresponding synthetic class
+   * Creates a synthetic class corresponding to a static method called by a qualified class name.
+   * Ensure to check with {@link #isAnUnsolvedStaticMethodCalledByAQualifiedClassName} before
+   * calling this method.
    *
-   * @param method the method call to be taken as input
+   * @param methodCall the method call to be used as input. This method call must contain one or
+   *     more dot separated identifiers, followed by a single pair of parentheses containing
+   *     arguments
+   * @param methodArguments the list of arguments for this method call
    */
-  public void updateClassSetWithNotSimpleMethodCall(MethodCallExpr method) {
-    String methodCall = method.toString();
-    String methodCallWithoutParen = methodCall.replace("()", "");
+  public void updateClassSetWithQualifiedStaticMethodCall(
+      String methodCall, List<String> methodArguments) {
+    // As this code involves complex string operations, we'll use a method call as an example,
+    // following its progression through the code.
+    // Suppose this is our method call: com.example.MyClass.process()
+    // At this point, our method call become: com.example.MyClass.process
+    String methodCallWithoutParen = methodCall.substring(0, methodCall.indexOf('('));
     List<String> methodParts = Splitter.onPattern("[.]").splitToList(methodCallWithoutParen);
     int lengthMethodParts = methodParts.size();
     if (lengthMethodParts <= 2) {
       throw new RuntimeException(
           "Need to check the method call with unsolvedAndNotSimple before using"
-              + " updateClassSetWithNotSimpleMethodCall");
+              + " isAnUnsolvedStaticMethodCalledByAQualifiedClassName");
     }
-    String returnTypeClassName = methodParts.get(0);
+    String returnTypeClassName = toCapital(methodParts.get(0));
     String packageName = methodParts.get(0);
+    // According to the above example, methodName will be process
     String methodName = methodParts.get(lengthMethodParts - 1);
-    for (int i = 1; i < lengthMethodParts - 1; i++) {
+    @SuppressWarnings(
+        "signature") // this className is from the second-to-last part of a fully-qualified method
+    // call, which is the simple name of a class. In this case, it is MyClass.
+    @ClassGetSimpleName String className = methodParts.get(lengthMethodParts - 2);
+    // After this loop: returnTypeClassName will be ComExample, and packageName will be com.example
+    for (int i = 1; i < lengthMethodParts - 2; i++) {
       returnTypeClassName = returnTypeClassName + toCapital(methodParts.get(i));
       packageName = packageName + "." + methodParts.get(i);
     }
-    returnTypeClassName = returnTypeClassName + toCapital(methodName) + "ReturnType";
-    // if the method call is org.package.Class.method(), then the return type of this method will be
-    // orgPackageClassMethodReturnType, which is a @ClassGetSimpleName
+    // At this point, returnTypeClassName will be ComExampleMyClassProcessReturnType
+    returnTypeClassName =
+        returnTypeClassName + toCapital(className) + toCapital(methodName) + "ReturnType";
+    // since returnTypeClassName is just a single long string without any dot in the middle, it will
+    // be a simple name.
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
-    UnsolvedClass newClass = new UnsolvedClass(thisReturnType, packageName);
-    UnsolvedMethod newMethod =
-        new UnsolvedMethod(methodName, thisReturnType, getArgumentsFromMethodCall(method));
-    newClass.addMethod(newMethod);
-    syntheticMethodAndClass.put(newMethod.toString(), newClass);
+    UnsolvedClass returnClass = new UnsolvedClass(thisReturnType, packageName);
+    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodArguments);
+    UnsolvedClass classThatContainMethod = new UnsolvedClass(className, packageName);
+    newMethod.setStatic();
+    classThatContainMethod.addMethod(newMethod);
+    syntheticMethodAndClass.put(newMethod.toString(), classThatContainMethod);
     @SuppressWarnings(
         "signature") // thisReturnType is a @ClassGetSimpleName, so combining it with the
     // packageName will give us the @FullyQualifiedName
     @FullyQualifiedName String returnTypeFullName = packageName + "." + thisReturnType;
     syntheticReturnTypes.add(returnTypeFullName);
-    this.updateMissingClass(newClass);
+    this.updateMissingClass(returnClass);
+    this.updateMissingClass(classThatContainMethod);
   }
 
   /**

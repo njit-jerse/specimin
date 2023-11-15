@@ -23,6 +23,9 @@ public class UnsolvedMethod {
    */
   private List<String> parameterList;
 
+  /** This field is set to true if this method is a static method */
+  private boolean isStatic = false;
+
   /**
    * Create an instance of UnsolvedMethod
    *
@@ -65,6 +68,11 @@ public class UnsolvedMethod {
     return name;
   }
 
+  /** Set isStatic to true */
+  public void setStatic() {
+    isStatic = true;
+  }
+
   /**
    * Return the content of the method. Note that the body of the method is stubbed out.
    *
@@ -85,7 +93,12 @@ public class UnsolvedMethod {
     if (!returnType.equals("")) {
       returnTypeInString = returnType + " ";
     }
+    String staticField = "";
+    if (isStatic) {
+      staticField = "static ";
+    }
     return "\n    public "
+        + staticField
         + returnTypeInString
         + name
         + "("
