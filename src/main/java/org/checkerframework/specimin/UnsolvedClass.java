@@ -27,6 +27,9 @@ public class UnsolvedClass {
    */
   private final String packageName;
 
+  /** This field checks if this class has a placeholder */
+  private boolean hasAPlaceHolder = false;
+
   /**
    * Create an instance of UnsolvedClass
    *
@@ -95,6 +98,19 @@ public class UnsolvedClass {
     this.classFields.add(variableExpression);
   }
 
+  /** This method sets hasAPlaceHolder to true */
+  public void setPlaceHolder() {
+    this.hasAPlaceHolder = true;
+  }
+
+  /**
+   * This method tells if the current class has a placeholder.
+   *
+   * @return true if the current class has a place holder.
+   */
+  public boolean hasPlaceHolder() {
+    return this.hasAPlaceHolder;
+  }
   /**
    * Update the return type of a method. Note: this method is supposed to be used to update
    * synthetic methods, where the return type of each method is distinct.
@@ -149,7 +165,11 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
-    sb.append("public class ").append(className).append(" {\n");
+    if (hasAPlaceHolder) {
+      sb.append("public class ").append(className).append("<T> {\n");
+    } else {
+      sb.append("public class ").append(className).append(" {\n");
+    }
     for (String variableDeclarations : classFields) {
       sb.append("    " + "public " + variableDeclarations + ";\n");
     }

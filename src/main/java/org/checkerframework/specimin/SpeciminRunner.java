@@ -26,6 +26,7 @@ import java.util.Set;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -165,7 +166,9 @@ public class SpeciminRunner {
     // correct the types of all related files before adding them to parsedTargetFiles
     JavaTypeCorrect typeCorrecter = new JavaTypeCorrect(root, relatedClass);
     typeCorrecter.correctTypesForAllFiles();
-    addMissingClass.updateTypes(typeCorrecter.getTypeToChange());
+    Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToChange =
+        typeCorrecter.getTypeToChange();
+    addMissingClass.updateTypes(typeToChange);
 
     for (String directory : relatedClass) {
       // directories already in parsedTargetFiles are original files in the root directory, we are
@@ -187,7 +190,20 @@ public class SpeciminRunner {
       if (isEmptyCompilationUnit(target.getValue())) {
         // target key will have this form: "path/of/package/ClassName.java"
         String classFullyQualfiedName = target.getKey().replace("/", ".");
-        classFullyQualfiedName = classFullyQualfiedName.replace(".java", "");
+        // this condition is actually always true
+        if (classFullyQualfiedName.endsWith(".java")) {
+          classFullyQualfiedName =
+              classFullyQualfiedName.substring(0, classFullyQualfiedName.length() - 5);
+        }
+        @SuppressWarnings("signature") // since it's the last element of a fully qualified path
+        @ClassGetSimpleName String simpleName =
+            classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
+        // If this condition is true, this class is a synthetic class initially created to be a
+        // return type of some synthetic methods, but later javac has found the correct return type
+        // for that method.
+        if (typeToChange.containsKey(simpleName)) {
+          continue;
+        }
         if (!finder.getUsedClass().contains(classFullyQualfiedName)) {
           continue;
         }

@@ -4,6 +4,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -205,6 +206,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
     return result;
+  }
+
+  @Override
+  public Visitable visit(Parameter para, Void p) {
+    if (insideTargetMethod) {
+      ResolvedType paraType = para.resolve().getType();
+      if (paraType.isReferenceType()) {
+        String paraName = paraType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+        usedClass.add(paraName);
+        for (ResolvedType parameter : paraType.asReferenceType().typeParametersValues()) {
+          usedClass.add(parameter.describe());
+        }
+      }
+    }
+    return super.visit(para, p);
   }
 
   @Override
