@@ -32,6 +32,7 @@ import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -264,6 +265,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Node visit(ImportDeclaration decl, Void arg) {
+    @SuppressWarnings(
+        "signature") // since this is the content of an import statement, it will be a qualified
+    // class path
+    @FullyQualifiedName String declAsString = decl.getNameAsString();
+    // if there is no jar paths included, every imported class is unsolved, apart from those
+    // belonging to the Java language.
+    if (!classesFromJar.isEmpty() || declAsString.startsWith("java")) {
+      return super.visit(decl, arg);
+    }
+    updateMissingClass(getSimpleSyntheticClassFromFullyQualifiedName(declAsString));
+    return super.visit(decl, arg);
+  }
+
+  @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
     SimpleName nodeName = node.getName();
     className = nodeName.asString();
@@ -400,12 +416,42 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(VariableDeclarator decl, Void p) {
+    // This part is to update the symbol table.
     boolean isAField =
         !decl.getParentNode().isEmpty() && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
       HashSet<String> currentListOfLocals = localVariables.removeFirst();
       currentListOfLocals.add(decl.getNameAsString());
       localVariables.addFirst(currentListOfLocals);
+    }
+
+    // This part is to create synthetic class for the type of decl if needed.
+    Type declType = decl.getType();
+    try {
+      declType.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      String typeAsString = declType.asString();
+      List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
+      // There could be two cases here: either a fully-qualified class name or a simple class name.
+      // This is the fully-qualified case.
+      if (elements.size() > 1) {
+        @SuppressWarnings("signature") // since this type is in a fully-qualfied form
+        @FullyQualifiedName String qualifiedTypeName = typeAsString;
+        updateMissingClass(getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName));
+      }
+      /**
+       * Handles the case where the type is a simple class name. Two sub-cases are considered: 1.
+       * The class is included among the import statements. 2. The class is not included in the
+       * import statements but is in the same directory as the input class. The first sub-case is
+       * addressed by the visit method for ImportDeclaration.
+       */
+      else if (!classAndPackageMap.containsKey(typeAsString)) {
+        @SuppressWarnings("signature") // since this is the simple name case
+        @ClassGetSimpleName String className = typeAsString;
+        String packageName = this.currentPackage;
+        UnsolvedClass newClass = new UnsolvedClass(className, packageName);
+        updateMissingClass(newClass);
+      }
     }
     return super.visit(decl, p);
   }
@@ -493,7 +539,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
-    HashSet<String> currentLocalVariables = new HashSet<>();
+    HashSet<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
     localVariables.addFirst(currentLocalVariables);
     super.visit(node, arg);
     localVariables.removeFirst();
@@ -544,8 +590,28 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(Parameter parameter, Void p) {
     try {
-      parameter.resolve().describeType();
-      return super.visit(parameter, p);
+      ResolvedParameterDeclaration resolvedParameter = parameter.resolve();
+      // Specimin will update synthetic class based on import statements before working on
+      // parameters. Why a parameter could be resolved but not described? Specimin creates the
+      // synthetic class based on the import statements, so if the synthetic class indeed needs a
+      // placeholder, Specimin will miss it.
+      try {
+        resolvedParameter.describeType();
+        return super.visit(parameter, p);
+      } catch (IllegalArgumentException e) {
+        // following the above explanation, typeName will be in this form path.to.A<path.to.B>
+        String typeName = parameter.getType().asString();
+        @SuppressWarnings(
+            "signature") // since this type is included among the import statements, we can expect
+        // that when it is used, it will be in its simple form.
+        @ClassGetSimpleName String typeToAddPlaceHolder = typeName.substring(0, typeName.indexOf("<"));
+        UnsolvedClass updateClass =
+            new UnsolvedClass(
+                typeToAddPlaceHolder,
+                classAndPackageMap.getOrDefault(typeToAddPlaceHolder, currentPackage));
+        updateClass.setPlaceHolder();
+        updateMissingClass(updateClass);
+      }
     }
     // If the parameter originates from a Java built-in library, such as java.io or java.lang,
     // an UnsupportedOperationException will be thrown instead.
@@ -636,6 +702,26 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return variableDeclaration + " = false";
     } else {
       return variableDeclaration + " = null";
+    }
+  }
+
+  /**
+   * Given a parameter in this form "path.to.A<path.to.B>," this method will update the placeholder
+   * for the synthetic class file of type A. This method should only be called in the context of
+   * visiting parameters.
+   *
+   * @param parameter a parameter in form "path.to.A<path.to.B>"
+   */
+  public void updatePlaceHolderForParameter(@FullyQualifiedName String parameter) {
+    // parameter will be in this form: "path.to.A<path.to.B>"
+    // this one might not be a good check but it should work fine.
+    if (parameter.indexOf("<") > 0) {
+      System.out.println("We got this parameter: " + parameter);
+      @SuppressWarnings("signature") // since path.to.A is a qualified name
+      @FullyQualifiedName String withoutInsidePart = parameter.substring(0, parameter.indexOf("<"));
+      UnsolvedClass updatedClass = getSimpleSyntheticClassFromFullyQualifiedName(withoutInsidePart);
+      updatedClass.setPlaceHolder();
+      updateMissingClass(updatedClass);
     }
   }
 
@@ -821,6 +907,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       throw new RuntimeException("Unforeseen expression: " + node);
     }
+  }
+
+  /**
+   * Given a method declaration, this method will return the set of parameters of that method
+   * declaration.
+   *
+   * @param decl the method declaration
+   * @return the set of parameters of decl
+   */
+  public HashSet<String> getParameterFromAMethodDeclaration(MethodDeclaration decl) {
+    HashSet<String> setOfParameters = new HashSet<>();
+    for (Parameter parameter : decl.getParameters()) {
+      setOfParameters.add(parameter.getName().asString());
+    }
+    return setOfParameters;
   }
 
   /**
@@ -1109,6 +1210,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // add new fields
         for (String variablesDescription : missedClass.getClassFields()) {
           e.addFields(variablesDescription);
+        }
+        if (missedClass.hasPlaceHolder()) {
+          e.setPlaceHolder();
         }
         return;
       }
