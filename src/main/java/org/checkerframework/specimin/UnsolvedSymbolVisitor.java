@@ -706,11 +706,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a parameter in this form "path.to.A<path.to.B>," this method will update the placeholder
-   * for the synthetic class file of type A. This method should only be called in the context of
+   * Given a parameter with a type that has placeholder, this method will update the placeholder for
+   * the synthetic class file of type A. This method should only be called in the context of
    * visiting parameters.
    *
-   * @param parameter a parameter in form "path.to.A<path.to.B>"
+   * @param parameter a parameter with placeholder in this type
    */
   public void updatePlaceHolderForParameter(@FullyQualifiedName String parameter) {
     // parameter will be in this form: "path.to.A<path.to.B>"
