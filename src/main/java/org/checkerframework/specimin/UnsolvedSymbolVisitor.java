@@ -716,7 +716,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // parameter will be in this form: "path.to.A<path.to.B>"
     // this one might not be a good check but it should work fine.
     if (parameter.indexOf("<") > 0) {
-      System.out.println("We got this parameter: " + parameter);
       @SuppressWarnings("signature") // since path.to.A is a qualified name
       @FullyQualifiedName String withoutInsidePart = parameter.substring(0, parameter.indexOf("<"));
       UnsolvedClass updatedClass = getSimpleSyntheticClassFromFullyQualifiedName(withoutInsidePart);
