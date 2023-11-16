@@ -706,25 +706,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a parameter with a type that has placeholder, this method will update the placeholder for
-   * the synthetic class file of type A. This method should only be called in the context of
-   * visiting parameters.
-   *
-   * @param parameter a parameter with placeholder in this type
-   */
-  public void updatePlaceHolderForParameter(@FullyQualifiedName String parameter) {
-    // parameter will be in this form: "path.to.A<path.to.B>"
-    // this one might not be a good check but it should work fine.
-    if (parameter.indexOf("<") > 0) {
-      @SuppressWarnings("signature") // since path.to.A is a qualified name
-      @FullyQualifiedName String withoutInsidePart = parameter.substring(0, parameter.indexOf("<"));
-      UnsolvedClass updatedClass = getSimpleSyntheticClassFromFullyQualifiedName(withoutInsidePart);
-      updatedClass.setPlaceHolder();
-      updateMissingClass(updatedClass);
-    }
-  }
-
-  /**
    * Given a class name that can either be fully-qualified or simple, this method will convert that
    * class name to a simple name.
    *
