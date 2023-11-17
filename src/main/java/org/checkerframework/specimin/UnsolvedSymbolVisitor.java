@@ -55,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
@@ -546,10 +547,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(Parameter parameter, Void p) {
     try {
       if (parameter.getType() instanceof UnionType) {
-        UnionType unionType = parameter.getType().asUnionType();
-        for (var param : unionType.getElements()) {
-          param.resolve().describe();
-        }
+        resolveUnionType(parameter);
       } else {
         parameter.resolve().describeType();
       }
@@ -558,23 +556,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // If the parameter originates from a Java built-in library, such as java.io or java.lang,
     // an UnsupportedOperationException will be thrown instead.
     catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      String parameterInString = parameter.toString();
-      if (isAClassPath(parameterInString)) {
-        // parameterInString needs to be a fully-qualified name. As this parameter has a form of
-        // class path, we can say that it is a fully-qualified name
-        @SuppressWarnings("signature")
-        UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
-        updateMissingClass(newClass);
-      } else {
-        // since it is unsolved, it could not be a primitive type
-        @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-        if (classAndPackageMap.containsKey(className)) {
-          UnsolvedClass newClass = new UnsolvedClass(className, classAndPackageMap.get(className));
-          updateMissingClass(newClass);
-        } else {
-          throw new RuntimeException("Unexpected class: " + className);
-        }
-      }
+      handleParameterResolveFailure(parameter);
     }
     gotException = true;
     return super.visit(parameter, p);
@@ -612,6 +594,46 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     super.visit(newExpr, p);
     insideAnObjectCreation = false;
     return newExpr;
+  }
+
+  /**
+   * @param parameter parameter from visitor method which is unsolvable.
+   */
+  private void handleParameterResolveFailure(@NonNull Parameter parameter) {
+    String parameterInString = parameter.toString();
+    if (isAClassPath(parameterInString)) {
+      // parameterInString needs to be a fully-qualified name. As this parameter has a form of
+      // class path, we can say that it is a fully-qualified name
+      @SuppressWarnings("signature")
+      UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
+      updateMissingClass(newClass);
+    } else {
+      // since it is unsolved, it could not be a primitive type
+      @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
+      if (classAndPackageMap.containsKey(className)) {
+        UnsolvedClass newClass = new UnsolvedClass(className, classAndPackageMap.get(className));
+        updateMissingClass(newClass);
+      } else {
+        throw new RuntimeException("Unexpected class: " + className);
+      }
+    }
+  }
+
+  /**
+   * Given the unionType parameter, this method will try resolving each element separately. If any
+   * of the element is unsolvable, an unsolved class instance will be created to generate synthetic
+   * class for the element.
+   *
+   * @param parameter unionType parameter from visitor class
+   */
+  private void resolveUnionType(@NonNull Parameter parameter) {
+    for (var param : parameter.getType().asUnionType().getElements()) {
+      try {
+        param.resolve().describe();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        handleParameterResolveFailure(parameter);
+      }
+    }
   }
 
   /**
