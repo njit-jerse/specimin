@@ -190,11 +190,11 @@ public class SpeciminRunner {
       if (isEmptyCompilationUnit(target.getValue())) {
         // target key will have this form: "path/of/package/ClassName.java"
         String classFullyQualfiedName = target.getKey().replace("/", ".");
-        // this condition is actually always true
-        if (classFullyQualfiedName.endsWith(".java")) {
-          classFullyQualfiedName =
-              classFullyQualfiedName.substring(0, classFullyQualfiedName.length() - 5);
+        if (!classFullyQualfiedName.endsWith(".java")) {
+          throw new RuntimeException("A Java file directory does not end with .java: " + classFullyQualfiedName);
         }
+        classFullyQualfiedName =
+                classFullyQualfiedName.substring(0, classFullyQualfiedName.length() - 5);
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
             classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
