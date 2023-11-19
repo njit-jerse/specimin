@@ -700,7 +700,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         UnsolvedClass newClass = new UnsolvedClass(type, classAndPackageMap.get(type));
         newClass.addMethod(creationMethod);
         this.updateMissingClass(newClass);
-        System.out.println("I was called by 00000");
       } else {
         throw new RuntimeException("Unexpected class: " + type);
       }
@@ -818,7 +817,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass returnTypeForThisMethod =
           new UnsolvedClass(returnType, missingClass.getPackageName());
       this.updateMissingClass(returnTypeForThisMethod);
-      System.out.println("I was called by 2114124");
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
     }
@@ -878,7 +876,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
     missingClass.addMethod(thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
-    System.out.println("I was called by update class from Jar Sources");
     this.updateMissingClass(missingClass);
   }
 
@@ -1008,7 +1005,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           setInitialValueForVariableDeclaration(variableType, variableType + " " + var));
       updateMissingClass(relatedClass);
       updateMissingClass(varType);
-      System.out.println("I was called by updateUnsolvdClassWithFields");
     }
   }
 
@@ -1270,7 +1266,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String filePathStr =
         this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Path.of(filePathStr);
-    System.out.println("Deleted file: " + filePath);
     try {
       Files.delete(filePath);
     } catch (IOException e) {
@@ -1310,7 +1305,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try (BufferedWriter writer =
           new BufferedWriter(new FileWriter(filePath.toFile(), StandardCharsets.UTF_8))) {
         writer.write(fileContent.toString());
-        System.out.println(fileContent);
       } catch (Exception e) {
         throw new Error(e.getMessage());
       }
@@ -1489,7 +1483,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     syntheticReturnTypes.add(returnTypeFullName);
     this.updateMissingClass(returnClass);
     this.updateMissingClass(classThatContainMethod);
-    System.out.println("I was called by adasdada");
   }
 
   /**
@@ -1523,7 +1516,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       else {
         for (UnsolvedClass unsolClass : missingClass) {
           for (String parentClass : classAndItsParent.values()) {
-            System.out.println(unsolClass.getClassName());
             if (unsolClass.getClassName().equals(parentClass)) {
               unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
               this.deleteOldSyntheticClass(unsolClass);
