@@ -27,8 +27,8 @@ public class UnsolvedClass {
    */
   private final String packageName;
 
-  /** This field checks if this class has a placeholder */
-  private boolean hasAPlaceHolder = false;
+  /** This field records the number of type variables for this class */
+  private int numberOfTypeVariables = 0;
 
   /**
    * Create an instance of UnsolvedClass
@@ -98,19 +98,20 @@ public class UnsolvedClass {
     this.classFields.add(variableExpression);
   }
 
-  /** This method sets hasAPlaceHolder to true */
-  public void setPlaceHolder() {
-    this.hasAPlaceHolder = true;
+  /** This method sets the number of type variables for the current class */
+  public void setNumberOfTypeVariables(int numberOfTypeVariables) {
+    this.numberOfTypeVariables = numberOfTypeVariables;
   }
 
   /**
-   * This method tells if the current class has a placeholder.
+   * This method tells the number of type variables for this class
    *
-   * @return true if the current class has a place holder.
+   * @return the number of type variables
    */
-  public boolean hasPlaceHolder() {
-    return this.hasAPlaceHolder;
+  public int getNumberOfTypeVariables() {
+    return this.numberOfTypeVariables;
   }
+
   /**
    * Update the return type of a method. Note: this method is supposed to be used to update
    * synthetic methods, where the return type of each method is distinct.
@@ -165,11 +166,7 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
-    if (hasAPlaceHolder) {
-      sb.append("public class ").append(className).append("<T> {\n");
-    } else {
-      sb.append("public class ").append(className).append(" {\n");
-    }
+    sb.append("public class ").append(className).append(getTypeVariablesAsString()).append(" {\n");
     for (String variableDeclarations : classFields) {
       sb.append("    " + "public " + variableDeclarations + ";\n");
     }
@@ -178,5 +175,26 @@ public class UnsolvedClass {
     }
     sb.append("}\n");
     return sb.toString();
+  }
+
+  /**
+   * Return a synthetic representation for type variables of the current class.
+   *
+   * @return the synthetic representation for type variables
+   */
+  public String getTypeVariablesAsString() {
+    if (numberOfTypeVariables == 0) {
+      return "";
+    }
+    StringBuilder result = new StringBuilder();
+    // if class A has three type variables, the expression will be A<T, TT, TTT>
+    result.append("<");
+    for (int i = 0; i < numberOfTypeVariables; i++) {
+      String typeExpression = "T" + "T".repeat(i);
+      result.append(typeExpression).append(", ");
+    }
+    result.delete(result.length() - 2, result.length());
+    result.append(">");
+    return result.toString();
   }
 }

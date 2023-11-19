@@ -10,6 +10,6 @@ public class UnsolvedParameter {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "unsolvedparameter",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#lengthImportStatement(NodeList<ImportDeclaration>)"});
+        new String[] {"com.example.Simple#printName(FullName<MiddleName<String>, LastName>)"});
   }
 }

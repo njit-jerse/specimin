@@ -215,8 +215,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (paraType.isReferenceType()) {
         String paraName = paraType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
         usedClass.add(paraName);
-        for (ResolvedType parameter : paraType.asReferenceType().typeParametersValues()) {
-          usedClass.add(parameter.describe());
+        for (ResolvedType typeVariable : paraType.asReferenceType().typeParametersValues()) {
+          String typeVariableFullName = typeVariable.describe();
+          if (typeVariableFullName.contains("<")) {
+            // removing the "<...>" part if there is any.
+            typeVariableFullName =
+                typeVariableFullName.substring(0, typeVariableFullName.indexOf("<"));
+          }
+          usedClass.add(typeVariableFullName);
         }
       }
     }

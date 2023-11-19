@@ -1,12 +1,11 @@
 package com.example;
 
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.ImportDeclaration;
+import com.name.FullName;
+import com.name.MiddleName;
+import com.name.LastName;
 
 public class Simple {
 
-    public void lengthImportStatement(NodeList<ImportDeclaration> listOfImports) {
-        for (ImportDeclaration importDecl : listOfImports) {
-        }
+    public void printName(FullName<MiddleName<String>, LastName> fullName) {
     }
 }

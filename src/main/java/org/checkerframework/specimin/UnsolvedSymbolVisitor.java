@@ -25,6 +25,7 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
@@ -32,7 +33,6 @@ import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -264,6 +264,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return super.visit(node, arg);
   }
 
+  /*
   @Override
   public Node visit(ImportDeclaration decl, Void arg) {
     @SuppressWarnings(
@@ -272,12 +273,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @FullyQualifiedName String declAsString = decl.getNameAsString();
     // if there is no jar paths included, every imported class is unsolved, apart from those
     // belonging to the Java language.
-    if (!classesFromJar.isEmpty() || declAsString.startsWith("java")) {
+    if (!classesFromJar.isEmpty() || declAsString.startsWith("java.")) {
       return super.visit(decl, arg);
     }
-    updateMissingClass(getSimpleSyntheticClassFromFullyQualifiedName(declAsString));
+    UnsolvedClass declaredClass = getSimpleSyntheticClassFromFullyQualifiedName(declAsString);
+    try {
+      createMissingClass(declaredClass);
+      missingClass.add(declaredClass);
+    } catch (RuntimeException e) {
+      // The class file already exists in the codebase
+      return super.visit(decl, arg);
+    }
     return super.visit(decl, arg);
   }
+
+   */
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
@@ -532,6 +542,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // since this method declaration is inside an anonymous class, its parent will be an
         // ObjectCreationExpr
         ((ObjectCreationExpr) parentNode).resolve();
+        nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
         String nameOfClass = classNodeSimpleName.asString();
@@ -588,30 +599,60 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
+    // this line is to work around a bug of JavaParser. When a type is called as a class path, such
+    // as com.example.Dog dog, JavaParser will also consider com and com.example as type name. This
+    // bug happens even if the source file of class Dog is present in the codebase.
+    if (!isCapital(typeExpr.getName().asString())) {
+      return super.visit(typeExpr, p);
+    }
+    if (!typeExpr.isReferenceType()) {
+      return super.visit(typeExpr, p);
+    }
+    try {
+      typeExpr.getElementType().resolve().describe();
+      return super.visit(typeExpr, p);
+    }
+    /*
+     * If the class file is not in the codebase yet, we got UnsolvedSymbolException.
+     * If the class file is not in the codebase and used by an anonymous class, we got UnsupportedOperationException.
+     * If the class file is in the codebase but the type variables are missing, we got IllegalArgumentException.
+     */
+    catch (UnsolvedSymbolException | UnsupportedOperationException | IllegalArgumentException e) {
+      // This method only updates type variables for unsolved classes. Other problems causing a
+      // class to be unsolved will be fixed by other methods.
+      Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
+      UnsolvedClass classToUpdate;
+      int numberOfArguments = 0;
+      String typeRawName = typeExpr.getElementType().asString();
+      if (typeArguments.isPresent()) {
+        numberOfArguments = typeArguments.get().size();
+        // without any type argument
+        typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
+      }
+      if (isAClassPath(typeRawName)) {
+        String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
+        @SuppressWarnings("signature") // since this is the last element of a class path
+        @ClassGetSimpleName String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
+        classToUpdate = new UnsolvedClass(className, packageName);
+      } else {
+        @SuppressWarnings("signature") // since it is not in a fully qualifed format
+        @ClassGetSimpleName String className = typeRawName;
+        String packageName = classAndPackageMap.getOrDefault(className, currentPackage);
+        classToUpdate = new UnsolvedClass(className, packageName);
+      }
+      classToUpdate.setNumberOfTypeVariables(numberOfArguments);
+      updateMissingClass(classToUpdate);
+      gotException = true;
+    }
+    return super.visit(typeExpr, p);
+  }
+
+  @Override
   public Visitable visit(Parameter parameter, Void p) {
     try {
-      ResolvedParameterDeclaration resolvedParameter = parameter.resolve();
-      // Specimin will update synthetic class based on import statements before working on
-      // parameters. Why a parameter could be resolved but not described? Specimin creates the
-      // synthetic class based on the import statements, so if the synthetic class indeed needs a
-      // placeholder, Specimin will miss it.
-      try {
-        resolvedParameter.describeType();
-        return super.visit(parameter, p);
-      } catch (IllegalArgumentException e) {
-        // following the above explanation, typeName will be in this form path.to.A<path.to.B>
-        String typeName = parameter.getType().asString();
-        @SuppressWarnings(
-            "signature") // since this type is included among the import statements, we can expect
-        // that when it is used, it will be in its simple form.
-        @ClassGetSimpleName String typeToAddPlaceHolder = typeName.substring(0, typeName.indexOf("<"));
-        UnsolvedClass updateClass =
-            new UnsolvedClass(
-                typeToAddPlaceHolder,
-                classAndPackageMap.getOrDefault(typeToAddPlaceHolder, currentPackage));
-        updateClass.setPlaceHolder();
-        updateMissingClass(updateClass);
-      }
+      parameter.resolve();
+      return super.visit(parameter, p);
     }
     // If the parameter originates from a Java built-in library, such as java.io or java.lang,
     // an UnsupportedOperationException will be thrown instead.
@@ -659,6 +700,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         UnsolvedClass newClass = new UnsolvedClass(type, classAndPackageMap.get(type));
         newClass.addMethod(creationMethod);
         this.updateMissingClass(newClass);
+        System.out.println("I was called by 00000");
       } else {
         throw new RuntimeException("Unexpected class: " + type);
       }
@@ -776,6 +818,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass returnTypeForThisMethod =
           new UnsolvedClass(returnType, missingClass.getPackageName());
       this.updateMissingClass(returnTypeForThisMethod);
+      System.out.println("I was called by 2114124");
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
     }
@@ -835,6 +878,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
     missingClass.addMethod(thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
+    System.out.println("I was called by update class from Jar Sources");
     this.updateMissingClass(missingClass);
   }
 
@@ -964,6 +1008,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           setInitialValueForVariableDeclaration(variableType, variableType + " " + var));
       updateMissingClass(relatedClass);
       updateMissingClass(varType);
+      System.out.println("I was called by updateUnsolvdClassWithFields");
     }
   }
 
@@ -1191,8 +1236,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         for (String variablesDescription : missedClass.getClassFields()) {
           e.addFields(variablesDescription);
         }
-        if (missedClass.hasPlaceHolder()) {
-          e.setPlaceHolder();
+        if (missedClass.getNumberOfTypeVariables() > 0) {
+          e.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
         }
         return;
       }
@@ -1220,10 +1265,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass a synthetic class to be deleted
    */
   public void deleteOldSyntheticClass(UnsolvedClass missedClass) {
-    String classPackage = classAndPackageMap.get(missedClass.getClassName());
+    String classPackage = missedClass.getPackageName();
+    String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
-        this.rootDirectory + classPackage + "/" + missedClass.getClassName() + ".java";
+        this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Path.of(filePathStr);
+    System.out.println("Deleted file: " + filePath);
     try {
       Files.delete(filePath);
     } catch (IOException e) {
@@ -1246,6 +1293,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String filePathStr =
         this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Paths.get(filePathStr);
+
+    // When class paths are not provide, this visitor will attempt to create synthetic classes for
+    // every class imported by the import statements. However, some of those classes might already
+    // exist in the input codebase.
+    if (Files.exists(filePath)) {
+      throw new RuntimeException("File already exists: " + filePath);
+    }
+
     createdClass.add(filePath);
     try {
       Path parentPath = filePath.getParent();
@@ -1255,6 +1310,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try (BufferedWriter writer =
           new BufferedWriter(new FileWriter(filePath.toFile(), StandardCharsets.UTF_8))) {
         writer.write(fileContent.toString());
+        System.out.println(fileContent);
       } catch (Exception e) {
         throw new Error(e.getMessage());
       }
@@ -1433,6 +1489,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     syntheticReturnTypes.add(returnTypeFullName);
     this.updateMissingClass(returnClass);
     this.updateMissingClass(classThatContainMethod);
+    System.out.println("I was called by adasdada");
   }
 
   /**
@@ -1450,15 +1507,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               + incorrectType.substring(1).replace("ReturnType", "");
       UnsolvedClass relatedClass = syntheticMethodAndClass.get(involvedMethod);
       if (relatedClass != null) {
+        for (UnsolvedClass syntheticClass : missingClass) {
+          if (syntheticClass.getClassName().equals(relatedClass.getClassName())
+              && syntheticClass.getPackageName().equals(relatedClass.getPackageName())) {
+            syntheticClass.updateMethodByReturnType(
+                incorrectType, typeToCorrect.get(incorrectType));
+            this.deleteOldSyntheticClass(syntheticClass);
+            this.createMissingClass(syntheticClass);
+          }
+        }
         relatedClass.updateMethodByReturnType(incorrectType, typeToCorrect.get(incorrectType));
-        this.deleteOldSyntheticClass(relatedClass);
-        this.createMissingClass(relatedClass);
       }
       // if the above condition is not met, then this incorrectType is a synthetic type for the
       // fields of the parent class rather than the return type of some methods
       else {
         for (UnsolvedClass unsolClass : missingClass) {
           for (String parentClass : classAndItsParent.values()) {
+            System.out.println(unsolClass.getClassName());
             if (unsolClass.getClassName().equals(parentClass)) {
               unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
               this.deleteOldSyntheticClass(unsolClass);
