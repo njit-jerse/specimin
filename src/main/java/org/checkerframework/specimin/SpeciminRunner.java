@@ -166,9 +166,9 @@ public class SpeciminRunner {
     // correct the types of all related files before adding them to parsedTargetFiles
     JavaTypeCorrect typeCorrecter = new JavaTypeCorrect(root, relatedClass);
     typeCorrecter.correctTypesForAllFiles();
-    Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToChange =
+    Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typesToChange =
         typeCorrecter.getTypeToChange();
-    addMissingClass.updateTypes(typeToChange);
+    addMissingClass.updateTypes(typesToChange);
 
     for (String directory : relatedClass) {
       // directories already in parsedTargetFiles are original files in the root directory, we are
@@ -191,17 +191,18 @@ public class SpeciminRunner {
         // target key will have this form: "path/of/package/ClassName.java"
         String classFullyQualfiedName = target.getKey().replace("/", ".");
         if (!classFullyQualfiedName.endsWith(".java")) {
-          throw new RuntimeException("A Java file directory does not end with .java: " + classFullyQualfiedName);
+          throw new RuntimeException(
+              "A Java file directory does not end with .java: " + classFullyQualfiedName);
         }
         classFullyQualfiedName =
-                classFullyQualfiedName.substring(0, classFullyQualfiedName.length() - 5);
+            classFullyQualfiedName.substring(0, classFullyQualfiedName.length() - 5);
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
             classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
         // If this condition is true, this class is a synthetic class initially created to be a
         // return type of some synthetic methods, but later javac has found the correct return type
         // for that method.
-        if (typeToChange.containsKey(simpleName)) {
+        if (typesToChange.containsKey(simpleName)) {
           continue;
         }
         if (!finder.getUsedClass().contains(classFullyQualfiedName)) {

@@ -264,31 +264,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return super.visit(node, arg);
   }
 
-  /*
-  @Override
-  public Node visit(ImportDeclaration decl, Void arg) {
-    @SuppressWarnings(
-        "signature") // since this is the content of an import statement, it will be a qualified
-    // class path
-    @FullyQualifiedName String declAsString = decl.getNameAsString();
-    // if there is no jar paths included, every imported class is unsolved, apart from those
-    // belonging to the Java language.
-    if (!classesFromJar.isEmpty() || declAsString.startsWith("java.")) {
-      return super.visit(decl, arg);
-    }
-    UnsolvedClass declaredClass = getSimpleSyntheticClassFromFullyQualifiedName(declAsString);
-    try {
-      createMissingClass(declaredClass);
-      missingClass.add(declaredClass);
-    } catch (RuntimeException e) {
-      // The class file already exists in the codebase
-      return super.visit(decl, arg);
-    }
-    return super.visit(decl, arg);
-  }
-
-   */
-
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
     SimpleName nodeName = node.getName();
@@ -542,7 +517,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // since this method declaration is inside an anonymous class, its parent will be an
         // ObjectCreationExpr
         ((ObjectCreationExpr) parentNode).resolve();
-        nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
         String nameOfClass = classNodeSimpleName.asString();
@@ -600,9 +574,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
-    // this line is to work around a bug of JavaParser. When a type is called as a class path, such
-    // as com.example.Dog dog, JavaParser will also consider com and com.example as type name. This
-    // bug happens even if the source file of class Dog is present in the codebase.
+    /**
+     * Workaround for a JavaParser bug: When a type is referenced as a class path, like
+     * com.example.Dog dog, JavaParser considers its package components (com and com.example) as
+     * types, too. This issue happens even when the source file of the Dog class is present in the
+     * codebase.
+     */
     if (!isCapital(typeExpr.getName().asString())) {
       return super.visit(typeExpr, p);
     }
@@ -1288,13 +1265,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String filePathStr =
         this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Paths.get(filePathStr);
-
-    // When class paths are not provide, this visitor will attempt to create synthetic classes for
-    // every class imported by the import statements. However, some of those classes might already
-    // exist in the input codebase.
-    if (Files.exists(filePath)) {
-      throw new RuntimeException("File already exists: " + filePath);
-    }
 
     createdClass.add(filePath);
     try {
