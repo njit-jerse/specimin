@@ -187,10 +187,10 @@ public class UnsolvedClass {
       return "";
     }
     StringBuilder result = new StringBuilder();
-    // if class A has three type variables, the expression will be A<T, TT, TTT>
+    // if class A has three type variables, the expression will be A<T, T1, T2>
     result.append("<");
     for (int i = 0; i < numberOfTypeVariables; i++) {
-      String typeExpression = "T" + "T".repeat(i);
+      String typeExpression = "T" + ((i > 0) ? i : "");
       result.append(typeExpression).append(", ");
     }
     result.delete(result.length() - 2, result.length());

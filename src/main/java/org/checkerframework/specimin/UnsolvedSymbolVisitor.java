@@ -574,12 +574,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
-    /**
-     * Workaround for a JavaParser bug: When a type is referenced as a class path, like
-     * com.example.Dog dog, JavaParser considers its package components (com and com.example) as
-     * types, too. This issue happens even when the source file of the Dog class is present in the
-     * codebase.
-     */
+    // Workaround for a JavaParser bug: When a type is referenced using its fully-qualified name,
+    // like
+    // com.example.Dog dog, JavaParser considers its package components (com and com.example) as
+    // types, too. This issue happens even when the source file of the Dog class is present in the
+    // codebase.
     if (!isCapital(typeExpr.getName().asString())) {
       return super.visit(typeExpr, p);
     }

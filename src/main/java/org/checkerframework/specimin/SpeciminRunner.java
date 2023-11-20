@@ -27,6 +27,7 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -189,13 +190,7 @@ public class SpeciminRunner {
       // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
         // target key will have this form: "path/of/package/ClassName.java"
-        String classFullyQualfiedName = target.getKey().replace("/", ".");
-        if (!classFullyQualfiedName.endsWith(".java")) {
-          throw new RuntimeException(
-              "A Java file directory does not end with .java: " + classFullyQualfiedName);
-        }
-        classFullyQualfiedName =
-            classFullyQualfiedName.substring(0, classFullyQualfiedName.length() - 5);
+        String classFullyQualfiedName = getFullyQualifiedClassName(target.getKey());
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
             classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
@@ -231,6 +226,24 @@ public class SpeciminRunner {
     }
     // delete all the temporary files created by UnsolvedSymbolVisitor
     deleteFiles(createdClass);
+  }
+
+  /**
+   * Converts a path to a Java file into the fully-qualified name of the public class in that file,
+   * relying on the file's relative path being the same as the package name.
+   *
+   * @param javaFilePath the path to a .java file, in this form: "path/of/package/ClassName.java".
+   *     Note that this path must be rooted at the same directory in which javac could be invoked to
+   *     compile the file
+   * @return the fully-qualified name of the given class
+   */
+  @SuppressWarnings("signature") // string manipulation
+  private static @FullyQualifiedName String getFullyQualifiedClassName(final String javaFilePath) {
+    String result = javaFilePath.replace("/", ".");
+    if (!result.endsWith(".java")) {
+      throw new RuntimeException("A Java file path does not end with .java: " + result);
+    }
+    return result.substring(0, result.length() - 5);
   }
 
   /**
