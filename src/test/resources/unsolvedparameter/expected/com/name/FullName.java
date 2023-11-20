@@ -1,4 +1,4 @@
 package com.name;
 
-public class FullName<T, TT> {
+public class FullName<T, T1> {
 }
