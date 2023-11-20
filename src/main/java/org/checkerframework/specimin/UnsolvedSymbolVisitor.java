@@ -5,6 +5,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -29,6 +30,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -82,6 +84,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /** The symbol table to keep track of local variables in the current input file */
   private final ArrayDeque<HashSet<String>> localVariables = new ArrayDeque<>();
+
+  /** The symbol table for type variables. */
+  private final ArrayDeque<Set<String>> typeVariables = new ArrayDeque<Set<String>>();
 
   /** The simple name of the class currently visited */
   private @ClassGetSimpleName String className = "";
@@ -275,7 +280,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       SimpleName superClassSimpleName = node.getExtendedTypes().get(0).getName();
       classAndItsParent.put(className, superClassSimpleName.asString());
     }
-    return super.visit(node, arg);
+    addTypeVariableScope(node.getTypeParameters());
+    Visitable result = super.visit(node, arg);
+    typeVariables.removeFirst();
+    return result;
   }
 
   @Override
@@ -316,9 +324,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ForStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, p);
+    Visitable result = super.visit(node, p);
     localVariables.removeFirst();
-    return node;
+    return result;
   }
 
   @Override
@@ -349,54 +357,54 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(WhileStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, p);
+    Visitable result = super.visit(node, p);
     localVariables.removeFirst();
-    return node;
+    return result;
   }
 
   @Override
   public Visitable visit(SwitchExpr node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, p);
+    Visitable result = super.visit(node, p);
     localVariables.removeFirst();
-    return node;
+    return result;
   }
 
   @Override
   public Visitable visit(SwitchEntry node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, p);
+    Visitable result = super.visit(node, p);
     localVariables.removeFirst();
-    return node;
+    return result;
   }
 
   @Override
   public Visitable visit(TryStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, p);
+    Visitable result = super.visit(node, p);
     localVariables.removeFirst();
-    return node;
+    return result;
   }
 
   @Override
   public Visitable visit(CatchClause node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, p);
+    Visitable result = super.visit(node, p);
     localVariables.removeFirst();
-    return node;
+    return result;
   }
 
   @Override
   public Visitable visit(BlockStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, p);
+    Visitable result = super.visit(node, p);
     localVariables.removeFirst();
-    return node;
+    return result;
   }
 
   @Override
@@ -486,6 +494,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(ConstructorDeclaration node, Void arg) {
+    // TODO: Loi: do we need to do anything for the parameters, like we do in
+    // visit(MethodDeclaration)?
+    addTypeVariableScope(node.getTypeParameters());
+    Visitable result = super.visit(node, arg);
+    typeVariables.removeFirst();
+    return result;
+  }
+
+  @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
     // a MethodDeclaration instance will have parent node
     Node parentNode = node.getParentNode().get();
@@ -497,10 +515,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       nodeType.resolve();
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      // TODO: double-check which of these takes precedence if there is a type variable
+      // with the same simple name as an in-scope class. Which is being referred to in
+      // a method declaration? It might be the one with smaller scope, which would be...
+      // difficult...for us to model properly here.
       if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
         UnsolvedClass syntheticType =
             new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
         this.updateMissingClass(syntheticType);
+      } else if (this.isTypeVar(nodeTypeSimpleForm)) {
+        // TODO: Do something here.
       } else {
         throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
       }
@@ -523,12 +547,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         updateUnsolvedClassWithMethod(node, nameOfClass, toSimpleName(nodeTypeAsString));
       }
     }
-
     HashSet<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
     localVariables.addFirst(currentLocalVariables);
-    super.visit(node, arg);
+    // TODO: for some reason the test loops forever if I do this at the beginning of the method?!?
+    // However, if we don't put this there then the call to isTypeVar above
+    // won't give the correct answer.
+    addTypeVariableScope(node.getTypeParameters());
+    Visitable result = super.visit(node, arg);
     localVariables.removeFirst();
-    return node;
+    typeVariables.removeFirst();
+    return result;
   }
 
   @Override
@@ -999,6 +1027,37 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     return false;
+  }
+
+  /**
+   * Is the given type name actually an in-scope type variable?
+   *
+   * @param typeName a simple name of a type, as written in a source file. The type name might be an
+   *     in-scope type variable.
+   * @return true iff there is a type variable in scope with this name. Returning false guarantees
+   *     that there is no such type variable, but not that the input is a valid type.
+   */
+  private boolean isTypeVar(String typeName) {
+    for (Set<String> scope : typeVariables) {
+      if (scope.contains(typeName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Adds a scope with the given list of type parameters. Each pair to this method must be paired
+   * with a call to typeVariables.removeFirst().
+   *
+   * @param typeParameters a list of type parameters
+   */
+  private void addTypeVariableScope(List<TypeParameter> typeParameters) {
+    Set<String> typeVariableScope = new HashSet<>();
+    for (TypeParameter t : typeParameters) {
+      typeVariableScope.add(t.getName().asString());
+    }
+    typeVariables.addFirst(typeVariableScope);
   }
 
   /**
