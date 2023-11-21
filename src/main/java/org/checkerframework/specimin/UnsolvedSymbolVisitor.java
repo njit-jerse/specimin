@@ -549,7 +549,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parameter.getType() instanceof UnionType) {
         resolveUnionType(parameter);
       } else {
-        parameter.resolve().describeType();
+        parameter.getType().resolve().describe();
       }
       return super.visit(parameter, p);
     }
