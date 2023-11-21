@@ -425,12 +425,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       String typeAsString = declType.asString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
-      // There could be two cases here: either a fully-qualified class name or a simple class name.
+      // There could be three cases here: a type variable, a fully-qualified class name, or a simple
+      // class name.
       // This is the fully-qualified case.
       if (elements.size() > 1) {
         @SuppressWarnings("signature") // since this type is in a fully-qualfied form
         @FullyQualifiedName String qualifiedTypeName = typeAsString;
         updateMissingClass(getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName));
+      } else if (isTypeVar(typeAsString)) {
+        // Nothing to do in this case, but we need to skip creating an unsolved class.
       }
       /**
        * Handles the case where the type is a simple class name. Two sub-cases are considered: 1.
@@ -508,6 +511,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // a MethodDeclaration instance will have parent node
     Node parentNode = node.getParentNode().get();
     Type nodeType = node.getType();
+
+    // TODO: for some reason the test loops forever if I do this at the beginning of the method?!?
+    // However, if we don't put this there then the call to isTypeVar above
+    // won't give the correct answer. Hint: running the test for some reason creates a file
+    // called T.java in the input directory! Suspicion: this is being created and then picked up,
+    // which leads to the infinite loop. Let's try to figure out why that happens.
+    addTypeVariableScope(node.getTypeParameters());
+
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
     @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
@@ -519,12 +530,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // with the same simple name as an in-scope class. Which is being referred to in
       // a method declaration? It might be the one with smaller scope, which would be...
       // difficult...for us to model properly here.
-      if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
+      if (this.isTypeVar(nodeTypeSimpleForm)) {
+        // TODO: Do something here.
+      } else if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
         UnsolvedClass syntheticType =
             new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
         this.updateMissingClass(syntheticType);
-      } else if (this.isTypeVar(nodeTypeSimpleForm)) {
-        // TODO: Do something here.
       } else {
         throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
       }
@@ -549,10 +560,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     HashSet<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
     localVariables.addFirst(currentLocalVariables);
-    // TODO: for some reason the test loops forever if I do this at the beginning of the method?!?
-    // However, if we don't put this there then the call to isTypeVar above
-    // won't give the correct answer.
-    addTypeVariableScope(node.getTypeParameters());
     Visitable result = super.visit(node, arg);
     localVariables.removeFirst();
     typeVariables.removeFirst();
@@ -634,7 +641,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // without any type argument
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
-      if (isAClassPath(typeRawName)) {
+      if (isTypeVar(typeRawName)) {
+        // If the type name itself is an in-scope type variable, just return without attempting
+        // to create a missing class.
+        return super.visit(typeExpr, p);
+      } else if (isAClassPath(typeRawName)) {
         String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
         @SuppressWarnings("signature") // since this is the last element of a class path
         @ClassGetSimpleName String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
@@ -1240,6 +1251,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be updated
    */
   public void updateMissingClass(UnsolvedClass missedClass) {
+    if (missedClass.getClassName().equals("T")) {
+      throw new RuntimeException("shouldn't be updating T as a missing class!");
+    }
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
@@ -1316,6 +1330,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be added
    */
   public void createMissingClass(UnsolvedClass missedClass) {
+    if (missedClass.getClassName().equals("T")) {
+      throw new RuntimeException("probably shouldn't be creating this one");
+    }
     StringBuilder fileContent = new StringBuilder();
     fileContent.append(missedClass);
     String classPackage = missedClass.getPackageName();

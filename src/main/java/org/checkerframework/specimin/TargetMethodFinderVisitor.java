@@ -199,8 +199,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       Type returnType = method.getType();
       // JavaParser may misinterpret unresolved array types as reference types.
       // To ensure accuracy, we resolve the type before proceeding with the check.
-      if (returnType.resolve() instanceof ResolvedReferenceType) {
-        usedClass.add(returnType.resolve().asReferenceType().getQualifiedName());
+      try {
+        ResolvedType resolvedType = returnType.resolve();
+        if (resolvedType instanceof ResolvedReferenceType) {
+          usedClass.add(resolvedType.asReferenceType().getQualifiedName());
+        }
+      } catch (UnsupportedOperationException e) {
+        // Occurs if the type is a type variable, so there is nothing to do.
+        // The type variable will be resolved later, by the UnsolvedSymbolVisitor.
       }
     }
     Visitable result = super.visit(method, p);
