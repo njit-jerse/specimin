@@ -512,32 +512,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Node parentNode = node.getParentNode().get();
     Type nodeType = node.getType();
 
-    // TODO: for some reason the test loops forever if I do this at the beginning of the method?!?
-    // However, if we don't put this there then the call to isTypeVar above
-    // won't give the correct answer. Hint: running the test for some reason creates a file
-    // called T.java in the input directory! Suspicion: this is being created and then picked up,
-    // which leads to the infinite loop. Let's try to figure out why that happens.
+    // This scope logic must happen here, because later in this method there is a check for
+    // whether the return type is a type variable, which must succeed if the type variable
+    // was declared for this scope.
     addTypeVariableScope(node.getTypeParameters());
 
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
     @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
     @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
-    try {
-      nodeType.resolve();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      // TODO: double-check which of these takes precedence if there is a type variable
-      // with the same simple name as an in-scope class. Which is being referred to in
-      // a method declaration? It might be the one with smaller scope, which would be...
-      // difficult...for us to model properly here.
-      if (this.isTypeVar(nodeTypeSimpleForm)) {
-        // TODO: Do something here.
-      } else if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
-        UnsolvedClass syntheticType =
-            new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
-        this.updateMissingClass(syntheticType);
-      } else {
-        throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
+    if (!this.isTypeVar(nodeTypeSimpleForm)) {
+      // Don't attempt to resolve a type variable, since we will inevitably fail.
+      try {
+        nodeType.resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
+          UnsolvedClass syntheticType =
+              new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
+          this.updateMissingClass(syntheticType);
+        } else {
+          throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
+        }
       }
     }
 
