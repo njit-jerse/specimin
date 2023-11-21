@@ -1,7 +1,7 @@
 package org.example;
 
 public class ClassWithTypeParam<T> {
-    T getT() {
+    public T getT() {
         throw new Error();
     }
 }
