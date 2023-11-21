@@ -1246,9 +1246,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be updated
    */
   public void updateMissingClass(UnsolvedClass missedClass) {
-    if (missedClass.getClassName().equals("T")) {
-      throw new RuntimeException("shouldn't be updating T as a missing class!");
-    }
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
@@ -1325,9 +1322,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be added
    */
   public void createMissingClass(UnsolvedClass missedClass) {
-    if (missedClass.getClassName().equals("T")) {
-      throw new RuntimeException("probably shouldn't be creating this one");
-    }
     StringBuilder fileContent = new StringBuilder();
     fileContent.append(missedClass);
     String classPackage = missedClass.getPackageName();
