@@ -205,8 +205,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           usedClass.add(resolvedType.asReferenceType().getQualifiedName());
         }
       } catch (UnsupportedOperationException e) {
-        // Occurs if the type is a type variable, so there is nothing to do.
-        // The type variable will be resolved later, by the UnsolvedSymbolVisitor.
+        // Occurs if the type is a type variable, so there is nothing to do:
+        // the type variable must have been declared in one of the containing scopes,
+        // and UnsolvedSymbolVisitor should already guarantee that the variable will
+        // be included in one of the classes that Specimin outputs.
       }
     }
     Visitable result = super.visit(method, p);
