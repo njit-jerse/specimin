@@ -19,9 +19,9 @@ for testcase in * ; do
     cd ../.. || exit 1
 done
 
-if [ "${returnval}" == 0 ]; then
+if [ "${returnval}" = 0 ]; then
   echo "All expected test outputs compiled successfully."
-elif [ "${returnval}" == 2 ]; then
+elif [ "${returnval}" = 2 ]; then
   echo "Some expected test outputs do not compile successfully. See the above error output for details."
 fi
 
