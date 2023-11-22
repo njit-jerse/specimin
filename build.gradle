@@ -47,6 +47,11 @@ task requireJavadoc(type: JavaExec) {
     args "src/main/java"
 }
 
+task expectedTestOutputsMustCompile(type: Verification) {
+    // TODO: should this task run in CI, or as part of the regular tests?
+    commandLine "sh", "typecheck_test_outputs.sh"
+}
+
 checkerFramework {
     checkers = [
             'org.checkerframework.checker.nullness.NullnessChecker',
