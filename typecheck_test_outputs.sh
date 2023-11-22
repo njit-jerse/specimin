@@ -1,7 +1,9 @@
 #!/bin/sh
 
 # This script runs javac on all of the expected test outputs under src/test/resources.
-# It returns 1 if any of them fail to compile, and zero if all of them do compile.
+# It returns 2 if any of them fail to compile, 1 if there are any malformed test directories,
+# and 0 if all of them do compile.
+#
 # It is desirable that all of the expected test outputs compile, because Specimin
 # should produce independently-compilable programs.
 
