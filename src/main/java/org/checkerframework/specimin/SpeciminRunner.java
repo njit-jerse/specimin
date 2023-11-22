@@ -176,7 +176,8 @@ public class SpeciminRunner {
     }
 
     MethodPrunerVisitor methodPruner =
-        new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMembers());
+        new MethodPrunerVisitor(
+            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
