@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.google.common.base.Splitter;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -12,14 +13,20 @@ import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
  * The reason is that the class file is not in the root directory.
  */
 public class UnsolvedClass {
-  /** Set of methods belongs to the class */
-  private final Set<UnsolvedMethod> methods;
+  /**
+   * Set of methods belongs to the class. Must be a linked set to ensure deterministic iteration
+   * order when writing files synthetic classes.
+   */
+  private final LinkedHashSet<UnsolvedMethod> methods;
 
   /** The name of the class */
   private final @ClassGetSimpleName String className;
 
-  /** The fields of this class */
-  private final Set<String> classFields;
+  /**
+   * The fields of this class. Must be a linked set to ensure deterministic iteration order when
+   * writing files for synthetic classes.
+   */
+  private final LinkedHashSet<String> classFields;
 
   /**
    * The name of the package of the class. We rely on the import statements from the source codes to
@@ -35,9 +42,9 @@ public class UnsolvedClass {
    */
   public UnsolvedClass(@ClassGetSimpleName String className, String packageName) {
     this.className = className;
-    this.methods = new HashSet<>();
+    this.methods = new LinkedHashSet<>();
     this.packageName = packageName;
-    this.classFields = new HashSet<>();
+    this.classFields = new LinkedHashSet<>();
   }
 
   /**
