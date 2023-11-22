@@ -32,7 +32,7 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
 
   /**
    * This is the set of classes used by the target methods. We use this set to determine if we
-   * should keep or delete an import statement. The string representing the class are in
+   * should keep or delete an import statement. The strings representing the classes are in
    * the @FullyQualifiedName form.
    */
   private Set<String> classesUsedByTargetMethods;
