@@ -12,7 +12,6 @@ returnval=0
 cd src/test/resources || exit 1
 for testcase in * ; do
     cd "${testcase}/expected/" || exit 1
-    javaccmd="javac -proc:only -nowarn $(find . -name "*.java")"
     # javac relies on word splitting
     # shellcheck disable=SC2046
     javac -proc:only -nowarn $(find . -name "*.java") \
