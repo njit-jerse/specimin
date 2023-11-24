@@ -129,6 +129,15 @@ class JavaTypeCorrect {
     }
   }
 
+  /**
+   * This method tries to get the fully-qualified name of a type based on the simple name of that
+   * type and the class file where that type is used.
+   *
+   * @param type the type to be taken as input
+   * @param filePath the path of the file where type is used
+   * @return the fully-qualified name of that type if any. Otherwise, return the original expression
+   *     of type.
+   */
   public String tryResolveFullyQualifiedType(String type, String filePath) {
     // type is already in the fully qualifed format
     if (Splitter.onPattern("\\.").splitToList(type).size() > 1) {
