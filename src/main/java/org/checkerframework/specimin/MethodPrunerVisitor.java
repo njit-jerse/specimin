@@ -1,6 +1,8 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
@@ -29,6 +31,13 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
   private Set<String> methodsToEmpty;
 
   /**
+   * This is the set of classes used by the target methods. We use this set to determine if we
+   * should keep or delete an import statement. The strings representing the classes are in
+   * the @FullyQualifiedName form.
+   */
+  private Set<String> classesUsedByTargetMethods;
+
+  /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
    * is set by {@link #visit(MethodDeclaration, Void)}.
    */
@@ -43,9 +52,23 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
    *     methods for specimin)
    * @param methodsToEmpty the set of methods whose bodies should be removed
    */
-  public MethodPrunerVisitor(Set<String> methodsToKeep, Set<String> methodsToEmpty) {
+  public MethodPrunerVisitor(
+      Set<String> methodsToKeep,
+      Set<String> methodsToEmpty,
+      Set<String> classesUsedByTargetMethods) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.methodsToEmpty = methodsToEmpty;
+    this.classesUsedByTargetMethods = classesUsedByTargetMethods;
+  }
+
+  @Override
+  public Node visit(ImportDeclaration decl, Void p) {
+    String classFullName = decl.getNameAsString();
+    if (classesUsedByTargetMethods.contains(classFullName)) {
+      return super.visit(decl, p);
+    }
+    decl.remove();
+    return decl;
   }
 
   @Override
