@@ -102,8 +102,7 @@ public class UnsolvedClass {
    * @param currentReturnType the current return type of this method
    * @param desiredReturnType the new return type
    */
-  public void updateMethodByReturnType(
-      @ClassGetSimpleName String currentReturnType, @ClassGetSimpleName String desiredReturnType) {
+  public void updateMethodByReturnType(String currentReturnType, String desiredReturnType) {
     for (UnsolvedMethod method : methods) {
       if (method.getReturnType().equals(currentReturnType)) {
         method.setReturnType(desiredReturnType);
