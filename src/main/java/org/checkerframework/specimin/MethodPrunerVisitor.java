@@ -51,6 +51,7 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
    * @param methodsToKeep the set of methods whose bodies should be kept intact (usually the target
    *     methods for specimin)
    * @param methodsToEmpty the set of methods whose bodies should be removed
+   * @param classesUsedByTargetMethods the classes used by target methods
    */
   public MethodPrunerVisitor(
       Set<String> methodsToKeep,
