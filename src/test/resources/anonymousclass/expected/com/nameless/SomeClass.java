@@ -2,11 +2,10 @@ package com.nameless;
 
 public class SomeClass {
 
-    public int getLocalVar() {
+    public SomeClass() {
         throw new Error();
     }
-
-    public SomeClass() {
+    public int getLocalVar() {
         throw new Error();
     }
 }
