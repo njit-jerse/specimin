@@ -2,5 +2,5 @@ package com.example;
 
 public class Parent {
 
-    public MyType theName = null;
+    public sample.pack.MyType theName = null;
 }

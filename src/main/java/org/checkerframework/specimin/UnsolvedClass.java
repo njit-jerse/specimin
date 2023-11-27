@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.google.common.base.Splitter;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -12,20 +13,29 @@ import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
  * The reason is that the class file is not in the root directory.
  */
 public class UnsolvedClass {
-  /** Set of methods belongs to the class */
-  private final Set<UnsolvedMethod> methods;
+  /**
+   * Set of methods belongs to the class. Must be a linked set to ensure deterministic iteration
+   * order when writing files synthetic classes.
+   */
+  private final LinkedHashSet<UnsolvedMethod> methods;
 
   /** The name of the class */
   private final @ClassGetSimpleName String className;
 
-  /** The fields of this class */
-  private final Set<String> classFields;
+  /**
+   * The fields of this class. Must be a linked set to ensure deterministic iteration order when
+   * writing files for synthetic classes.
+   */
+  private final LinkedHashSet<String> classFields;
 
   /**
    * The name of the package of the class. We rely on the import statements from the source codes to
    * guess the package name.
    */
   private final String packageName;
+
+  /** This field records the number of type variables for this class */
+  private int numberOfTypeVariables = 0;
 
   /**
    * Create an instance of UnsolvedClass
@@ -35,9 +45,9 @@ public class UnsolvedClass {
    */
   public UnsolvedClass(@ClassGetSimpleName String className, String packageName) {
     this.className = className;
-    this.methods = new HashSet<>();
+    this.methods = new LinkedHashSet<>();
     this.packageName = packageName;
-    this.classFields = new HashSet<>();
+    this.classFields = new LinkedHashSet<>();
   }
 
   /**
@@ -95,6 +105,20 @@ public class UnsolvedClass {
     this.classFields.add(variableExpression);
   }
 
+  /** This method sets the number of type variables for the current class */
+  public void setNumberOfTypeVariables(int numberOfTypeVariables) {
+    this.numberOfTypeVariables = numberOfTypeVariables;
+  }
+
+  /**
+   * This method tells the number of type variables for this class
+   *
+   * @return the number of type variables
+   */
+  public int getNumberOfTypeVariables() {
+    return this.numberOfTypeVariables;
+  }
+
   /**
    * Update the return type of a method. Note: this method is supposed to be used to update
    * synthetic methods, where the return type of each method is distinct.
@@ -102,8 +126,7 @@ public class UnsolvedClass {
    * @param currentReturnType the current return type of this method
    * @param desiredReturnType the new return type
    */
-  public void updateMethodByReturnType(
-      @ClassGetSimpleName String currentReturnType, @ClassGetSimpleName String desiredReturnType) {
+  public void updateMethodByReturnType(String currentReturnType, String desiredReturnType) {
     for (UnsolvedMethod method : methods) {
       if (method.getReturnType().equals(currentReturnType)) {
         method.setReturnType(desiredReturnType);
@@ -149,7 +172,7 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
-    sb.append("public class ").append(className).append(" {\n");
+    sb.append("public class ").append(className).append(getTypeVariablesAsString()).append(" {\n");
     for (String variableDeclarations : classFields) {
       sb.append("    " + "public " + variableDeclarations + ";\n");
     }
@@ -158,5 +181,26 @@ public class UnsolvedClass {
     }
     sb.append("}\n");
     return sb.toString();
+  }
+
+  /**
+   * Return a synthetic representation for type variables of the current class.
+   *
+   * @return the synthetic representation for type variables
+   */
+  public String getTypeVariablesAsString() {
+    if (numberOfTypeVariables == 0) {
+      return "";
+    }
+    StringBuilder result = new StringBuilder();
+    // if class A has three type variables, the expression will be A<T, T1, T2>
+    result.append("<");
+    for (int i = 0; i < numberOfTypeVariables; i++) {
+      String typeExpression = "T" + ((i > 0) ? i : "");
+      result.append(typeExpression).append(", ");
+    }
+    result.delete(result.length() - 2, result.length());
+    result.append(">");
+    return result.toString();
   }
 }
