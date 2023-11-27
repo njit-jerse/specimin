@@ -174,8 +174,7 @@ public class SpeciminRunner {
     JavaTypeCorrect typeCorrecter =
         new JavaTypeCorrect(root, relatedClass, filesAndAssociatedTypes);
     typeCorrecter.correctTypesForAllFiles();
-    Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typesToChange =
-        typeCorrecter.getTypeToChange();
+    Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
     addMissingClass.updateTypes(typesToChange);
 
     for (String directory : relatedClass) {
