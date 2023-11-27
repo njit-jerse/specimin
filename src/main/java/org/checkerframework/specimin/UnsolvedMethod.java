@@ -1,7 +1,6 @@
 package org.checkerframework.specimin;
 
 import java.util.List;
-import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
  * An UnsolvedMethod instance is a representation of a method that can not be solved by
@@ -15,7 +14,7 @@ public class UnsolvedMethod {
    * The return type of the method. At the moment, we set the return type the same as the class
    * where the method belongs to.
    */
-  private @ClassGetSimpleName String returnType;
+  private String returnType;
 
   /**
    * The list of parameters of the method. (Right now we won't touch it until the new variant of
@@ -33,8 +32,7 @@ public class UnsolvedMethod {
    * @param returnType the return type of the method
    * @param parameterList the list of parameters for this method
    */
-  public UnsolvedMethod(
-      String name, @ClassGetSimpleName String returnType, List<String> parameterList) {
+  public UnsolvedMethod(String name, String returnType, List<String> parameterList) {
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
@@ -46,7 +44,7 @@ public class UnsolvedMethod {
    *
    * @param returnType the return type to bet set for this method
    */
-  public void setReturnType(@ClassGetSimpleName String returnType) {
+  public void setReturnType(String returnType) {
     this.returnType = returnType;
   }
 
@@ -55,7 +53,7 @@ public class UnsolvedMethod {
    *
    * @return the value of returnType
    */
-  public @ClassGetSimpleName String getReturnType() {
+  public String getReturnType() {
     return returnType;
   }
 
