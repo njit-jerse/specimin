@@ -162,8 +162,15 @@ public class SpeciminRunner {
         relatedClass.add(directoryOfFile);
       }
     }
+    GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(getTypesFullNameVisitor, null);
+    }
+    Map<String, Set<String>> filesAndAssociatedTypes =
+        getTypesFullNameVisitor.getFileAndAssociatedTypes();
     // correct the types of all related files before adding them to parsedTargetFiles
-    JavaTypeCorrect typeCorrecter = new JavaTypeCorrect(root, relatedClass);
+    JavaTypeCorrect typeCorrecter =
+        new JavaTypeCorrect(root, relatedClass, filesAndAssociatedTypes);
     typeCorrecter.correctTypesForAllFiles();
     addMissingClass.updateTypes(typeCorrecter.getTypeToChange());
 
@@ -176,7 +183,8 @@ public class SpeciminRunner {
     }
 
     MethodPrunerVisitor methodPruner =
-        new MethodPrunerVisitor(finder.getTargetMethods(), finder.getUsedMembers());
+        new MethodPrunerVisitor(
+            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);

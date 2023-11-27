@@ -1357,8 +1357,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param typeToCorrect the Map to be analyzed
    */
-  public void updateTypes(
-      Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToCorrect) {
+  public void updateTypes(Map<String, String> typeToCorrect) {
     for (String incorrectType : typeToCorrect.keySet()) {
       // convert MethodNameReturnType to methodName
       String involvedMethod =

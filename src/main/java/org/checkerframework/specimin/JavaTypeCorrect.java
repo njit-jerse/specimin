@@ -9,8 +9,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
-import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 
 /**
  * This class uses javac to analyze files. If there are any incompatible type errors in those files,
@@ -34,7 +32,13 @@ class JavaTypeCorrect {
    * This map is for type correcting. The key is the name of the current incorrect type, and the
    * value is the name of the desired correct type.
    */
-  private Map<@ClassGetSimpleName String, @ClassGetSimpleName String> typeToChange;
+  private Map<String, String> typeToChange;
+
+  /**
+   * A map that associates the file directory with the set of fully qualified names of types used
+   * within that file.
+   */
+  private Map<String, Set<String>> fileAndAssociatedTypes = new HashMap<>();
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
@@ -43,10 +47,14 @@ class JavaTypeCorrect {
    * @param rootDirectory the root directory of the files to correct types
    * @param fileNameList the list of the relative directory of the files to correct types
    */
-  public JavaTypeCorrect(String rootDirectory, Set<String> fileNameList) {
+  public JavaTypeCorrect(
+      String rootDirectory,
+      Set<String> fileNameList,
+      Map<String, Set<String>> fileAndAssociatedTypes) {
     this.fileNameList = fileNameList;
     this.sourcePath = new File(rootDirectory).getAbsolutePath();
     this.typeToChange = new HashMap<>();
+    this.fileAndAssociatedTypes = fileAndAssociatedTypes;
   }
 
   /**
@@ -54,7 +62,7 @@ class JavaTypeCorrect {
    *
    * @return the value of typeToChange
    */
-  public Map<@ClassGetSimpleName String, @ClassGetSimpleName String> getTypeToChange() {
+  public Map<String, String> getTypeToChange() {
     return typeToChange;
   }
 
@@ -87,7 +95,7 @@ class JavaTypeCorrect {
       String line;
       while ((line = reader.readLine()) != null) {
         if (line.contains("error: incompatible types")) {
-          updateTypeToChange(line);
+          updateTypeToChange(line, filePath);
         }
       }
     } catch (Exception e) {
@@ -99,8 +107,9 @@ class JavaTypeCorrect {
    * This method updates typeToChange by relying on the error messages from javac
    *
    * @param errorMessage the error message to be analyzed
+   * @param filePath the path of the file where this error happens
    */
-  private void updateTypeToChange(String errorMessage) {
+  private void updateTypeToChange(String errorMessage, String filePath) {
     List<String> splitErrorMessage = Splitter.onPattern("\\s+").splitToList(errorMessage);
     if (splitErrorMessage.size() < 7) {
       throw new RuntimeException("Unexpected type error messages: " + errorMessage);
@@ -110,38 +119,38 @@ class JavaTypeCorrect {
      * 2. error: incompatible types: found <type1> required <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      // since this is from javac, we know that these will be dot-separated identifiers.
-      @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage.get(4);
-      @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
+      String incorrectType = splitErrorMessage.get(4);
+      String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
+      typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
     } else {
-      @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String incorrectType = splitErrorMessage.get(5);
-      @SuppressWarnings("signature")
-      @DotSeparatedIdentifiers String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      typeToChange.put(toSimpleName(incorrectType), toSimpleName(correctType));
+      String incorrectType = splitErrorMessage.get(5);
+      String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
+      typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
     }
   }
 
   /**
-   * This method takes the name of a class and converts it to the @ClassGetSimpleName type according
-   * to Checker Framework. If the name is already in the @ClassGetSimpleName form, this method will
-   * not make any changes
+   * This method tries to get the fully-qualified name of a type based on the simple name of that
+   * type and the class file where that type is used.
    *
-   * @param className the name of the class to be converted
-   * @return the simple name of the class
+   * @param type the type to be taken as input
+   * @param filePath the path of the file where type is used
+   * @return the fully-qualified name of that type if any. Otherwise, return the original expression
+   *     of type.
    */
-  // the code is self-explanatory, essentially the last element of a class name is the simple name
-  // of that class. This method takes the input from the error message of javac, so we know that
-  // className will be a dot-separated identifier.
-  @SuppressWarnings("signature")
-  public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    List<String> classNameParts = Splitter.onPattern("[.]").splitToList(className);
-    if (classNameParts.size() < 2) {
-      return className;
+  public String tryResolveFullyQualifiedType(String type, String filePath) {
+    // type is already in the fully qualifed format
+    if (Splitter.onPattern("\\.").splitToList(type).size() > 1) {
+      return type;
     }
-    return classNameParts.get(classNameParts.size() - 1);
+    if (fileAndAssociatedTypes.containsKey(filePath)) {
+      Set<String> fullyQualifiedType = fileAndAssociatedTypes.get(filePath);
+      for (String typeFullName : fullyQualifiedType) {
+        if (typeFullName.substring(typeFullName.lastIndexOf(".") + 1).equals(type)) {
+          return typeFullName;
+        }
+      }
+    }
+    return type;
   }
 }
