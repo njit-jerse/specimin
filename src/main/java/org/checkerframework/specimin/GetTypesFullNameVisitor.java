@@ -5,6 +5,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -31,7 +32,7 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
    * @return the value of fileAndAssociatedTypes
    */
   public Map<String, Set<String>> getFileAndAssociatedTypes() {
-    return fileAndAssociatedTypes;
+    return Collections.unmodifiableMap(fileAndAssociatedTypes);
   }
 
   @Override
