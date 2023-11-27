@@ -50,7 +50,7 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
     String typeFullName;
     try {
       typeFullName = type.resolve().getQualifiedName();
-    } catch (UnsolvedSymbolException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       return super.visit(type, p);
     }
     if (fileAndAssociatedTypes.containsKey(fileDirectory)) {
