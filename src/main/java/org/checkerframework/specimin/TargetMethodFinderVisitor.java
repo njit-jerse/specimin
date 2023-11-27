@@ -4,6 +4,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -198,13 +199,43 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       Type returnType = method.getType();
       // JavaParser may misinterpret unresolved array types as reference types.
       // To ensure accuracy, we resolve the type before proceeding with the check.
-      if (returnType.resolve() instanceof ResolvedReferenceType) {
-        usedClass.add(returnType.resolve().asReferenceType().getQualifiedName());
+      try {
+        ResolvedType resolvedType = returnType.resolve();
+        if (resolvedType instanceof ResolvedReferenceType) {
+          usedClass.add(resolvedType.asReferenceType().getQualifiedName());
+        }
+      } catch (UnsupportedOperationException e) {
+        // Occurs if the type is a type variable, so there is nothing to do:
+        // the type variable must have been declared in one of the containing scopes,
+        // and UnsolvedSymbolVisitor should already guarantee that the variable will
+        // be included in one of the classes that Specimin outputs.
       }
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
     return result;
+  }
+
+  @Override
+  public Visitable visit(Parameter para, Void p) {
+    if (insideTargetMethod) {
+      ResolvedType paraType = para.resolve().getType();
+      if (paraType.isReferenceType()) {
+        String paraTypeFullName =
+            paraType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+        usedClass.add(paraTypeFullName);
+        for (ResolvedType typeParameterValue : paraType.asReferenceType().typeParametersValues()) {
+          String typeParameterValueName = typeParameterValue.describe();
+          if (typeParameterValueName.contains("<")) {
+            // removing the "<...>" part if there is any.
+            typeParameterValueName =
+                typeParameterValueName.substring(0, typeParameterValueName.indexOf("<"));
+          }
+          usedClass.add(typeParameterValueName);
+        }
+      }
+    }
+    return super.visit(para, p);
   }
 
   @Override
