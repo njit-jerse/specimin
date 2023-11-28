@@ -12,6 +12,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
@@ -237,7 +238,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           }
         }
       } else {
-        paramType = para.resolve().getType();
+        if (para.getParentNode().get() instanceof CatchClause) {
+          paramType = para.getType().resolve();
+        } else {
+          paramType = para.resolve().getType();
+        }
+
         if (paramType.isReferenceType()) {
           paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();

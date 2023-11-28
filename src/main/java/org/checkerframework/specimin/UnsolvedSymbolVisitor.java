@@ -528,13 +528,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
-          UnsolvedClass syntheticType =
-              new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
-          this.updateMissingClass(syntheticType);
-        } else {
-          throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
-        }
+        // if the class could not be found among import statements, we assume that the class must be
+        // in the same package as the current class.
+        String packageName = classAndPackageMap.getOrDefault(nodeTypeSimpleForm, currentPackage);
+        UnsolvedClass syntheticType = new UnsolvedClass(nodeTypeSimpleForm, packageName);
+        this.updateMissingClass(syntheticType);
       }
     }
 
@@ -666,7 +664,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parameter.getType() instanceof UnionType) {
         resolveUnionType(parameter);
       } else {
-        parameter.resolve();
+        if (parameter.getParentNode().isPresent()
+            && parameter.getParentNode().get() instanceof CatchClause) {
+          parameter.getType().resolve();
+        } else {
+          parameter.resolve();
+        }
       }
       return super.visit(parameter, p);
     }
@@ -696,14 +699,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
-      if (classAndPackageMap.containsKey(type)) {
-        UnsolvedClass newClass = new UnsolvedClass(type, classAndPackageMap.get(type));
-        newClass.addMethod(creationMethod);
-        this.updateMissingClass(newClass);
-      } else {
-        throw new RuntimeException("Unexpected class: " + type);
-      }
-
+      // we assume that an unsolved class not found among import statements should be in the same
+      // package as the current class
+      String packageName = classAndPackageMap.getOrDefault(type, currentPackage);
+      UnsolvedClass newClass = new UnsolvedClass(type, packageName);
+      newClass.addMethod(creationMethod);
+      this.updateMissingClass(newClass);
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
@@ -840,10 +841,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    if (!classAndPackageMap.containsKey(className)) {
-      throw new RuntimeException("Unexpected class: " + className);
-    }
-    UnsolvedClass missingClass = new UnsolvedClass(className, classAndPackageMap.get(className));
+    // a class not found among import statements should be in the same package as the current class
+    UnsolvedClass missingClass =
+        new UnsolvedClass(className, classAndPackageMap.getOrDefault(className, currentPackage));
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
     missingClass.addMethod(thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
