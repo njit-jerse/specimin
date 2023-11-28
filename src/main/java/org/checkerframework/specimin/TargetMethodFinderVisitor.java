@@ -219,12 +219,29 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(Parameter para, Void p) {
     if (insideTargetMethod) {
-      ResolvedType paraType = para.resolve().getType();
-      if (paraType.isReferenceType()) {
-        String paraTypeFullName =
-            paraType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+      Type type = para.getType();
+      String paraTypeFullName = "";
+      ResolvedType paramType;
+      if (type.isUnionType()) {
+        for (var param : para.getType().asUnionType().getElements()) {
+          try {
+            paramType = param.resolve();
+            paraTypeFullName =
+                paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+            usedClass.add(paraTypeFullName);
+          } catch (
+              Exception
+                  e) { // This visitor should not have an unsolvable parameter type. Throwing if
+            // exception occurs.
+            throw new Error(e.getMessage());
+          }
+        }
+      } else if (type.isReferenceType()) {
+        paramType = para.getType().resolve();
+        paraTypeFullName =
+            paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
         usedClass.add(paraTypeFullName);
-        for (ResolvedType typeParameterValue : paraType.asReferenceType().typeParametersValues()) {
+        for (ResolvedType typeParameterValue : paramType.asReferenceType().typeParametersValues()) {
           String typeParameterValueName = typeParameterValue.describe();
           if (typeParameterValueName.contains("<")) {
             // removing the "<...>" part if there is any.
