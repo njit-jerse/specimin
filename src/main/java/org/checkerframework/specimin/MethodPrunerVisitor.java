@@ -150,7 +150,6 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
    * @return An Expression representing the basic initializer for the given field type.
    */
   private Expression getBasicInitializer(Type fieldType) {
-    // Method implementation here
     if (fieldType.isPrimitiveType()) {
       PrimitiveType.Primitive primitiveType = ((PrimitiveType) fieldType).getType();
       switch (primitiveType) {
