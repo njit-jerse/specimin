@@ -26,8 +26,8 @@ import java.util.Set;
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
  * #methodsToLeaveUnchanged} set or {@link #membersToEmpty} set. It also deletes the bodies of all
- * methods and replaces them with "throw new Error();" or minimizes the initializers of final fields
- * within the {@link #membersToEmpty} set.
+ * methods and replaces them with "throw new Error();" or remove the initializers of fields
+ * (minimized if the field is final) within the {@link #membersToEmpty} set.
  */
 public class PrunerVisitor extends ModifierVisitor<Void> {
 
