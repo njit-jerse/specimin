@@ -59,13 +59,15 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   private boolean insideTargetMethod = false;
 
   /**
-   * Creates the pruner. All methods this pruner encounters other than those in its input sets will
-   * be removed entirely. For both arguments, the Strings should be in the format produced by
-   * ResolvedMethodDeclaration#getQualifiedSignature.
+   * Creates the pruner. All members this pruner encounters other than those in its input sets will
+   * be removed entirely. For methods in both arguments, the Strings should be in the format
+   * produced by ResolvedMethodDeclaration#getQualifiedSignature. For fields in {@link
+   * #membersToEmpty}, the Strings should be in the format produced by
+   * ResolvedTypeDeclaration#getQualifiedName.
    *
    * @param methodsToKeep the set of methods whose bodies should be kept intact (usually the target
    *     methods for specimin)
-   * @param membersToEmpty the set of members to be empty
+   * @param membersToEmpty the set of members that this pruner will empty
    * @param classesUsedByTargetMethods the classes used by target methods
    */
   public PrunerVisitor(
