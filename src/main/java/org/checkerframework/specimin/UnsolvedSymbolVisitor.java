@@ -526,9 +526,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        // if the class could not be found among import statements, we assume that the class must be
-        // in the same package as the current class.
-        this.updateMissingClass(createUnsolvedClass(nodeTypeSimpleForm));
+        updateUnsolvedClassWithClassName(nodeTypeSimpleForm);
       }
     }
 
@@ -673,7 +671,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else {
         // since it is unsolved, it could not be a primitive type
         @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-        updateMissingClass(createUnsolvedClass(className));
+        updateUnsolvedClassWithClassName(className);
       }
     }
     gotException = true;
@@ -879,16 +877,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * Given the simple name of an unsolved class, this method will create an UnsolvedClass instance
-   * to represent that class.
+   * to represent that class and update the list of missing class with that UnsolvedClass instance.
    *
    * @param nameOfClass the name of an unsolved class
-   * @return an UnsolvedClass instance
    */
-  public UnsolvedClass createUnsolvedClass(@ClassGetSimpleName String nameOfClass) {
+  public void updateUnsolvedClassWithClassName(@ClassGetSimpleName String nameOfClass) {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
     String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
-    return new UnsolvedClass(nameOfClass, packageName);
+    updateMissingClass(new UnsolvedClass(nameOfClass, packageName));
   }
 
   /**
