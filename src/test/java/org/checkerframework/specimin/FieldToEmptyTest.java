@@ -8,7 +8,7 @@ public class FieldToEmptyTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "onefilesimple",
+        "fieldtoempty",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#test()"});
   }
