@@ -4,11 +4,23 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.BooleanLiteralExpr;
+import com.github.javaparser.ast.expr.CharLiteralExpr;
+import com.github.javaparser.ast.expr.DoubleLiteralExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.IntegerLiteralExpr;
+import com.github.javaparser.ast.expr.LongLiteralExpr;
+import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.type.PrimitiveType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import java.util.Iterator;
 import java.util.Set;
 
 /**
@@ -104,6 +116,64 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
     } else {
       constructorDecl.remove();
       return constructorDecl;
+    }
+  }
+
+  @Override
+  public Visitable visit(FieldDeclaration fieldDecl, Void p) {
+    String classFullName = fieldDecl.resolve().declaringType().getQualifiedName();
+    boolean isFinal = fieldDecl.isFinal();
+    Iterator<VariableDeclarator> iterator = fieldDecl.getVariables().iterator();
+    while (iterator.hasNext()) {
+      VariableDeclarator varDecl = iterator.next();
+      String varFullName = classFullName + "#" + varDecl.getNameAsString();
+
+      if (methodsToEmpty.contains(varFullName)) {
+        varDecl.removeInitializer();
+        if (isFinal) {
+          varDecl.setInitializer(getBasicInitializer(varDecl.getType()));
+        }
+      } else {
+        iterator.remove();
+      }
+    }
+
+    return super.visit(fieldDecl, p);
+  }
+
+  /**
+   * Creates a basic initializer expression for a specified field type. The way the initial value is
+   * chosen is based on the document of the Java Language:
+   * https://docs.oracle.com/javase/specs/jls/se7/html/jls-4.html#jls-4.12.5
+   *
+   * @param fieldType The type for which to generate the basic initializer.
+   * @return An Expression representing the basic initializer for the given field type.
+   */
+  private Expression getBasicInitializer(Type fieldType) {
+    // Method implementation here
+    if (fieldType.isPrimitiveType()) {
+      PrimitiveType.Primitive primitiveType = ((PrimitiveType) fieldType).getType();
+      switch (primitiveType) {
+        case BOOLEAN:
+          return new BooleanLiteralExpr(false);
+        case INT:
+          return new IntegerLiteralExpr("0");
+        case LONG:
+          return new LongLiteralExpr("0L");
+        case FLOAT:
+          return new DoubleLiteralExpr("0.0f");
+        case DOUBLE:
+          return new DoubleLiteralExpr("0.0");
+        case BYTE:
+          return new IntegerLiteralExpr("0");
+        case SHORT:
+          return new IntegerLiteralExpr("0");
+          // If none of the above cases are true, then this type is a char
+        default:
+          return new CharLiteralExpr("'\u0000'");
+      }
+    } else {
+      return new NullLiteralExpr();
     }
   }
 }
