@@ -14,6 +14,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
@@ -224,18 +225,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String paraTypeFullName = "";
       ResolvedType paramType;
       if (type.isUnionType()) {
-        for (var param : para.getType().asUnionType().getElements()) {
-          try {
-            paramType = param.resolve();
-            paraTypeFullName =
-                paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-            usedClass.add(paraTypeFullName);
-          } catch (
-              Exception
-                  e) { // This visitor should not have an unsolvable parameter type. Throwing if
-            // exception occurs.
-            throw new Error(e.getMessage());
-          }
+        for (ReferenceType param : para.getType().asUnionType().getElements()) {
+          paramType = param.resolve();
+          paraTypeFullName =
+              paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+          usedClass.add(paraTypeFullName);
         }
       } else {
         if (para.getParentNode().get() instanceof CatchClause) {
