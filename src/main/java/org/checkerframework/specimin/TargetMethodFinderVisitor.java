@@ -273,10 +273,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
     if (insideTargetMethod) {
-      // while the name of the method is declaringType(), it actually returns the class where the
-      // field is declared
       String fullNameOfClass;
       try {
+        // while the name of the method is declaringType(), it actually returns the class where the
+        // field is declared
         fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         usedClass.add(fullNameOfClass);
