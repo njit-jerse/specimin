@@ -24,11 +24,12 @@ import java.util.Iterator;
 import java.util.Set;
 
 /**
- * This visitor removes every method in the compilation unit that is not a member of its {@link
- * #methodsToLeaveUnchanged} set or {@link #methodsToEmpty} set. It also removes the bodies of all
- * methods in the {@link #methodsToEmpty} set and replaces their bodies with "throw new Error();".
+ * This visitor removes every member in the compilation unit that is not a member of its {@link
+ * #methodsToLeaveUnchanged} set or {@link #membersToEmpty} set. It also deletes the bodies of all
+ * methods and replaces them with "throw new Error();" or minimizes the initializers of final fields
+ * within the {@link #membersToEmpty} set.
  */
-public class MethodPrunerVisitor extends ModifierVisitor<Void> {
+public class PrunerVisitor extends ModifierVisitor<Void> {
 
   /**
    * The methods that should NOT be touched by this pruner. The strings representing the method are
@@ -37,10 +38,12 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
   private Set<String> methodsToLeaveUnchanged;
 
   /**
-   * The methods whose bodies should be pruned. The strings representing the method are those
-   * returned by ResolvedMethodDeclaration#getQualifiedSignature.
+   * The members, fields and methods, to be pruned. For methods, the bodies are removed. For fields,
+   * the initializers are removed, or minimized in case the field is final. The strings representing
+   * the method are those returned by ResolvedMethodDeclaration#getQualifiedSignature. The strings
+   * representing the field are returned by ResolvedTypeDeclaration#getQualifiedName.
    */
-  private Set<String> methodsToEmpty;
+  private Set<String> membersToEmpty;
 
   /**
    * This is the set of classes used by the target methods. We use this set to determine if we
@@ -62,15 +65,15 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
    *
    * @param methodsToKeep the set of methods whose bodies should be kept intact (usually the target
    *     methods for specimin)
-   * @param methodsToEmpty the set of methods whose bodies should be removed
+   * @param membersToEmpty the set of members to be empty
    * @param classesUsedByTargetMethods the classes used by target methods
    */
-  public MethodPrunerVisitor(
+  public PrunerVisitor(
       Set<String> methodsToKeep,
-      Set<String> methodsToEmpty,
+      Set<String> membersToEmpty,
       Set<String> classesUsedByTargetMethods) {
     this.methodsToLeaveUnchanged = methodsToKeep;
-    this.methodsToEmpty = methodsToEmpty;
+    this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
   }
 
@@ -92,7 +95,7 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
       Visitable result = super.visit(methodDecl, p);
       insideTargetMethod = false;
       return result;
-    } else if (methodsToEmpty.contains(resolved.getQualifiedSignature())) {
+    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
       methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return methodDecl;
     } else {
@@ -110,7 +113,7 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
     ResolvedConstructorDeclaration resolved = constructorDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       return super.visit(constructorDecl, p);
-    } else if (methodsToEmpty.contains(resolved.getQualifiedSignature())) {
+    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
       constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return constructorDecl;
     } else {
@@ -128,7 +131,7 @@ public class MethodPrunerVisitor extends ModifierVisitor<Void> {
       VariableDeclarator varDecl = iterator.next();
       String varFullName = classFullName + "#" + varDecl.getNameAsString();
 
-      if (methodsToEmpty.contains(varFullName)) {
+      if (membersToEmpty.contains(varFullName)) {
         varDecl.removeInitializer();
         if (isFinal) {
           varDecl.setInitializer(getBasicInitializer(varDecl.getType()));
