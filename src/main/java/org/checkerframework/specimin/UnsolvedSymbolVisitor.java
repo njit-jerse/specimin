@@ -30,8 +30,8 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
-import com.github.javaparser.ast.type.UnionType;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.ast.type.UnionType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -727,12 +727,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       // since it is unsolved, it could not be a primitive type
       @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-      if (classAndPackageMap.containsKey(className)) {
-        UnsolvedClass newClass = new UnsolvedClass(className, classAndPackageMap.get(className));
-        updateMissingClass(newClass);
+      String packageName = classAndPackageMap.getOrDefault(className, currentPackage);
+      UnsolvedClass newClass;
+      if (parameter.getParentNode().isPresent()
+          && parameter.getParentNode().get() instanceof CatchClause) {
+        newClass = new UnsolvedClass(className, packageName, true);
       } else {
-        throw new RuntimeException("Unexpected class: " + className);
+        newClass = new UnsolvedClass(className, packageName);
       }
+      updateMissingClass(newClass);
     }
   }
 

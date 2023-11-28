@@ -37,6 +37,9 @@ public class UnsolvedClass {
   /** This field records the number of type variables for this class */
   private int numberOfTypeVariables = 0;
 
+  /** This field records if the class is a custom exception */
+  private boolean isExceptionType = false;
+
   /**
    * Create an instance of UnsolvedClass
    *
@@ -48,6 +51,21 @@ public class UnsolvedClass {
     this.methods = new LinkedHashSet<>();
     this.packageName = packageName;
     this.classFields = new LinkedHashSet<>();
+  }
+
+  /**
+   * Create an instance of UnsolvedClass
+   *
+   * @param className the name of the class
+   * @param packageName the name of the package
+   */
+  public UnsolvedClass(
+      @ClassGetSimpleName String className, String packageName, boolean exceptionType) {
+    this.className = className;
+    this.methods = new LinkedHashSet<>();
+    this.packageName = packageName;
+    this.classFields = new LinkedHashSet<>();
+    this.isExceptionType = exceptionType;
   }
 
   /**
@@ -172,7 +190,18 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
-    sb.append("public class ").append(className).append(getTypeVariablesAsString()).append(" {\n");
+    if (isExceptionType) {
+      sb.append("public class ")
+          .append(className)
+          .append(getTypeVariablesAsString())
+          .append(" extends Exception")
+          .append(" {\n");
+    } else {
+      sb.append("public class ")
+          .append(className)
+          .append(getTypeVariablesAsString())
+          .append(" {\n");
+    }
     for (String variableDeclarations : classFields) {
       sb.append("    " + "public " + variableDeclarations + ";\n");
     }
