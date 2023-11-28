@@ -170,9 +170,10 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
           return new IntegerLiteralExpr("0");
         case SHORT:
           return new IntegerLiteralExpr("0");
-          // If none of the above cases are true, then this type is a char
-        default:
+        case CHAR:
           return new CharLiteralExpr("'\u0000'");
+        default:
+          throw new RuntimeException("Unexpected primitive type: " + fieldType);
       }
     } else {
       return new NullLiteralExpr();
