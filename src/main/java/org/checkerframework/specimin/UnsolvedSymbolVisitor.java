@@ -31,6 +31,7 @@ import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.ast.type.UnionType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -57,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
@@ -526,7 +528,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        updateUnsolvedClassWithClassName(nodeTypeSimpleForm);
+        updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false);
       }
     }
 
@@ -655,24 +657,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(Parameter parameter, Void p) {
     try {
-      parameter.resolve();
+      if (parameter.getType() instanceof UnionType) {
+        resolveUnionType(parameter);
+      } else {
+        if (parameter.getParentNode().isPresent()
+            && parameter.getParentNode().get() instanceof CatchClause) {
+          parameter.getType().resolve();
+        } else {
+          parameter.resolve();
+        }
+      }
       return super.visit(parameter, p);
     }
     // If the parameter originates from a Java built-in library, such as java.io or java.lang,
     // an UnsupportedOperationException will be thrown instead.
     catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      String parameterInString = parameter.toString();
-      if (isAClassPath(parameterInString)) {
-        // parameterInString needs to be a fully-qualified name. As this parameter has a form of
-        // class path, we can say that it is a fully-qualified name
-        @SuppressWarnings("signature")
-        UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
-        updateMissingClass(newClass);
-      } else {
-        // since it is unsolved, it could not be a primitive type
-        @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-        updateUnsolvedClassWithClassName(className);
-      }
+      handleParameterResolveFailure(parameter);
     }
     gotException = true;
     return super.visit(parameter, p);
@@ -695,7 +695,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
-      updateUnsolvedClassWithClassName(type, creationMethod);
+      updateUnsolvedClassWithClassName(type, false, creationMethod);
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
@@ -703,6 +703,46 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     super.visit(newExpr, p);
     insideAnObjectCreation = false;
     return newExpr;
+  }
+
+  /**
+   * @param parameter parameter from visitor method which is unsolvable.
+   */
+  private void handleParameterResolveFailure(@NonNull Parameter parameter) {
+    String parameterInString = parameter.toString();
+    if (isAClassPath(parameterInString)) {
+      // parameterInString needs to be a fully-qualified name. As this parameter has a form of
+      // class path, we can say that it is a fully-qualified name
+      @SuppressWarnings("signature")
+      UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
+      updateMissingClass(newClass);
+    } else {
+      // since it is unsolved, it could not be a primitive type
+      @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
+      if (parameter.getParentNode().isPresent()
+          && parameter.getParentNode().get() instanceof CatchClause) {
+        updateUnsolvedClassWithClassName(className, true);
+      } else {
+        updateUnsolvedClassWithClassName(className, false);
+      }
+    }
+  }
+
+  /**
+   * Given the unionType parameter, this method will try resolving each element separately. If any
+   * of the element is unsolvable, an unsolved class instance will be created to generate synthetic
+   * class for the element.
+   *
+   * @param parameter unionType parameter from visitor class
+   */
+  private void resolveUnionType(@NonNull Parameter parameter) {
+    for (var param : parameter.getType().asUnionType().getElements()) {
+      try {
+        param.resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        handleParameterResolveFailure(parameter);
+      }
+    }
   }
 
   /**
@@ -790,7 +830,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       returnType = desiredReturnType;
     }
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
-    UnsolvedClass missingClass = updateUnsolvedClassWithClassName(className, thisMethod);
+    UnsolvedClass missingClass = updateUnsolvedClassWithClassName(className, false, thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
 
     // if the return type is not specified, a synthetic return type will be created. This part of
@@ -873,15 +913,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param nameOfClass the name of an unsolved class
    * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
    *     missing classes (optional, may be omitted)
+   * @param isExceptionType if the class is of exceptionType
    * @return the newly-created UnsolvedClass method, for further processing. This output may be
    *     ignored.
    */
   public UnsolvedClass updateUnsolvedClassWithClassName(
-      @ClassGetSimpleName String nameOfClass, UnsolvedMethod... unsolvedMethods) {
+      @ClassGetSimpleName String nameOfClass,
+      boolean isExceptionType,
+      UnsolvedMethod... unsolvedMethods) {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
     String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
-    UnsolvedClass result = new UnsolvedClass(nameOfClass, packageName);
+    UnsolvedClass result = new UnsolvedClass(nameOfClass, packageName, isExceptionType);
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
       result.addMethod(unsolvedMethod);
     }
