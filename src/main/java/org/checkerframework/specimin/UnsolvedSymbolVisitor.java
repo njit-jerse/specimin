@@ -695,12 +695,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
-      // we assume that an unsolved class not found among import statements should be in the same
-      // package as the current class
-      String packageName = classAndPackageMap.getOrDefault(type, currentPackage);
-      UnsolvedClass newClass = new UnsolvedClass(type, packageName);
-      newClass.addMethod(creationMethod);
-      this.updateMissingClass(newClass);
+      updateUnsolvedClassWithClassName(type, creationMethod);
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
@@ -880,12 +875,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * to represent that class and update the list of missing class with that UnsolvedClass instance.
    *
    * @param nameOfClass the name of an unsolved class
+   * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
+   *                        missing classes (optional, may be omitted)
    */
-  public void updateUnsolvedClassWithClassName(@ClassGetSimpleName String nameOfClass) {
+  public void updateUnsolvedClassWithClassName(@ClassGetSimpleName String nameOfClass, UnsolvedMethod... unsolvedMethods) {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
     String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
-    updateMissingClass(new UnsolvedClass(nameOfClass, packageName));
+    UnsolvedClass unsolvedClass = new UnsolvedClass(nameOfClass, packageName);
+    for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
+      unsolvedClass.addMethod(unsolvedMethod);
+    }
+    updateMissingClass(unsolvedClass);
   }
 
   /**
