@@ -16,6 +16,7 @@ import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.UnionType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -223,16 +224,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(Parameter para, Void p) {
     if (insideTargetMethod) {
       Type type = para.getType();
-      String paraTypeFullName = "";
-      ResolvedType paramType;
       if (type.isUnionType()) {
-        for (ReferenceType param : para.getType().asUnionType().getElements()) {
-          paramType = param.resolve();
-          paraTypeFullName =
-              paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-          usedClass.add(paraTypeFullName);
-        }
+        resolveUnionType(type.asUnionType());
       } else {
+        // Parameter resolution (para.resolve()) does not work in catch clause.
+        // However, resolution works on the type of the parameter.
+        // Bug report: https://github.com/javaparser/javaparser/issues/4240
+        ResolvedType paramType;
         if (para.getParentNode().isPresent() && para.getParentNode().get() instanceof CatchClause) {
           paramType = para.getType().resolve();
         } else {
@@ -240,7 +238,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         }
 
         if (paramType.isReferenceType()) {
-          paraTypeFullName =
+          String paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
           usedClass.add(paraTypeFullName);
           for (ResolvedType typeParameterValue :
@@ -329,5 +327,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(expr, p);
+  }
+
+  /**
+   * @param type unionType parameter
+   */
+  private void resolveUnionType(UnionType type) {
+    for (ReferenceType param : type.getElements()) {
+      ResolvedType paramType = param.resolve();
+      String paraTypeFullName =
+          paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+      usedClass.add(paraTypeFullName);
+    }
   }
 }

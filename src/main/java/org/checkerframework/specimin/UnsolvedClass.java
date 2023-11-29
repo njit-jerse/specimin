@@ -188,18 +188,11 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
+    sb.append("public class ").append(className).append(getTypeVariablesAsString());
     if (isExceptionType) {
-      sb.append("public class ")
-          .append(className)
-          .append(getTypeVariablesAsString())
-          .append(" extends Exception")
-          .append(" {\n");
-    } else {
-      sb.append("public class ")
-          .append(className)
-          .append(getTypeVariablesAsString())
-          .append(" {\n");
+      sb.append(" extends Exception");
     }
+    sb.append(" {\n");
     for (String variableDeclarations : classFields) {
       sb.append("    " + "public " + variableDeclarations + ";\n");
     }
