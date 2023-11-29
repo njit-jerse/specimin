@@ -121,7 +121,11 @@ public class UnsolvedClass {
     this.classFields.add(variableExpression);
   }
 
-  /** This method sets the number of type variables for the current class */
+  /**
+   * This method sets the number of type variables for the current class
+   *
+   * @param numberOfTypeVariables number of type variable in this class.
+   */
   public void setNumberOfTypeVariables(int numberOfTypeVariables) {
     this.numberOfTypeVariables = numberOfTypeVariables;
   }
