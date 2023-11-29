@@ -266,6 +266,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (methodReturnType instanceof ResolvedReferenceType) {
         usedClass.add(methodReturnType.asReferenceType().getQualifiedName());
       }
+      if (call.getScope().isPresent()) {
+        Expression scope = call.getScope().get();
+        // if the scope of a method call is a field, the type of that scope will be NameExpr.
+        if (scope instanceof NameExpr) {
+          NameExpr expression = call.getScope().get().asNameExpr();
+          updateUsedElementWithPotentialFieldNameExpr(expression);
+        }
+      }
     }
     return super.visit(call, p);
   }
@@ -313,17 +321,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr expr, Void p) {
-    Optional<Node> parentNode = expr.getParentNode();
-    if (parentNode.isEmpty()
-        || !(parentNode.get() instanceof MethodCallExpr
-            || parentNode.get() instanceof FieldAccessExpr)) {
-      ResolvedValueDeclaration exprDecl = expr.resolve();
-      if (exprDecl instanceof ResolvedFieldDeclaration) {
-        // while the name of the method is declaringType(), it actually returns the class where the
-        // field is declared
-        String classFullName = exprDecl.asField().declaringType().getQualifiedName();
-        usedClass.add(classFullName);
-        usedMembers.add(classFullName + "#" + expr.getNameAsString());
+    if (insideTargetMethod) {
+      Optional<Node> parentNode = expr.getParentNode();
+      if (parentNode.isEmpty()
+          || !(parentNode.get() instanceof MethodCallExpr
+              || parentNode.get() instanceof FieldAccessExpr)) {
+        updateUsedElementWithPotentialFieldNameExpr(expr);
       }
     }
     return super.visit(expr, p);
@@ -340,6 +343,29 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String paraTypeFullName =
           paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
       usedClass.add(paraTypeFullName);
+    }
+  }
+
+  /**
+   * Given a NameExpr instance, this method will update the used elements, classes and members if
+   * that NameExpr is a field.
+   *
+   * @param expr a field access expression inside target methods
+   */
+  public void updateUsedElementWithPotentialFieldNameExpr(NameExpr expr) {
+    ResolvedValueDeclaration exprDecl;
+    try {
+      exprDecl = expr.resolve();
+    } catch (UnsolvedSymbolException e) {
+      // if expr is the name of a class in a static call, we can't resolve its value.
+      return;
+    }
+    if (exprDecl instanceof ResolvedFieldDeclaration) {
+      // while the name of the method is declaringType(), it actually returns the class where the
+      // field is declared
+      String classFullName = exprDecl.asField().declaringType().getQualifiedName();
+      usedClass.add(classFullName);
+      usedMembers.add(classFullName + "#" + expr.getNameAsString());
     }
   }
 }
