@@ -233,7 +233,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           usedClass.add(paraTypeFullName);
         }
       } else {
-        if (para.getParentNode().get() instanceof CatchClause) {
+        if (para.getParentNode().isPresent() && para.getParentNode().get() instanceof CatchClause) {
           paramType = para.getType().resolve();
         } else {
           paramType = para.resolve().getType();
