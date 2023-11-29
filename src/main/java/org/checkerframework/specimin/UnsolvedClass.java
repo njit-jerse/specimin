@@ -47,10 +47,7 @@ public class UnsolvedClass {
    * @param packageName the name of the package
    */
   public UnsolvedClass(@ClassGetSimpleName String className, String packageName) {
-    this.className = className;
-    this.methods = new LinkedHashSet<>();
-    this.packageName = packageName;
-    this.classFields = new LinkedHashSet<>();
+    this(className, packageName, false);
   }
 
   /**
@@ -58,14 +55,15 @@ public class UnsolvedClass {
    *
    * @param className the name of the class
    * @param packageName the name of the package
+   * @param isException does the class represents an exception?
    */
   public UnsolvedClass(
-      @ClassGetSimpleName String className, String packageName, boolean exceptionType) {
+      @ClassGetSimpleName String className, String packageName, boolean isException) {
     this.className = className;
     this.methods = new LinkedHashSet<>();
     this.packageName = packageName;
     this.classFields = new LinkedHashSet<>();
-    this.isExceptionType = exceptionType;
+    this.isExceptionType = isException;
   }
 
   /**
