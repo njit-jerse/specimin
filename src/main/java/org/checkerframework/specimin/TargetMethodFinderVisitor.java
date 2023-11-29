@@ -18,6 +18,7 @@ import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -292,7 +293,18 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
     if (insideTargetMethod) {
-      usedMembers.add(classFQName + "#" + expr.getName().asString());
+      String fullNameOfClass;
+      try {
+        // while the name of the method is declaringType(), it actually returns the class where the
+        // field is declared
+        fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
+        usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
+        usedClass.add(fullNameOfClass);
+      } catch (UnsolvedSymbolException e) {
+        // if the a field is accessed in the form of a fully-qualified path, such as
+        // org.example.A.b, then other components in the path apart from the class name and field
+        // name, such as org and org.example, will also be considered as FieldAccessExpr.
+      }
     }
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
@@ -309,7 +321,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             || parentNode.get() instanceof FieldAccessExpr)) {
       ResolvedValueDeclaration exprDecl = expr.resolve();
       if (exprDecl instanceof ResolvedFieldDeclaration) {
-        usedClass.add(exprDecl.asField().declaringType().getQualifiedName());
+        // while the name of the method is declaringType(), it actually returns the class where the
+        // field is declared
+        String classFullName = exprDecl.asField().declaringType().getQualifiedName();
+        usedClass.add(classFullName);
+        usedMembers.add(classFullName + "#" + expr.getNameAsString());
       }
     }
     return super.visit(expr, p);

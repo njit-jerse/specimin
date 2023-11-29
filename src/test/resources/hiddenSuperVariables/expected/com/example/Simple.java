@@ -4,7 +4,7 @@ import com.library.number.SimpleInt;
 
 public class Simple extends Simplicity {
 
-    private SimpleInt myInteger = null;
+    private SimpleInt myInteger;
 
     public SimpleInt getMyInteger() {
         return myInteger;

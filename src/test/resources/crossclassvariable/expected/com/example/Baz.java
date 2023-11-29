@@ -1,5 +1,5 @@
 package com.example;
 
 public class Baz {
-    static int x = 5;
+    static int x;
 }

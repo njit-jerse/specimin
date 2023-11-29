@@ -1,7 +1,7 @@
 package org.wild;
 public class Mammal {
 
-    public String habitat = null;
+    public String habitat;
 
-    public boolean canBreathUnderWater = false;
+    public boolean canBreathUnderWater;
 }

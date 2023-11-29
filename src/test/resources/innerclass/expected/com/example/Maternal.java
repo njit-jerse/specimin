@@ -2,5 +2,5 @@ package com.example;
 
 public class Maternal {
 
-    public java.lang.String maternalLastName = null;
+    public java.lang.String maternalLastName;
 }
