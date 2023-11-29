@@ -267,9 +267,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         usedClass.add(methodReturnType.asReferenceType().getQualifiedName());
       }
       if (call.getScope().isPresent()) {
-        // the scope of a method will always be a NameExpr, while that NameExpr might be a field,
-        // variable, or a class.
         Expression scope = call.getScope().get();
+        // if the scope of a method is called by a field, the type of that scope will be NameExpr.
         if (scope instanceof NameExpr) {
           NameExpr expression = call.getScope().get().asNameExpr();
           updateUsedElementWithPotentialFieldNameExpr(expression);
@@ -348,8 +347,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a NameExpr instance that could be a field, this method will update the used elements,
-   * classes and members, if that NameExpr is a field.
+   * Given a NameExpr instance, this method will update the used elements, classes and members if
+   * that NameExpr is a field.
    *
    * @param expr a field access expression inside target methods
    */
