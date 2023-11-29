@@ -789,13 +789,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    // a class not found among import statements should be in the same package as the current class
-    UnsolvedClass missingClass =
-        new UnsolvedClass(className, classAndPackageMap.getOrDefault(className, currentPackage));
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
-    missingClass.addMethod(thisMethod);
+    UnsolvedClass missingClass = updateUnsolvedClassWithClassName(className, thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
-    this.updateMissingClass(missingClass);
 
     // if the return type is not specified, a synthetic return type will be created. This part of
     // codes creates the corresponding class for that synthetic return type
@@ -877,16 +873,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param nameOfClass the name of an unsolved class
    * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
    *                        missing classes (optional, may be omitted)
+   * @return the newly-created UnsolvedClass method, for further processing. This output may be ignored.
    */
-  public void updateUnsolvedClassWithClassName(@ClassGetSimpleName String nameOfClass, UnsolvedMethod... unsolvedMethods) {
+  public UnsolvedClass updateUnsolvedClassWithClassName(@ClassGetSimpleName String nameOfClass, UnsolvedMethod... unsolvedMethods) {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
     String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
-    UnsolvedClass unsolvedClass = new UnsolvedClass(nameOfClass, packageName);
+    UnsolvedClass result = new UnsolvedClass(nameOfClass, packageName);
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
-      unsolvedClass.addMethod(unsolvedMethod);
+      result.addMethod(unsolvedMethod);
     }
-    updateMissingClass(unsolvedClass);
+    updateMissingClass(result);
+    return result;
   }
 
   /**
