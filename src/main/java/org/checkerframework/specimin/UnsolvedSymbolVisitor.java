@@ -590,11 +590,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateClassSetWithQualifiedStaticMethodCall(
           methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
     }
-
-    this.gotException =
-        calledByAnUnsolvedSymbol(method)
+    boolean needToSetException =
+        !canBeSolved(method)
+            || calledByAnUnsolvedSymbol(method)
             || calledByAnIncompleteSyntheticClass(method)
             || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
+    if (needToSetException) {
+      this.gotException = true;
+    }
     return super.visit(method, p);
   }
 
