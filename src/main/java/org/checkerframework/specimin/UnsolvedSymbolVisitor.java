@@ -872,10 +872,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param nameOfClass the name of an unsolved class
    * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
-   *                        missing classes (optional, may be omitted)
-   * @return the newly-created UnsolvedClass method, for further processing. This output may be ignored.
+   *     missing classes (optional, may be omitted)
+   * @return the newly-created UnsolvedClass method, for further processing. This output may be
+   *     ignored.
    */
-  public UnsolvedClass updateUnsolvedClassWithClassName(@ClassGetSimpleName String nameOfClass, UnsolvedMethod... unsolvedMethods) {
+  public UnsolvedClass updateUnsolvedClassWithClassName(
+      @ClassGetSimpleName String nameOfClass, UnsolvedMethod... unsolvedMethods) {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
     String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
