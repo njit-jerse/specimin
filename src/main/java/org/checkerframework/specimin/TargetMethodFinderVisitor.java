@@ -269,8 +269,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (call.getScope().isPresent()) {
         // the scope of a method will always be a NameExpr, while that NameExpr might be a field,
         // variable, or a class.
-        NameExpr expression = call.getScope().get().asNameExpr();
-        updateUsedElementWithPotentialFieldNameExpr(expression);
+        Expression scope = call.getScope().get();
+        if (scope instanceof NameExpr) {
+          NameExpr expression = call.getScope().get().asNameExpr();
+          updateUsedElementWithPotentialFieldNameExpr(expression);
+        }
       }
     }
     return super.visit(call, p);
@@ -351,7 +354,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param expr a field access expression inside target methods
    */
   public void updateUsedElementWithPotentialFieldNameExpr(NameExpr expr) {
-    ResolvedValueDeclaration exprDecl = expr.resolve();
+    ResolvedValueDeclaration exprDecl;
+    try {
+      exprDecl = expr.resolve();
+    } catch (UnsolvedSymbolException e) {
+      // if expr is the name of a class in a static call, we can't resolve its value.
+      return;
+    }
     if (exprDecl instanceof ResolvedFieldDeclaration) {
       // while the name of the method is declaringType(), it actually returns the class where the
       // field is declared
