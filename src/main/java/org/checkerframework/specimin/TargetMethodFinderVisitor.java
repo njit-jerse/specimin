@@ -268,7 +268,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
       if (call.getScope().isPresent()) {
         Expression scope = call.getScope().get();
-        // if the scope of a method is called by a field, the type of that scope will be NameExpr.
+        // if the scope of a method call is a field, the type of that scope will be NameExpr.
         if (scope instanceof NameExpr) {
           NameExpr expression = call.getScope().get().asNameExpr();
           updateUsedElementWithPotentialFieldNameExpr(expression);
