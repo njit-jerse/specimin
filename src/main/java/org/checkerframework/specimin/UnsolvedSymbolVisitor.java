@@ -526,13 +526,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        if (classAndPackageMap.containsKey(nodeTypeSimpleForm)) {
-          UnsolvedClass syntheticType =
-              new UnsolvedClass(nodeTypeSimpleForm, classAndPackageMap.get(nodeTypeSimpleForm));
-          this.updateMissingClass(syntheticType);
-        } else {
-          throw new RuntimeException("Unexpected class: " + nodeTypeSimpleForm);
-        }
+        updateUnsolvedClassWithClassName(nodeTypeSimpleForm);
       }
     }
 
@@ -677,12 +671,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else {
         // since it is unsolved, it could not be a primitive type
         @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-        if (classAndPackageMap.containsKey(className)) {
-          UnsolvedClass newClass = new UnsolvedClass(className, classAndPackageMap.get(className));
-          updateMissingClass(newClass);
-        } else {
-          throw new RuntimeException("Unexpected class: " + className);
-        }
+        updateUnsolvedClassWithClassName(className);
       }
     }
     gotException = true;
@@ -706,14 +695,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
-      if (classAndPackageMap.containsKey(type)) {
-        UnsolvedClass newClass = new UnsolvedClass(type, classAndPackageMap.get(type));
-        newClass.addMethod(creationMethod);
-        this.updateMissingClass(newClass);
-      } else {
-        throw new RuntimeException("Unexpected class: " + type);
-      }
-
+      updateUnsolvedClassWithClassName(type, creationMethod);
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
@@ -807,14 +789,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    if (!classAndPackageMap.containsKey(className)) {
-      throw new RuntimeException("Unexpected class: " + className);
-    }
-    UnsolvedClass missingClass = new UnsolvedClass(className, classAndPackageMap.get(className));
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
-    missingClass.addMethod(thisMethod);
+    UnsolvedClass missingClass = updateUnsolvedClassWithClassName(className, thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
-    this.updateMissingClass(missingClass);
 
     // if the return type is not specified, a synthetic return type will be created. This part of
     // codes creates the corresponding class for that synthetic return type
@@ -887,6 +864,29 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     missingClass.addMethod(thisMethod);
     syntheticMethodAndClass.put(methodName, missingClass);
     this.updateMissingClass(missingClass);
+  }
+
+  /**
+   * Given the simple name of an unsolved class, this method will create an UnsolvedClass instance
+   * to represent that class and update the list of missing class with that UnsolvedClass instance.
+   *
+   * @param nameOfClass the name of an unsolved class
+   * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
+   *     missing classes (optional, may be omitted)
+   * @return the newly-created UnsolvedClass method, for further processing. This output may be
+   *     ignored.
+   */
+  public UnsolvedClass updateUnsolvedClassWithClassName(
+      @ClassGetSimpleName String nameOfClass, UnsolvedMethod... unsolvedMethods) {
+    // if the name of the class is not present among import statements, we assume that this unsolved
+    // class is in the same directory as the current class
+    String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
+    UnsolvedClass result = new UnsolvedClass(nameOfClass, packageName);
+    for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
+      result.addMethod(unsolvedMethod);
+    }
+    updateMissingClass(result);
+    return result;
   }
 
   /**
