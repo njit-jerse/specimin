@@ -330,6 +330,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Resolves unionType parameters one by one and adds them in the usedClass set.
+   *
    * @param type unionType parameter
    */
   private void resolveUnionType(UnionType type) {
