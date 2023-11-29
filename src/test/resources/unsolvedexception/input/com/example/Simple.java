@@ -5,7 +5,7 @@ import org.checkerframework.specimin.CustomExceptionTest;
 public class Simple {
     public void test() {
         try {
-            throw CustomException();
+            throw new CustomException("It's an unsolvable custom exception");
         } catch (CustomException e) {
             e.printStackTrace();
         }
