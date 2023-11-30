@@ -111,30 +111,7 @@ public class SpeciminRunner {
      * files in the end.
      */
     Set<Path> createdClass = new HashSet<>();
-    while (addMissingClass.gettingException()) {
-      addMissingClass.setExceptionToFalse();
-      for (CompilationUnit cu : parsedTargetFiles.values()) {
-        addMissingClass.setImportStatement(cu.getImports());
-        // it's important to make sure that getDeclarations and addMissingClass will visit the same
-        // file for each execution of the loop
-        FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
-        cu.accept(getDeclarations, null);
-        addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
-        cu.accept(addMissingClass, null);
-      }
-      addMissingClass.updateSyntheticSourceCode();
-      createdClass.addAll(addMissingClass.getCreatedClass());
-      // since the root directory is updated, we need to update the SymbolSolver
-      TypeSolver newTypeSolver =
-          new CombinedTypeSolver(
-              new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
-      JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
-      StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
-      parsedTargetFiles = new HashMap<>();
-      for (String targetFile : targetFiles) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-      }
-    }
+    updateSyntheticFiles(addMissingClass, parsedTargetFiles, createdClass, targetFiles, root);
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
@@ -233,6 +210,51 @@ public class SpeciminRunner {
     }
     // delete all the temporary files created by UnsolvedSymbolVisitor
     deleteFiles(createdClass);
+  }
+
+  /**
+   * This method will update synthetic files for unsolved symbols in classes from a list of target
+   * files.
+   *
+   * @param addMissingClass an UnsolvedSymbolVisitor instance to update synthetic files
+   * @param parsedTargetFiles a Map of the paths of target files and their corresponding compilation
+   *     units
+   * @param createdClass a list of synthetic files that have been created by addMissingClass
+   * @param targetFiles a list of target files
+   * @param root the root directory of the target files
+   * @throws IOException if there is a problem with parsing files
+   */
+  private static void updateSyntheticFiles(
+      UnsolvedSymbolVisitor addMissingClass,
+      Map<String, CompilationUnit> parsedTargetFiles,
+      Set<Path> createdClass,
+      List<String> targetFiles,
+      String root)
+      throws IOException {
+    while (addMissingClass.gettingException()) {
+      addMissingClass.setExceptionToFalse();
+      for (CompilationUnit cu : parsedTargetFiles.values()) {
+        addMissingClass.setImportStatement(cu.getImports());
+        // it's important to make sure that getDeclarations and addMissingClass will visit the same
+        // file for each execution of the loop
+        FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
+        cu.accept(getDeclarations, null);
+        addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
+        cu.accept(addMissingClass, null);
+      }
+      addMissingClass.updateSyntheticSourceCode();
+      createdClass.addAll(addMissingClass.getCreatedClass());
+      // since the root directory is updated, we need to update the SymbolSolver
+      TypeSolver newTypeSolver =
+          new CombinedTypeSolver(
+              new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+      JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
+      StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
+      parsedTargetFiles = new HashMap<>();
+      for (String targetFile : targetFiles) {
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
+    }
   }
 
   /**
