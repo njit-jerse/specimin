@@ -112,7 +112,7 @@ public class SpeciminRunner {
      */
     Set<Path> createdClass =
         updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root);
-    // since the root directory is updated, we need to update the SymbolSolver
+    // update the map of files and compilation units
     parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
