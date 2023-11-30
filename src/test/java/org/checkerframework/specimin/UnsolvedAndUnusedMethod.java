@@ -1,8 +1,7 @@
 package org.checkerframework.specimin;
 
-import org.junit.Test;
-
 import java.io.IOException;
+import org.junit.Test;
 
 /**
  * This test checks if Specimin can successfully remove a method that is both unused and unsolved.

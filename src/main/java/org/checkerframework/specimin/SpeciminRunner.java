@@ -110,7 +110,8 @@ public class SpeciminRunner {
      * The set of path of files that have been created by addMissingClass. We will delete all those
      * files in the end.
      */
-    Set<Path> createdClass = updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root);
+    Set<Path> createdClass =
+        updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root);
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
