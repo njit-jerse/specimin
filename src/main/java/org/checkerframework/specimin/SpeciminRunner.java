@@ -110,8 +110,7 @@ public class SpeciminRunner {
      * The set of path of files that have been created by addMissingClass. We will delete all those
      * files in the end.
      */
-    Set<Path> createdClass = new HashSet<>();
-    updateSyntheticFiles(addMissingClass, parsedTargetFiles, createdClass, targetFiles, root);
+    Set<Path> createdClass = updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root);
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
@@ -219,18 +218,18 @@ public class SpeciminRunner {
    * @param addMissingClass an UnsolvedSymbolVisitor instance to update synthetic files
    * @param parsedTargetFiles a Map of the paths of target files and their corresponding compilation
    *     units
-   * @param createdClass a list of synthetic files that have been created by addMissingClass
    * @param targetFiles a list of target files
    * @param root the root directory of the target files
+   * @return createdClass the path of synthetic files created
    * @throws IOException if there is a problem with parsing files
    */
-  private static void updateSyntheticFiles(
+  private static Set<Path> updateSyntheticFiles(
       UnsolvedSymbolVisitor addMissingClass,
       Map<String, CompilationUnit> parsedTargetFiles,
-      Set<Path> createdClass,
       List<String> targetFiles,
       String root)
       throws IOException {
+    Set<Path> createdClass = new HashSet<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
       for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -255,6 +254,7 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
     }
+    return createdClass;
   }
 
   /**
