@@ -25,6 +25,8 @@ import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -80,6 +82,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * usually indicates an error.
    */
   private final List<String> unfoundMethods;
+
+  /**
+   * A list of Java file containing unsolved symbols that are used by the target methods. These symbols are either the return types of some methods or the types of some fields.
+   */
+  private final Set<String> listOfUsedYetUnsolvedFile = new HashSet<>();
 
   /**
    * Create a new target method finding visitor.
@@ -261,8 +268,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       usedMembers.add(call.resolve().getQualifiedSignature());
-      usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
-      ResolvedType methodReturnType = call.resolve().getReturnType();
+      // the full name of the class that contain this method
+      String classFullName = call.resolve().getPackageName() + "." + call.resolve().getClassName();
+      usedClass.add(classFullName);
+      ResolvedType methodReturnType;
+      try {
+        methodReturnType = call.resolve().getReturnType();
+      }
+      catch (UnsolvedSymbolException e) {
+        listOfUsedYetUnsolvedFile.add(converClassNameToDirectory(classFullName));
+        return super.visit(call, p);
+      }
       if (methodReturnType instanceof ResolvedReferenceType) {
         usedClass.add(methodReturnType.asReferenceType().getQualifiedName());
       }
@@ -341,5 +357,19 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
       usedClass.add(paraTypeFullName);
     }
+  }
+
+  /**
+   * Given the fully qualified name of a class, this method returns the directory of the Java file that contains this class. The directory will be relative to the root directory of this class.
+   * @param className the fully qualified name of a class
+   * @return the directory of the corresponding Java file
+   */
+  private String converClassNameToDirectory (String className) {
+    String fileName = className.replace(".", "/");
+    if (fileName.contains("$")) {
+      // remove the inner class part
+      fileName = fileName.substring(0, fileName.indexOf("$"));
+    }
+    return fileName + ".java";
   }
 }
