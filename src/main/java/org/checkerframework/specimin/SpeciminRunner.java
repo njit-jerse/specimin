@@ -220,8 +220,8 @@ public class SpeciminRunner {
    *     units
    * @param targetFiles a list of target files
    * @param root the root directory of the target files
-   * @return createdClass the path of synthetic files created
    * @throws IOException if there is a problem with parsing files
+   * @return createdClass the path of synthetic files created
    */
   private static Set<Path> updateSyntheticFiles(
       UnsolvedSymbolVisitor addMissingClass,
