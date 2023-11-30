@@ -25,8 +25,6 @@ import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
-import org.checkerframework.checker.signature.qual.FullyQualifiedName;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -84,7 +82,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final List<String> unfoundMethods;
 
   /**
-   * A list of Java file containing unsolved symbols that are used by the target methods. These symbols are either the return types of some methods or the types of some fields.
+   * A list of Java file containing unsolved symbols that are used by the target methods. These
+   * symbols are either the return types of some methods or the types of some fields.
    */
   private final Set<String> listOfUsedYetUnsolvedFile = new HashSet<>();
 
@@ -274,8 +273,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedType methodReturnType;
       try {
         methodReturnType = call.resolve().getReturnType();
-      }
-      catch (UnsolvedSymbolException e) {
+      } catch (UnsolvedSymbolException e) {
         listOfUsedYetUnsolvedFile.add(converClassNameToDirectory(classFullName));
         return super.visit(call, p);
       }
@@ -385,13 +383,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
   }
 
-
   /**
-   * Given the fully qualified name of a class, this method returns the directory of the Java file that contains this class. The directory will be relative to the root directory of this class.
+   * Given the fully qualified name of a class, this method returns the directory of the Java file
+   * that contains the input class. The directory will be relative to the root directory of the
+   * input class.
+   *
    * @param className the fully qualified name of a class
    * @return the directory of the corresponding Java file
    */
-  private String converClassNameToDirectory (String className) {
+  private String converClassNameToDirectory(String className) {
     String fileName = className.replace(".", "/");
     if (fileName.contains("$")) {
       // remove the inner class part
