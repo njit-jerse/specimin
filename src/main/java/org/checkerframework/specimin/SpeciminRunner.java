@@ -112,10 +112,19 @@ public class SpeciminRunner {
      */
     Set<Path> createdClass =
         updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root);
+    // since the root directory is updated, we need to update the SymbolSolver
+    TypeSolver newTypeSolver =
+        new CombinedTypeSolver(
+            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+    JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
+    StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
+    parsedTargetFiles = new HashMap<>();
+    for (String targetFile : targetFiles) {
+      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+    }
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
-
     TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodNames);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
