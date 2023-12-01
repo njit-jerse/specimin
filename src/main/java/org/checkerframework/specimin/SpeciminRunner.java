@@ -17,6 +17,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -130,8 +131,7 @@ public class SpeciminRunner {
       cu.accept(finder, null);
     }
     Set<String> setOfUsedAndUnsolvedFile = finder.getListOfUsedYetUnsolvedFile();
-    parsedTargetFiles.putAll(
-        getUpdateParsedTargetFiles(setOfUsedAndUnsolvedFile.stream().toList(), root));
+    parsedTargetFiles.putAll(getUpdateParsedTargetFiles(setOfUsedAndUnsolvedFile, root));
     createdClass.addAll(
         updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root));
     parsedTargetFiles = getUpdateParsedTargetFiles(targetFiles, root);
@@ -237,7 +237,7 @@ public class SpeciminRunner {
    * @return parsedTargetFiles an updated version of parsedTargetFiles
    */
   public static Map<String, CompilationUnit> getUpdateParsedTargetFiles(
-      List<String> targetFiles, String root) throws IOException {
+      Collection<String> targetFiles, String root) throws IOException {
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
