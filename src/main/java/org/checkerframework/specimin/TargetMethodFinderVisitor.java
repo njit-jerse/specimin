@@ -306,6 +306,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         usedClass.add(fullNameOfClass);
+        usedClass.add(expr.resolve().getType().describe());
       } catch (UnsolvedSymbolException e) {
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
