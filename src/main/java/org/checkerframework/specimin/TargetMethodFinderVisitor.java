@@ -82,8 +82,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final List<String> unfoundMethods;
 
   /**
-   * A list of Java file containing unsolved symbols that are used by the target methods. These
-   * symbols are either the return types of some methods or the types of some fields.
+   * A list of Java files containing the declarations of unsolved symbols used by the target
+   * methods. The reason we have these kinds of files is that UnsolvedSymbolVisitor will only create
+   * synthetic files for files specified in the --targetFiles argument. At this point, we only
+   * include one case, which is the lacking of information about a method's return type causing that
+   * method to be unsolved. For other types, we should have enough data to create synthetic files
+   * for them at the point they are used (no need to look up their declarations).
    */
   private final Set<String> listOfUsedYetUnsolvedFile = new HashSet<>();
 
@@ -138,6 +142,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getTargetMethods() {
     return targetMethods;
+  }
+
+  /**
+   * Get the list of Java files containing unsolved symbols used by target methods
+   *
+   * @return the value of listOfUsedYetUnsolvedFile
+   */
+  public Set<String> getListOfUsedYetUnsolvedFile() {
+    return listOfUsedYetUnsolvedFile;
   }
 
   @Override
@@ -317,9 +330,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       try {
         // while the name of the method is declaringType(), it actually returns the class where the
         // field is declared
-        fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
+        ResolvedFieldDeclaration resolvedField = expr.resolve().asField();
+        fullNameOfClass = resolvedField.declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         usedClass.add(fullNameOfClass);
+        try {
+          ResolvedType typeOfField = resolvedField.getType();
+          usedClass.add(typeOfField.describe());
+        } catch (UnsolvedSymbolException e) {
+          listOfUsedYetUnsolvedFile.add(converClassNameToDirectory(fullNameOfClass));
+        }
       } catch (UnsolvedSymbolException e) {
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field

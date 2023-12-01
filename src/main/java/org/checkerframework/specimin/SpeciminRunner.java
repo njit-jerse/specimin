@@ -113,19 +113,31 @@ public class SpeciminRunner {
     Set<Path> createdClass =
         updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root);
     // update the map of files and compilation units
-    parsedTargetFiles = new HashMap<>();
-    for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-    }
+    parsedTargetFiles = getUpdateParsedTargetFiles(targetFiles, root);
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
+    // This first phase contains three steps:
+    // 1: Have TargetMethodFinderVisitor run through the list of target files and find out if there
+    // is any additional file containing unsolved symbols used by target methods. Add those files to
+    // the list of target files
+    // 2: Have UnsolvedSymbolVisitor run through the list if target files
+    // 3: Have TargetMethodFinderVisitor through the list of target files again and find all classes
+    // and symbols used by target methods
     TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodNames);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
     }
-
+    Set<String> setOfUsedAndUnsolvedFile = finder.getListOfUsedYetUnsolvedFile();
+    parsedTargetFiles.putAll(
+        getUpdateParsedTargetFiles(setOfUsedAndUnsolvedFile.stream().toList(), root));
+    createdClass.addAll(
+        updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root));
+    parsedTargetFiles = getUpdateParsedTargetFiles(targetFiles, root);
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(finder, null);
+    }
     List<String> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
@@ -217,6 +229,23 @@ public class SpeciminRunner {
   }
 
   /**
+   * This method update the value of parsedTargetFile with a list of target files.
+   *
+   * @param targetFiles a list of target files
+   * @param root root of the target files
+   * @throws IOException if anything bad happen
+   * @return parsedTargetFiles an updated version of parsedTargetFiles
+   */
+  public static Map<String, CompilationUnit> getUpdateParsedTargetFiles(
+      List<String> targetFiles, String root) throws IOException {
+    Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
+    for (String targetFile : targetFiles) {
+      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+    }
+    return parsedTargetFiles;
+  }
+
+  /**
    * This method will update synthetic files for unsolved symbols in classes from a list of target
    * files.
    *
@@ -235,8 +264,9 @@ public class SpeciminRunner {
       String root)
       throws IOException {
     Set<Path> createdClass = new HashSet<>();
+    addMissingClass.setException(true);
     while (addMissingClass.gettingException()) {
-      addMissingClass.setExceptionToFalse();
+      addMissingClass.setException(false);
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
         // it's important to make sure that getDeclarations and addMissingClass will visit the same
