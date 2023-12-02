@@ -165,10 +165,10 @@ public class UnsolvedClass {
     Set<String> newFields = new HashSet<>();
     while (iterator.hasNext()) {
       String fieldDeclared = iterator.next();
-      boolean isStatic = false;
+      String staticKeyword = "";
       if (fieldDeclared.startsWith("static")) {
         fieldDeclared = fieldDeclared.replace("static ", "");
-        isStatic = true;
+        staticKeyword = "static ";
       }
       List<String> elements = Splitter.on(' ').splitToList(fieldDeclared);
       // fieldExpression is guaranteed to have the form "TYPE FIELD_NAME". Since this field
@@ -178,15 +178,9 @@ public class UnsolvedClass {
       String fieldName = elements.get(1);
       if (fieldType.equals(currentType)) {
         iterator.remove();
-        if (!isStatic) {
           newFields.add(
               UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
-                  correctType, correctType + " " + fieldName));
-        } else {
-          newFields.add(
-              UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
-                  correctType, "static " + correctType + " " + fieldName));
-        }
+                  correctType, staticKeyword + correctType + " " + fieldName));
       }
     }
 
