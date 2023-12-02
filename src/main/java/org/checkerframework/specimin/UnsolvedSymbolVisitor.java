@@ -1665,8 +1665,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // According to the above example, fieldName will be myField
     String fieldName = fieldParts.get(numOfFieldParts - 1);
     @SuppressWarnings(
-        "signature") // this className is from the second-to-last part of a fully-qualified method
-    // call, which is the simple name of a class. In this case, it is MyClass.
+        "signature") // this className is from the second-to-last part of a fully-qualified field
+    // signature, which is the simple name of a class. In this case, it is MyClass.
     @ClassGetSimpleName String className = fieldParts.get(numOfFieldParts - 2);
     // After this loop: fieldTypeClassName will be ComExample, and packageName will be com.example
     for (int i = 1; i < numOfFieldParts - 2; i++) {
@@ -1684,9 +1684,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // at this point, fieldDeclaration will become "ComExampleMyClassMyFieldType myField"
     String fieldDeclaration = fieldTypeClassName + " " + fieldName;
     if (isStatic) {
+      // fieldDeclaration will become "static ComExampleMyClassMyFieldType myField = null;"
       fieldDeclaration = "static " + fieldDeclaration;
     }
-    // fieldDeclaration will become "static ComExampleMyClassMyFieldType myField = null;"
     fieldDeclaration = setInitialValueForVariableDeclaration(fieldTypeClassName, fieldDeclaration);
     classThatContainField.addFields(fieldDeclaration);
     classAndPackageMap.put(thisFieldType, packageName);

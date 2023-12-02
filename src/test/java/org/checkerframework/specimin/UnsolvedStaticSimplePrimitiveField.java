@@ -1,11 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks that if Specimin will work if there is an unsolved, static field in a simple name form with a primitive type.
+ * This test checks that if Specimin will work if there is an unsolved, static field in a simple
+ * name form with a primitive type.
  */
 public class UnsolvedStaticSimplePrimitiveField {
   @Test
