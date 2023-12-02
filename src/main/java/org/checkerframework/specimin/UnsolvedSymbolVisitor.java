@@ -1660,6 +1660,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           "Need to check this field access expression with"
               + " isAnUnsolvedStaticFieldCalledByAQualifiedClassName before using this method");
     }
+    // this is the synthetic type of the field
     String fieldTypeClassName = toCapital(fieldParts.get(0));
     String packageName = fieldParts.get(0);
     // According to the above example, fieldName will be myField

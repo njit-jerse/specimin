@@ -1,11 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks that if Specimin will work if there is an unsolved, non-static field used by target methods
+ * This test checks that if Specimin will work if there is an unsolved, non-static field used by
+ * target methods
  */
 public class UnsolvedNonStaticField {
   @Test

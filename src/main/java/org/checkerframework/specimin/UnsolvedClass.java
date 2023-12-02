@@ -178,9 +178,9 @@ public class UnsolvedClass {
       String fieldName = elements.get(1);
       if (fieldType.equals(currentType)) {
         iterator.remove();
-          newFields.add(
-              UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
-                  correctType, staticKeyword + correctType + " " + fieldName));
+        newFields.add(
+            UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
+                correctType, staticKeyword + correctType + " " + fieldName));
       }
     }
 
