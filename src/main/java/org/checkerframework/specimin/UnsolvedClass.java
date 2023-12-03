@@ -164,7 +164,13 @@ public class UnsolvedClass {
     Iterator<String> iterator = classFields.iterator();
     Set<String> newFields = new HashSet<>();
     while (iterator.hasNext()) {
-      List<String> elements = Splitter.on(' ').splitToList(iterator.next());
+      String fieldDeclared = iterator.next();
+      String staticKeyword = "";
+      if (fieldDeclared.startsWith("static")) {
+        fieldDeclared = fieldDeclared.replace("static ", "");
+        staticKeyword = "static ";
+      }
+      List<String> elements = Splitter.on(' ').splitToList(fieldDeclared);
       // fieldExpression is guaranteed to have the form "TYPE FIELD_NAME". Since this field
       // expression is from a synthetic class, there is no annotation involved, so TYPE has no
       // space.
@@ -174,7 +180,7 @@ public class UnsolvedClass {
         iterator.remove();
         newFields.add(
             UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
-                correctType, correctType + " " + fieldName));
+                correctType, staticKeyword + correctType + " " + fieldName));
       }
     }
 

@@ -121,6 +121,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Map<String, UnsolvedClass> syntheticMethodAndClass = new HashMap<>();
 
   /**
+   * This instance maps the name of a synthetic type with the class where there is a field declared
+   * with that type
+   */
+  private final Map<String, UnsolvedClass> syntheticTypeAndClass = new HashMap<>();
+
+  /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
    * or we still need more.
    */
@@ -561,6 +567,30 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(FieldAccessExpr node, Void p) {
     if (isASuperCall(node) && !canBeSolved(node)) {
       updateSyntheticClassForSuperCall(node);
+    } else if (canBeSolved(node)) {
+      return super.visit(node, p);
+    } else if (isAQualifiedFieldSignature(node.toString())) {
+      updateClassSetWithQualifiedFieldSignature(node.toString(), true);
+    } else if (unsolvedFieldCalledByASimpleClassName(node)) {
+      String simpleClassName = node.getScope().toString();
+      String fullyQualifiedCall =
+          classAndPackageMap.getOrDefault(simpleClassName, currentPackage) + "." + node;
+      updateClassSetWithQualifiedFieldSignature(fullyQualifiedCall, true);
+    }
+    // if the symbol that called this field is solvable yet this field is unsolved, then the type of
+    // the calling symbol is a synthetic class that needs to have a synthetic field updated
+    else if (canBeSolved(node.getScope())) {
+      updateSyntheticClassWithNonStaticFields(node);
+    }
+
+    try {
+      node.resolve();
+    } catch (UnsolvedSymbolException e) {
+      // for a qualified name field access such as org.sample.MyClass.field, org.sample will also be
+      // considered FieldAccessExpr.
+      if (isAClassPath(node.getScope().toString())) {
+        this.gotException = true;
+      }
     }
     return super.visit(node, p);
   }
@@ -1002,6 +1032,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Given a non-static and unsolved field access expression, this method will update the
+   * corresponding synthetic class.
+   *
+   * @param field a non-static field access expression
+   */
+  public void updateSyntheticClassWithNonStaticFields(FieldAccessExpr field) {
+    Expression caller = field.getScope();
+    String fullyQualifiedClassName = caller.calculateResolvedType().describe();
+    String fieldQualifedSignature = fullyQualifiedClassName + "." + field.getNameAsString();
+    updateClassSetWithQualifiedFieldSignature(fieldQualifedSignature, false);
+  }
+
+  /**
    * For a super call, this method will update the corresponding synthetic class
    *
    * @param expr the super call expression to be taken as input
@@ -1018,13 +1061,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
     } else if (expr instanceof FieldAccessExpr) {
       String nameAsString = expr.asFieldAccessExpr().getNameAsString();
-      updateUnsolvedClassWithFields(
+      updateUnsolvedSuperClassWithFields(
           nameAsString,
           getParentClass(className),
           classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
     } else if (expr instanceof NameExpr) {
       String nameAsString = expr.asNameExpr().getNameAsString();
-      updateUnsolvedClassWithFields(
+      updateUnsolvedSuperClassWithFields(
           nameAsString,
           getParentClass(className),
           classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
@@ -1044,7 +1087,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param className the name of the synthetic class
    * @param packageName the package of the synthetic class
    */
-  public void updateUnsolvedClassWithFields(
+  public void updateUnsolvedSuperClassWithFields(
       String var, @ClassGetSimpleName String className, String packageName) {
     UnsolvedClass relatedClass = new UnsolvedClass(className, packageName);
     if (variablesAndDeclaration.containsKey(var)) {
@@ -1466,6 +1509,24 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Check whether a field, invoked by a simple class name, is unsolved
+   *
+   * @param field the field to be checked
+   * @return true if the field is unsolved and invoked by a simple class name
+   */
+  public boolean unsolvedFieldCalledByASimpleClassName(FieldAccessExpr field) {
+    try {
+      field.resolve();
+      return false;
+    } catch (UnsolvedSymbolException e) {
+      // this check is not very comprehensive, since a class can be in lowercase, and a method or
+      // field can be in uppercase. But since this is without the jar paths, this is the best we can
+      // do.
+      return Character.isUpperCase(field.getScope().toString().charAt(0));
+    }
+  }
+
+  /**
    * Returns the fully-qualified class name version of a method call invoked by a simple class name.
    *
    * @param method the method call invoked by a simple class name
@@ -1504,6 +1565,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String callerToString = callerExpression.get().toString();
       return isAClassPath(callerToString);
     }
+  }
+
+  /**
+   * This method checks if a field access expression is a qualified field signature. For example,
+   * for this field access expression: org.package.Class.firstField.secondField, this method will
+   * return true for "org.package.Class.firstField", but not for
+   * "org.package.Class.firstField.secondField".
+   *
+   * @param field the field access expression to be checked
+   * @return true if field is a qualified field signature
+   */
+  public boolean isAQualifiedFieldSignature(String field) {
+    String caller = field.substring(0, field.lastIndexOf("."));
+    return isAClassPath(caller);
   }
 
   /**
@@ -1566,6 +1641,63 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Creates a synthetic class corresponding to a static field called by a qualified class name.
+   * Ensure to check with {@link #isAQualifiedFieldSignature(String)} before calling this method.
+   *
+   * @param fieldExpr the field access expression to be used as input. This field access expression
+   *     must be in the form of a qualified class name
+   * @param isStatic check whether the field is static
+   */
+  public void updateClassSetWithQualifiedFieldSignature(String fieldExpr, boolean isStatic) {
+    // As this code involves complex string operations, we'll use a field access expression as an
+    // example,
+    // following its progression through the code.
+    // Suppose this is our field access expression: com.example.MyClass.myField
+    List<String> fieldParts = Splitter.onPattern("[.]").splitToList(fieldExpr);
+    int numOfFieldParts = fieldParts.size();
+    if (numOfFieldParts <= 2) {
+      throw new RuntimeException(
+          "Need to check this field access expression with"
+              + " isAnUnsolvedStaticFieldCalledByAQualifiedClassName before using this method");
+    }
+    // this is the synthetic type of the field
+    String fieldTypeClassName = toCapital(fieldParts.get(0));
+    String packageName = fieldParts.get(0);
+    // According to the above example, fieldName will be myField
+    String fieldName = fieldParts.get(numOfFieldParts - 1);
+    @SuppressWarnings(
+        "signature") // this className is from the second-to-last part of a fully-qualified field
+    // signature, which is the simple name of a class. In this case, it is MyClass.
+    @ClassGetSimpleName String className = fieldParts.get(numOfFieldParts - 2);
+    // After this loop: fieldTypeClassName will be ComExample, and packageName will be com.example
+    for (int i = 1; i < numOfFieldParts - 2; i++) {
+      fieldTypeClassName = fieldTypeClassName + toCapital(fieldParts.get(i));
+      packageName = packageName + "." + fieldParts.get(i);
+    }
+    // At this point, fieldTypeClassName will be ComExampleMyClassMyFieldType
+    fieldTypeClassName = fieldTypeClassName + toCapital(className) + toCapital(fieldName) + "Type";
+    // since fieldTypeClassName is just a single long string without any dot in the middle, it will
+    // be a simple name.
+    @SuppressWarnings("signature")
+    @ClassGetSimpleName String thisFieldType = fieldTypeClassName;
+    UnsolvedClass typeClass = new UnsolvedClass(thisFieldType, packageName);
+    UnsolvedClass classThatContainField = new UnsolvedClass(className, packageName);
+    // at this point, fieldDeclaration will become "ComExampleMyClassMyFieldType myField"
+    String fieldDeclaration = fieldTypeClassName + " " + fieldName;
+    if (isStatic) {
+      // fieldDeclaration will become "static ComExampleMyClassMyFieldType myField = null;"
+      fieldDeclaration = "static " + fieldDeclaration;
+    }
+    fieldDeclaration = setInitialValueForVariableDeclaration(fieldTypeClassName, fieldDeclaration);
+    classThatContainField.addFields(fieldDeclaration);
+    classAndPackageMap.put(thisFieldType, packageName);
+    classAndPackageMap.put(className, packageName);
+    syntheticTypeAndClass.put(thisFieldType, classThatContainField);
+    this.updateMissingClass(typeClass);
+    this.updateMissingClass(classThatContainField);
+  }
+
+  /**
    * Based on the Map returned by JavaTypeCorrect, this method updates the types of methods in
    * synthetic classes.
    *
@@ -1573,6 +1705,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void updateTypes(Map<String, String> typeToCorrect) {
     for (String incorrectType : typeToCorrect.keySet()) {
+      // update incorrecType if it is the type of a field in a synthetic class
+      if (syntheticTypeAndClass.containsKey(incorrectType)) {
+        UnsolvedClass relatedClass = syntheticTypeAndClass.get(incorrectType);
+        relatedClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
+        this.deleteOldSyntheticClass(relatedClass);
+        this.createMissingClass(relatedClass);
+        return;
+      }
       // convert MethodNameReturnType to methodName
       String involvedMethod =
           incorrectType.substring(0, 1).toLowerCase()
