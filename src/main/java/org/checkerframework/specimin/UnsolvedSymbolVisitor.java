@@ -1354,9 +1354,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be updated
    */
   public void updateMissingClass(UnsolvedClass missedClass) {
-    if (missedClass.getClassName().equals("Avro2Confluent")) {
-      throw new RuntimeException("Toi ru em ngu. Mot som mua thu");
-    }
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
