@@ -281,6 +281,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceType type, Void p) {
+    if (!insideTargetMethod) {
+      return super.visit(type, p);
+    }
     try {
       usedClass.add(type.resolve().getQualifiedName());
     }
