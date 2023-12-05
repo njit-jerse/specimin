@@ -586,7 +586,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // if the symbol that called this field is solvable yet this field is unsolved, then the type of
     // the calling symbol is a synthetic class that needs to have a synthetic field updated
     else if (canBeSolved(node.getScope())) {
-      updateSyntheticClassWithNonStaticFields(node);
+      Expression nodeSccope = node.getScope();
+      String filePath =
+          rootDirectory + nodeSccope.calculateResolvedType().describe().replace(".", "/") + ".java";
+      System.out.println(filePath);
+      // this condition checks if the class is a synthetic class.
+      if (createdClass.contains(Path.of(filePath))) {
+        updateSyntheticClassWithNonStaticFields(node);
+      }
     }
 
     try {
@@ -1344,6 +1351,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be updated
    */
   public void updateMissingClass(UnsolvedClass missedClass) {
+    if (missedClass.getClassName().equals("Avro2Confluent")) {
+      throw new RuntimeException("Toi ru em ngu. Mot som mua thu");
+    }
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
@@ -1427,7 +1437,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String filePathStr =
         this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Paths.get(filePathStr);
-
     createdClass.add(filePath);
     try {
       Path parentPath = filePath.getParent();

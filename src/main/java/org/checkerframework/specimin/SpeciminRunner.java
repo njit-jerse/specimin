@@ -11,6 +11,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import com.github.javaparser.utils.SourceRoot;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -104,6 +105,13 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    // the set of Java files already exist in the input codebase
+    Set<Path> existingFiles = new HashSet<>();
+    SourceRoot sourceRoot = new SourceRoot(Path.of(root));
+    for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
+      existingFiles.add(compilationUnit.getStorage().get().getPath());
+    }
+    System.out.println(existingFiles);
     UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root);
     addMissingClass.setClassesFromJar(jarPaths);
     /**
