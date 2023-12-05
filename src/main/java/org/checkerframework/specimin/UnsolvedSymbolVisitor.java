@@ -171,6 +171,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
+   * @param setOfExistingFiles the set of existing files in the input codebase
    */
   public UnsolvedSymbolVisitor(String rootDirectory, Set setOfExistingFiles) {
     this.rootDirectory = rootDirectory;
