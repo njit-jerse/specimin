@@ -1,8 +1,7 @@
 package org.checkerframework.specimin;
 
-import org.junit.Test;
-
 import java.io.IOException;
+import org.junit.Test;
 
 /** This test checks if Specimin can work when there is an unsolved union type. */
 public class UnionTypeTest {

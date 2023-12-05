@@ -283,8 +283,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceType type, Void p) {
     try {
       usedClass.add(type.resolve().getQualifiedName());
-      System.out.println(type.resolve().getQualifiedName());
-    } catch (UnsolvedSymbolException e) {
+    }
+    // if the type has a fully-qualified form, JavaParser also consider other components rather than
+    // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
+    // will also consider org and org.A as ClassOrInterfaceType
+    catch (UnsolvedSymbolException e) {
       return super.visit(type, p);
     }
     return super.visit(type, p);
