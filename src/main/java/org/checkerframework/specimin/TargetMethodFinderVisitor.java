@@ -289,8 +289,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
-    // will also consider org and org.A as ClassOrInterfaceType
-    catch (UnsolvedSymbolException e) {
+    // will also consider org and org.A as ClassOrInterfaceType.
+    // if type is a type variable, we will get an UnsupportedOperation Exception.
+    catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       return super.visit(type, p);
     }
     return super.visit(type, p);
