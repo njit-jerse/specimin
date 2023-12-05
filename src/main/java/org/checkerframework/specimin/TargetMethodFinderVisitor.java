@@ -322,7 +322,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         usedClass.add(fullNameOfClass);
         usedClass.add(expr.resolve().getType().describe());
-      } catch (UnsolvedSymbolException e) {
+      }
+      // when the type is a primitive array, we will have an UnsupportedOperationException
+      catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
         // name, such as org and org.example, will also be considered as FieldAccessExpr.

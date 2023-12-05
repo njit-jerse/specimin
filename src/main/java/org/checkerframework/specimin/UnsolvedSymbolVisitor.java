@@ -164,14 +164,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
+  /** The list of existing files in the input codebase. */
+  private Set<Path> setOfExistingFiles;
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
    */
-  public UnsolvedSymbolVisitor(String rootDirectory) {
+  public UnsolvedSymbolVisitor(String rootDirectory, Set setOfExistingFiles) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
+    this.setOfExistingFiles = setOfExistingFiles;
   }
 
   /**
@@ -589,9 +593,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       Expression nodeSccope = node.getScope();
       String filePath =
           rootDirectory + nodeSccope.calculateResolvedType().describe().replace(".", "/") + ".java";
-      System.out.println(filePath);
       // this condition checks if the class is a synthetic class.
-      if (createdClass.contains(Path.of(filePath))) {
+      if (setOfExistingFiles.contains(Path.of(filePath).normalize())) {
         updateSyntheticClassWithNonStaticFields(node);
       }
     }
