@@ -14,6 +14,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.UnionType;
@@ -276,6 +277,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(call, p);
+  }
+
+  @Override
+  public Visitable visit(ClassOrInterfaceType type, Void p) {
+    try {
+      usedClass.add(type.resolve().getQualifiedName());
+      System.out.println(type.resolve().getQualifiedName());
+    } catch (UnsolvedSymbolException e) {
+      return super.visit(type, p);
+    }
+    return super.visit(type, p);
   }
 
   @Override

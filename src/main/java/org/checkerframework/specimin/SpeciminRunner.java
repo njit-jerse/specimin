@@ -205,6 +205,8 @@ public class SpeciminRunner {
         // return type of some synthetic methods, but later javac has found the correct return type
         // for that method.
         if (typesToChange.containsKey(simpleName)) {
+          System.out.println(typesToChange);
+          System.out.println("A: " + target.getValue());
           continue;
         }
         if (!finder.getUsedClass().contains(classFullyQualfiedName)) {

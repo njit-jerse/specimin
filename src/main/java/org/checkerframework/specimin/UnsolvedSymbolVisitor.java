@@ -400,6 +400,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(CatchClause node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
+    currentLocalVariables.add(node.getParameter().getNameAsString());
     localVariables.addFirst(currentLocalVariables);
     Visitable result = super.visit(node, p);
     localVariables.removeFirst();
@@ -430,7 +431,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Type declType = decl.getType();
     try {
       declType.resolve();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+    } catch (RuntimeException e) {
+      // nothing to do here. This type is a var type. It is not unsolved.
+      if (!(e instanceof UnsolvedSymbolException)
+          && !(e instanceof UnsupportedOperationException)) {
+        return super.visit(decl, p);
+      }
       String typeAsString = declType.asString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
       // There could be three cases here: a type variable, a fully-qualified class name, or a simple
@@ -769,11 +775,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param parameter unionType parameter from visitor class
    */
   private void resolveUnionType(@NonNull Parameter parameter) {
-    for (var param : parameter.getType().asUnionType().getElements()) {
+    for (ReferenceType param : parameter.getType().asUnionType().getElements()) {
       try {
         param.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        handleParameterResolveFailure(parameter);
+        // since this type is unsolved, it could not be a primitive type
+        @ClassGetSimpleName String typeName = param.getElementType().asClassOrInterfaceType().getName().asString();
+        UnsolvedClass newClass = updateUnsolvedClassWithClassName(typeName, true);
+        updateMissingClass(newClass);
       }
     }
   }

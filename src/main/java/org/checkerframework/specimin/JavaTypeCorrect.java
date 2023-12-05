@@ -94,6 +94,7 @@ class JavaTypeCorrect {
               new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
       String line;
       while ((line = reader.readLine()) != null) {
+        System.out.println(line);
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
         }
