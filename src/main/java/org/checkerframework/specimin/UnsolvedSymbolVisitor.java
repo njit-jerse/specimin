@@ -594,7 +594,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String filePath =
           rootDirectory + nodeSccope.calculateResolvedType().describe().replace(".", "/") + ".java";
       // this condition checks if the class is a synthetic class.
-      if (setOfExistingFiles.contains(Path.of(filePath).normalize())) {
+      if (!setOfExistingFiles.contains(Path.of(filePath).toAbsolutePath().normalize())) {
         updateSyntheticClassWithNonStaticFields(node);
       }
     }

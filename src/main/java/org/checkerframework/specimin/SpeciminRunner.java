@@ -110,7 +110,7 @@ public class SpeciminRunner {
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
-      existingFiles.add(compilationUnit.getStorage().get().getPath().normalize());
+      existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
     }
     UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root, existingFiles);
     addMissingClass.setClassesFromJar(jarPaths);
