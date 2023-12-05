@@ -277,6 +277,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Node visit(ImportDeclaration decl, Void arg) {
+    if (decl.isAsterisk()) {
+      throw new RuntimeException(
+          "A wildcard import statement found. Please use explicit import" + " statements.");
+    }
+    return super.visit(decl, arg);
+  }
+
+  @Override
   public Visitable visit(PackageDeclaration node, Void arg) {
     this.currentPackage = node.getNameAsString();
     return super.visit(node, arg);
