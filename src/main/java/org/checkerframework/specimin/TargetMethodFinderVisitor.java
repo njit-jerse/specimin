@@ -26,6 +26,7 @@ import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.google.common.base.Splitter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -185,8 +186,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // The substring here is to remove the method's return type. Return types cannot contain spaces.
     // TODO: test this with annotations
-    String methodName =
-        this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
+    String methodName = this.classFQName + "#" + removeMethodReturnType(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
@@ -352,6 +352,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(expr, p);
+  }
+
+  /**
+   * Given a method declaration, this method return the declaration of that method without the
+   * return type.
+   *
+   * @param methodDeclaration the method declaration to be used as input
+   * @return methodDeclaration without the return type
+   */
+  public static String removeMethodReturnType(String methodDeclaration) {
+    String methodDeclarationWithoutParen =
+        methodDeclaration.substring(0, methodDeclaration.indexOf("("));
+    List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
+    String methodName = methodParts.get(methodParts.size() - 1);
+    String methodReturnType = methodDeclaration.substring(0, methodDeclaration.indexOf(methodName));
+    return methodDeclaration.replace(methodReturnType, "");
   }
 
   /**

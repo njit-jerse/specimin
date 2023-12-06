@@ -161,7 +161,6 @@ public class SpeciminRunner {
     }
 
     Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
-
     // add all files related to the targeted methods
     for (String classFullName : finder.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";

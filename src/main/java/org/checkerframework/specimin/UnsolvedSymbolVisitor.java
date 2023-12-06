@@ -173,7 +173,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param rootDirectory the root directory of the input files
    * @param setOfExistingFiles the set of existing files in the input codebase
    */
-  public UnsolvedSymbolVisitor(String rootDirectory, Set setOfExistingFiles) {
+  public UnsolvedSymbolVisitor(String rootDirectory, Set<Path> setOfExistingFiles) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
     this.setOfExistingFiles = setOfExistingFiles;
@@ -443,14 +443,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     // This part is to create synthetic class for the type of decl if needed.
     Type declType = decl.getType();
+    if (declType.isVarType()) {
+      // nothing to do here. A var type could never be solved.
+      return super.visit(decl, p);
+    }
     try {
       declType.resolve();
-    } catch (RuntimeException e) {
-      // nothing to do here. This type is a var type. It is not unsolved.
-      if (!(e instanceof UnsolvedSymbolException)
-          && !(e instanceof UnsupportedOperationException)) {
-        return super.visit(decl, p);
-      }
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       String typeAsString = declType.asString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
       // There could be three cases here: a type variable, a fully-qualified class name, or a simple
