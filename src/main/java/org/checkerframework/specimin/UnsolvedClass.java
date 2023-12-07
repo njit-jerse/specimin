@@ -166,9 +166,16 @@ public class UnsolvedClass {
     while (iterator.hasNext()) {
       String fieldDeclared = iterator.next();
       String staticKeyword = "";
+      String finalKeyword = "";
+      // since these are fields in synthetic classes created by UnsolvedSymbolVisitor, if the field
+      // is both static and final, the static keyword will be placed before the final keyword,
       if (fieldDeclared.startsWith("static")) {
         fieldDeclared = fieldDeclared.replace("static ", "");
         staticKeyword = "static ";
+      }
+      if (fieldDeclared.startsWith("final")) {
+        fieldDeclared = fieldDeclared.replace("final ", "");
+        finalKeyword = "final ";
       }
       List<String> elements = Splitter.on(' ').splitToList(fieldDeclared);
       // fieldExpression is guaranteed to have the form "TYPE FIELD_NAME". Since this field
@@ -180,7 +187,7 @@ public class UnsolvedClass {
         iterator.remove();
         newFields.add(
             UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
-                correctType, staticKeyword + correctType + " " + fieldName));
+                correctType, staticKeyword + finalKeyword + correctType + " " + fieldName));
       }
     }
 

@@ -83,6 +83,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @Override
   public Node visit(ImportDeclaration decl, Void p) {
     String classFullName = decl.getNameAsString();
+    if (decl.isStatic()) {
+      classFullName = classFullName.substring(0, classFullName.lastIndexOf("."));
+    }
     if (classesUsedByTargetMethods.contains(classFullName)) {
       return super.visit(decl, p);
     }
