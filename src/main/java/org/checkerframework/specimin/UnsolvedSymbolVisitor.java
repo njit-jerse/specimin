@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import javax.swing.*;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -1341,8 +1342,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       method.resolve();
       return false;
-    } catch (Exception e) {
-      return true;
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      if (e instanceof UnsolvedSymbolException) {
+        return true;
+      }
+      // UnsupportedOperationException is for when the types could not be solved at all, such as
+      // unknown or wildcard types.
+      return false;
     }
   }
 
