@@ -760,9 +760,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // If the parameter originates from a Java built-in library, such as java.io or java.lang,
     // an UnsupportedOperationException will be thrown instead.
     catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      handleParameterResolveFailure(parameter);
+      if (!parameter.getType().isUnknownType()) {
+        handleParameterResolveFailure(parameter);
+        gotException = true;
+      }
     }
-    gotException = true;
     return super.visit(parameter, p);
   }
 
@@ -1347,7 +1349,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         return true;
       }
       // UnsupportedOperationException is for when the types could not be solved at all, such as
-      // unknown or wildcard types.
+      // var or wildcard types.
       return false;
     }
   }
