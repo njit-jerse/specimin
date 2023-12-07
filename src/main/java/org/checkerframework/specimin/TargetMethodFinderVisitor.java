@@ -184,7 +184,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
-    // The substring here is to remove the method's return type.
     // TODO: test this with annotations
     String methodName = this.classFQName + "#" + removeMethodReturnType(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
