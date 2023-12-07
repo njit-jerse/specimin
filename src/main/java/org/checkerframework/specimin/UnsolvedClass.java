@@ -167,8 +167,8 @@ public class UnsolvedClass {
       String fieldDeclared = iterator.next();
       String staticKeyword = "";
       String finalKeyword = "";
-      // since these are fields in synthetic classes created by UnsolvedSymbolVisitor, if the field
-      // is both static and final, the static keyword will be placed before the final keyword,
+      // since these are fields in synthetic classes created by UnsolvedSymbolVisitor, if this field
+      // is both static and final, the static keyword will be placed before the final keyword.
       if (fieldDeclared.startsWith("static")) {
         fieldDeclared = fieldDeclared.replace("static ", "");
         staticKeyword = "static ";
