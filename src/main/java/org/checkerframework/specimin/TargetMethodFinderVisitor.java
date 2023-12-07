@@ -14,6 +14,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.UnionType;
@@ -25,6 +26,7 @@ import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.google.common.base.Splitter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -182,10 +184,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
-    // The substring here is to remove the method's return type. Return types cannot contain spaces.
     // TODO: test this with annotations
-    String methodName =
-        this.classFQName + "#" + methodDeclAsString.substring(methodDeclAsString.indexOf(' ') + 1);
+    String methodName = this.classFQName + "#" + removeMethodReturnType(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
@@ -279,6 +279,24 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(ClassOrInterfaceType type, Void p) {
+    if (!insideTargetMethod) {
+      return super.visit(type, p);
+    }
+    try {
+      usedClass.add(type.resolve().getQualifiedName());
+    }
+    // if the type has a fully-qualified form, JavaParser also consider other components rather than
+    // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
+    // will also consider org and org.A as ClassOrInterfaceType.
+    // if type is a type variable, we will get an UnsupportedOperation Exception.
+    catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return super.visit(type, p);
+    }
+    return super.visit(type, p);
+  }
+
+  @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
       usedMembers.add(newExpr.resolve().getQualifiedSignature());
@@ -307,7 +325,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         usedClass.add(fullNameOfClass);
         usedClass.add(expr.resolve().getType().describe());
-      } catch (UnsolvedSymbolException e) {
+      }
+      // when the type is a primitive array, we will have an UnsupportedOperationException
+      catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
         // name, such as org and org.example, will also be considered as FieldAccessExpr.
@@ -331,6 +351,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(expr, p);
+  }
+
+  /**
+   * Given a method declaration, this method return the declaration of that method without the
+   * return type.
+   *
+   * @param methodDeclaration the method declaration to be used as input
+   * @return methodDeclaration without the return type
+   */
+  public static String removeMethodReturnType(String methodDeclaration) {
+    String methodDeclarationWithoutParen =
+        methodDeclaration.substring(0, methodDeclaration.indexOf("("));
+    List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
+    String methodName = methodParts.get(methodParts.size() - 1);
+    String methodReturnType = methodDeclaration.substring(0, methodDeclaration.indexOf(methodName));
+    return methodDeclaration.replace(methodReturnType, "");
   }
 
   /**

@@ -11,6 +11,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import com.github.javaparser.utils.SourceRoot;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -104,7 +105,14 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
-    UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root);
+    // the set of Java files already exist in the input codebase
+    Set<Path> existingFiles = new HashSet<>();
+    SourceRoot sourceRoot = new SourceRoot(Path.of(root));
+    sourceRoot.tryToParse();
+    for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
+      existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
+    }
+    UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root, existingFiles);
     addMissingClass.setClassesFromJar(jarPaths);
     /**
      * The set of path of files that have been created by addMissingClass. We will delete all those
@@ -153,7 +161,6 @@ public class SpeciminRunner {
     }
 
     Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
-
     // add all files related to the targeted methods
     for (String classFullName : finder.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";

@@ -18,6 +18,7 @@ import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import java.util.Iterator;
@@ -91,6 +92,16 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
+    try {
+      // resolved() will only check if the return type is solvable
+      // getQualifiedSignature() will also check if the parameters are solvable
+      methodDecl.resolve().getQualifiedSignature();
+    } catch (UnsolvedSymbolException e) {
+      // The current class is employed by the target methods, although not all of its members are
+      // utilized. It's not surprising for unused members to remain unresolved.
+      methodDecl.remove();
+      return methodDecl;
+    }
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       insideTargetMethod = true;
@@ -112,6 +123,16 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration constructorDecl, Void p) {
+    try {
+      // resolved() will only check if the return type is solvable
+      // getQualifiedSignature() will also check if the parameters are solvable
+      constructorDecl.resolve().getQualifiedSignature();
+    } catch (UnsolvedSymbolException e) {
+      // The current class is employed by the target methods, although not all of its members are
+      // utilized. It's not surprising for unused members to remain unresolved.
+      constructorDecl.remove();
+      return constructorDecl;
+    }
     ResolvedConstructorDeclaration resolved = constructorDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       return super.visit(constructorDecl, p);
@@ -126,6 +147,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldDeclaration fieldDecl, Void p) {
+    try {
+      fieldDecl.resolve();
+    } catch (UnsolvedSymbolException e) {
+      // The current class is employed by the target methods, although not all of its members are
+      // utilized. It's not surprising for unused members to remain unresolved.
+      fieldDecl.remove();
+      return fieldDecl;
+    }
     String classFullName = fieldDecl.resolve().declaringType().getQualifiedName();
     boolean isFinal = fieldDecl.isFinal();
     Iterator<VariableDeclarator> iterator = fieldDecl.getVariables().iterator();

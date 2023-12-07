@@ -164,14 +164,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
+  /** The list of existing files in the input codebase. */
+  private Set<Path> setOfExistingFiles;
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
+   * @param setOfExistingFiles the set of existing files in the input codebase
    */
-  public UnsolvedSymbolVisitor(String rootDirectory) {
+  public UnsolvedSymbolVisitor(String rootDirectory, Set<Path> setOfExistingFiles) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
+    this.setOfExistingFiles = setOfExistingFiles;
   }
 
   /**
@@ -269,6 +274,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void setExceptionToFalse() {
     gotException = false;
+  }
+
+  @Override
+  public Node visit(ImportDeclaration decl, Void arg) {
+    if (decl.isAsterisk()) {
+      throw new RuntimeException(
+          "A wildcard import statement found. Please use explicit import" + " statements.");
+    }
+    return super.visit(decl, arg);
   }
 
   @Override
@@ -400,6 +414,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(CatchClause node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
+    currentLocalVariables.add(node.getParameter().getNameAsString());
     localVariables.addFirst(currentLocalVariables);
     Visitable result = super.visit(node, p);
     localVariables.removeFirst();
@@ -428,6 +443,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     // This part is to create synthetic class for the type of decl if needed.
     Type declType = decl.getType();
+    if (declType.isVarType()) {
+      // nothing to do here. A var type could never be solved.
+      return super.visit(decl, p);
+    }
     try {
       declType.resolve();
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
@@ -577,9 +596,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           classAndPackageMap.getOrDefault(simpleClassName, currentPackage) + "." + node;
       updateClassSetWithQualifiedFieldSignature(fullyQualifiedCall, true);
     }
-    // if the symbol that called this field is solvable yet this field is unsolved, then the type of
-    // the calling symbol is a synthetic class that needs to have a synthetic field updated
-    else if (canBeSolved(node.getScope())) {
+    // check if this unsolved field belongs to a synthetic class.
+    else if (canBeSolved(node.getScope()) && !belongsToARealClassFile(node)) {
       updateSyntheticClassWithNonStaticFields(node);
     }
 
@@ -739,6 +757,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Given a field access expression, this method determines whether the field is declared in one of
+   * the original class file in the codebase (instead of a synthetic class).
+   *
+   * @param node a FieldAccessExpr instance
+   * @return true if the field is inside an original class file
+   */
+  public boolean belongsToARealClassFile(FieldAccessExpr node) {
+    Expression nodeScope = node.getScope();
+    String filePath =
+        rootDirectory + nodeScope.calculateResolvedType().describe().replace(".", "/") + ".java";
+    return setOfExistingFiles.contains(Path.of(filePath).toAbsolutePath().normalize());
+  }
+
+  /**
    * @param parameter parameter from visitor method which is unsolvable.
    */
   private void handleParameterResolveFailure(@NonNull Parameter parameter) {
@@ -769,11 +801,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param parameter unionType parameter from visitor class
    */
   private void resolveUnionType(@NonNull Parameter parameter) {
-    for (var param : parameter.getType().asUnionType().getElements()) {
+    for (ReferenceType param : parameter.getType().asUnionType().getElements()) {
       try {
         param.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        handleParameterResolveFailure(parameter);
+        // since this type is unsolved, it could not be a primitive type
+        @ClassGetSimpleName String typeName = param.getElementType().asClassOrInterfaceType().getName().asString();
+        UnsolvedClass newClass = updateUnsolvedClassWithClassName(typeName, true);
+        updateMissingClass(newClass);
       }
     }
   }
@@ -1418,7 +1453,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String filePathStr =
         this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Paths.get(filePathStr);
-
     createdClass.add(filePath);
     try {
       Path parentPath = filePath.getParent();
