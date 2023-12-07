@@ -596,16 +596,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           classAndPackageMap.getOrDefault(simpleClassName, currentPackage) + "." + node;
       updateClassSetWithQualifiedFieldSignature(fullyQualifiedCall, true);
     }
-    // if the symbol that called this field is solvable yet this field is unsolved, then the type of
-    // the calling symbol is a synthetic class that needs to have a synthetic field updated
-    else if (canBeSolved(node.getScope())) {
-      Expression nodeSccope = node.getScope();
-      String filePath =
-          rootDirectory + nodeSccope.calculateResolvedType().describe().replace(".", "/") + ".java";
-      // this condition checks if the class is a synthetic class.
-      if (!setOfExistingFiles.contains(Path.of(filePath).toAbsolutePath().normalize())) {
-        updateSyntheticClassWithNonStaticFields(node);
-      }
+    // check if this unsolved field belongs to a synthetic class.
+    else if (canBeSolved(node.getScope()) && !belongsToARealClassFile(node)) {
+      updateSyntheticClassWithNonStaticFields(node);
     }
 
     try {
@@ -761,6 +754,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     super.visit(newExpr, p);
     insideAnObjectCreation = false;
     return newExpr;
+  }
+
+  /**
+   * Given a field access expression, this method determines whether the field is declared in one of
+   * the original class file in the codebase (instead of a synthetic class).
+   *
+   * @param node a FieldAccessExpr instance
+   * @return true if the field is inside an original class file
+   */
+  public boolean belongsToARealClassFile(FieldAccessExpr node) {
+    Expression nodeScope = node.getScope();
+    String filePath =
+        rootDirectory + nodeScope.calculateResolvedType().describe().replace(".", "/") + ".java";
+    return setOfExistingFiles.contains(Path.of(filePath).toAbsolutePath().normalize());
   }
 
   /**
