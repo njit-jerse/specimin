@@ -117,8 +117,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private boolean insideAnObjectCreation = false;
 
-  /** This instance maps the name of a synthetic method with its synthetic class */
-  private final Map<String, UnsolvedClass> syntheticMethodAndClass = new HashMap<>();
+  /**
+   * This instance maps the name of the return type of a synthetic method with the synthetic class
+   * of that method
+   */
+  private final Map<String, UnsolvedClass> syntheticMethodReturnTypeAndClass = new HashMap<>();
 
   /**
    * This instance maps the name of a synthetic type with the class where there is a field declared
@@ -166,6 +169,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /** The list of existing files in the input codebase. */
   private Set<Path> setOfExistingFiles;
+
+  /**
+   * Mapping of statically imported members where keys are the imported members and values are their
+   * corresponding classes.
+   */
+  private final Map<String, @FullyQualifiedName String> staticImportedMembersMap = new HashMap<>();
 
   /**
    * Create a new UnsolvedSymbolVisitor instance
@@ -281,6 +290,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (decl.isAsterisk()) {
       throw new RuntimeException(
           "A wildcard import statement found. Please use explicit import" + " statements.");
+    }
+    if (decl.isStatic()) {
+      String name = decl.getNameAsString();
+      @SuppressWarnings(
+          "signature") // since this is from an import statement, this is a fully qualified class
+      // name
+      @FullyQualifiedName String className = name.substring(0, name.lastIndexOf("."));
+      String elementName = name.replace(className + ".", "");
+      staticImportedMembersMap.put(elementName, className);
     }
     return super.visit(decl, arg);
   }
@@ -485,6 +503,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (fieldNameToClassNameMap.containsKey(name)) {
       return super.visit(node, arg);
     }
+    // this condition checks if this NameExpr is a statically imported field
+    else if (staticImportedMembersMap.containsKey(name)) {
+      try {
+        node.resolve();
+      } catch (UnsolvedSymbolException e) {
+        @FullyQualifiedName String className = staticImportedMembersMap.get(name);
+        String fullyQualifiedFieldSignature = className + "." + name;
+        updateClassSetWithQualifiedFieldSignature(fullyQualifiedFieldSignature, true, true);
+        return super.visit(node, arg);
+      }
+    }
     // This method explicitly handles NameExpr instances that represent fields of classes but are
     // not explicitly shown in the code. For example, if "number" is a field of a class, then
     // "return number;" is an expression that this method will address. If the NameExpr instance is
@@ -589,12 +618,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else if (canBeSolved(node)) {
       return super.visit(node, p);
     } else if (isAQualifiedFieldSignature(node.toString())) {
-      updateClassSetWithQualifiedFieldSignature(node.toString(), true);
+      updateClassSetWithQualifiedFieldSignature(node.toString(), true, false);
     } else if (unsolvedFieldCalledByASimpleClassName(node)) {
       String simpleClassName = node.getScope().toString();
       String fullyQualifiedCall =
           classAndPackageMap.getOrDefault(simpleClassName, currentPackage) + "." + node;
-      updateClassSetWithQualifiedFieldSignature(fullyQualifiedCall, true);
+      updateClassSetWithQualifiedFieldSignature(fullyQualifiedCall, true, false);
     }
     // check if this unsolved field belongs to a synthetic class.
     else if (canBeSolved(node.getScope()) && !belongsToARealClassFile(node)) {
@@ -637,6 +666,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String methodFullyQualifiedCall = toFullyQualifiedCall(method);
       updateClassSetWithQualifiedStaticMethodCall(
           methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
+    } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
+      String methodName = method.getNameAsString();
+      @FullyQualifiedName String className = staticImportedMembersMap.get(methodName);
+      String methodFullyQualifiedCall = className + "." + methodName;
+      // everything inside the (...) will be trimmed
+      updateClassSetWithQualifiedStaticMethodCall(
+          methodFullyQualifiedCall + "()", getArgumentsFromMethodCall(method));
     }
     boolean needToSetException =
         !canBeSolved(method)
@@ -723,9 +759,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // If the parameter originates from a Java built-in library, such as java.io or java.lang,
     // an UnsupportedOperationException will be thrown instead.
     catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      handleParameterResolveFailure(parameter);
+      if (!parameter.getType().isUnknownType()) {
+        handleParameterResolveFailure(parameter);
+        gotException = true;
+      }
     }
-    gotException = true;
     return super.visit(parameter, p);
   }
 
@@ -899,7 +937,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
     UnsolvedClass missingClass = updateUnsolvedClassWithClassName(className, false, thisMethod);
-    syntheticMethodAndClass.put(methodName, missingClass);
+    syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
 
     // if the return type is not specified, a synthetic return type will be created. This part of
     // codes creates the corresponding class for that synthetic return type
@@ -970,7 +1008,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
     missingClass.addMethod(thisMethod);
-    syntheticMethodAndClass.put(methodName, missingClass);
+    syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
     this.updateMissingClass(missingClass);
   }
 
@@ -1076,7 +1114,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Expression caller = field.getScope();
     String fullyQualifiedClassName = caller.calculateResolvedType().describe();
     String fieldQualifedSignature = fullyQualifiedClassName + "." + field.getNameAsString();
-    updateClassSetWithQualifiedFieldSignature(fieldQualifedSignature, false);
+    updateClassSetWithQualifiedFieldSignature(fieldQualifedSignature, false, false);
   }
 
   /**
@@ -1305,8 +1343,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       method.resolve();
       return false;
-    } catch (Exception e) {
-      return true;
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      if (e instanceof UnsolvedSymbolException) {
+        return true;
+      }
+      // UnsupportedOperationException is for when the types could not be solved at all, such as
+      // var or wildcard types.
+      return false;
     }
   }
 
@@ -1664,7 +1707,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClass classThatContainMethod = new UnsolvedClass(className, packageName);
     newMethod.setStatic();
     classThatContainMethod.addMethod(newMethod);
-    syntheticMethodAndClass.put(newMethod.toString(), classThatContainMethod);
+    syntheticMethodReturnTypeAndClass.put(thisReturnType, classThatContainMethod);
     @SuppressWarnings(
         "signature") // thisReturnType is a @ClassGetSimpleName, so combining it with the
     // packageName will give us the @FullyQualifiedName
@@ -1681,8 +1724,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param fieldExpr the field access expression to be used as input. This field access expression
    *     must be in the form of a qualified class name
    * @param isStatic check whether the field is static
+   * @param isFinal check whether the field is final
    */
-  public void updateClassSetWithQualifiedFieldSignature(String fieldExpr, boolean isStatic) {
+  public void updateClassSetWithQualifiedFieldSignature(
+      String fieldExpr, boolean isStatic, boolean isFinal) {
     // As this code involves complex string operations, we'll use a field access expression as an
     // example,
     // following its progression through the code.
@@ -1718,6 +1763,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClass classThatContainField = new UnsolvedClass(className, packageName);
     // at this point, fieldDeclaration will become "ComExampleMyClassMyFieldType myField"
     String fieldDeclaration = fieldTypeClassName + " " + fieldName;
+    if (isFinal) {
+      fieldDeclaration = "final " + fieldDeclaration;
+    }
     if (isStatic) {
       // fieldDeclaration will become "static ComExampleMyClassMyFieldType myField = null;"
       fieldDeclaration = "static " + fieldDeclaration;
@@ -1747,11 +1795,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         this.createMissingClass(relatedClass);
         return;
       }
-      // convert MethodNameReturnType to methodName
-      String involvedMethod =
-          incorrectType.substring(0, 1).toLowerCase()
-              + incorrectType.substring(1).replace("ReturnType", "");
-      UnsolvedClass relatedClass = syntheticMethodAndClass.get(involvedMethod);
+      UnsolvedClass relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
       if (relatedClass != null) {
         for (UnsolvedClass syntheticClass : missingClass) {
           if (syntheticClass.getClassName().equals(relatedClass.getClassName())
