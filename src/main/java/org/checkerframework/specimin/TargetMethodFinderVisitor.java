@@ -226,7 +226,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       Type type = para.getType();
       if (type.isUnionType()) {
         resolveUnionType(type.asUnionType());
-      } else {
+      }
+      // an unknown type plays the role of a null object for lambda parameters that have no explicit
+      // type declared
+      else if (!type.isUnknownType()) {
         // Parameter resolution (para.resolve()) does not work in catch clause.
         // However, resolution works on the type of the parameter.
         // Bug report: https://github.com/javaparser/javaparser/issues/4240
