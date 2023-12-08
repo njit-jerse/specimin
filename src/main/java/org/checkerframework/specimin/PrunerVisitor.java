@@ -5,6 +5,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.BooleanLiteralExpr;
@@ -89,6 +90,12 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     if (classesUsedByTargetMethods.contains(classFullName)) {
       return super.visit(decl, p);
     }
+    decl.remove();
+    return decl;
+  }
+
+  @Override
+  public Visitable visit(InitializerDeclaration decl, Void p) {
     decl.remove();
     return decl;
   }

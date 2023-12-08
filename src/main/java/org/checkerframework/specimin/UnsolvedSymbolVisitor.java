@@ -37,6 +37,7 @@ import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
@@ -1371,6 +1372,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @FullyQualifiedName String callerName = referCaller.getQualifiedName();
       @ClassGetSimpleName String callerSimple = fullyQualifiedToSimple(callerName);
       return callerSimple;
+    } else if (callerExpression instanceof ResolvedLambdaConstraintType) {
+      // an example of ConstraintType is the type of "e" in this expression: myMap.map(e ->
+      // e.toString())
+      @FullyQualifiedName String boundedQualifiedType =
+          callerExpression.asConstraintType().getBound().asReferenceType().getQualifiedName();
+      return fullyQualifiedToSimple(boundedQualifiedType);
     } else {
       throw new RuntimeException("Unexpected expression: " + callerExpression);
     }

@@ -200,6 +200,10 @@ public class SpeciminRunner {
       cu.accept(methodPruner, null);
     }
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
+      // ignore classes from the Java package.
+      if (target.getKey().startsWith("java/")) {
+        continue;
+      }
       // If a compilation output's entire body has been removed and the related class is not used by
       // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
