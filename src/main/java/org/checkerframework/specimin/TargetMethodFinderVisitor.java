@@ -169,6 +169,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
+      usedClass.add(method.resolve().getPackageName() + "." + method.resolve().getClassName());
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
