@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -78,6 +79,15 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
+  }
+
+  @Override
+  public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    if (!classesUsedByTargetMethods.contains(decl.resolve().getQualifiedName())) {
+      decl.remove();
+      return decl;
+    }
+    return super.visit(decl, p);
   }
 
   @Override

@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import java.util.HashMap;
@@ -30,6 +31,9 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
 
   @Override
   public void visit(FieldDeclaration decl, Void p) {
+    if (decl.getParentNode().get() instanceof ObjectCreationExpr) {
+      return;
+    }
     ClassOrInterfaceDeclaration classNode =
         (ClassOrInterfaceDeclaration) decl.getParentNode().get();
     SimpleName classNodeSimpleName = classNode.getName();

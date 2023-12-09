@@ -186,6 +186,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
     String methodName = this.classFQName + "#" + removeMethodReturnType(methodDeclAsString);
+    if (methodDeclAsString.contains("listIterator")) {
+      System.out.println(methodName);
+    }
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();

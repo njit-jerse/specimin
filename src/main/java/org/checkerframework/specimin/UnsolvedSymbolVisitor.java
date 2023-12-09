@@ -111,13 +111,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final String rootDirectory;
 
   /**
-   * This boolean tracks whether the element currently being visited is inside an object creation.
-   * It is set by {@link #visit(ObjectCreationExpr, Void)}. This boolean helps UnsolvedSymbolVisitor
-   * recognize anonymous class.
-   */
-  private boolean insideAnObjectCreation = false;
-
-  /**
    * This instance maps the name of the return type of a synthetic method with the synthetic class
    * of that method
    */
@@ -468,7 +461,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       declType.resolve();
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      String typeAsString = declType.asString();
+      // get the simple name of the type
+      String typeAsString = declType.getElementType().asClassOrInterfaceType().getNameAsString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
       // There could be three cases here: a type variable, a fully-qualified class name, or a simple
       // class name.
@@ -572,35 +566,35 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // whether the return type is a type variable, which must succeed if the type variable
     // was declared for this scope.
     addTypeVariableScope(node.getTypeParameters());
-
-    // since this is a return type of a method, it is a dot-separated identifier
-    @SuppressWarnings("signature")
-    @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
-    @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
-    if (!this.isTypeVar(nodeTypeSimpleForm)) {
-      // Don't attempt to resolve a type variable, since we will inevitably fail.
-      try {
-        nodeType.resolve();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false);
+    // the type without the [], if any.
+    Type nodeElementType = nodeType.getElementType();
+    if (!nodeElementType.isVoidType() && !nodeElementType.isPrimitiveType()) {
+      @ClassGetSimpleName String nodeTypeSimpleForm = nodeElementType.asClassOrInterfaceType().getName().asString();
+      if (!this.isTypeVar(nodeTypeSimpleForm)) {
+        // Don't attempt to resolve a type variable, since we will inevitably fail.
+        try {
+          nodeType.resolve();
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false);
+        }
       }
-    }
 
-    if (!insideAnObjectCreation) {
-      SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
-      className = classNodeSimpleName.asString();
-      methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
-    }
-    // node is a method declaration inside an anonymous class
-    else {
-      try {
-        // since this method declaration is inside an anonymous class, its parent will be an
-        // ObjectCreationExpr
-        ((ObjectCreationExpr) parentNode).resolve();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
-        String nameOfClass = classNodeSimpleName.asString();
-        updateUnsolvedClassWithMethod(node, nameOfClass, toSimpleName(nodeTypeAsString));
+      if (!insideAnObjectCreation(node)) {
+        SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+        className = classNodeSimpleName.asString();
+        methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
+      }
+      // node is a method declaration inside an anonymous class
+      else {
+        try {
+          // since this method declaration is inside an anonymous class, its parent will be an
+          // ObjectCreationExpr
+          ((ObjectCreationExpr) parentNode).resolve();
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
+          String nameOfClass = classNodeSimpleName.asString();
+          updateUnsolvedClassWithMethod(node, nameOfClass, nodeTypeSimpleForm);
+        }
       }
     }
     HashSet<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
@@ -695,6 +689,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!isCapital(typeExpr.getName().asString())) {
       return super.visit(typeExpr, p);
     }
+    if (typeExpr.isTypeParameter()) {
+      return super.visit(typeExpr, p);
+    }
     if (!typeExpr.isReferenceType()) {
       return super.visit(typeExpr, p);
     }
@@ -775,10 +772,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isFromAJarFile(newExpr)) {
         updateClassesFromJarSourcesForObjectCreation(newExpr);
       }
-      insideAnObjectCreation = true;
-      super.visit(newExpr, p);
-      insideAnObjectCreation = false;
-      return newExpr;
+      return super.visit(newExpr, p);
     }
     this.gotException = true;
     try {
@@ -788,10 +782,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
-    insideAnObjectCreation = true;
-    super.visit(newExpr, p);
-    insideAnObjectCreation = false;
-    return newExpr;
+    return super.visit(newExpr, p);
   }
 
   /**
@@ -884,6 +875,25 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
   }
 
+  /**
+   * Given a MethodDeclaration instance, this method checks if that MethodDeclaration is inside an
+   * object creation expression.
+   *
+   * @param decl a MethodDeclaration instance
+   * @return true if decl is inside an object creation expression
+   */
+  private boolean insideAnObjectCreation(MethodDeclaration decl) {
+    while (decl.getParentNode().isPresent()) {
+      Node parent = decl.getParentNode().get();
+      if (parent instanceof ObjectCreationExpr) {
+        return true;
+      }
+      if (parent instanceof ClassOrInterfaceDeclaration) {
+        return false;
+      }
+    }
+    throw new RuntimeException("Got a method declaration with no class!");
+  }
   /**
    * Given a class name that can either be fully-qualified or simple, this method will convert that
    * class name to a simple name.
