@@ -566,35 +566,37 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // whether the return type is a type variable, which must succeed if the type variable
     // was declared for this scope.
     addTypeVariableScope(node.getTypeParameters());
-    // the type without the [], if any.
-    Type nodeElementType = nodeType.getElementType();
-    if (!nodeElementType.isVoidType() && !nodeElementType.isPrimitiveType()) {
-      @ClassGetSimpleName String nodeTypeSimpleForm = nodeElementType.asClassOrInterfaceType().getName().asString();
-      if (!this.isTypeVar(nodeTypeSimpleForm)) {
-        // Don't attempt to resolve a type variable, since we will inevitably fail.
-        try {
-          nodeType.resolve();
-        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-          updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false);
-        }
-      }
 
-      if (!insideAnObjectCreation(node)) {
-        SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
-        className = classNodeSimpleName.asString();
-        methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
+    // since this is a return type of a method, it is a dot-separated identifier
+    @SuppressWarnings("signature")
+    @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.getElementType().asString();
+    @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
+    // the visit method for ClassOrInterfaceType will handle type variables
+    nodeTypeSimpleForm = nodeTypeSimpleForm.substring(0, nodeTypeSimpleForm.indexOf("<"));
+    if (!this.isTypeVar(nodeTypeSimpleForm)) {
+      // Don't attempt to resolve a type variable, since we will inevitably fail.
+      try {
+        nodeType.resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false);
       }
-      // node is a method declaration inside an anonymous class
-      else {
-        try {
-          // since this method declaration is inside an anonymous class, its parent will be an
-          // ObjectCreationExpr
-          ((ObjectCreationExpr) parentNode).resolve();
-        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-          SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
-          String nameOfClass = classNodeSimpleName.asString();
-          updateUnsolvedClassWithMethod(node, nameOfClass, nodeTypeSimpleForm);
-        }
+    }
+
+    if (!insideAnObjectCreation(method)) {
+      SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+      className = classNodeSimpleName.asString();
+      methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
+    }
+    // node is a method declaration inside an anonymous class
+    else {
+      try {
+        // since this method declaration is inside an anonymous class, its parent will be an
+        // ObjectCreationExpr
+        ((ObjectCreationExpr) parentNode).resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
+        String nameOfClass = classNodeSimpleName.asString();
+        updateUnsolvedClassWithMethod(node, nameOfClass, toSimpleName(nodeTypeAsString));
       }
     }
     HashSet<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
