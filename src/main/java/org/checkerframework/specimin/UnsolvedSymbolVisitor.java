@@ -571,8 +571,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @SuppressWarnings("signature")
     @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.getElementType().asString();
     @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
-    // the visit method for ClassOrInterfaceType will handle type variables
-    nodeTypeSimpleForm = nodeTypeSimpleForm.substring(0, nodeTypeSimpleForm.indexOf("<"));
     if (!this.isTypeVar(nodeTypeSimpleForm)) {
       // Don't attempt to resolve a type variable, since we will inevitably fail.
       try {
@@ -582,7 +580,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
-    if (!insideAnObjectCreation(method)) {
+    if (!insideAnObjectCreation(node)) {
       SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
       className = classNodeSimpleName.asString();
       methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
@@ -907,13 +905,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   // simple form of that name
   @SuppressWarnings("signature")
   public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    List<String> elements = Splitter.onPattern("[.]").splitToList(className);
+    String classNameWithoutTypeVars = className;
+    if (classNameWithoutTypeVars.contains("<")) {
+      classNameWithoutTypeVars =
+          classNameWithoutTypeVars.substring(0, classNameWithoutTypeVars.indexOf("<"));
+    }
+    List<String> elements = Splitter.onPattern("[.]").splitToList(classNameWithoutTypeVars);
     if (elements.size() < 2) {
-      return className;
+      return classNameWithoutTypeVars;
     }
     return elements.get(elements.size() - 1);
   }
-
   /**
    * This method will add a new method declaration to a synthetic class based on the unsolved method
    * call or method declaration in the original input. User can choose the desired return type for
