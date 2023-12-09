@@ -689,9 +689,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!isCapital(typeExpr.getName().asString())) {
       return super.visit(typeExpr, p);
     }
-    if (typeExpr.isTypeParameter()) {
-      return super.visit(typeExpr, p);
-    }
     if (!typeExpr.isReferenceType()) {
       return super.visit(typeExpr, p);
     }
