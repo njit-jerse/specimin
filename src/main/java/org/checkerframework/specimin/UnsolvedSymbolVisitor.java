@@ -461,8 +461,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       declType.resolve();
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      // get the simple name of the type
-      String typeAsString = declType.getElementType().asClassOrInterfaceType().getNameAsString();
+      String typeAsString = declType.asString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
       // There could be three cases here: a type variable, a fully-qualified class name, or a simple
       // class name.
@@ -569,7 +568,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
-    @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.getElementType().asString();
+    @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
     @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
     if (!this.isTypeVar(nodeTypeSimpleForm)) {
       // Don't attempt to resolve a type variable, since we will inevitably fail.
@@ -902,14 +901,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   // simple form of that name
   @SuppressWarnings("signature")
   public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    String classNameWithoutTypeVars = className;
-    if (classNameWithoutTypeVars.contains("<")) {
-      classNameWithoutTypeVars =
-          classNameWithoutTypeVars.substring(0, classNameWithoutTypeVars.indexOf("<"));
-    }
-    List<String> elements = Splitter.onPattern("[.]").splitToList(classNameWithoutTypeVars);
+    List<String> elements = Splitter.onPattern("[.]").splitToList(className);
     if (elements.size() < 2) {
-      return classNameWithoutTypeVars;
+      return className;
     }
     return elements.get(elements.size() - 1);
   }
