@@ -420,10 +420,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a qualified class name, this method will update the list of used classes with that class
-   * name and the corresponding enclosing classes in case the input class is a nested class.
+   * Updates the list of used classes with the given qualified class name and its corresponding
+   * enclosing classes, if applicable (in the case of nested classes).
    *
-   * @param qualifiedClassName a qualified class name to be used as input
+   * @param qualifiedClassName The qualified class name to be included in the list of used classes.
    */
   public void updateUsedClassWithQualifiedClassName(String qualifiedClassName) {
     // in case of type variables
