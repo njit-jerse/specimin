@@ -426,6 +426,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param qualifiedClassName a qualified class name to be used as input
    */
   public void updateUsedClassWithQualifiedClassName(String qualifiedClassName) {
+    // in case of type variables
+    if (!qualifiedClassName.contains(".")) {
+      return;
+    }
     usedClass.add(qualifiedClassName);
     String potentialOuterClass =
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
