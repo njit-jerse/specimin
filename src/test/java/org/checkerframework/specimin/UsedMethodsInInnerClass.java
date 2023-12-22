@@ -5,7 +5,7 @@ import org.junit.Test;
 import java.io.IOException;
 
 /**
- * This test checks if Specimin can preserve inner classes that contain used methods and remove inner classes that do not..
+ * This test checks if Specimin can preserve inner classes that contain used methods and remove inner classes that do not.
  */
 public class UsedMethodsInInnerClass {
   @Test
