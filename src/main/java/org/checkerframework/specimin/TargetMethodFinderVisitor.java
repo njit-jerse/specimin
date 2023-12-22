@@ -426,12 +426,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param qualifiedClassName a qualified class name to be used as input
    */
   public void updateUsedClassWithQualifiedClassName(String qualifiedClassName) {
-    if (UnsolvedSymbolVisitor.isAClassPath(qualifiedClassName)) {
-      usedClass.add(qualifiedClassName);
-    } else {
-      return;
+    usedClass.add(qualifiedClassName);
+    String potentialOuterClass =
+        qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
+    if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
+      updateUsedClassWithQualifiedClassName(potentialOuterClass);
     }
-    updateUsedClassWithQualifiedClassName(
-        qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf(".")));
   }
 }
