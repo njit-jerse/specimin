@@ -6,6 +6,8 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -588,7 +590,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
 
     if (!insideAnObjectCreation) {
-      SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+      SimpleName classNodeSimpleName = getSimpleNameOfClass(node);
       className = classNodeSimpleName.asString();
       methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
     }
@@ -1227,6 +1229,28 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       typeVariableScope.add(t.getName().asString());
     }
     typeVariables.addFirst(typeVariableScope);
+  }
+
+  /**
+   * Given a method declaration, this method will get the name of the class where that method is
+   * declared in.
+   *
+   * @param node the method declaration for input.
+   * @return the name of the class where that declaration belongs to.
+   */
+  private SimpleName getSimpleNameOfClass(MethodDeclaration node) {
+    SimpleName classNodeSimpleName;
+    Node parentNode = node.getParentNode().get();
+    if (parentNode instanceof EnumConstantDeclaration) {
+      classNodeSimpleName = ((EnumDeclaration) parentNode.getParentNode().get()).getName();
+    } else if (parentNode instanceof EnumDeclaration) {
+      classNodeSimpleName = ((EnumDeclaration) parentNode).getName();
+    } else if (parentNode instanceof ClassOrInterfaceDeclaration) {
+      classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+    } else {
+      throw new RuntimeException("Unexpected parent node: " + parentNode);
+    }
+    return classNodeSimpleName;
   }
 
   /**
