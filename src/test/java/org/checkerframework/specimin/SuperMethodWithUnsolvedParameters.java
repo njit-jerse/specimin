@@ -10,7 +10,7 @@ public class SuperMethodWithUnsolvedParameters {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "onefilesimple",
+        "supermethodwithunsolvedparameters",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar()"});
   }
