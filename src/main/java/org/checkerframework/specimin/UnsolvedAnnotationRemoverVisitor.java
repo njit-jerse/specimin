@@ -15,12 +15,29 @@ import java.util.Set;
 
 /** A visitor that removes unsolved annotation expressions. */
 public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
+  /**
+   * List of paths of jar files to be used as input. Note: this is the set of every jar path, not
+   * just the jar paths used by the current compilation unit.
+   */
   List<String> jarPaths;
 
+  /** List of paths of jar files used by the annotations. */
   Set<String> usedJarPaths = new HashSet<>();
+
+  /** Map every class in the set of jar files to the corresponding jar file */
   Map<String, String> classToJarPath = new HashMap<>();
+
+  /**
+   * Map a class to its fully qualified name based on the import statements of the current
+   * compilation unit.
+   */
   Map<String, String> classToFullClassName = new HashMap<>();
 
+  /**
+   * Create a new instance of UnsolvedAnnotationRemoverVisitor
+   *
+   * @param jarPaths a list of paths of jar files to be used as input
+   */
   public UnsolvedAnnotationRemoverVisitor(List<String> jarPaths) {
     this.jarPaths = jarPaths;
     for (String jarPath : jarPaths) {
@@ -35,6 +52,11 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
     }
   }
 
+  /**
+   * Get the value of usedJarPaths
+   *
+   * @return the value of usedJarPaths
+   */
   public Set<String> getUsedJarPaths() {
     return usedJarPaths;
   }
