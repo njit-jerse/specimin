@@ -4,7 +4,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 
-/** This test checks if Specimin can preserve annotations as needed */
+/** This test checks if Specimin can remove annotations as needed */
 public class RemoveUnsolvedAnnotationsTest {
   @Test
   public void runTest() throws IOException {
