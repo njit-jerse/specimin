@@ -324,9 +324,8 @@ public class SpeciminRunner {
    */
   private static void copyFilesToDirectory(Set<String> sourceFilePaths, String outputFolderPath)
       throws IOException {
-    System.out.println(outputFolderPath);
-    System.out.println(sourceFilePaths);
-    Files.createDirectories(Paths.get(outputFolderPath));
+    Path outputDirection = Paths.get(outputFolderPath);
+    Files.createDirectories(outputDirection);
     for (String sourceFilePath : sourceFilePaths) {
       Path sourcePath = Paths.get(sourceFilePath);
       Path fileNameAsPath = sourcePath.getFileName();
@@ -334,7 +333,7 @@ public class SpeciminRunner {
         continue;
       }
       String fileName = fileNameAsPath.toString();
-      Path destinationFilePath = Paths.get(outputFolderPath).resolve(fileName);
+      Path destinationFilePath = outputDirection.resolve(fileName);
       Files.copy(sourcePath, destinationFilePath, StandardCopyOption.REPLACE_EXISTING);
     }
   }

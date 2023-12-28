@@ -86,8 +86,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
         }
         annotationName = classToFullClassName.get(annotationName);
       }
-      System.out.println(annotation);
-      System.out.println(classToJarPath);
       if (!classToJarPath.containsKey(annotationName)) {
         annotation.remove();
       } else {
