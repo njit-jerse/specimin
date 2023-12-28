@@ -13,7 +13,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** A visitor that removes unsolved annotation expressions. */
+/**
+ * A visitor that removes unsolved annotation expressions. This visitor needs to be run twice: first
+ * time is to visit every compilation unit in the original list of target files, the second time is
+ * in the updated list of target files.
+ */
 public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
   /**
    * List of paths of jar files to be used as input. Note: this is the set of every jar path, not
