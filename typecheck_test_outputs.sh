@@ -11,6 +11,7 @@ returnval=0
 
 cd src/test/resources || exit 1
 for testcase in * ; do
+    if [ "${testcase}" = "shared" ]; then continue; fi
     cd "${testcase}/expected/" || exit 1
     # javac relies on word splitting
     # shellcheck disable=SC2046
