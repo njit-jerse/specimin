@@ -1232,11 +1232,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a method declaration, this method will get the name of the class where that method is
-   * declared in.
+   * Given a method declaration, this method will get the name of the class in which the method was declared.
    *
    * @param node the method declaration for input.
-   * @return the name of the class where that declaration belongs to.
+   * @return the name of the class to which that declaration belongs.
    */
   private SimpleName getSimpleNameOfClass(MethodDeclaration node) {
     SimpleName classNodeSimpleName;
