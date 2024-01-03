@@ -651,12 +651,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateClassesFromJarSourcesForMethodCall(method);
       return super.visit(method, p);
     }
-    if (isASuperCall(method) && !canBeSolved(method)) {
-      updateSyntheticClassForSuperCall(method);
-      return super.visit(method, p);
-    }
     // we will wait for the next run to solve this method call
     if (!canSolveParameters(method)) {
+      return super.visit(method, p);
+    }
+    if (isASuperCall(method) && !canBeSolved(method)) {
+      updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
     }
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
