@@ -18,8 +18,6 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -145,13 +143,13 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
     }
-    Set<String> usedJarPaths = new HashSet<>();
+
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
       cu.accept(annoRemover, null);
       annoRemover.processAnnotations(cu);
-      usedJarPaths.addAll(annoRemover.getUsedJarPaths());
     }
+
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
@@ -206,20 +204,8 @@ public class SpeciminRunner {
             finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
-      UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
-      cu.accept(annoRemover, null);
-      annoRemover.processAnnotations(cu);
-      usedJarPaths.addAll(annoRemover.getUsedJarPaths());
-    }
-    try {
-      copyFilesToDirectory(usedJarPaths, outputDirectory);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
     }
-
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
       // If a compilation output's entire body has been removed and the related class is not used by
       // the target methods, do not output it.
@@ -318,30 +304,6 @@ public class SpeciminRunner {
    */
   private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
     return StaticJavaParser.parse(Path.of(root, path));
-  }
-
-  /**
-   * Given a set of file paths and a directory, this method copies all of those files to that
-   * directory.
-   *
-   * @param sourceFilePaths a set of file paths
-   * @param outputFolderPath the directory to keep the copies of those files
-   * @throws IOException if there is an excepion in copying
-   */
-  private static void copyFilesToDirectory(Set<String> sourceFilePaths, String outputFolderPath)
-      throws IOException {
-    Path outputDirection = Paths.get(outputFolderPath);
-    Files.createDirectories(outputDirection);
-    for (String sourceFilePath : sourceFilePaths) {
-      Path sourcePath = Paths.get(sourceFilePath);
-      Path fileNameAsPath = sourcePath.getFileName();
-      if (fileNameAsPath == null) {
-        continue;
-      }
-      String fileName = fileNameAsPath.toString();
-      Path destinationFilePath = outputDirection.resolve(fileName);
-      Files.copy(sourcePath, destinationFilePath, StandardCopyOption.REPLACE_EXISTING);
-    }
   }
 
   /**

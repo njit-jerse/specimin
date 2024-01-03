@@ -8,15 +8,11 @@ import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * A visitor that removes unsolved annotation expressions. This visitor needs to be run twice: first
- * time is to visit every compilation unit in the original list of target files, the second time is
- * in the updated list of target files.
+ * A visitor that removes unsolved annotation expressions.
  */
 public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
   /**
@@ -24,9 +20,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
    * just the jar paths used by the current compilation unit.
    */
   List<String> jarPaths;
-
-  /** List of paths of jar files used by the annotations. */
-  Set<String> usedJarPaths = new HashSet<>();
 
   /** Map every class in the set of jar files to the corresponding jar file */
   Map<String, String> classToJarPath = new HashMap<>();
@@ -56,15 +49,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
     }
   }
 
-  /**
-   * Get the value of usedJarPaths
-   *
-   * @return the value of usedJarPaths
-   */
-  public Set<String> getUsedJarPaths() {
-    return usedJarPaths;
-  }
-
   @Override
   public Node visit(ImportDeclaration decl, Void p) {
     String classFullName = decl.getNameAsString();
@@ -92,8 +76,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
       }
       if (!classToJarPath.containsKey(annotationName)) {
         annotation.remove();
-      } else {
-        usedJarPaths.add(classToJarPath.get(annotationName));
       }
     }
   }

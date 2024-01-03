@@ -1,8 +1,7 @@
 package org.checkerframework.specimin;
 
-import org.junit.Test;
-
 import java.io.IOException;
+import org.junit.Test;
 
 /** This test checks if Specimin can remove annotations as needed */
 public class RemoveUnsolvedAnnotationsTest {
@@ -12,6 +11,6 @@ public class RemoveUnsolvedAnnotationsTest {
         "removeunsolvedannotations",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#baz()"},
-        new String[] {"src/test/resources/removeunsolvedannotations/input/checker-qual-3.42.0.jar"});
+        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
   }
 }
