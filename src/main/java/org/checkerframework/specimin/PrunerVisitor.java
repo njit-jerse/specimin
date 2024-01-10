@@ -156,13 +156,15 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     ResolvedConstructorDeclaration resolved = constructorDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       return super.visit(constructorDecl, p);
-    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
+    }
+
+    if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
       constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return constructorDecl;
-    } else {
-      constructorDecl.remove();
-      return constructorDecl;
     }
+
+    constructorDecl.remove();
+    return constructorDecl;
   }
 
   @Override
@@ -206,28 +208,17 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   private Expression getBasicInitializer(Type fieldType) {
     if (fieldType.isPrimitiveType()) {
       PrimitiveType.Primitive primitiveType = ((PrimitiveType) fieldType).getType();
-      switch (primitiveType) {
-        case BOOLEAN:
-          return new BooleanLiteralExpr(false);
-        case INT:
-          return new IntegerLiteralExpr("0");
-        case LONG:
-          return new LongLiteralExpr("0L");
-        case FLOAT:
-          return new DoubleLiteralExpr("0.0f");
-        case DOUBLE:
-          return new DoubleLiteralExpr("0.0");
-        case BYTE:
-          return new IntegerLiteralExpr("0");
-        case SHORT:
-          return new IntegerLiteralExpr("0");
-        case CHAR:
-          return new CharLiteralExpr("'\u0000'");
-        default:
-          throw new RuntimeException("Unexpected primitive type: " + fieldType);
-      }
-    } else {
-      return new NullLiteralExpr();
+      return switch (primitiveType) {
+        case BOOLEAN -> new BooleanLiteralExpr(false);
+        case INT, BYTE, SHORT -> new IntegerLiteralExpr("0");
+        case LONG -> new LongLiteralExpr("0L");
+        case FLOAT -> new DoubleLiteralExpr("0.0f");
+        case DOUBLE -> new DoubleLiteralExpr("0.0");
+        case CHAR -> new CharLiteralExpr("'\u0000'");
+        default -> throw new RuntimeException("Unexpected primitive type: " + fieldType);
+      };
     }
+
+    return new NullLiteralExpr();
   }
 }

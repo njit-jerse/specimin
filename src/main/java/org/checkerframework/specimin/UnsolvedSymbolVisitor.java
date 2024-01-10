@@ -864,28 +864,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param variableDeclaration the basic declaration of that variable
    * @return the declaration of the variable with an initial value
    */
-  public static String setInitialValueForVariableDeclaration(
-      String variableType, String variableDeclaration) {
-    if (variableType.equals("byte")) {
-      return variableDeclaration + " = (byte)0";
-    } else if (variableType.equals("short")) {
-      return variableDeclaration + " = (short)0";
-    } else if (variableType.equals("int")) {
-      return variableDeclaration + " = 0";
-    } else if (variableType.equals("long")) {
-      return variableDeclaration + " = 0L";
-    } else if (variableType.equals("float")) {
-      return variableDeclaration + " = 0.0f";
-    } else if (variableType.equals("double")) {
-      return variableDeclaration + " = 0.0d";
-    } else if (variableType.equals("char")) {
-      return variableDeclaration + " = '\\u0000'";
-    } else if (variableType.equals("boolean")) {
-      return variableDeclaration + " = false";
-    } else {
-      return variableDeclaration + " = null";
-    }
+  public static String setInitialValueForVariableDeclaration(String variableType, String variableDeclaration) {
+    return switch (variableType) {
+      case "byte" -> variableDeclaration + " = (byte)0";
+      case "short" -> variableDeclaration + " = (short)0";
+      case "int" -> variableDeclaration + " = 0";
+      case "long" -> variableDeclaration + " = 0L";
+      case "float" -> variableDeclaration + " = 0.0f";
+      case "double" -> variableDeclaration + " = 0.0d";
+      case "char" -> variableDeclaration + " = '\\u0000'";
+      case "boolean" -> variableDeclaration + " = false";
+      default -> variableDeclaration + " = null";
+    };
   }
+
 
   /**
    * Given a class name that can either be fully-qualified or simple, this method will convert that

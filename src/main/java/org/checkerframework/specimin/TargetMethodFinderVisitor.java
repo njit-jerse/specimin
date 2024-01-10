@@ -141,7 +141,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
-      if (!this.classFQName.equals("")) {
+      if (!this.classFQName.isEmpty()) {
         throw new UnsupportedOperationException(
             "Attempted to enter an unexpected kind of class: "
                 + decl.getFullyQualifiedName()
@@ -189,7 +189,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // TODO: test this with annotations
     String methodName = this.classFQName + "#" + removeMethodReturnType(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
-    if (insideTargetMethod) {
+    if (insideTargetMethod && method.getParentNode().isPresent()) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
       ResolvedConstructorDeclaration resolved = parentExpression.resolve();
       String methodPackage = resolved.getPackageName();
@@ -245,9 +245,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         }
 
         if (paramType.isReferenceType()) {
-          String paraTypeFullName =
-              paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-          updateUsedClassWithQualifiedClassName(paraTypeFullName);
+          if (paramType.asReferenceType().getTypeDeclaration().isPresent()) {
+              String paraTypeFullName =
+                      paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+              updateUsedClassWithQualifiedClassName(paraTypeFullName);
+          }
           for (ResolvedType typeParameterValue :
               paramType.asReferenceType().typeParametersValues()) {
             String typeParameterValueName = typeParameterValue.describe();
