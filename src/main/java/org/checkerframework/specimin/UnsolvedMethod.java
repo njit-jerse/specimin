@@ -92,17 +92,17 @@ public class UnsolvedMethod {
     String staticField = isStatic ? "static " : "";
 
     return System.lineSeparator()
-      + "    public "
-      + staticField
-      + returnTypeInString
-      + name
-      + "("
-      + arguments
-      + ") {"
-      + System.lineSeparator()
-      + "        throw new Error();"
-      + System.lineSeparator()
-      + "    }"
-      + System.lineSeparator();
+        + "    public "
+        + staticField
+        + returnTypeInString
+        + name
+        + "("
+        + arguments
+        + ") {"
+        + System.lineSeparator()
+        + "        throw new Error();"
+        + System.lineSeparator()
+        + "    }"
+        + System.lineSeparator();
   }
 }

@@ -273,24 +273,24 @@ public class SpeciminRunner {
    *     entirely
    */
   private static boolean isEmptyCompilationUnit(CompilationUnit cu) {
-      for (Node child : cu.getChildNodes()) {
-        if (child instanceof PackageDeclaration) {
-          // Package declarations don't count for the purposes of
-          // deciding whether to entirely remove a compilation unit.
-          continue;
-        }
-
-        // If the node is a ClassOrInterfaceDeclaration, check if it has members.
-        if (child instanceof ClassOrInterfaceDeclaration cdecl) {
-          if (!cdecl.getMembers().isEmpty()) {
-            return false;
-          }
-        }
-
-        // If the node is not a PackageDeclaration or a ClassOrInterfaceDeclaration,
-        // the compilation unit is not empty.
-        return false;
+    for (Node child : cu.getChildNodes()) {
+      if (child instanceof PackageDeclaration) {
+        // Package declarations don't count for the purposes of
+        // deciding whether to entirely remove a compilation unit.
+        continue;
       }
+
+      // If the node is a ClassOrInterfaceDeclaration, check if it has members.
+      if (child instanceof ClassOrInterfaceDeclaration cdecl) {
+        if (!cdecl.getMembers().isEmpty()) {
+          return false;
+        }
+      }
+
+      // If the node is not a PackageDeclaration or a ClassOrInterfaceDeclaration,
+      // the compilation unit is not empty.
+      return false;
+    }
     return true;
   }
 

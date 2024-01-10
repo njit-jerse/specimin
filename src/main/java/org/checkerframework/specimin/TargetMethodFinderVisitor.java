@@ -246,9 +246,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
         if (paramType.isReferenceType()) {
           if (paramType.asReferenceType().getTypeDeclaration().isPresent()) {
-              String paraTypeFullName =
-                      paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-              updateUsedClassWithQualifiedClassName(paraTypeFullName);
+            String paraTypeFullName =
+                paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+            updateUsedClassWithQualifiedClassName(paraTypeFullName);
           }
           for (ResolvedType typeParameterValue :
               paramType.asReferenceType().typeParametersValues()) {

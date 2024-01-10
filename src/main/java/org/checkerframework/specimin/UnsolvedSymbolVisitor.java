@@ -864,7 +864,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param variableDeclaration the basic declaration of that variable
    * @return the declaration of the variable with an initial value
    */
-  public static String setInitialValueForVariableDeclaration(String variableType, String variableDeclaration) {
+  public static String setInitialValueForVariableDeclaration(
+      String variableType, String variableDeclaration) {
     return switch (variableType) {
       case "byte" -> variableDeclaration + " = (byte)0";
       case "short" -> variableDeclaration + " = (short)0";
@@ -877,7 +878,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       default -> variableDeclaration + " = null";
     };
   }
-
 
   /**
    * Given a class name that can either be fully-qualified or simple, this method will convert that
