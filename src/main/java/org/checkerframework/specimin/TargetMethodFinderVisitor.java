@@ -27,11 +27,7 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 /**
  * The main visitor for Specimin's first phase, which locates the target method(s) and compiles
@@ -245,11 +241,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         }
 
         if (paramType.isReferenceType()) {
-          if (paramType.asReferenceType().getTypeDeclaration().isPresent()) {
-              String paraTypeFullName =
-                      paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-              updateUsedClassWithQualifiedClassName(paraTypeFullName);
-          }
+          // Caution: Calling .get() on an Optional without checking if it's present.
+          // This will throw NoSuchElementException if the Optional returned by getTypeDeclaration()
+          // is empty.
+          // This scenario can occur if the reference type of the parameter does not have a resolved
+          // type declaration,
+          // which might be due to missing type information or unresolved references in the
+          // codebase.
+          String paraTypeFullName =
+              paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+          updateUsedClassWithQualifiedClassName(paraTypeFullName);
           for (ResolvedType typeParameterValue :
               paramType.asReferenceType().typeParametersValues()) {
             String typeParameterValueName = typeParameterValue.describe();

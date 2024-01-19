@@ -78,6 +78,7 @@ public class UnsolvedMethod {
    */
   @Override
   public String toString() {
+    StringBuilder result = new StringBuilder();
     StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
       String parameter = parameterList.get(i);
@@ -91,18 +92,21 @@ public class UnsolvedMethod {
     String returnTypeInString = returnType.isEmpty() ? "" : returnType + " ";
     String staticField = isStatic ? "static " : "";
 
-    return System.lineSeparator()
-      + "    public "
-      + staticField
-      + returnTypeInString
-      + name
-      + "("
-      + arguments
-      + ") {"
-      + System.lineSeparator()
-      + "        throw new Error();"
-      + System.lineSeparator()
-      + "    }"
-      + System.lineSeparator();
+    result
+        .append(System.lineSeparator())
+        .append("    public ")
+        .append(staticField)
+        .append(returnTypeInString)
+        .append(name)
+        .append("(")
+        .append(arguments)
+        .append(") {")
+        .append(System.lineSeparator())
+        .append("        throw new Error();")
+        .append(System.lineSeparator())
+        .append("    }")
+        .append(System.lineSeparator());
+
+    return result.toString();
   }
 }

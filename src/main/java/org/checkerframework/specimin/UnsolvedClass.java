@@ -209,7 +209,10 @@ public class UnsolvedClass {
     }
     sb.append(" {\n");
     for (String variableDeclarations : classFields) {
-      sb.append("    " + "public ").append(variableDeclarations).append(";").append(System.lineSeparator());
+      sb.append("    " + "public ")
+          .append(variableDeclarations)
+          .append(";")
+          .append(System.lineSeparator());
     }
     for (UnsolvedMethod method : methods) {
       sb.append(method.toString());
