@@ -228,8 +228,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         default:
           throw new RuntimeException("Unexpected primitive type: " + fieldType);
       }
-    } else {
-      return new NullLiteralExpr();
     }
+    return new NullLiteralExpr();
   }
 }

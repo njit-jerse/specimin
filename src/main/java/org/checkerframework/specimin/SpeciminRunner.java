@@ -110,6 +110,9 @@ public class SpeciminRunner {
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
+      // Caution: Calling .get() on an Optional without checking if it's present.
+      // This will throw NoSuchElementException if the Optional returned by getStorage()
+      // is empty.
       existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
     }
     UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root, existingFiles);

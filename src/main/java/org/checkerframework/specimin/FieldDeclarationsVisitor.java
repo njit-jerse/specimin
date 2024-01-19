@@ -30,6 +30,9 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
 
   @Override
   public void visit(FieldDeclaration decl, Void p) {
+    // Caution: Calling .get() on an Optional without checking if it's present.
+    // This will throw NoSuchElementException if the Optional returned by getParentNode()
+    // is empty.
     ClassOrInterfaceDeclaration classNode =
         (ClassOrInterfaceDeclaration) decl.getParentNode().get();
     SimpleName classNodeSimpleName = classNode.getName();
