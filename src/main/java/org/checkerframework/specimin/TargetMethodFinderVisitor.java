@@ -27,7 +27,11 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * The main visitor for Specimin's first phase, which locates the target method(s) and compiles
@@ -185,7 +189,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // TODO: test this with annotations
     String methodName = this.classFQName + "#" + removeMethodReturnType(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
-    if (insideTargetMethod && method.getParentNode().isPresent()) {
+    if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
       ResolvedConstructorDeclaration resolved = parentExpression.resolve();
       String methodPackage = resolved.getPackageName();
