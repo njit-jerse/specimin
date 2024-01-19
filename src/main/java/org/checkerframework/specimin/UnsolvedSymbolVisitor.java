@@ -1575,7 +1575,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public static boolean isAClassPath(String potentialClassPath) {
     List<String> elements = Splitter.onPattern("\\.").splitToList(potentialClassPath);
-    ;
     int elementsCount = elements.size();
     return elementsCount > 1 && isCapital(elements.get(elementsCount - 1));
   }
