@@ -193,9 +193,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       updateUsedClassWithQualifiedClassName(
           method.resolve().getPackageName() + "." + method.resolve().getClassName());
       insideTargetMethod = true;
-      targetMethods.add(method.resolve().getQualifiedSignature());
+      ResolvedConstructorDeclaration resolvedMethod = method.resolve();
+      targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
-      usedClass.add(method.resolve().getPackageName() + "." + method.resolve().getClassName());
+      usedClass.add(resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
