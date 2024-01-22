@@ -890,6 +890,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parent instanceof ClassOrInterfaceDeclaration) {
         return false;
       }
+      if (parent instanceof EnumConstantDeclaration) {
+        return false;
+      }
+      if (parent instanceof EnumDeclaration) {
+        return false;
+      }
     }
     throw new RuntimeException("Got a method declaration with no class!");
   }
