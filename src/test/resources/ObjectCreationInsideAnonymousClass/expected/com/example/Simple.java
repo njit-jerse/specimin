@@ -8,7 +8,7 @@ public class Simple {
     public Baz getBaz() {
         return new Baz() {
 
-            private Foo foo;
+            private Foo foo = new Foo("starting");
 
             public void remove() {
                 foo.remove();

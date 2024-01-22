@@ -3,7 +3,6 @@ package org.checkerframework.specimin;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -151,6 +150,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldDeclaration fieldDecl, Void p) {
+    if (insideTargetMethod) {
+      return super.visit(fieldDecl, p);
+    }
     try {
       fieldDecl.resolve();
     } catch (UnsolvedSymbolException e) {
