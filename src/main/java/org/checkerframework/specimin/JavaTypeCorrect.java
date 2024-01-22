@@ -93,9 +93,23 @@ class JavaTypeCorrect {
           new BufferedReader(
               new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
       String line;
+      // incorrect constraint type will be updated here. Other types will be updated by
+      // updateTypeToChange
+      String incorrectConstraintType = "";
+      String correctConstraintType = "";
       while ((line = reader.readLine()) != null) {
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
+        }
+        // the type error with constraint types will be in a pair of lines:
+        // equality constraint: correctType
+        // lower bounds: incorrectType
+        if (line.contains("equality constraints: ")) {
+          correctConstraintType = line.trim().replace("equality constraints: ", "");
+        }
+        if (line.contains("lower bounds: ")) {
+          incorrectConstraintType = line.trim().replace("lower bounds: ", "");
+          typeToChange.put(incorrectConstraintType, correctConstraintType);
         }
       }
     } catch (Exception e) {

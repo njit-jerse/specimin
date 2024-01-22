@@ -6,6 +6,8 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -37,6 +39,7 @@ import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
@@ -580,7 +583,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
 
     if (!insideAnObjectCreation(node)) {
-      SimpleName classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+      SimpleName classNodeSimpleName = getSimpleNameOfClass(node);
       className = classNodeSimpleName.asString();
       methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
     }
@@ -641,12 +644,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateClassesFromJarSourcesForMethodCall(method);
       return super.visit(method, p);
     }
-    if (isASuperCall(method) && !canBeSolved(method)) {
-      updateSyntheticClassForSuperCall(method);
-      return super.visit(method, p);
-    }
     // we will wait for the next run to solve this method call
     if (!canSolveParameters(method)) {
+      return super.visit(method, p);
+    }
+    if (isASuperCall(method) && !canBeSolved(method)) {
+      updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
     }
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
@@ -1234,6 +1237,28 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Given a method declaration, this method will get the name of the class in which the method was
+   * declared.
+   *
+   * @param node the method declaration for input.
+   * @return the name of the class to which that declaration belongs.
+   */
+  private SimpleName getSimpleNameOfClass(MethodDeclaration node) {
+    SimpleName classNodeSimpleName;
+    Node parentNode = node.getParentNode().get();
+    if (parentNode instanceof EnumConstantDeclaration) {
+      classNodeSimpleName = ((EnumDeclaration) parentNode.getParentNode().get()).getName();
+    } else if (parentNode instanceof EnumDeclaration) {
+      classNodeSimpleName = ((EnumDeclaration) parentNode).getName();
+    } else if (parentNode instanceof ClassOrInterfaceDeclaration) {
+      classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+    } else {
+      throw new RuntimeException("Unexpected parent node: " + parentNode);
+    }
+    return classNodeSimpleName;
+  }
+
+  /**
    * This method checks if the current run of UnsolvedSymbolVisitor can solve the parameters' types
    * of a method call
    *
@@ -1376,6 +1401,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @FullyQualifiedName String callerName = referCaller.getQualifiedName();
       @ClassGetSimpleName String callerSimple = fullyQualifiedToSimple(callerName);
       return callerSimple;
+    } else if (callerExpression instanceof ResolvedLambdaConstraintType) {
+      // an example of ConstraintType is the type of "e" in this expression: myMap.map(e ->
+      // e.toString())
+      @FullyQualifiedName String boundedQualifiedType =
+          callerExpression.asConstraintType().getBound().asReferenceType().getQualifiedName();
+      return fullyQualifiedToSimple(boundedQualifiedType);
     } else {
       throw new RuntimeException("Unexpected expression: " + callerExpression);
     }

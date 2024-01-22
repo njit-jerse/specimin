@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -8,9 +9,12 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -28,8 +32,10 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -84,6 +90,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final List<String> unfoundMethods;
 
   /**
+   * This map has the name of an imported class as key and the package of that class as the value.
+   */
+  private final Map<String, String> importedClassToPackage;
+
+  /**
    * Create a new target method finding visitor.
    *
    * @param methodNames the names of the target methods, the format
@@ -93,6 +104,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     targetMethodNames = new HashSet<>();
     targetMethodNames.addAll(methodNames);
     unfoundMethods = new ArrayList<>(methodNames);
+    importedClassToPackage = new HashMap<>();
   }
 
   /**
@@ -137,6 +149,18 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Node visit(ImportDeclaration decl, Void p) {
+    String classFullName = decl.getNameAsString();
+    if (decl.isStatic()) {
+      classFullName = classFullName.substring(0, classFullName.lastIndexOf("."));
+    }
+    String classSimpleName = classFullName.substring(classFullName.lastIndexOf(".") + 1);
+    String packageName = classFullName.replace("." + classSimpleName, "");
+    importedClassToPackage.put(classSimpleName, packageName);
+    return super.visit(decl, p);
+  }
+
+  @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
@@ -166,6 +190,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
     if (this.targetMethodNames.contains(methodName)) {
+      updateUsedClassWithQualifiedClassName(
+          method.resolve().getPackageName() + "." + method.resolve().getClassName());
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
@@ -194,10 +220,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String methodPackage = resolved.getPackageName();
       String methodClass = resolved.getClassName();
       usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
-      usedClass.add(methodPackage + "." + methodClass);
+      updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
     }
 
     if (this.targetMethodNames.contains(methodName)) {
+      updateUsedClassWithQualifiedClassName(
+          method.resolve().getPackageName() + "." + method.resolve().getClassName());
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
@@ -208,7 +236,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       try {
         ResolvedType resolvedType = returnType.resolve();
         if (resolvedType instanceof ResolvedReferenceType) {
-          usedClass.add(resolvedType.asReferenceType().getQualifiedName());
+          updateUsedClassWithQualifiedClassName(resolvedType.asReferenceType().getQualifiedName());
         }
       } catch (UnsupportedOperationException e) {
         // Occurs if the type is a type variable, so there is nothing to do:
@@ -223,12 +251,48 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(MarkerAnnotationExpr expr, Void p) {
+    if (insideTargetMethod) {
+      String annotationName = expr.getNameAsString();
+      if (importedClassToPackage.containsKey(annotationName)) {
+        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+      }
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(NormalAnnotationExpr expr, Void p) {
+    if (insideTargetMethod) {
+      String annotationName = expr.getNameAsString();
+      if (importedClassToPackage.containsKey(annotationName)) {
+        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+      }
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(SingleMemberAnnotationExpr expr, Void p) {
+    if (insideTargetMethod) {
+      String annotationName = expr.getNameAsString();
+      if (importedClassToPackage.containsKey(annotationName)) {
+        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+      }
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
   public Visitable visit(Parameter para, Void p) {
     if (insideTargetMethod) {
       Type type = para.getType();
       if (type.isUnionType()) {
         resolveUnionType(type.asUnionType());
-      } else {
+      }
+      // an unknown type plays the role of a null object for lambda parameters that have no explicit
+      // type declared
+      else if (!type.isUnknownType()) {
         // Parameter resolution (para.resolve()) does not work in catch clause.
         // However, resolution works on the type of the parameter.
         // Bug report: https://github.com/javaparser/javaparser/issues/4240
@@ -242,7 +306,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         if (paramType.isReferenceType()) {
           String paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-          usedClass.add(paraTypeFullName);
+          updateUsedClassWithQualifiedClassName(paraTypeFullName);
           for (ResolvedType typeParameterValue :
               paramType.asReferenceType().typeParametersValues()) {
             String typeParameterValueName = typeParameterValue.describe();
@@ -251,7 +315,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
               typeParameterValueName =
                   typeParameterValueName.substring(0, typeParameterValueName.indexOf("<"));
             }
-            usedClass.add(typeParameterValueName);
+            updateUsedClassWithQualifiedClassName(typeParameterValueName);
           }
         }
       }
@@ -263,10 +327,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       usedMembers.add(call.resolve().getQualifiedSignature());
-      usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
+      updateUsedClassWithQualifiedClassName(
+          call.resolve().getPackageName() + "." + call.resolve().getClassName());
       ResolvedType methodReturnType = call.resolve().getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
-        usedClass.add(methodReturnType.asReferenceType().getQualifiedName());
+        updateUsedClassWithQualifiedClassName(
+            methodReturnType.asReferenceType().getQualifiedName());
       }
       if (call.getScope().isPresent()) {
         Expression scope = call.getScope().get();
@@ -286,7 +352,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       return super.visit(type, p);
     }
     try {
-      usedClass.add(type.resolve().getQualifiedName());
+      updateUsedClassWithQualifiedClassName(type.resolve().getQualifiedName());
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
@@ -302,7 +368,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
       usedMembers.add(newExpr.resolve().getQualifiedSignature());
-      usedClass.add(newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
+      updateUsedClassWithQualifiedClassName(
+          newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
     }
     return super.visit(newExpr, p);
   }
@@ -311,7 +378,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ExplicitConstructorInvocationStmt expr, Void p) {
     if (insideTargetMethod) {
       usedMembers.add(expr.resolve().getQualifiedSignature());
-      usedClass.add(expr.resolve().getPackageName() + "." + expr.resolve().getClassName());
+      updateUsedClassWithQualifiedClassName(
+          expr.resolve().getPackageName() + "." + expr.resolve().getClassName());
     }
     return super.visit(expr, p);
   }
@@ -325,11 +393,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // field is declared
         fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
-        usedClass.add(fullNameOfClass);
-        usedClass.add(expr.resolve().getType().describe());
-      }
-      // when the type is a primitive array, we will have an UnsupportedOperationException
-      catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        updateUsedClassWithQualifiedClassName(fullNameOfClass);
+        updateUsedClassWithQualifiedClassName(expr.resolve().getType().describe());
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        // when the type is a primitive array, we will have an UnsupportedOperationException
+        if (e instanceof UnsupportedOperationException) {
+          updateUsedElementWithPotentialFieldNameExpr(expr.getScope().asNameExpr());
+        }
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
         // name, such as org and org.example, will also be considered as FieldAccessExpr.
@@ -337,7 +407,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
-      usedClass.add(caller.calculateResolvedType().describe());
+      updateUsedClassWithQualifiedClassName(caller.calculateResolvedType().describe());
     }
     return super.visit(expr, p);
   }
@@ -381,7 +451,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedType paramType = param.resolve();
       String paraTypeFullName =
           paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-      usedClass.add(paraTypeFullName);
+      updateUsedClassWithQualifiedClassName(paraTypeFullName);
     }
   }
 
@@ -403,8 +473,27 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // while the name of the method is declaringType(), it actually returns the class where the
       // field is declared
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
-      usedClass.add(classFullName);
+      updateUsedClassWithQualifiedClassName(classFullName);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
+    }
+  }
+
+  /**
+   * Updates the list of used classes with the given qualified class name and its corresponding
+   * enclosing classes, if applicable (in the case of nested classes).
+   *
+   * @param qualifiedClassName The qualified class name to be included in the list of used classes.
+   */
+  public void updateUsedClassWithQualifiedClassName(String qualifiedClassName) {
+    // in case of type variables
+    if (!qualifiedClassName.contains(".")) {
+      return;
+    }
+    usedClass.add(qualifiedClassName);
+    String potentialOuterClass =
+        qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
+    if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
+      updateUsedClassWithQualifiedClassName(potentialOuterClass);
     }
   }
 }

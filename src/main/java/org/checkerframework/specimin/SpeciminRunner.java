@@ -143,6 +143,13 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
     }
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
+      cu.accept(annoRemover, null);
+      annoRemover.processAnnotations(cu);
+    }
+
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
@@ -200,6 +207,10 @@ public class SpeciminRunner {
       cu.accept(methodPruner, null);
     }
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
+      // ignore classes from the Java package.
+      if (target.getKey().startsWith("java/")) {
+        continue;
+      }
       // If a compilation output's entire body has been removed and the related class is not used by
       // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
