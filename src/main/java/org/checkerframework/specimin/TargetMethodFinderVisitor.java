@@ -27,6 +27,7 @@ import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -193,8 +194,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       updateUsedClassWithQualifiedClassName(
           method.resolve().getPackageName() + "." + method.resolve().getClassName());
       insideTargetMethod = true;
-      targetMethods.add(method.resolve().getQualifiedSignature());
+      ResolvedConstructorDeclaration resolvedMethod = method.resolve();
+      targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
+      usedClass.add(resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
@@ -228,6 +231,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = true;
       targetMethods.add(method.resolve().getQualifiedSignature());
       unfoundMethods.remove(methodName);
+      ResolvedMethodDeclaration resolvedMethod = method.resolve();
+      usedClass.add(resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
       Type returnType = method.getType();
       // JavaParser may misinterpret unresolved array types as reference types.
       // To ensure accuracy, we resolve the type before proceeding with the check.

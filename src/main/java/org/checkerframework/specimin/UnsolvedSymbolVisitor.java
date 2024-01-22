@@ -114,13 +114,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final String rootDirectory;
 
   /**
-   * This boolean tracks whether the element currently being visited is inside an object creation.
-   * It is set by {@link #visit(ObjectCreationExpr, Void)}. This boolean helps UnsolvedSymbolVisitor
-   * recognize anonymous class.
-   */
-  private boolean insideAnObjectCreation = false;
-
-  /**
    * This instance maps the name of the return type of a synthetic method with the synthetic class
    * of that method
    */
@@ -589,7 +582,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
-    if (!insideAnObjectCreation) {
+    if (!insideAnObjectCreation(node)) {
       SimpleName classNodeSimpleName = getSimpleNameOfClass(node);
       className = classNodeSimpleName.asString();
       methodAndReturnType.put(node.getNameAsString(), nodeTypeSimpleForm);
@@ -778,10 +771,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isFromAJarFile(newExpr)) {
         updateClassesFromJarSourcesForObjectCreation(newExpr);
       }
-      insideAnObjectCreation = true;
-      super.visit(newExpr, p);
-      insideAnObjectCreation = false;
-      return newExpr;
+      return super.visit(newExpr, p);
     }
     this.gotException = true;
     try {
@@ -791,10 +781,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
-    insideAnObjectCreation = true;
-    super.visit(newExpr, p);
-    insideAnObjectCreation = false;
-    return newExpr;
+    return super.visit(newExpr, p);
   }
 
   /**
@@ -888,6 +875,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Given a MethodDeclaration instance, this method checks if that MethodDeclaration is inside an
+   * object creation expression.
+   *
+   * @param decl a MethodDeclaration instance
+   * @return true if decl is inside an object creation expression
+   */
+  private boolean insideAnObjectCreation(MethodDeclaration decl) {
+    while (decl.getParentNode().isPresent()) {
+      Node parent = decl.getParentNode().get();
+      if (parent instanceof ObjectCreationExpr) {
+        return true;
+      }
+      if (parent instanceof ClassOrInterfaceDeclaration) {
+        return false;
+      }
+      if (parent instanceof EnumConstantDeclaration) {
+        return false;
+      }
+      if (parent instanceof EnumDeclaration) {
+        return false;
+      }
+    }
+    throw new RuntimeException("Got a method declaration with no class!");
+  }
+  /**
    * Given a class name that can either be fully-qualified or simple, this method will convert that
    * class name to a simple name.
    *
@@ -904,7 +916,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     return elements.get(elements.size() - 1);
   }
-
   /**
    * This method will add a new method declaration to a synthetic class based on the unsolved method
    * call or method declaration in the original input. User can choose the desired return type for

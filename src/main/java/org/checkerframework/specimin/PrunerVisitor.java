@@ -167,6 +167,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldDeclaration fieldDecl, Void p) {
+    if (insideTargetMethod) {
+      return super.visit(fieldDecl, p);
+    }
     try {
       fieldDecl.resolve();
     } catch (UnsolvedSymbolException e) {
