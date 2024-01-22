@@ -143,6 +143,13 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
     }
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
+      cu.accept(annoRemover, null);
+      annoRemover.processAnnotations(cu);
+    }
+
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.

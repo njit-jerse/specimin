@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -8,9 +9,12 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -28,8 +32,10 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -84,6 +90,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final List<String> unfoundMethods;
 
   /**
+   * This map has the name of an imported class as key and the package of that class as the value.
+   */
+  private final Map<String, String> importedClassToPackage;
+
+  /**
    * Create a new target method finding visitor.
    *
    * @param methodNames the names of the target methods, the format
@@ -93,6 +104,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     targetMethodNames = new HashSet<>();
     targetMethodNames.addAll(methodNames);
     unfoundMethods = new ArrayList<>(methodNames);
+    importedClassToPackage = new HashMap<>();
   }
 
   /**
@@ -134,6 +146,18 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getTargetMethods() {
     return targetMethods;
+  }
+
+  @Override
+  public Node visit(ImportDeclaration decl, Void p) {
+    String classFullName = decl.getNameAsString();
+    if (decl.isStatic()) {
+      classFullName = classFullName.substring(0, classFullName.lastIndexOf("."));
+    }
+    String classSimpleName = classFullName.substring(classFullName.lastIndexOf(".") + 1);
+    String packageName = classFullName.replace("." + classSimpleName, "");
+    importedClassToPackage.put(classSimpleName, packageName);
+    return super.visit(decl, p);
   }
 
   @Override
@@ -222,6 +246,39 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
     return result;
+  }
+
+  @Override
+  public Visitable visit(MarkerAnnotationExpr expr, Void p) {
+    if (insideTargetMethod) {
+      String annotationName = expr.getNameAsString();
+      if (importedClassToPackage.containsKey(annotationName)) {
+        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+      }
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(NormalAnnotationExpr expr, Void p) {
+    if (insideTargetMethod) {
+      String annotationName = expr.getNameAsString();
+      if (importedClassToPackage.containsKey(annotationName)) {
+        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+      }
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(SingleMemberAnnotationExpr expr, Void p) {
+    if (insideTargetMethod) {
+      String annotationName = expr.getNameAsString();
+      if (importedClassToPackage.containsKey(annotationName)) {
+        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+      }
+    }
+    return super.visit(expr, p);
   }
 
   @Override
