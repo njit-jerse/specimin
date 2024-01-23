@@ -324,6 +324,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt node, Void arg) {
+    if (node.isThis()) {
+      return super.visit(node, arg);
+    }
     try {
       // check if the symbol is solvable. If it is, then there's no need to create a synthetic file.
       node.resolve().getQualifiedSignature();
