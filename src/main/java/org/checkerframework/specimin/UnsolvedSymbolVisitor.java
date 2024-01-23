@@ -797,7 +797,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public boolean belongsToARealClassFile(FieldAccessExpr node) {
     Expression nodeScope = node.getScope();
     String filePath =
-        rootDirectory + nodeScope.calculateResolvedType().describe().replace(".", "/") + ".java";
+        rootDirectory + nodeScope.calculateResolvedType().describe().replace(".", "/");
+    if (filePath.contains("<")) {
+      filePath = filePath.substring(0, filePath.indexOf("<"));
+    }
+    filePath = filePath + ".java";
     return setOfExistingFiles.contains(Path.of(filePath).toAbsolutePath().normalize());
   }
 
@@ -812,6 +816,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @SuppressWarnings("signature")
       UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
       updateMissingClass(newClass);
+
     } else {
       // since it is unsolved, it could not be a primitive type
       @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
@@ -1517,7 +1522,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String classPackage = missedClass.getPackageName();
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
-        this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
+        this.rootDirectory + classDirectory + "/" + missedClass.getBasicClassName() + ".java";
     Path filePath = Path.of(filePathStr);
     try {
       Files.delete(filePath);
@@ -1539,7 +1544,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String classPackage = missedClass.getPackageName();
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
-        this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
+        this.rootDirectory + classDirectory + "/" + missedClass.getBasicClassName() + ".java";
     Path filePath = Paths.get(filePathStr);
     createdClass.add(filePath);
     try {

@@ -85,6 +85,19 @@ public class UnsolvedClass {
   }
 
   /**
+   * This method returns the name of this class without the generic types.
+   *
+   * @return name of the class without the generic types.
+   */
+  public String getBasicClassName() {
+    int indexOfGenericType = className.indexOf("<");
+    if (indexOfGenericType == -1) {
+      return className;
+    }
+    return className.substring(0, indexOfGenericType);
+  }
+
+  /**
    * Get the package where this class belongs to
    *
    * @return the value of packageName
