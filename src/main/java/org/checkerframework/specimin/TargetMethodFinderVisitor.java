@@ -517,11 +517,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param type the resolved type of a used member
    */
   public void updateUsedClassWithPossibleTypeArgs(ResolvedType type) {
-    if (type.isPrimitive()) {
+    if (!type.isReferenceType()) {
       return;
     }
-    // according to the documentation of ResolvedType class, a ResolvedType object could either be a
-    // primitive type or a reference type.
     ResolvedReferenceType typeAsReference = type.asReferenceType();
     List<ResolvedType> typeParameters = typeAsReference.typeParametersValues();
     for (ResolvedType typePara : typeParameters) {
