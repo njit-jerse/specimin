@@ -523,7 +523,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     ResolvedReferenceType typeAsReference = type.asReferenceType();
     List<ResolvedType> typeParameters = typeAsReference.typeParametersValues();
     for (ResolvedType typePara : typeParameters) {
-      if (typePara.isPrimitive() || typePara.isTypeVariable()) {
+      if (typePara.isPrimitive() || typePara.isTypeVariable() || typePara.isWildcard()) {
         continue;
       }
       usedClass.add(typePara.asReferenceType().getQualifiedName());
