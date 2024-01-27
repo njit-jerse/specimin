@@ -4,14 +4,14 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks that a simple Java file with no dependencies and a single target method with one
- * method that it depends on results in that depended-on method being replaced by an empty body.
+ * This test ensures that Specimin will not miss unresolved types serving as type parameters within
+ * another type.
  */
-public class OneFileSimpleTest {
+public class MapOfUnsolvedTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "onefilesimple",
+        "mapofunsolved",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar()"});
   }

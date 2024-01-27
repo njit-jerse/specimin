@@ -4,14 +4,14 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test ensures that Specimin will not miss unresolved types serving as type parameters within
- * another type.
+ * This test ensures that Specimin will not create any synthetic file for generic type variables
+ * within another type.
  */
-public class MapOfUnsolvedTest {
+public class MapOfTypeVarsTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "mapofunsolved",
+        "mapoftypevars",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar()"});
   }
