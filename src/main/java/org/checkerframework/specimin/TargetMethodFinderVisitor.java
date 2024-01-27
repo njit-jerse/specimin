@@ -240,7 +240,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         ResolvedType resolvedType = returnType.resolve();
         if (resolvedType instanceof ResolvedReferenceType) {
           updateUsedClassWithQualifiedClassName(resolvedType.asReferenceType().getQualifiedName());
-          updateUsedClassWithPossibleTypeVars(resolvedType);
+          updateUsedClassWithPossibleTypeArgs(resolvedType);
         }
       } catch (UnsupportedOperationException e) {
         // Occurs if the type is a type variable, so there is nothing to do:
@@ -337,7 +337,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (methodReturnType instanceof ResolvedReferenceType) {
         updateUsedClassWithQualifiedClassName(
             methodReturnType.asReferenceType().getQualifiedName());
-        updateUsedClassWithPossibleTypeVars(methodReturnType);
+        updateUsedClassWithPossibleTypeArgs(methodReturnType);
       }
       if (call.getScope().isPresent()) {
         Expression scope = call.getScope().get();
@@ -358,8 +358,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     try {
       ResolvedReferenceType typeResolved = type.resolve();
-      updateUsedClassWithQualifiedClassName(type.resolve().getQualifiedName());
-      updateUsedClassWithPossibleTypeVars(typeResolved);
+      updateUsedClassWithQualifiedClassName(typeResolved.getQualifiedName());
+      updateUsedClassWithPossibleTypeArgs(typeResolved);
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
@@ -403,7 +403,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         updateUsedClassWithQualifiedClassName(fullNameOfClass);
         ResolvedType exprResolvedType = expr.resolve().getType();
         updateUsedClassWithQualifiedClassName(exprResolvedType.describe());
-        updateUsedClassWithPossibleTypeVars(exprResolvedType);
+        updateUsedClassWithPossibleTypeArgs(exprResolvedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // when the type is a primitive array, we will have an UnsupportedOperationException
         if (e instanceof UnsupportedOperationException) {
@@ -418,7 +418,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (caller instanceof SuperExpr) {
       ResolvedType callerResolvedType = caller.calculateResolvedType();
       updateUsedClassWithQualifiedClassName(callerResolvedType.describe());
-      updateUsedClassWithPossibleTypeVars(callerResolvedType);
+      updateUsedClassWithPossibleTypeArgs(callerResolvedType);
     }
     return super.visit(expr, p);
   }
@@ -463,7 +463,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String paraTypeFullName =
           paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
       updateUsedClassWithQualifiedClassName(paraTypeFullName);
-      updateUsedClassWithPossibleTypeVars(paramType);
+      updateUsedClassWithPossibleTypeArgs(paramType);
     }
   }
 
@@ -487,7 +487,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
       updateUsedClassWithQualifiedClassName(classFullName);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
-      updateUsedClassWithPossibleTypeVars(exprDecl.getType());
+      updateUsedClassWithPossibleTypeArgs(exprDecl.getType());
     }
   }
 
@@ -512,18 +512,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * Given the resolved type of a used member, this method will update the list of used classes
-   * accordingly.
+   * based on the type arguments of the input type accordingly.
    *
    * @param type the resolved type of a used member
    */
-  public void updateUsedClassWithPossibleTypeVars(ResolvedType type) {
+  public void updateUsedClassWithPossibleTypeArgs(ResolvedType type) {
     if (type.isPrimitive()) {
       return;
     }
     // according to the documentation of ResolvedType class, a ResolvedType object could either be a
     // primitive type or a reference type.
     ResolvedReferenceType typeAsReference = type.asReferenceType();
-    usedClass.add(typeAsReference.getQualifiedName());
     List<ResolvedType> typeParameters = typeAsReference.typeParametersValues();
     for (ResolvedType typePara : typeParameters) {
       if (typePara.isPrimitive() || typePara.isTypeVariable()) {
