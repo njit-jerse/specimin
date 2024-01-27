@@ -1,7 +1,7 @@
 package com.example;
 
 import java.util.IdentityHashMap;
-import com.sun.source.tree.BigTree;
+import org.testing.BigTree;
 import java.util.Set;
 
 class Simple {
