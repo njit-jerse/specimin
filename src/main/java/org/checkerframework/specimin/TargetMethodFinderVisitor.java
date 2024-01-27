@@ -478,6 +478,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
       updateUsedClassWithQualifiedClassName(classFullName);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
+      updateUsedClassWithResolvedType(exprDecl.getType());
     }
   }
 
@@ -497,6 +498,29 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
     if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
       updateUsedClassWithQualifiedClassName(potentialOuterClass);
+    }
+  }
+
+  /**
+   * Given the resolved type of a used member, this method will update the list of used classes
+   * accordingly.
+   *
+   * @param type the resolved type of a used member
+   */
+  public void updateUsedClassWithResolvedType(ResolvedType type) {
+    if (type.isPrimitive()) {
+      return;
+    }
+    // according to the documentation of ResolvedType class, a ResolvedType object could either be a
+    // primitive type or a reference type.
+    ResolvedReferenceType typeAsReference = type.asReferenceType();
+    usedClass.add(typeAsReference.getQualifiedName());
+    List<ResolvedType> typeParameters = typeAsReference.typeParametersValues();
+    for (ResolvedType typePara : typeParameters) {
+      if (typePara.isPrimitive()) {
+        continue;
+      }
+      usedClass.add(typePara.asReferenceType().getQualifiedName());
     }
   }
 }
