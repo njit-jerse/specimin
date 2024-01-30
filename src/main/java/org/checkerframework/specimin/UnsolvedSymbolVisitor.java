@@ -1132,6 +1132,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public void updateSyntheticClassWithNonStaticFields(FieldAccessExpr field) {
     Expression caller = field.getScope();
     String fullyQualifiedClassName = caller.calculateResolvedType().describe();
+    int indexOfAngleBracket = fullyQualifiedClassName.indexOf('<');
+    if (indexOfAngleBracket != -1) {
+      fullyQualifiedClassName = fullyQualifiedClassName.substring(0, indexOfAngleBracket);
+    }
     String fieldQualifedSignature = fullyQualifiedClassName + "." + field.getNameAsString();
     updateClassSetWithQualifiedFieldSignature(fieldQualifedSignature, false, false);
   }
