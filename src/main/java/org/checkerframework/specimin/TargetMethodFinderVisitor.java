@@ -495,6 +495,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * Updates the list of used classes with the given qualified class name and its corresponding
    * enclosing classes, if applicable (in the case of nested classes).
    *
+   * <p>If we are updating the type of a used member, we should call this method together with
+   * {@link TargetMethodFinderVisitor#updateUsedClassWithPossibleTypeArgs(ResolvedType)}
+   *
    * @param qualifiedClassName The qualified class name to be included in the list of used classes.
    */
   public void updateUsedClassWithQualifiedClassName(String qualifiedClassName) {
@@ -513,6 +516,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   /**
    * Given the resolved type of a used member, this method will update the list of used classes
    * based on the type arguments of the input type accordingly.
+   *
+   * <p>We should always call this method whenever we call {@link
+   * TargetMethodFinderVisitor#updateUsedClassWithQualifiedClassName(String)}
    *
    * @param type the resolved type of a used member
    */
