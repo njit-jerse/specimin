@@ -239,8 +239,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       try {
         ResolvedType resolvedType = returnType.resolve();
         if (resolvedType instanceof ResolvedReferenceType) {
-          updateUsedClassWithQualifiedClassName(resolvedType.asReferenceType().getQualifiedName());
-          updateUsedClassWithPossibleTypeArgs(resolvedType);
+          updateUsedClassBasedOnType(resolvedType);
         }
       } catch (UnsupportedOperationException e) {
         // Occurs if the type is a type variable, so there is nothing to do:
@@ -335,9 +334,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           call.resolve().getPackageName() + "." + call.resolve().getClassName());
       ResolvedType methodReturnType = call.resolve().getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
-        updateUsedClassWithQualifiedClassName(
-            methodReturnType.asReferenceType().getQualifiedName());
-        updateUsedClassWithPossibleTypeArgs(methodReturnType);
+        updateUsedClassBasedOnType(methodReturnType);
       }
       if (call.getScope().isPresent()) {
         Expression scope = call.getScope().get();
@@ -358,8 +355,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     try {
       ResolvedReferenceType typeResolved = type.resolve();
-      updateUsedClassWithQualifiedClassName(typeResolved.getQualifiedName());
-      updateUsedClassWithPossibleTypeArgs(typeResolved);
+      updateUsedClassBasedOnType(typeResolved);
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
@@ -402,8 +398,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         updateUsedClassWithQualifiedClassName(fullNameOfClass);
         ResolvedType exprResolvedType = expr.resolve().getType();
-        updateUsedClassWithQualifiedClassName(exprResolvedType.describe());
-        updateUsedClassWithPossibleTypeArgs(exprResolvedType);
+        updateUsedClassBasedOnType(exprResolvedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // when the type is a primitive array, we will have an UnsupportedOperationException
         if (e instanceof UnsupportedOperationException) {
@@ -417,8 +412,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
       ResolvedType callerResolvedType = caller.calculateResolvedType();
-      updateUsedClassWithQualifiedClassName(callerResolvedType.describe());
-      updateUsedClassWithPossibleTypeArgs(callerResolvedType);
+      updateUsedClassBasedOnType(callerResolvedType);
     }
     return super.visit(expr, p);
   }
@@ -460,10 +454,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private void resolveUnionType(UnionType type) {
     for (ReferenceType param : type.getElements()) {
       ResolvedType paramType = param.resolve();
-      String paraTypeFullName =
-          paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-      updateUsedClassWithQualifiedClassName(paraTypeFullName);
-      updateUsedClassWithPossibleTypeArgs(paramType);
+      updateUsedClassBasedOnType(paramType);
     }
   }
 
@@ -487,16 +478,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
       updateUsedClassWithQualifiedClassName(classFullName);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
-      updateUsedClassWithPossibleTypeArgs(exprDecl.getType());
+      updateUsedClassBasedOnType(exprDecl.getType());
     }
   }
 
   /**
    * Updates the list of used classes with the given qualified class name and its corresponding
    * enclosing classes, if applicable (in the case of nested classes).
-   *
-   * <p>If we are updating the type of a used member, we should call this method together with
-   * {@link TargetMethodFinderVisitor#updateUsedClassWithPossibleTypeArgs(ResolvedType)}.
    *
    * @param qualifiedClassName The qualified class name to be included in the list of used classes.
    */
@@ -514,15 +502,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given the resolved type of a used member, this method will update the list of used classes
-   * based on the type arguments of the input type accordingly.
+   * Updates the list of used classes based on the resolved type of a used element, where a element
+   * can be a method, a field, a variable, or a parameter.
    *
-   * <p>We should always call this method whenever we call {@link
-   * TargetMethodFinderVisitor#updateUsedClassWithQualifiedClassName(String)}.
-   *
-   * @param type the resolved type of a used member
+   * @param type The resolved type of the used element.
    */
-  public void updateUsedClassWithPossibleTypeArgs(ResolvedType type) {
+  public void updateUsedClassBasedOnType(ResolvedType type) {
+    updateUsedClassWithQualifiedClassName(type.describe());
     if (!type.isReferenceType()) {
       return;
     }
