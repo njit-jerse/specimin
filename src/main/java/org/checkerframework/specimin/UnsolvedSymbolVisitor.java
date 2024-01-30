@@ -724,14 +724,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         return super.visit(typeExpr, p);
       } else if (isAClassPath(typeRawName)) {
         String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
-        @SuppressWarnings("signature") // since this is the last element of a class path
-        @ClassGetSimpleName String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
+        String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
         classToUpdate = new UnsolvedClass(className, packageName);
       } else {
-        @SuppressWarnings("signature") // since it is not in a fully qualifed format
-        @ClassGetSimpleName String className = typeRawName;
-        String packageName = classAndPackageMap.getOrDefault(className, currentPackage);
-        classToUpdate = new UnsolvedClass(className, packageName);
+        String packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
+        classToUpdate = new UnsolvedClass(typeRawName, packageName);
       }
       classToUpdate.setNumberOfTypeVariables(numberOfArguments);
       updateMissingClass(classToUpdate);
@@ -1522,7 +1519,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String classPackage = missedClass.getPackageName();
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
-        this.rootDirectory + classDirectory + "/" + missedClass.getBasicClassName() + ".java";
+        this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Path.of(filePathStr);
     try {
       Files.delete(filePath);
@@ -1544,7 +1541,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String classPackage = missedClass.getPackageName();
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
-        this.rootDirectory + classDirectory + "/" + missedClass.getBasicClassName() + ".java";
+        this.rootDirectory + classDirectory + "/" + missedClass.getClassName() + ".java";
     Path filePath = Paths.get(filePathStr);
     createdClass.add(filePath);
     try {

@@ -41,25 +41,33 @@ public class UnsolvedClass {
   private boolean isExceptionType = false;
 
   /**
-   * Create an instance of UnsolvedClass
+   * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
+   * any generics attached to it.
    *
-   * @param className the name of the class
+   * @param className the name of the class, possibly followed by a set of type arguments
    * @param packageName the name of the package
    */
-  public UnsolvedClass(@ClassGetSimpleName String className, String packageName) {
+  public UnsolvedClass(String className, String packageName) {
     this(className, packageName, false);
   }
 
   /**
    * Create an instance of UnsolvedClass
    *
-   * @param className the name of the class
+   * @param className the simple name of the class, possibly followed by a set of type arguments
    * @param packageName the name of the package
    * @param isException does the class represents an exception?
    */
-  public UnsolvedClass(
-      @ClassGetSimpleName String className, String packageName, boolean isException) {
-    this.className = className;
+  public UnsolvedClass(String className, String packageName, boolean isException) {
+    if (className.contains("<")) {
+      @SuppressWarnings("signature") // removing the <> makes this a true simple name
+      @ClassGetSimpleName String classNameWithoutAngleBrackets = className.substring(0, className.indexOf('<'));
+      this.className = classNameWithoutAngleBrackets;
+    } else {
+      @SuppressWarnings("signature") // no angle brackets means this is a true simple name
+      @ClassGetSimpleName String classNameWithoutAngleBrackets = className;
+      this.className = classNameWithoutAngleBrackets;
+    }
     this.methods = new LinkedHashSet<>();
     this.packageName = packageName;
     this.classFields = new LinkedHashSet<>();
@@ -76,25 +84,12 @@ public class UnsolvedClass {
   }
 
   /**
-   * Get the name of this class.
+   * Get the name of this class (note: without any generic type variables).
    *
    * @return the name of the class
    */
   public @ClassGetSimpleName String getClassName() {
     return className;
-  }
-
-  /**
-   * This method returns the name of this class without the generic types.
-   *
-   * @return name of the class without the generic types.
-   */
-  public String getBasicClassName() {
-    int indexOfGenericType = className.indexOf("<");
-    if (indexOfGenericType == -1) {
-      return className;
-    }
-    return className.substring(0, indexOfGenericType);
   }
 
   /**
