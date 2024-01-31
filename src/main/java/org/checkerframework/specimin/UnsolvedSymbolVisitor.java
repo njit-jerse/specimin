@@ -1467,8 +1467,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be updated
    */
   public void updateMissingClass(UnsolvedClass missedClass) {
+    // If an original class from the input codebase is used with unsolved type parameters, it may be
+    // misunderstood as an unresolved class.
     if (classfileIsInOriginalCodebase(
-            missedClass.getPackageName() + "." + missedClass.getClassName())) {
+        missedClass.getPackageName() + "." + missedClass.getClassName())) {
       return;
     }
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
@@ -1511,7 +1513,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     relativeClassPath = relativeClassPath + ".java";
     return this.setOfExistingFiles.contains(
-            Paths.get(this.rootDirectory + "/" + relativeClassPath).toAbsolutePath());
+        Paths.get(this.rootDirectory + "/" + relativeClassPath).toAbsolutePath());
   }
 
   /**
