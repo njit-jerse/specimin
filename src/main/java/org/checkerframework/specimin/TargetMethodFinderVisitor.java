@@ -239,7 +239,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       try {
         ResolvedType resolvedType = returnType.resolve();
         if (resolvedType instanceof ResolvedReferenceType) {
-          updateUsedClassWithQualifiedClassName(resolvedType.asReferenceType().getQualifiedName());
+          updateUsedClassBasedOnType(resolvedType);
         }
       } catch (UnsupportedOperationException e) {
         // Occurs if the type is a type variable, so there is nothing to do:
@@ -334,8 +334,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           call.resolve().getPackageName() + "." + call.resolve().getClassName());
       ResolvedType methodReturnType = call.resolve().getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
-        updateUsedClassWithQualifiedClassName(
-            methodReturnType.asReferenceType().getQualifiedName());
+        updateUsedClassBasedOnType(methodReturnType);
       }
       if (call.getScope().isPresent()) {
         Expression scope = call.getScope().get();
@@ -355,7 +354,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       return super.visit(type, p);
     }
     try {
-      updateUsedClassWithQualifiedClassName(type.resolve().getQualifiedName());
+      ResolvedReferenceType typeResolved = type.resolve();
+      updateUsedClassBasedOnType(typeResolved);
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
@@ -397,7 +397,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         updateUsedClassWithQualifiedClassName(fullNameOfClass);
-        updateUsedClassWithQualifiedClassName(expr.resolve().getType().describe());
+        ResolvedType exprResolvedType = expr.resolve().getType();
+        updateUsedClassBasedOnType(exprResolvedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // when the type is a primitive array, we will have an UnsupportedOperationException
         if (e instanceof UnsupportedOperationException) {
@@ -410,7 +411,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
-      updateUsedClassWithQualifiedClassName(caller.calculateResolvedType().describe());
+      ResolvedType callerResolvedType = caller.calculateResolvedType();
+      updateUsedClassBasedOnType(callerResolvedType);
     }
     return super.visit(expr, p);
   }
@@ -452,9 +454,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private void resolveUnionType(UnionType type) {
     for (ReferenceType param : type.getElements()) {
       ResolvedType paramType = param.resolve();
-      String paraTypeFullName =
-          paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-      updateUsedClassWithQualifiedClassName(paraTypeFullName);
+      updateUsedClassBasedOnType(paramType);
     }
   }
 
@@ -478,6 +478,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
       updateUsedClassWithQualifiedClassName(classFullName);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
+      updateUsedClassBasedOnType(exprDecl.getType());
     }
   }
 
@@ -497,6 +498,27 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
     if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
       updateUsedClassWithQualifiedClassName(potentialOuterClass);
+    }
+  }
+
+  /**
+   * Updates the list of used classes based on the resolved type of a used element, where a element
+   * can be a method, a field, a variable, or a parameter.
+   *
+   * @param type The resolved type of the used element.
+   */
+  public void updateUsedClassBasedOnType(ResolvedType type) {
+    updateUsedClassWithQualifiedClassName(type.describe());
+    if (!type.isReferenceType()) {
+      return;
+    }
+    ResolvedReferenceType typeAsReference = type.asReferenceType();
+    List<ResolvedType> typeParameters = typeAsReference.typeParametersValues();
+    for (ResolvedType typePara : typeParameters) {
+      if (typePara.isPrimitive() || typePara.isTypeVariable() || typePara.isWildcard()) {
+        continue;
+      }
+      usedClass.add(typePara.asReferenceType().getQualifiedName());
     }
   }
 }
