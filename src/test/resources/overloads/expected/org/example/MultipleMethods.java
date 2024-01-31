@@ -5,11 +5,19 @@ public class MultipleMethods {
         throw new Error();
     }
 
+    public ExampleReturnType example(java.lang.String parameter0) {
+        throw new Error();
+    }
+
     public ExampleReturnType example(int parameter0) {
         throw new Error();
     }
 
-    public ExampleReturnType example(String parameter0) {
+    public ExampleReturnType example(java.lang.String parameter0, int parameter1) {
+        throw new Error();
+    }
+
+    public ExampleReturnType example(int parameter0, java.lang.String parameter1) {
         throw new Error();
     }
 
@@ -17,15 +25,7 @@ public class MultipleMethods {
         throw new Error();
     }
 
-    public ExampleReturnType example(String parameter0, int parameter1) {
-        throw new Error();
-    }
-
-    public ExampleReturnType example(int parameter0, String parameter1) {
-        throw new Error();
-    }
-
-    public ExampleReturnType example(String parameter0, String parameter1) {
+    public ExampleReturnType example(java.lang.String parameter0, java.lang.String parameter1) {
         throw new Error();
     }
 }
