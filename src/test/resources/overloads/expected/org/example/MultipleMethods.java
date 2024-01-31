@@ -1,31 +1,31 @@
 package org.example;
 
 public class MultipleMethods {
-    public void example() {
+    public ExampleReturnType example() {
         throw new Error();
     }
 
-    public void example(int parameter0) {
+    public ExampleReturnType example(int parameter0) {
         throw new Error();
     }
 
-    public void example(String parameter0) {
+    public ExampleReturnType example(String parameter0) {
         throw new Error();
     }
 
-    public void example(int parameter0, int parameter1) {
+    public ExampleReturnType example(int parameter0, int parameter1) {
         throw new Error();
     }
 
-    public void example(String parameter0, int parameter1) {
+    public ExampleReturnType example(String parameter0, int parameter1) {
         throw new Error();
     }
 
-    public void example(int parameter0, String parameter1) {
+    public ExampleReturnType example(int parameter0, String parameter1) {
         throw new Error();
     }
 
-    public void example(String parameter0, String parameter1) {
+    public ExampleReturnType example(String parameter0, String parameter1) {
         throw new Error();
     }
 }
