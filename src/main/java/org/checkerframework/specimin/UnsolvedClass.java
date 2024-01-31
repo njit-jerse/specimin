@@ -5,7 +5,9 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
@@ -202,6 +204,24 @@ public class UnsolvedClass {
     for (String field : newFields) {
       classFields.add(field);
     }
+  }
+
+  @Override
+  public boolean equals(@Nullable Object other) {
+    if (!(other instanceof UnsolvedClass)) {
+      return false;
+    }
+    UnsolvedClass otherClass = (UnsolvedClass) other;
+    // This makes me nervous, because it's not clear that it
+    // allows us to differentiate between anonymous inner classes in the same
+    // outer class. TODO: write some tests for that case.
+    return otherClass.className.equals(this.className)
+        && otherClass.packageName.equals(this.packageName);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(className, packageName);
   }
 
   /**

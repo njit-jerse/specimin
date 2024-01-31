@@ -1470,7 +1470,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClass e = iterator.next();
-      if (e.getClassName().equals(missedClass.getClassName())) {
+      if (e.equals(missedClass)) {
 
         // add new methods
         for (UnsolvedMethod method : missedClass.getMethods()) {
@@ -1852,8 +1852,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClass relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
       if (relatedClass != null) {
         for (UnsolvedClass syntheticClass : missingClass) {
-          if (syntheticClass.getClassName().equals(relatedClass.getClassName())
-              && syntheticClass.getPackageName().equals(relatedClass.getPackageName())) {
+          if (syntheticClass.equals(relatedClass)) {
             syntheticClass.updateMethodByReturnType(
                 incorrectType, typeToCorrect.get(incorrectType));
             this.deleteOldSyntheticClass(syntheticClass);
@@ -1867,6 +1866,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       else {
         for (UnsolvedClass unsolClass : missingClass) {
           for (String parentClass : classAndItsParent.values()) {
+            // TODO: should this also check that unsolClass's package name is
+            // the correct one for the parent? Martin isn't sure how to do that here.
             if (unsolClass.getClassName().equals(parentClass)) {
               unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
               this.deleteOldSyntheticClass(unsolClass);

@@ -13,6 +13,6 @@ public class TwoTargetsThatUseSameSimpleNameTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "twotargetsthatusesamesimplename",
         new String[] {"com/example/Foo.java", "com/example/Bar.java"},
-        new String[] {"com.example.Foo#test()", "com.example.Bar#test()"});
+        new String[] {"com.example.Foo#test(Node)", "com.example.Bar#test(Node)"});
   }
 }
