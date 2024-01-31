@@ -1,6 +1,8 @@
 package org.checkerframework.specimin;
 
 import java.util.List;
+import java.util.Objects;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * An UnsolvedMethod instance is a representation of a method that can not be solved by
@@ -17,8 +19,8 @@ public class UnsolvedMethod {
   private String returnType;
 
   /**
-   * The list of parameters of the method. (Right now we won't touch it until the new variant of
-   * SymbolSolver is available)
+   * The list of the types of the parameters of the method. (Right now we won't touch it until the
+   * new variant of SymbolSolver is available)
    */
   private List<String> parameterList;
 
@@ -69,6 +71,24 @@ public class UnsolvedMethod {
   /** Set isStatic to true */
   public void setStatic() {
     isStatic = true;
+  }
+
+  @Override
+  public boolean equals(@Nullable Object o) {
+    if (!(o instanceof UnsolvedMethod)) {
+      return false;
+    }
+    UnsolvedMethod other = (UnsolvedMethod) o;
+    // This set of fields is based on the JLS' overloading rules, which
+    // permit an overload if any of the name, return type, or parameter types differ.
+    return other.returnType.equals(this.returnType)
+        && other.name.equals(this.name)
+        && other.parameterList.equals(parameterList);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(returnType, name, parameterList);
   }
 
   /**

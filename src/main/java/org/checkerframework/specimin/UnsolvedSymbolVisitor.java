@@ -1474,20 +1474,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
         // add new methods
         for (UnsolvedMethod method : missedClass.getMethods()) {
-          // this boolean checks if the required method is already inside the related synthetic
-          // class. In that case, no need to add another one.
-          boolean alreadyHad = false;
-          for (UnsolvedMethod classMethod : e.getMethods()) {
-            if (classMethod.getReturnType().equals(method.getReturnType())) {
-              if (classMethod.getName().equals(method.getName())) {
-                alreadyHad = true;
-                break;
-              }
-            }
-          }
-          if (!alreadyHad) {
-            e.addMethod(method);
-          }
+          // No need to check for containment, since the methods are stored
+          // as a set (which does not permit duplicates).
+          e.addMethod(method);
         }
 
         // add new fields
