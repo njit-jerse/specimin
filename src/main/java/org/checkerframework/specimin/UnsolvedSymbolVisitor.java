@@ -1503,7 +1503,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * exists in the original input codebase.
    *
    * @param qualifiedName the qualified name of a class.
-   * @return true if the corresponding class file is origi nally in the input codebase.
+   * @return true if the corresponding class file is originally in the input codebase.
    */
   public boolean classfileIsInOriginalCodebase(String qualifiedName) {
     String relativeClassPath = qualifiedName.replace(".", "/");
