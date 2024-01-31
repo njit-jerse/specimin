@@ -4,15 +4,15 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks that a simple Java file with no dependencies and a single target method with one
- * method that it depends on results in that depended-on method being replaced by an empty body.
+ * This test makes sure that Specimin will not modify existing class file in the input codebase when
+ * dealing with a method with generic return type.
  */
-public class OneFileSimpleTest {
+public class GenericTypeMethodTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "onefilesimple",
-        new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar()"});
+        "generictypemethod",
+        new String[] {"com/example/Foo.java"},
+        new String[] {"com.example.Foo#bar()"});
   }
 }
