@@ -5,7 +5,9 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
@@ -202,6 +204,24 @@ public class UnsolvedClass {
     for (String field : newFields) {
       classFields.add(field);
     }
+  }
+
+  @Override
+  public boolean equals(@Nullable Object other) {
+    if (!(other instanceof UnsolvedClass)) {
+      return false;
+    }
+    UnsolvedClass otherClass = (UnsolvedClass) other;
+    // Note: an UnsovledClass cannot represent an anonymous class
+    // (each UnsovledClass corresponds to a source file), so this
+    // check is sufficient for equality (it is checking the canonical name).
+    return otherClass.className.equals(this.className)
+        && otherClass.packageName.equals(this.packageName);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(className, packageName);
   }
 
   /**
