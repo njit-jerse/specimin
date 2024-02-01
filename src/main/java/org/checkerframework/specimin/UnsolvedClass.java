@@ -212,9 +212,9 @@ public class UnsolvedClass {
       return false;
     }
     UnsolvedClass otherClass = (UnsolvedClass) other;
-    // This makes me nervous, because it's not clear that it
-    // allows us to differentiate between anonymous inner classes in the same
-    // outer class. TODO: write some tests for that case.
+    // Note: an UnsovledClass cannot represent an anonymous class
+    // (each UnsovledClass corresponds to a source file), so this
+    // check is sufficient for equality (it is checking the canonical name).
     return otherClass.className.equals(this.className)
         && otherClass.packageName.equals(this.packageName);
   }
