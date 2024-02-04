@@ -1,12 +1,9 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
-/**
- * This test checks if Specimin can properly remove an unsolved interface.
- */
+/** This test checks if Specimin can properly remove an unsolved interface. */
 public class UnsolvedInterfaceTest {
   @Test
   public void runTest() throws IOException {

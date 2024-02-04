@@ -1,12 +1,9 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
-/**
- * This test checks if Specimin can properly remove unused interfaces.
- */
+/** This test checks if Specimin can properly remove unused interfaces. */
 public class UnusedInterfaceTest {
   @Test
   public void runTest() throws IOException {

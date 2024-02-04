@@ -1,17 +1,14 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
-/**
- * This test checks if Specimin can properly remove unused method signatures from an interface.
- */
+/** This test checks if Specimin can properly remove unused method signatures from an interface. */
 public class InterfaceImplementedTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "unsolvedinterface",
+        "interfaceimplemented",
         new String[] {"com/example/Foo.java"},
         new String[] {"com.example.Foo#doSomething()"});
   }
