@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -16,6 +17,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
@@ -54,6 +56,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * the @FullyQualifiedName form.
    */
   private Set<String> classesUsedByTargetMethods;
+
+  /** This is to check whether the current compilation unit is a class or an interface. */
+  private boolean isInsideAnInterface = false;
 
   /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
@@ -101,6 +106,24 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       decl.remove();
       return decl;
     }
+    if (decl.isInterface()) {
+      this.isInsideAnInterface = true;
+    } else {
+      NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
+      Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
+      while (iterator.hasNext()) {
+        ClassOrInterfaceType interfaceType = iterator.next();
+        try {
+          String typeFullName = interfaceType.resolve().getQualifiedName();
+          if (!classesUsedByTargetMethods.contains(typeFullName)) {
+            iterator.remove();
+          }
+        } catch (UnsolvedSymbolException e) {
+          iterator.remove();
+        }
+      }
+      decl.setImplementedTypes(implementedInterfaces);
+    }
     return super.visit(decl, p);
   }
 
@@ -129,7 +152,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = false;
       return result;
     } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
-      methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      if (!isInsideAnInterface) {
+        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      }
       return methodDecl;
     } else {
       // if insideTargetMethod is true, this current method declaration belongs to an anonnymous

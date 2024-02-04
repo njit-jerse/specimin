@@ -96,6 +96,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final Map<String, String> importedClassToPackage;
 
   /**
+   * This map connects the declaration of a method to the qualified name of the interface that
+   * contains it, if any.
+   */
+  private final Map<ResolvedMethodDeclaration, ClassOrInterfaceType>
+      methodDeclarationToInterfaceType = new HashMap<>();
+
+  /**
    * Create a new target method finding visitor.
    *
    * @param methodNames the names of the target methods, the format
@@ -149,6 +156,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     return targetMethods;
   }
 
+  private void updateMethodDeclarationToInterfaceType(
+      List<ResolvedMethodDeclaration> methodList, ClassOrInterfaceType interfaceType) {
+    for (ResolvedMethodDeclaration method : methodList) {
+      this.methodDeclarationToInterfaceType.put(method, interfaceType);
+    }
+  }
+
   @Override
   public Node visit(ImportDeclaration decl, Void p) {
     String classFullName = decl.getNameAsString();
@@ -163,6 +177,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    for (ClassOrInterfaceType interfaceType : decl.getImplementedTypes()) {
+      try {
+        updateMethodDeclarationToInterfaceType(
+            interfaceType.resolve().getAllMethods(), interfaceType);
+      } catch (UnsolvedSymbolException e) {
+        continue;
+      }
+    }
+
     if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
@@ -226,6 +249,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
 
     if (this.targetMethodNames.contains(methodName)) {
+      updateUsedClassesForInterface(method);
       updateUsedClassWithQualifiedClassName(
           method.resolve().getPackageName() + "." + method.resolve().getClassName());
       insideTargetMethod = true;
@@ -428,6 +452,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(expr, p);
+  }
+
+  public void updateUsedClassesForInterface(MethodDeclaration method) {
+    for (ResolvedMethodDeclaration interfaceMethod : methodDeclarationToInterfaceType.keySet()) {
+      if (method.getNameAsString().equals(interfaceMethod.getName())) {
+        String methodReturnType = method.resolve().getReturnType().describe();
+        String interfaceMethodReturnType = interfaceMethod.getReturnType().describe();
+        if (methodReturnType.equals(interfaceMethodReturnType)) {
+          if (method.getParameters().size() == interfaceMethod.getNumberOfParams()) {
+            usedClass.add(
+                methodDeclarationToInterfaceType.get(interfaceMethod).resolve().getQualifiedName());
+            usedMembers.add(interfaceMethod.getQualifiedSignature());
+          }
+        }
+      }
+    }
   }
 
   /**
