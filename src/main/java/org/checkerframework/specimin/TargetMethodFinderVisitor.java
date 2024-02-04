@@ -96,8 +96,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final Map<String, String> importedClassToPackage;
 
   /**
-   * This map connects the declaration of a method to the qualified name of the interface that
-   * contains it, if any.
+   * This map connects the resolved declaration of a method to the interface that contains it, if
+   * any.
    */
   private final Map<ResolvedMethodDeclaration, ClassOrInterfaceType>
       methodDeclarationToInterfaceType = new HashMap<>();
@@ -156,6 +156,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     return targetMethods;
   }
 
+  /**
+   * Updates the mapping of method declarations to their corresponding interface type based on a
+   * list of methods and the interface type that contains those methods.
+   *
+   * @param methodList the list of resolved method declarations
+   * @param interfaceType the interface containing the specified methods.
+   */
   private void updateMethodDeclarationToInterfaceType(
       List<ResolvedMethodDeclaration> methodList, ClassOrInterfaceType interfaceType) {
     for (ResolvedMethodDeclaration method : methodList) {
@@ -249,13 +256,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
 
     if (this.targetMethodNames.contains(methodName)) {
-      updateUsedClassesForInterface(method);
-      updateUsedClassWithQualifiedClassName(
-          method.resolve().getPackageName() + "." + method.resolve().getClassName());
-      insideTargetMethod = true;
-      targetMethods.add(method.resolve().getQualifiedSignature());
-      unfoundMethods.remove(methodName);
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
+      updateUsedClassesForInterface(resolvedMethod);
+      updateUsedClassWithQualifiedClassName(
+          method.resolve().getPackageName() + "." + resolvedMethod.getClassName());
+      insideTargetMethod = true;
+      targetMethods.add(resolvedMethod.getQualifiedSignature());
+      unfoundMethods.remove(methodName);
       usedClass.add(resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
       Type returnType = method.getType();
       // JavaParser may misinterpret unresolved array types as reference types.
@@ -454,13 +461,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     return super.visit(expr, p);
   }
 
-  public void updateUsedClassesForInterface(MethodDeclaration method) {
+  /**
+   * Updates the list of used classes based on a resolved method declaration. If the input method
+   * originates from an interface, that interface will be added to the list of used classes. The
+   * determination of whether a method belongs to an interface is based on three criteria: method
+   * name, method return type, and the number of parameters.
+   *
+   * @param method The resolved method declaration to be used for updating the list.
+   */
+  public void updateUsedClassesForInterface(ResolvedMethodDeclaration method) {
     for (ResolvedMethodDeclaration interfaceMethod : methodDeclarationToInterfaceType.keySet()) {
-      if (method.getNameAsString().equals(interfaceMethod.getName())) {
-        String methodReturnType = method.resolve().getReturnType().describe();
+      if (method.getName().equals(interfaceMethod.getName())) {
+        String methodReturnType = method.getReturnType().describe();
         String interfaceMethodReturnType = interfaceMethod.getReturnType().describe();
         if (methodReturnType.equals(interfaceMethodReturnType)) {
-          if (method.getParameters().size() == interfaceMethod.getNumberOfParams()) {
+          if (method.getNumberOfParams() == interfaceMethod.getNumberOfParams()) {
             usedClass.add(
                 methodDeclarationToInterfaceType.get(interfaceMethod).resolve().getQualifiedName());
             usedMembers.add(interfaceMethod.getQualifiedSignature());

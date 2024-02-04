@@ -284,6 +284,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     gotException = false;
   }
 
+  /**
+   * Get the set of target files that should be added for the next iteration.
+   *
+   * @return the value of addedTargetFiles.
+   */
   public Set<String> getAddedTargetFiles() {
     return addedTargetFiles;
   }

@@ -252,7 +252,7 @@ public class SpeciminRunner {
         System.out.println("with error: " + e);
       }
     }
-    // delete all the  temporary files created by UnsolvedSymbolVisitor
+    // delete all the temporary files created by UnsolvedSymbolVisitor
     deleteFiles(createdClass);
   }
 
