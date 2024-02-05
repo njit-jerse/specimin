@@ -1,13 +1,10 @@
 package com.example;
 
-class Simple<T, V> {
+import org.testing.Baz;
 
-    void bar() {
-        Object obj = new Object();
-        obj = baz(obj);
-    }
+class Simple<T extends Baz, V> {
 
-    Object baz(Object obj) {
-        throw new Error();
+    void bar(T bazObject) {
+        bazObject.bazMethod();
     }
 }
