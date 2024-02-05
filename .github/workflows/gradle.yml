@@ -25,3 +25,16 @@ jobs:
         uses: gradle/gradle-build-action@v2
       - name: Run build with Gradle Wrapper
         run: ./gradlew build expectedTestOutputsMustCompile
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Checkout specimin-evaluation repository
+        uses: actions/checkout@v3
+        with:
+          repository: tahiat/specimin-evaluation
+          path: specimin-evaluation
+      - name: Run evaluation script
+        run: |
+          cd specimin-evaluation
+          python main.py
