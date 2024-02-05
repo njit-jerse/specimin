@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -16,13 +17,17 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.resolution.types.ResolvedTypeVariable;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -97,6 +102,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    decl = minimizeTypeParameters(decl);
     if (!classesUsedByTargetMethods.contains(decl.resolve().getQualifiedName())) {
       decl.remove();
       return decl;
@@ -232,5 +238,56 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     } else {
       return new NullLiteralExpr();
     }
+  }
+
+  /**
+   * Given the declaration of a class, this method returns the updated declaration with the type
+   * parameters that are not used by target methods removed.
+   *
+   * @param decl the declaration of a class.
+   * @return that declaration with unused type parameters removed.
+   */
+  private ClassOrInterfaceDeclaration minimizeTypeParameters(ClassOrInterfaceDeclaration decl) {
+    NodeList<TypeParameter> typeParameterList = decl.getTypeParameters();
+    NodeList<TypeParameter> updatedTypeParameterList = new NodeList<>();
+    for (TypeParameter typeParameter : typeParameterList) {
+      // first we remove the unused type bounds within typeParameter.
+      typeParameter = typeParameter.setTypeBound(getUsedTypesOnly(typeParameter.getTypeBound()));
+      ResolvedTypeVariable resolvedTypeParameter;
+      try {
+        resolvedTypeParameter = typeParameter.resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        continue;
+      }
+      if (resolvedTypeParameter.isReferenceType()
+          && classesUsedByTargetMethods.contains(
+              resolvedTypeParameter.asReferenceType().getQualifiedName())) {
+        updatedTypeParameterList.add(typeParameter);
+      }
+    }
+    return decl.setTypeParameters(updatedTypeParameterList);
+  }
+
+  /**
+   * Given a NodeList of types, this method removes those type not used by target methods.
+   *
+   * @param inputList a NodeList of ClassOrInterfaceType instances.
+   * @return the updated list with unused types removed.
+   */
+  private NodeList<ClassOrInterfaceType> getUsedTypesOnly(
+      NodeList<ClassOrInterfaceType> inputList) {
+    NodeList<ClassOrInterfaceType> usedTypeOnly = new NodeList<>();
+    for (ClassOrInterfaceType type : inputList) {
+      ResolvedType resolvedType;
+      try {
+        resolvedType = type.resolve();
+      } catch (UnsolvedSymbolException e) {
+        continue;
+      }
+      if (classesUsedByTargetMethods.contains(resolvedType.asReferenceType().getQualifiedName())) {
+        usedTypeOnly.add(type);
+      }
+    }
+    return usedTypeOnly;
   }
 }
