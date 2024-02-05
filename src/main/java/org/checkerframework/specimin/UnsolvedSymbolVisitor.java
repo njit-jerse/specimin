@@ -172,6 +172,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private final Map<String, @FullyQualifiedName String> staticImportedMembersMap = new HashMap<>();
 
+  /** New files that should be added to the list of target files for the next iteration. */
+  private final Set<String> addedTargetFiles = new HashSet<>();
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -281,6 +284,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     gotException = false;
   }
 
+  /**
+   * Get the set of target files that should be added for the next iteration.
+   *
+   * @return the value of addedTargetFiles.
+   */
+  public Set<String> getAddedTargetFiles() {
+    return addedTargetFiles;
+  }
+
   @Override
   public Node visit(ImportDeclaration decl, Void arg) {
     if (decl.isAsterisk()) {
@@ -319,6 +331,30 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     addTypeVariableScope(node.getTypeParameters());
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
+
+    NodeList<ClassOrInterfaceType> interfaceList = node.getImplementedTypes();
+    for (ClassOrInterfaceType interfaceType : interfaceList) {
+      String qualifiedName =
+          classAndPackageMap.getOrDefault(className, this.currentPackage)
+              + "."
+              + interfaceType.getName().asString();
+      if (classfileIsInOriginalCodebase(qualifiedName)) {
+        // add the source codes of the interface to the list of target files so that
+        // UnsolvedSymbolVisitor can solve symbols for that interface if needed.
+        String filePath = qualifiedName.replace(".", "/");
+        if (filePath.contains("<")) {
+          filePath = filePath.substring(filePath.indexOf("<"));
+        }
+        filePath = filePath + ".java";
+        if (!addedTargetFiles.contains(filePath)) {
+          // strictly speaking, there is no exception here. But we set gotException to true so that
+          // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
+          // file.
+          this.gotException = true;
+        }
+        addedTargetFiles.add(filePath);
+      }
+    }
     return result;
   }
 

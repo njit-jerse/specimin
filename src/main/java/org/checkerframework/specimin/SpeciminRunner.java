@@ -148,6 +148,9 @@ public class SpeciminRunner {
       for (String targetFile : targetFiles) {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
+      for (String targetFile : addMissingClass.getAddedTargetFiles()) {
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
     }
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
