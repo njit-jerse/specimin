@@ -1,6 +1,6 @@
 package com.example;
 
-class Simple {
+class Simple<T, V> {
 
     void bar() {
         Object obj = new Object();

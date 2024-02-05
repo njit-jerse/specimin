@@ -27,7 +27,6 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
-import com.github.javaparser.resolution.types.ResolvedTypeVariable;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -241,29 +240,18 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given the declaration of a class, this method returns the updated declaration with the type
-   * parameters that are not used by target methods removed.
+   * Given the declaration of a class, this method returns the updated declaration with the unused
+   * type bounds of the type parameters removed.
    *
    * @param decl the declaration of a class.
-   * @return that declaration with unused type parameters removed.
+   * @return that declaration with unused type bounds of type parameters removed.
    */
   private ClassOrInterfaceDeclaration minimizeTypeParameters(ClassOrInterfaceDeclaration decl) {
     NodeList<TypeParameter> typeParameterList = decl.getTypeParameters();
     NodeList<TypeParameter> updatedTypeParameterList = new NodeList<>();
     for (TypeParameter typeParameter : typeParameterList) {
-      // first we remove the unused type bounds within typeParameter.
       typeParameter = typeParameter.setTypeBound(getUsedTypesOnly(typeParameter.getTypeBound()));
-      ResolvedTypeVariable resolvedTypeParameter;
-      try {
-        resolvedTypeParameter = typeParameter.resolve();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        continue;
-      }
-      if (resolvedTypeParameter.isReferenceType()
-          && classesUsedByTargetMethods.contains(
-              resolvedTypeParameter.asReferenceType().getQualifiedName())) {
-        updatedTypeParameterList.add(typeParameter);
-      }
+      updatedTypeParameterList.add(typeParameter);
     }
     return decl.setTypeParameters(updatedTypeParameterList);
   }
