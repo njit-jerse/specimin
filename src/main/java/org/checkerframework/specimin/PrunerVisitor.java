@@ -20,11 +20,13 @@ import com.github.javaparser.ast.expr.NullLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -102,6 +104,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    decl = minimizeTypeParameters(decl);
     if (!classesUsedByTargetMethods.contains(decl.resolve().getQualifiedName())) {
       decl.remove();
       return decl;
@@ -257,5 +260,45 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     } else {
       return new NullLiteralExpr();
     }
+  }
+
+  /**
+   * Given the declaration of a class, this method returns the updated declaration with the unused
+   * type bounds of the type parameters removed.
+   *
+   * @param decl the declaration of a class.
+   * @return that declaration with unused type bounds of type parameters removed.
+   */
+  private ClassOrInterfaceDeclaration minimizeTypeParameters(ClassOrInterfaceDeclaration decl) {
+    NodeList<TypeParameter> typeParameterList = decl.getTypeParameters();
+    NodeList<TypeParameter> updatedTypeParameterList = new NodeList<>();
+    for (TypeParameter typeParameter : typeParameterList) {
+      typeParameter = typeParameter.setTypeBound(getUsedTypesOnly(typeParameter.getTypeBound()));
+      updatedTypeParameterList.add(typeParameter);
+    }
+    return decl.setTypeParameters(updatedTypeParameterList);
+  }
+
+  /**
+   * Given a NodeList of types, this method removes those type not used by target methods.
+   *
+   * @param inputList a NodeList of ClassOrInterfaceType instances.
+   * @return the updated list with unused types removed.
+   */
+  private NodeList<ClassOrInterfaceType> getUsedTypesOnly(
+      NodeList<ClassOrInterfaceType> inputList) {
+    NodeList<ClassOrInterfaceType> usedTypeOnly = new NodeList<>();
+    for (ClassOrInterfaceType type : inputList) {
+      ResolvedType resolvedType;
+      try {
+        resolvedType = type.resolve();
+      } catch (UnsolvedSymbolException e) {
+        continue;
+      }
+      if (classesUsedByTargetMethods.contains(resolvedType.asReferenceType().getQualifiedName())) {
+        usedTypeOnly.add(type);
+      }
+    }
+    return usedTypeOnly;
   }
 }
