@@ -89,6 +89,12 @@ public class SpeciminRunner {
       String outputDirectory)
       throws IOException {
 
+    // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
+    // trailing slash.
+    if (!root.endsWith("/")) {
+      root = root + "/";
+    }
+
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
         new CombinedTypeSolver(
@@ -140,6 +146,9 @@ public class SpeciminRunner {
       StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
       parsedTargetFiles = new HashMap<>();
       for (String targetFile : targetFiles) {
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
+      for (String targetFile : addMissingClass.getAddedTargetFiles()) {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
     }

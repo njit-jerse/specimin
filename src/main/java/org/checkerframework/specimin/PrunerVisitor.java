@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -16,13 +17,16 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -54,6 +58,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * the @FullyQualifiedName form.
    */
   private Set<String> classesUsedByTargetMethods;
+
+  /** This is to check whether the current compilation unit is a class or an interface. */
+  private boolean isInsideAnInterface = false;
 
   /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
@@ -97,9 +104,28 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    decl = minimizeTypeParameters(decl);
     if (!classesUsedByTargetMethods.contains(decl.resolve().getQualifiedName())) {
       decl.remove();
       return decl;
+    }
+    if (decl.isInterface()) {
+      this.isInsideAnInterface = true;
+    } else {
+      NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
+      Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
+      while (iterator.hasNext()) {
+        ClassOrInterfaceType interfaceType = iterator.next();
+        try {
+          String typeFullName = interfaceType.resolve().getQualifiedName();
+          if (!classesUsedByTargetMethods.contains(typeFullName)) {
+            iterator.remove();
+          }
+        } catch (UnsolvedSymbolException e) {
+          iterator.remove();
+        }
+      }
+      decl.setImplementedTypes(implementedInterfaces);
     }
     return super.visit(decl, p);
   }
@@ -129,7 +155,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = false;
       return result;
     } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
-      methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      if (!isInsideAnInterface) {
+        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      }
       return methodDecl;
     } else {
       // if insideTargetMethod is true, this current method declaration belongs to an anonnymous
@@ -232,5 +260,45 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     } else {
       return new NullLiteralExpr();
     }
+  }
+
+  /**
+   * Given the declaration of a class, this method returns the updated declaration with the unused
+   * type bounds of the type parameters removed.
+   *
+   * @param decl the declaration of a class.
+   * @return that declaration with unused type bounds of type parameters removed.
+   */
+  private ClassOrInterfaceDeclaration minimizeTypeParameters(ClassOrInterfaceDeclaration decl) {
+    NodeList<TypeParameter> typeParameterList = decl.getTypeParameters();
+    NodeList<TypeParameter> updatedTypeParameterList = new NodeList<>();
+    for (TypeParameter typeParameter : typeParameterList) {
+      typeParameter = typeParameter.setTypeBound(getUsedTypesOnly(typeParameter.getTypeBound()));
+      updatedTypeParameterList.add(typeParameter);
+    }
+    return decl.setTypeParameters(updatedTypeParameterList);
+  }
+
+  /**
+   * Given a NodeList of types, this method removes those type not used by target methods.
+   *
+   * @param inputList a NodeList of ClassOrInterfaceType instances.
+   * @return the updated list with unused types removed.
+   */
+  private NodeList<ClassOrInterfaceType> getUsedTypesOnly(
+      NodeList<ClassOrInterfaceType> inputList) {
+    NodeList<ClassOrInterfaceType> usedTypeOnly = new NodeList<>();
+    for (ClassOrInterfaceType type : inputList) {
+      ResolvedType resolvedType;
+      try {
+        resolvedType = type.resolve();
+      } catch (UnsolvedSymbolException e) {
+        continue;
+      }
+      if (classesUsedByTargetMethods.contains(resolvedType.asReferenceType().getQualifiedName())) {
+        usedTypeOnly.add(type);
+      }
+    }
+    return usedTypeOnly;
   }
 }
