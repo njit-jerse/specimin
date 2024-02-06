@@ -1893,22 +1893,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // update incorrecType if it is the type of a field in a synthetic class
       if (syntheticTypeAndClass.containsKey(incorrectType)) {
         UnsolvedClass relatedClass = syntheticTypeAndClass.get(incorrectType);
-        relatedClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
-        this.deleteOldSyntheticClass(relatedClass);
-        this.createMissingClass(relatedClass);
-        return;
+        updateTypeForSyntheticClasses(
+            relatedClass.getClassName(),
+            relatedClass.getPackageName(),
+            true,
+            incorrectType,
+            typeToCorrect.get(incorrectType));
+        continue;
       }
       UnsolvedClass relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
       if (relatedClass != null) {
-        for (UnsolvedClass syntheticClass : missingClass) {
-          if (syntheticClass.equals(relatedClass)) {
-            syntheticClass.updateMethodByReturnType(
-                incorrectType, typeToCorrect.get(incorrectType));
-            this.deleteOldSyntheticClass(syntheticClass);
-            this.createMissingClass(syntheticClass);
-          }
-        }
-        relatedClass.updateMethodByReturnType(incorrectType, typeToCorrect.get(incorrectType));
+        updateTypeForSyntheticClasses(
+            relatedClass.getClassName(),
+            relatedClass.getPackageName(),
+            false,
+            incorrectType,
+            typeToCorrect.get(incorrectType));
       }
       // if the above condition is not met, then this incorrectType is a synthetic type for the
       // fields of the parent class rather than the return type of some methods
@@ -1926,6 +1926,42 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
+  }
+
+  /**
+   * Updates the types for fields or methods in a synthetic class.
+   *
+   * @param className        The name of the synthetic class.
+   * @param packageName      The package of the synthetic class.
+   * @param updateAField     True if updating the type of a field, false to update the type of a method.
+   * @param incorrectTypeName The name of the current incorrect type.
+   * @param correctTypeName   The name of the desired correct type.
+   */
+  public void updateTypeForSyntheticClasses(
+      String className,
+      String packageName,
+      boolean updateAField,
+      String incorrectTypeName,
+      String correctTypeName) {
+    UnsolvedClass classToSearch = new UnsolvedClass(className, packageName);
+    Iterator<UnsolvedClass> iterator = missingClass.iterator();
+    while (iterator.hasNext()) {
+      UnsolvedClass missedClass = iterator.next();
+      // Class comparison is based on class name and package name only.
+      if (missedClass.equals(classToSearch)) {
+        iterator.remove(); // Remove the outdated version of this synthetic class from the list
+        if (updateAField) {
+          missedClass.updateFieldByType(incorrectTypeName, correctTypeName);
+        } else {
+          missedClass.updateMethodByReturnType(incorrectTypeName, correctTypeName);
+        }
+        missingClass.add(missedClass); // Add the modified missedClass back to the list
+        this.deleteOldSyntheticClass(missedClass);
+        this.createMissingClass(missedClass);
+        return;
+      }
+    }
+    throw new RuntimeException("Could not find the corresponding missing class!");
   }
 
   /**
