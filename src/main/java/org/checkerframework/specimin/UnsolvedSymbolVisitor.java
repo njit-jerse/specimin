@@ -1896,7 +1896,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         relatedClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
         this.deleteOldSyntheticClass(relatedClass);
         this.createMissingClass(relatedClass);
-        return;
+        continue;
       }
       UnsolvedClass relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
       if (relatedClass != null) {
