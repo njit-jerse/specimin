@@ -333,19 +333,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     typeVariables.removeFirst();
 
     NodeList<ClassOrInterfaceType> interfaceList = node.getImplementedTypes();
-    for (ClassOrInterfaceType interfaceType : interfaceList) {
+    // Not sure why getExtendedTypes return a list, since a class can only extends at most one class
+    // in Java.
+    NodeList<ClassOrInterfaceType> superClassAndInterfaceList = node.getExtendedTypes();
+    superClassAndInterfaceList.addAll(interfaceList);
+    for (ClassOrInterfaceType interfaceType : superClassAndInterfaceList) {
       String qualifiedName =
           classAndPackageMap.getOrDefault(className, this.currentPackage)
               + "."
               + interfaceType.getName().asString();
       if (classfileIsInOriginalCodebase(qualifiedName)) {
-        // add the source codes of the interface to the list of target files so that
-        // UnsolvedSymbolVisitor can solve symbols for that interface if needed.
-        String filePath = qualifiedName.replace(".", "/");
-        if (filePath.contains("<")) {
-          filePath = filePath.substring(filePath.indexOf("<"));
-        }
-        filePath = filePath + ".java";
+        // add the source codes of the interface or the super class to the list of target files so
+        // that UnsolvedSymbolVisitor can solve symbols for that class if needed.
+        String filePath = qualifiedNameToFilePath(qualifiedName);
         if (!addedTargetFiles.contains(filePath)) {
           // strictly speaking, there is no exception here. But we set gotException to true so that
           // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
@@ -659,10 +659,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String fullyQualifiedCall =
           classAndPackageMap.getOrDefault(simpleClassName, currentPackage) + "." + node;
       updateClassSetWithQualifiedFieldSignature(fullyQualifiedCall, true, false);
-    }
-    // check if this unsolved field belongs to a synthetic class.
-    else if (canBeSolved(node.getScope()) && !belongsToARealClassFile(node)) {
-      updateSyntheticClassWithNonStaticFields(node);
+    } else if (canBeSolved(node.getScope())) {
+      // check if this unsolved field belongs to a synthetic class.
+      if (!belongsToARealClassFile(node)) {
+        updateSyntheticClassWithNonStaticFields(node);
+      } else {
+        // since we have checked whether node.getScope() can be solved, this call is safe.
+        addedTargetFiles.add(
+            qualifiedNameToFilePath(
+                node.getScope().calculateResolvedType().asReferenceType().getQualifiedName()));
+      }
     }
 
     try {
@@ -694,9 +700,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       updateClassSetWithQualifiedStaticMethodCall(
           method.toString(), getArgumentsFromMethodCall(method));
-    } else if (calledByAnIncompleteSyntheticClass(method)) {
-      @ClassGetSimpleName String incompleteClassName = getSyntheticClass(method);
-      updateUnsolvedClassWithMethod(method, incompleteClassName, "");
+    } else if (calledByAnIncompleteClass(method)) {
+      String qualifiedNameOfIncompleteClass = getIncompleteClass(method);
+      if (classfileIsInOriginalCodebase(qualifiedNameOfIncompleteClass)) {
+        addedTargetFiles.add(qualifiedNameToFilePath(qualifiedNameOfIncompleteClass));
+      } else {
+        @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
+        updateUnsolvedClassWithMethod(method, incompleteClassName, "");
+      }
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
       String methodFullyQualifiedCall = toFullyQualifiedCall(method);
       updateClassSetWithQualifiedStaticMethodCall(
@@ -712,7 +723,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     boolean needToSetException =
         !canBeSolved(method)
             || calledByAnUnsolvedSymbol(method)
-            || calledByAnIncompleteSyntheticClass(method)
+            || calledByAnIncompleteClass(method)
             || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
     if (needToSetException) {
       this.gotException = true;
@@ -821,6 +832,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // can not solve the parameters for this object creation in this current run
     }
     return super.visit(newExpr, p);
+  }
+
+  /**
+   * Converts a qualified class name into a relative file path.
+   *
+   * @param qualifiedName The qualified name of the class.
+   * @return The relative file path corresponding to the qualified name.
+   */
+  public String qualifiedNameToFilePath(String qualifiedName) {
+    String filePath = qualifiedName.replace(".", "/");
+    if (filePath.contains("<")) {
+      filePath = filePath.substring(filePath.indexOf("<"));
+    }
+    filePath = filePath + ".java";
+    return filePath;
   }
 
   /**
@@ -1410,14 +1436,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method takes a MethodCallExpr as an instance, and check if the method involved is called
-   * by an incomplete synthetic class. It should be noted that an incomplete synthetic class is
-   * different from a non-existing synthetic class. In this context, an incomplete synthetic class
-   * is a compilable class but missing some methods.
+   * by an incomplete synthetic class. An incomplete class could either be an original class with
+   * unsolved symbols or a synthetic class that need to be updated.
    *
    * @param method a MethodCallExpr instance
-   * @return true if the method involved is called by an incomplete synthetic class
+   * @return true if the method involved is called by an incomplete class
    */
-  public static boolean calledByAnIncompleteSyntheticClass(MethodCallExpr method) {
+  public static boolean calledByAnIncompleteClass(MethodCallExpr method) {
     if (calledByAnUnsolvedSymbol(method)) {
       return false;
     }
@@ -1425,7 +1450,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return false;
     }
     try {
-      method.resolve();
+      // use an additional getReturnType() will check the solvability of the method more
+      // comprehensively.
+      method.resolve().getReturnType();
       return false;
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       if (e instanceof UnsolvedSymbolException) {
@@ -1438,29 +1465,29 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a MethodCallExpr instance, this method will return the synthetic class for the method
-   * involved. Thus, make sure that the input method actually belongs to an existing synthetic class
-   * before calling this method {@link
-   * UnsolvedSymbolVisitor#calledByAnIncompleteSyntheticClass(MethodCallExpr)}}
+   * Given a MethodCallExpr instance, this method will return the incomplete class for the method
+   * involved. Thus, make sure that the input method actually belongs to an incomplete class before
+   * calling this method {@link UnsolvedSymbolVisitor#calledByAnIncompleteClass(MethodCallExpr)}
+   * (MethodCallExpr)}}. An incomplete class is either an original class with unsolved symbols or a
+   * synthetic class that needs to be updated.
    *
    * @param method the method call to be analyzed
    * @return the name of the synthetic class of that method
    */
-  public static @ClassGetSimpleName String getSyntheticClass(MethodCallExpr method) {
-    // if calledByAnIncompleteSyntheticClass returns true for this method call, we know that it has
+  public static @FullyQualifiedName String getIncompleteClass(MethodCallExpr method) {
+    // if calledByAnIncompleteClass returns true for this method call, we know that it has
     // a caller.
     ResolvedType callerExpression = method.getScope().get().calculateResolvedType();
     if (callerExpression instanceof ResolvedReferenceType) {
       ResolvedReferenceType referCaller = (ResolvedReferenceType) callerExpression;
       @FullyQualifiedName String callerName = referCaller.getQualifiedName();
-      @ClassGetSimpleName String callerSimple = fullyQualifiedToSimple(callerName);
-      return callerSimple;
+      return callerName;
     } else if (callerExpression instanceof ResolvedLambdaConstraintType) {
       // an example of ConstraintType is the type of "e" in this expression: myMap.map(e ->
       // e.toString())
       @FullyQualifiedName String boundedQualifiedType =
           callerExpression.asConstraintType().getBound().asReferenceType().getQualifiedName();
-      return fullyQualifiedToSimple(boundedQualifiedType);
+      return boundedQualifiedType;
     } else {
       throw new RuntimeException("Unexpected expression: " + callerExpression);
     }
@@ -1503,10 +1530,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be updated
    */
   public void updateMissingClass(UnsolvedClass missedClass) {
+    String qualifiedName = missedClass.getPackageName() + "." + missedClass.getClassName();
     // If an original class from the input codebase is used with unsolved type parameters, it may be
     // misunderstood as an unresolved class.
-    if (classfileIsInOriginalCodebase(
-        missedClass.getPackageName() + "." + missedClass.getClassName())) {
+    if (classfileIsInOriginalCodebase(qualifiedName)) {
       return;
     }
     Iterator<UnsolvedClass> iterator = missingClass.iterator();
