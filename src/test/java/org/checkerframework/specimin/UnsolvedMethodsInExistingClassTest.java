@@ -8,7 +8,7 @@ import org.junit.Test;
  * UnsolvedSymbolVisitor in case there is an unsolved method from a class that is not added as a
  * target file.
  */
-public class UnsolvedMethodInExistingClassTest {
+public class UnsolvedMethodsInExistingClassTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
