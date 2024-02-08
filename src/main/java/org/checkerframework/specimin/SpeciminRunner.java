@@ -207,10 +207,15 @@ public class SpeciminRunner {
         parsedTargetFiles.put(directory, parseJavaFile(root, directory));
       }
     }
+    InheritancePreserveVisitor inheritancePreserve =
+        new InheritancePreserveVisitor(finder.getUsedClass());
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(inheritancePreserve, null);
+    }
 
     PrunerVisitor methodPruner =
         new PrunerVisitor(
-            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
+            finder.getTargetMethods(), finder.getUsedMembers(), inheritancePreserve.getUsedClass());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
