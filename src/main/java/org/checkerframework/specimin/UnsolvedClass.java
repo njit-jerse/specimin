@@ -95,6 +95,15 @@ public class UnsolvedClass {
   }
 
   /**
+   * Return the qualified name of this class.
+   *
+   * @return the qualified name
+   */
+  public String getQualifiedClassName() {
+    return packageName + "." + className;
+  }
+
+  /**
    * Get the package where this class belongs to
    *
    * @return the value of packageName

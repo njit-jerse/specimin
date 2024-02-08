@@ -835,7 +835,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Converts a qualified class name into a relative file path.
+   * Converts a qualified class name into a relative file path. Angle brackets for type variables
+   * are permitted in the input.
    *
    * @param qualifiedName The qualified name of the class.
    * @return The relative file path corresponding to the qualified name.
@@ -1436,8 +1437,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method takes a MethodCallExpr as an instance, and check if the method involved is called
-   * by an incomplete synthetic class. An incomplete class could either be an original class with
-   * unsolved symbols or a synthetic class that need to be updated.
+   * by an incomplete class. An incomplete class could either be an original class with unsolved
+   * symbols or a synthetic class that need to be updated.
    *
    * @param method a MethodCallExpr instance
    * @return true if the method involved is called by an incomplete class
@@ -1451,7 +1452,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     try {
       // use an additional getReturnType() will check the solvability of the method more
-      // comprehensively.
+      // comprehensively. We need to do this because if the return type isn't explicitly shown
+      // when the method is called, the method might be mistakenly perceived as solved even if the
+      // return type remains unsolved.
       method.resolve().getReturnType();
       return false;
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
@@ -1530,7 +1533,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param missedClass the class to be updated
    */
   public void updateMissingClass(UnsolvedClass missedClass) {
-    String qualifiedName = missedClass.getPackageName() + "." + missedClass.getClassName();
+    String qualifiedName = missedClass.getQualifiedClassName();
     // If an original class from the input codebase is used with unsolved type parameters, it may be
     // misunderstood as an unresolved class.
     if (classfileIsInOriginalCodebase(qualifiedName)) {
@@ -1958,11 +1961,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Updates the types for fields or methods in a synthetic class.
    *
-   * @param className        The name of the synthetic class.
-   * @param packageName      The package of the synthetic class.
-   * @param updateAField     True if updating the type of a field, false to update the type of a method.
+   * @param className The name of the synthetic class.
+   * @param packageName The package of the synthetic class.
+   * @param updateAField True if updating the type of a field, false to update the type of a method.
    * @param incorrectTypeName The name of the current incorrect type.
-   * @param correctTypeName   The name of the desired correct type.
+   * @param correctTypeName The name of the desired correct type.
    */
   public void updateTypeForSyntheticClasses(
       String className,
