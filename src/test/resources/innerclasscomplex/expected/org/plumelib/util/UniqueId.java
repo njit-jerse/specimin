@@ -1,5 +1,5 @@
 package org.plumelib.util;
 
-class UniqueId {
+public class UniqueId {
 
 }
