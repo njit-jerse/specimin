@@ -1,4 +1,4 @@
 package org.testing;
 
-class UnsolvedType  {
+public class UnsolvedType  {
 }
