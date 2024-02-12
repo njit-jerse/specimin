@@ -4,8 +4,8 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'signing'
-    id 'com.diffplug.spotless' version '6.18.0'
-    id 'org.checkerframework' version '0.6.34'
+    id 'com.diffplug.spotless' version '6.25.0'
+    id 'org.checkerframework' version '0.6.37'
     id("net.ltgt.errorprone") version "3.1.0"
     id 'com.adarshr.test-logger' version '3.1.0'
 }
@@ -29,7 +29,7 @@ dependencies {
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
 
-    errorprone("com.google.errorprone:error_prone_core:2.10.0")
+    errorprone("com.google.errorprone:error_prone_core:2.24.0")
 }
 
 // Use require-javadoc. From https://github.com/plume-lib/require-javadoc.
