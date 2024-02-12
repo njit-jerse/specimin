@@ -748,15 +748,32 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(typeExpr, p);
     }
     try {
-      typeExpr.getElementType().resolve().describe();
+      // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
+      // extends or implements a resolved class/interface.
+      typeExpr.resolve().getAllAncestors();
       return super.visit(typeExpr, p);
     }
     /*
-     * If the class file is not in the codebase yet, we got UnsolvedSymbolException.
-     * If the class file is not in the codebase and used by an anonymous class, we got UnsupportedOperationException.
-     * If the class file is in the codebase but the type variables are missing, we got IllegalArgumentException.
+     * 1. If the class file is in the codebase but extends/implements a class/interface not in the codebase, we got UnsolvedSymbolException.
+     * 2. If the class file is not in the codebase yet, we also got UnsolvedSymbolException.
+     * 3. If the class file is not in the codebase and used by an anonymous class, we got UnsupportedOperationException.
+     * 4. If the class file is in the codebase but the type variables are missing, we got IllegalArgumentException.
      */
     catch (UnsolvedSymbolException | UnsupportedOperationException | IllegalArgumentException e) {
+      // this is for case 1. By adding the class file to the list of target files,
+      // UnsolvedSymbolVisitor will take care of the unsolved extension in its next iteration.
+      String qualifiedName =
+          classAndPackageMap.getOrDefault(typeExpr.getNameAsString(), currentPackage)
+              + "."
+              + typeExpr.getNameAsString();
+      if (classfileIsInOriginalCodebase(qualifiedName)) {
+        addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
+        gotException = true;
+        return super.visit(typeExpr, p);
+      }
+
+      // below is for other three cases.
+
       // This method only updates type variables for unsolved classes. Other problems causing a
       // class to be unsolved will be fixed by other methods.
       Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
