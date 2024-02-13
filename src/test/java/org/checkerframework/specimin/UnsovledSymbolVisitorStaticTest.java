@@ -55,6 +55,7 @@ public class UnsovledSymbolVisitorStaticTest {
     assertFalse(UnsolvedSymbolVisitor.isAClassPath(ENDS_WITH_DOT_CLASS));
     assertFalse(UnsolvedSymbolVisitor.isAClassPath(ANOTHER_LONG_CHAIN));
     assertFalse(UnsolvedSymbolVisitor.isAClassPath(ANOTHER_LONG_CHAIN_2));
+    // This is the one that caused https://github.com/kelloggm/specimin/issues/94
     assertFalse(UnsolvedSymbolVisitor.isAClassPath(ANOTHER_LONG_CHAIN_3));
   }
 }
