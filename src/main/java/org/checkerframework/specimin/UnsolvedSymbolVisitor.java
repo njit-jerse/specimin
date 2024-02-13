@@ -43,6 +43,7 @@ import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
+import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -88,7 +89,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String currentPackage = "";
 
   /** The symbol table to keep track of local variables in the current input file */
-  private final ArrayDeque<HashSet<String>> localVariables = new ArrayDeque<>();
+  private final ArrayDeque<Set<String>> localVariables = new ArrayDeque<Set<String>>();
 
   /** The symbol table for type variables. */
   private final ArrayDeque<Set<String>> typeVariables = new ArrayDeque<Set<String>>();
@@ -217,6 +218,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
   }
+
   /**
    * This method sets the classAndPackageMap. This method is called in the method
    * setImportStatement, as classAndPackageMap and importStatements should always be in sync.
@@ -489,7 +491,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     boolean isAField =
         !decl.getParentNode().isEmpty() && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
-      HashSet<String> currentListOfLocals = localVariables.removeFirst();
+      Set<String> currentListOfLocals = localVariables.removeFirst();
       currentListOfLocals.add(decl.getNameAsString());
       localVariables.addFirst(currentListOfLocals);
     }
@@ -515,12 +517,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else if (isTypeVar(typeAsString)) {
         // Nothing to do in this case, but we need to skip creating an unsolved class.
       }
-      /**
-       * Handles the case where the type is a simple class name. Two sub-cases are considered: 1.
-       * The class is included among the import statements. 2. The class is not included in the
-       * import statements but is in the same directory as the input class. The first sub-case is
-       * addressed by the visit method for ImportDeclaration.
-       */
+      // Handles the case where the type is a simple class name. Two sub-cases are considered: 1.
+      // The class is included among the import statements. 2. The class is not included in the
+      // import statements but is in the same directory as the input class. The first sub-case is
+      // addressed by the visit method for ImportDeclaration.
       else if (!classAndPackageMap.containsKey(typeAsString)) {
         @SuppressWarnings("signature") // since this is the simple name case
         @ClassGetSimpleName String className = typeAsString;
@@ -638,7 +638,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         updateUnsolvedClassWithMethod(node, nameOfClass, toSimpleName(nodeTypeAsString));
       }
     }
-    HashSet<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
+    Set<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
     localVariables.addFirst(currentLocalVariables);
     Visitable result = super.visit(node, arg);
     localVariables.removeFirst();
@@ -970,6 +970,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     throw new RuntimeException("Got a method declaration with no class!");
   }
+
   /**
    * Given a class name that can either be fully-qualified or simple, this method will convert that
    * class name to a simple name.
@@ -987,6 +988,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     return elements.get(elements.size() - 1);
   }
+
   /**
    * This method will add a new method declaration to a synthetic class based on the unsolved method
    * call or method declaration in the original input. User can choose the desired return type for
@@ -1181,8 +1183,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param decl the method declaration
    * @return the set of parameters of decl
    */
-  public HashSet<String> getParameterFromAMethodDeclaration(MethodDeclaration decl) {
-    HashSet<String> setOfParameters = new HashSet<>();
+  public Set<String> getParameterFromAMethodDeclaration(MethodDeclaration decl) {
+    Set<String> setOfParameters = new HashSet<>();
     for (Parameter parameter : decl.getParameters()) {
       setOfParameters.add(parameter.getName().asString());
     }
@@ -1276,7 +1278,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if that variable is local
    */
   public boolean isALocalVar(String variableName) {
-    for (HashSet<String> varSet : localVariables) {
+    for (Set<String> varSet : localVariables) {
       // for anonymous classes, it is assumed that any matching local variable either belongs to the
       // class itself or is a final variable in the enclosing scope.
       if (varSet.contains(variableName)) {
@@ -1519,8 +1521,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return that name in @ClassGetSimpleName form
    */
   public static @ClassGetSimpleName String returnNameForMethod(String methodName) {
-    String capitalizedMethodName =
-        methodName.substring(0, 1).toUpperCase() + methodName.substring(1);
+    String capitalizedMethodName = toCapital(methodName);
     @SuppressWarnings("signature")
     @ClassGetSimpleName String returnName = capitalizedMethodName + "ReturnType";
     return returnName;
@@ -1653,7 +1654,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return the capitalized version of the string
    */
   public static String toCapital(String string) {
-    return string.substring(0, 1).toUpperCase() + string.substring(1);
+    return Ascii.toUpperCase(string.substring(0, 1)) + string.substring(1);
   }
 
   /**
