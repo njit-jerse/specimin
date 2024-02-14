@@ -28,6 +28,12 @@ public class UnsolvedMethod {
   private boolean isStatic = false;
 
   /**
+   * Indicates whether this instance of UnsolvedMethod represents just a method signature without a
+   * body.
+   */
+  public boolean isJustMethodSignature = false;
+
+  /**
    * Create an instance of UnsolvedMethod
    *
    * @param name the name of the method
@@ -41,6 +47,23 @@ public class UnsolvedMethod {
   }
 
   /**
+   * Create an instance of UnsolvedMethod for a synthetic interface.
+   *
+   * @param name the name of the method
+   * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
+   * @param isJustMethodSignature indicates whether this method represents just a method signature
+   *     without a body
+   */
+  public UnsolvedMethod(
+      String name, String returnType, List<String> parameterList, boolean isJustMethodSignature) {
+    this.name = name;
+    this.returnType = returnType;
+    this.parameterList = parameterList;
+    this.isJustMethodSignature = isJustMethodSignature;
+  }
+
+  /**
    * Set the value of returnType. This method is used when javac tells us that UnsolvedSymbolVisitor
    * get the return types wrong.
    *
@@ -48,6 +71,14 @@ public class UnsolvedMethod {
    */
   public void setReturnType(String returnType) {
     this.returnType = returnType;
+  }
+
+  /**
+   * Sets the flag indicating whether this method represents just a method signature without a body.
+   * If set to true, the method signature will be generated without a body in toString().
+   */
+  public void setJustMethodSignature() {
+    isJustMethodSignature = true;
   }
 
   /**
@@ -115,12 +146,12 @@ public class UnsolvedMethod {
     if (isStatic) {
       staticField = "static ";
     }
-    return "\n    public "
-        + staticField
-        + returnTypeInString
-        + name
-        + "("
-        + arguments
-        + ") {\n        throw new Error();\n    }\n";
+    String methodSignature =
+        "public " + staticField + returnTypeInString + name + "(" + arguments + ")";
+    if (isJustMethodSignature) {
+      return methodSignature + ";";
+    } else {
+      return "\n    " + methodSignature + " {\n        throw new Error();\n    }\n";
+    }
   }
 }
