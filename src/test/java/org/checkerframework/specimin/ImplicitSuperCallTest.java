@@ -1,11 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks whether Specimin can handle a method from a superclass that is implicitly invoked.
+ * This test checks whether Specimin can handle a method from a superclass that is implicitly
+ * invoked.
  */
 public class ImplicitSuperCallTest {
   @Test
