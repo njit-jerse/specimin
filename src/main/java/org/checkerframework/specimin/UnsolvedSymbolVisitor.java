@@ -376,8 +376,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
         addedTargetFiles.add(filePath);
       } else {
-        UnsolvedClassOrInterface unsolvedInterface =
-            new UnsolvedClassOrInterface(typeName, packageName);
+        UnsolvedClassOrInterface unsolvedInterface;
+        try {
+          implementedOrExtended.resolve();
+          continue;
+        } catch (UnsolvedSymbolException e) {
+          unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
+        }
         boolean typeIsAnInterface =
             node.isInterface() || implementedTypes.contains(implementedOrExtended);
         if (typeIsAnInterface) {
@@ -1068,6 +1073,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param method the method call or method declaration in the original input
    * @param className the name of the synthetic class
    * @param desiredReturnType the desired return type for this method
+   * @param updatingInterface true if this method is being used to update an interface, false for
+   *     updating classes
    */
   public void updateUnsolvedClassOrInterfaceWithMethod(
       Node method,
