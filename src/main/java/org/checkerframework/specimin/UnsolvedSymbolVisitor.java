@@ -383,6 +383,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         } catch (UnsolvedSymbolException e) {
           unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
         }
+        // this extended/implemented type is an interface if it is in the declaration of an
+        // interface, or if it is used with the "implements" keyword.
         boolean typeIsAnInterface =
             node.isInterface() || implementedTypes.contains(implementedOrExtended);
         if (typeIsAnInterface) {
