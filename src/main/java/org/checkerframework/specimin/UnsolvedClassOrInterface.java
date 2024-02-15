@@ -43,7 +43,7 @@ public class UnsolvedClassOrInterface {
   private boolean isExceptionType = false;
 
   /** This field records if the class is an interface */
-  private boolean isAnInterface = false;
+  private final boolean isAnInterface;
 
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
@@ -77,11 +77,33 @@ public class UnsolvedClassOrInterface {
     this.packageName = packageName;
     this.classFields = new LinkedHashSet<>();
     this.isExceptionType = isException;
+    this.isAnInterface = false;
   }
 
-  /** Set the value of isAnInterface to true. */
-  public void setIsAnInterface() {
-    isAnInterface = true;
+  /**
+   * Create an instance of an unsolved interface.
+   *
+   * @param className the simple name of the interface, possibly followed by a set of type arguments
+   * @param packageName the name of the package
+   * @param isException does the interface represents an exception?
+   * @param isAnInterface check whether this is an interface
+   */
+  public UnsolvedClassOrInterface(
+      String className, String packageName, boolean isException, boolean isAnInterface) {
+    if (className.contains("<")) {
+      @SuppressWarnings("signature") // removing the <> makes this a true simple name
+      @ClassGetSimpleName String classNameWithoutAngleBrackets = className.substring(0, className.indexOf('<'));
+      this.className = classNameWithoutAngleBrackets;
+    } else {
+      @SuppressWarnings("signature") // no angle brackets means this is a true simple name
+      @ClassGetSimpleName String classNameWithoutAngleBrackets = className;
+      this.className = classNameWithoutAngleBrackets;
+    }
+    this.methods = new LinkedHashSet<>();
+    this.packageName = packageName;
+    this.classFields = new LinkedHashSet<>();
+    this.isExceptionType = isException;
+    this.isAnInterface = isAnInterface;
   }
 
   /**

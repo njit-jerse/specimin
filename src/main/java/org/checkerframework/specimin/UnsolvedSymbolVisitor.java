@@ -381,15 +381,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           implementedOrExtended.resolve();
           continue;
         } catch (UnsolvedSymbolException e) {
-          unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
-        }
-        // this extended/implemented type is an interface if it is in the declaration of an
-        // interface, or if it is used with the "implements" keyword.
-        boolean typeIsAnInterface =
-            node.isInterface() || implementedTypes.contains(implementedOrExtended);
-        if (typeIsAnInterface) {
-          unsolvedInterface.setIsAnInterface();
-          classToItsUnsolvedInterface.put(className, typeName);
+          // this extended/implemented type is an interface if it is in the declaration of an
+          // interface, or if it is used with the "implements" keyword.
+          boolean typeIsAnInterface =
+              node.isInterface() || implementedTypes.contains(implementedOrExtended);
+          if (typeIsAnInterface) {
+            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName, false, true);
+            classToItsUnsolvedInterface.put(className, typeName);
+          } else {
+            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
+          }
         }
         updateMissingClass(unsolvedInterface);
       }
@@ -1240,10 +1241,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
     String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
-    UnsolvedClassOrInterface result =
-        new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType);
+    UnsolvedClassOrInterface result;
     if (isUpdatingInterface) {
-      result.setIsAnInterface();
+      result = new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType, true);
+    } else {
+      result = new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType);
     }
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
       result.addMethod(unsolvedMethod);
