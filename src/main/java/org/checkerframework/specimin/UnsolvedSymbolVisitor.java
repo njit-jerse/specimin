@@ -923,20 +923,24 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
         continue;
       }
-      boolean methodDeclaredHaveNoParameters = methodDeclared.getParameters().isEmpty();
-      boolean methodHasNoParameters = method.getTypeArguments().isEmpty();
-      if (methodHasNoParameters) {
-        if (methodDeclaredHaveNoParameters) {
-          return true;
+      List<String> methodTypesOfParameters = getArgumentsFromMethodCall(method);
+      NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
+      List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
+      for (Parameter parameter : methodDeclaredParameters) {
+        try {
+          ResolvedType parameterTypeResolved = parameter.getType().resolve();
+          if (parameterTypeResolved.isPrimitive()) {
+            methodDeclaredTypesOfParameters.add(parameterTypeResolved.asPrimitive().name());
+          } else if (parameterTypeResolved.isReferenceType()) {
+            methodDeclaredTypesOfParameters.add(
+                parameterTypeResolved.asReferenceType().getQualifiedName());
+          }
+        } catch (UnsolvedSymbolException e) {
+          // UnsolvedSymbolVisitor will not create any synthetic class at this iteration.
+          return false;
         }
-        continue;
       }
-      NodeList<Type> methodDeclaredTypeParameters = new NodeList<>();
-      for (Parameter parameter : methodDeclared.getParameters()) {
-        methodDeclaredTypeParameters.add(parameter.getType());
-      }
-      // TODO: this check will fail if methodDeclared has optional parameters.
-      if (methodDeclaredTypeParameters.equals(method.getTypeArguments().get())) {
+      if (methodDeclaredTypesOfParameters.equals(methodTypesOfParameters)) {
         return true;
       }
     }
