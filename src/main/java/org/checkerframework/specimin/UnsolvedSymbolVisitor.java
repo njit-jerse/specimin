@@ -771,8 +771,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         } else if (classAndItsParent.containsKey(className)) {
           String parentName = classAndItsParent.get(className);
           updateUnsolvedClassOrInterfaceWithMethod(method, parentName, "", false);
-        } else {
-          throw new RuntimeException("A method that is declared nowhere: " + method);
         }
       }
     }
