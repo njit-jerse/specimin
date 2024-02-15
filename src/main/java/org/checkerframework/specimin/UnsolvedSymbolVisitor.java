@@ -179,7 +179,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Set<String> addedTargetFiles = new HashSet<>();
 
   /** Stores the set of method names declared in the currently visiting class. */
-  private final Set<String> declaredMethod = new HashSet<>();
+  private final Set<MethodDeclaration> declaredMethod = new HashSet<>();
 
   /**
    * Maps the name of a class to the unsolved interface that it implements. If a class implements
@@ -305,7 +305,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void setDeclaredMethod(List<MethodDeclaration> methods) {
     for (MethodDeclaration method : methods) {
-      declaredMethod.add(method.getName().asString());
+      declaredMethod.add(method);
     }
   }
 
@@ -764,7 +764,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else if (haveNoScopeOrCallByThisKeyword(method)) {
       // in this case, the method must be declared inside the interface or the superclass that the
       // current class extends/implements.
-      if (!declaredMethod.contains(method.getNameAsString())) {
+      if (!declaredInCurrentClass(method)) {
         if (classToItsUnsolvedInterface.containsKey(className)) {
           String unsolvedInterface = classToItsUnsolvedInterface.get(className);
           updateUnsolvedClassOrInterfaceWithMethod(method, unsolvedInterface, "", true);
@@ -909,6 +909,38 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     filePath = filePath + ".java";
     return filePath;
+  }
+
+  /**
+   * Given a method call, this method checks if that method call is declared in the currently
+   * visiting class.
+   *
+   * @param method the method call to be checked
+   * @return true if method is declared in the current clases
+   */
+  public boolean declaredInCurrentClass(MethodCallExpr method) {
+    for (MethodDeclaration methodDeclared : declaredMethod) {
+      if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
+        continue;
+      }
+      boolean methodDeclaredHaveNoParameters = methodDeclared.getParameters().isEmpty();
+      boolean methodHasNoParameters = method.getTypeArguments().isEmpty();
+      if (methodHasNoParameters) {
+        if (methodDeclaredHaveNoParameters) {
+          return true;
+        }
+        continue;
+      }
+      NodeList<Type> methodDeclaredTypeParameters = new NodeList<>();
+      for (Parameter parameter : methodDeclared.getParameters()) {
+        methodDeclaredTypeParameters.add(parameter.getType());
+      }
+      // TODO: this check will fail if methodDeclared has optional parameters.
+      if (methodDeclaredTypeParameters.equals(method.getTypeArguments().get())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -1102,10 +1134,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
+    UnsolvedMethod thisMethod;
     if (updatingInterface) {
-      thisMethod.setJustMethodSignature();
+      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters, true);
+    } else {
+      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
     }
+
     UnsolvedClassOrInterface missingClass =
         updateUnsolvedClassWithClassName(className, false, false, thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);

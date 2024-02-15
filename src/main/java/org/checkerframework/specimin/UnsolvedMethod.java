@@ -31,7 +31,7 @@ public class UnsolvedMethod {
    * Indicates whether this instance of UnsolvedMethod represents just a method signature without a
    * body.
    */
-  public boolean isJustMethodSignature = false;
+  private final boolean isJustMethodSignature;
 
   /**
    * Create an instance of UnsolvedMethod
@@ -44,6 +44,7 @@ public class UnsolvedMethod {
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
+    this.isJustMethodSignature = false;
   }
 
   /**
@@ -71,14 +72,6 @@ public class UnsolvedMethod {
    */
   public void setReturnType(String returnType) {
     this.returnType = returnType;
-  }
-
-  /**
-   * Sets the flag indicating whether this method represents just a method signature without a body.
-   * If set to true, the method signature will be generated without a body in toString().
-   */
-  public void setJustMethodSignature() {
-    isJustMethodSignature = true;
   }
 
   /**
