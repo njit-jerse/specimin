@@ -41,10 +41,7 @@ public class UnsolvedMethod {
    * @param parameterList the list of parameters for this method
    */
   public UnsolvedMethod(String name, String returnType, List<String> parameterList) {
-    this.name = name;
-    this.returnType = returnType;
-    this.parameterList = parameterList;
-    this.isJustMethodSignature = false;
+    this(name, returnType, parameterList, false);
   }
 
   /**
