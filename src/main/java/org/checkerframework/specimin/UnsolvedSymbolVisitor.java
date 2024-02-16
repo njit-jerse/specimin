@@ -178,7 +178,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** New files that should be added to the list of target files for the next iteration. */
   private final Set<String> addedTargetFiles = new HashSet<>();
 
-  /** Stores the sets of method names declared in the currently visiting classes. */
+  /** Stores the sets of method declarations in the currently visiting classes. */
   private final ArrayDeque<Set<MethodDeclaration>> declaredMethod = new ArrayDeque<>();
 
   /**
