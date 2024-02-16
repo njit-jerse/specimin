@@ -256,7 +256,7 @@ public class SpeciminRunner {
       try {
         PrintWriter writer =
             new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8.name());
-        writer.print(target.getValue());
+        writer.print(removeCommentsFromCompilationUnit(target.getValue()));
         writer.close();
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
@@ -352,6 +352,20 @@ public class SpeciminRunner {
         throw new RuntimeException("Unresolved file path: " + filePath);
       }
     }
+  }
+
+  /**
+   * Given a compilation unit, this method returns a no-comment version of that compilation unit.
+   *
+   * @param cu a compilation unit
+   * @return cu without any comments
+   */
+  private static CompilationUnit removeCommentsFromCompilationUnit(CompilationUnit cu) {
+    CompilationUnit cuWithNoComments = cu;
+    for (Comment child : cuWithNoComments.getAllComments()) {
+      child.remove();
+    }
+    return cuWithNoComments;
   }
 
   /**
