@@ -28,6 +28,12 @@ public class UnsolvedMethod {
   private boolean isStatic = false;
 
   /**
+   * Indicates whether this instance of UnsolvedMethod represents just a method signature without a
+   * body.
+   */
+  private final boolean isJustMethodSignature;
+
+  /**
    * Create an instance of UnsolvedMethod
    *
    * @param name the name of the method
@@ -35,9 +41,24 @@ public class UnsolvedMethod {
    * @param parameterList the list of parameters for this method
    */
   public UnsolvedMethod(String name, String returnType, List<String> parameterList) {
+    this(name, returnType, parameterList, false);
+  }
+
+  /**
+   * Create an instance of UnsolvedMethod for a synthetic interface.
+   *
+   * @param name the name of the method
+   * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
+   * @param isJustMethodSignature indicates whether this method represents just a method signature
+   *     without a body
+   */
+  public UnsolvedMethod(
+      String name, String returnType, List<String> parameterList, boolean isJustMethodSignature) {
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
+    this.isJustMethodSignature = isJustMethodSignature;
   }
 
   /**
@@ -115,12 +136,12 @@ public class UnsolvedMethod {
     if (isStatic) {
       staticField = "static ";
     }
-    return "\n    public "
-        + staticField
-        + returnTypeInString
-        + name
-        + "("
-        + arguments
-        + ") {\n        throw new Error();\n    }\n";
+    String methodSignature =
+        "public " + staticField + returnTypeInString + name + "(" + arguments + ")";
+    if (isJustMethodSignature) {
+      return methodSignature + ";";
+    } else {
+      return "\n    " + methodSignature + " {\n        throw new Error();\n    }\n";
+    }
   }
 }
