@@ -1,9 +1,8 @@
 package com.example;
 
-import org.testing.B;
 import org.fortesting.Parent2;
 
-public class Simple extends B {
+public class Simple {
 
     void foo() {
         throw new RuntimeException();
