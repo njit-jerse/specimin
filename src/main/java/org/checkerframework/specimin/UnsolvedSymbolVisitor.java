@@ -178,8 +178,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** New files that should be added to the list of target files for the next iteration. */
   private final Set<String> addedTargetFiles = new HashSet<>();
 
-  /** Stores the set of method names declared in the currently visiting class. */
-  private final Set<MethodDeclaration> declaredMethod = new HashSet<>();
+  /** Stores the sets of method names declared in the currently visiting classes. */
+  private final ArrayDeque<Set<MethodDeclaration>> declaredMethod = new ArrayDeque<>();
 
   /**
    * Maps the name of a class to the unsolved interface that it implements. If a class implements
@@ -299,17 +299,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Update the set of declared methods based on a list of method declarations
-   *
-   * @param methods a list of MethodDeclaration instance
-   */
-  public void setDeclaredMethod(List<MethodDeclaration> methods) {
-    for (MethodDeclaration method : methods) {
-      declaredMethod.add(method);
-    }
-  }
-
-  /**
    * Get the set of target files that should be added for the next iteration.
    *
    * @return the value of addedTargetFiles.
@@ -344,7 +333,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
-    setDeclaredMethod(node.getMethods());
     SimpleName nodeName = node.getName();
     className = nodeName.asString();
     if (node.getExtendedTypes().isNonEmpty()) {
@@ -397,8 +385,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
 
     addTypeVariableScope(node.getTypeParameters());
+    declaredMethod.addFirst(new HashSet<>(node.getMethods()));
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
+    declaredMethod.removeFirst();
     return result;
   }
 
@@ -918,29 +908,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if method is declared in the current clases
    */
   public boolean declaredInCurrentClass(MethodCallExpr method) {
-    for (MethodDeclaration methodDeclared : declaredMethod) {
-      if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
-        continue;
-      }
-      List<String> methodTypesOfParameters = getArgumentsFromMethodCall(method);
-      NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
-      List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
-      for (Parameter parameter : methodDeclaredParameters) {
-        try {
-          ResolvedType parameterTypeResolved = parameter.getType().resolve();
-          if (parameterTypeResolved.isPrimitive()) {
-            methodDeclaredTypesOfParameters.add(parameterTypeResolved.asPrimitive().name());
-          } else if (parameterTypeResolved.isReferenceType()) {
-            methodDeclaredTypesOfParameters.add(
-                parameterTypeResolved.asReferenceType().getQualifiedName());
-          }
-        } catch (UnsolvedSymbolException e) {
-          // UnsolvedSymbolVisitor will not create any synthetic class at this iteration.
-          return false;
+    for (Set<MethodDeclaration> methodDeclarationSet : declaredMethod) {
+      for (MethodDeclaration methodDeclared : methodDeclarationSet) {
+        if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
+          continue;
         }
-      }
-      if (methodDeclaredTypesOfParameters.equals(methodTypesOfParameters)) {
-        return true;
+        List<String> methodTypesOfParameters = getArgumentsFromMethodCall(method);
+        NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
+        List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
+        for (Parameter parameter : methodDeclaredParameters) {
+          try {
+            ResolvedType parameterTypeResolved = parameter.getType().resolve();
+            if (parameterTypeResolved.isPrimitive()) {
+              methodDeclaredTypesOfParameters.add(parameterTypeResolved.asPrimitive().name());
+            } else if (parameterTypeResolved.isReferenceType()) {
+              methodDeclaredTypesOfParameters.add(
+                  parameterTypeResolved.asReferenceType().getQualifiedName());
+            }
+          } catch (UnsolvedSymbolException e) {
+            // UnsolvedSymbolVisitor will not create any synthetic class at this iteration.
+            return false;
+          }
+        }
+        if (methodDeclaredTypesOfParameters.equals(methodTypesOfParameters)) {
+          return true;
+        }
       }
     }
     return false;
