@@ -181,11 +181,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** Stores the sets of method declarations in the currently visiting classes. */
   private final ArrayDeque<Set<MethodDeclaration>> declaredMethod = new ArrayDeque<>();
 
-  /**
-   * Maps the name of a class to the unsolved interface that it implements. If a class implements
-   * multiple unsolved interfaces, only the last one is tracked in this map.
-   */
-  private final Map<@ClassGetSimpleName String, @ClassGetSimpleName String>
+  /** Maps the name of a class to the list of unsolved interface that it implements. */
+  private final Map<@ClassGetSimpleName String, List<@ClassGetSimpleName String>>
       classToItsUnsolvedInterface = new HashMap<>();
 
   /**
@@ -375,7 +372,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               node.isInterface() || implementedTypes.contains(implementedOrExtended);
           if (typeIsAnInterface) {
             unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName, false, true);
-            classToItsUnsolvedInterface.put(className, typeName);
+            @SuppressWarnings(
+                "signature") // an empty array list is not a list of @ClassGetSimpleName, but since
+            // we will add typeName to that list right after the initialization,
+            // this code is correct.
+            List<@ClassGetSimpleName String> interfaceName =
+                classToItsUnsolvedInterface.computeIfAbsent(className, k -> new ArrayList<>());
+            interfaceName.add(typeName);
           } else {
             unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
           }
@@ -757,7 +760,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // current class extends/implements.
       if (!declaredInCurrentClass(method)) {
         if (classToItsUnsolvedInterface.containsKey(className)) {
-          String unsolvedInterface = classToItsUnsolvedInterface.get(className);
+          List<@ClassGetSimpleName String> relevantInterfaces =
+              classToItsUnsolvedInterface.get(className);
+          // Since these are unsolved interfaces, we have no ideas which one of them contains the
+          // signature for the current method, thus we will put the signature in the last interface.
+          String unsolvedInterface = relevantInterfaces.get(relevantInterfaces.size() - 1);
           updateUnsolvedClassOrInterfaceWithMethod(method, unsolvedInterface, "", true);
         } else if (classAndItsParent.containsKey(className)) {
           String parentName = classAndItsParent.get(className);
