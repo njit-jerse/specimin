@@ -207,6 +207,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private boolean insidePotentialUsedMember = false;
 
+  /** The qualified name of the current class. */
+  private String currentClassQualifiedName = "";
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -360,6 +363,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // regardless of being inside target methods or potentially-used members.
     SimpleName nodeName = node.getName();
     className = nodeName.asString();
+
+    if (node.isNestedType()) {
+      this.currentClassQualifiedName += "." + node.getName().asString();
+    } else {
+      this.currentClassQualifiedName = node.getFullyQualifiedName().orElseThrow();
+    }
     if (node.getExtendedTypes().isNonEmpty()) {
       // note that since Specimin does not have access to the classpaths of the project, all the
       // unsolved methods related to inheritance will be placed in the parent class, even if there
@@ -420,6 +429,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
     declaredMethod.removeFirst();
+
+    if (node.isNestedType()) {
+      this.currentClassQualifiedName =
+          this.currentClassQualifiedName.substring(
+              0, this.currentClassQualifiedName.lastIndexOf('.'));
+    } else {
+      this.currentClassQualifiedName = "";
+    }
     return result;
   }
 
@@ -674,9 +691,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
     String methodQualifiedSignature =
-        this.currentPackage
-            + "."
-            + this.className
+        this.currentClassQualifiedName
             + "#"
             + TargetMethodFinderVisitor.removeMethodReturnType(
                 node.getDeclarationAsString(false, false, false));
