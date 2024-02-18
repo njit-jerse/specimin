@@ -120,10 +120,9 @@ public class SpeciminRunner {
     }
     UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root, existingFiles);
     addMissingClass.setClassesFromJar(jarPaths);
-    /**
-     * The set of path of files that have been created by addMissingClass. We will delete all those
-     * files in the end.
-     */
+
+    // The set of path of files that have been created by addMissingClass. We will delete all those
+    // files in the end.
     Set<Path> createdClass = new HashSet<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();

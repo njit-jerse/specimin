@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
+
+import com.google.common.base.Ascii;
 import org.junit.Assert;
 
 /** Utility class containing routines to run Specimin's tests. */
@@ -81,7 +83,7 @@ public class SpeciminTestExecutor {
 
     // Diff the files to ensure that specimin's output is what we expect
     ProcessBuilder builder = new ProcessBuilder();
-    boolean isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
+    boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
     if (isWindows) {
       // TODO: make this work
       Assert.fail("specimin cannot be tested on Windows");

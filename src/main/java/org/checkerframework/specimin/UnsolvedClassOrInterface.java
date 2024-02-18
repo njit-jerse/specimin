@@ -11,10 +11,10 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
- * An UnsolvedClass instance is a representation of a class that can not be solved by SymbolSolver.
- * The reason is that the class file is not in the root directory.
+ * An UnsolvedClassOrInterface instance is a representation of a class or an interface that can not
+ * be solved by SymbolSolver. The reason is that the class file is not in the root directory.
  */
-public class UnsolvedClass {
+public class UnsolvedClassOrInterface {
   /**
    * Set of methods belongs to the class. Must be a linked set to ensure deterministic iteration
    * order when writing files synthetic classes.
@@ -42,6 +42,9 @@ public class UnsolvedClass {
   /** This field records if the class is a custom exception */
   private boolean isExceptionType = false;
 
+  /** This field records if the class is an interface */
+  private final boolean isAnInterface;
+
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
    * any generics attached to it.
@@ -49,7 +52,7 @@ public class UnsolvedClass {
    * @param className the name of the class, possibly followed by a set of type arguments
    * @param packageName the name of the package
    */
-  public UnsolvedClass(String className, String packageName) {
+  public UnsolvedClassOrInterface(String className, String packageName) {
     this(className, packageName, false);
   }
 
@@ -60,7 +63,20 @@ public class UnsolvedClass {
    * @param packageName the name of the package
    * @param isException does the class represents an exception?
    */
-  public UnsolvedClass(String className, String packageName, boolean isException) {
+  public UnsolvedClassOrInterface(String className, String packageName, boolean isException) {
+    this(className, packageName, isException, false);
+  }
+
+  /**
+   * Create an instance of an unsolved interface or unsolved class.
+   *
+   * @param className the simple name of the interface, possibly followed by a set of type arguments
+   * @param packageName the name of the package
+   * @param isException does the interface represents an exception?
+   * @param isAnInterface check whether this is an interface or a class
+   */
+  public UnsolvedClassOrInterface(
+      String className, String packageName, boolean isException, boolean isAnInterface) {
     if (className.contains("<")) {
       @SuppressWarnings("signature") // removing the <> makes this a true simple name
       @ClassGetSimpleName String classNameWithoutAngleBrackets = className.substring(0, className.indexOf('<'));
@@ -74,6 +90,16 @@ public class UnsolvedClass {
     this.packageName = packageName;
     this.classFields = new LinkedHashSet<>();
     this.isExceptionType = isException;
+    this.isAnInterface = isAnInterface;
+  }
+
+  /**
+   * Returns the value of isAnInterface.
+   *
+   * @return return true if the current UnsolvedClassOrInterface instance represents an interface.
+   */
+  public boolean isAnInterface() {
+    return isAnInterface;
   }
 
   /**
@@ -217,10 +243,10 @@ public class UnsolvedClass {
 
   @Override
   public boolean equals(@Nullable Object other) {
-    if (!(other instanceof UnsolvedClass)) {
+    if (!(other instanceof UnsolvedClassOrInterface)) {
       return false;
     }
-    UnsolvedClass otherClass = (UnsolvedClass) other;
+    UnsolvedClassOrInterface otherClass = (UnsolvedClassOrInterface) other;
     // Note: an UnsovledClass cannot represent an anonymous class
     // (each UnsovledClass corresponds to a source file), so this
     // check is sufficient for equality (it is checking the canonical name).
@@ -242,7 +268,11 @@ public class UnsolvedClass {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
-    sb.append("public class ").append(className).append(getTypeVariablesAsString());
+    if (isAnInterface) {
+      sb.append("public interface ").append(className).append(getTypeVariablesAsString());
+    } else {
+      sb.append("public class ").append(className).append(getTypeVariablesAsString());
+    }
     if (isExceptionType) {
       sb.append(" extends Exception");
     }

@@ -19,6 +19,7 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -43,6 +44,7 @@ import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
+import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -88,7 +90,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String currentPackage = "";
 
   /** The symbol table to keep track of local variables in the current input file */
-  private final ArrayDeque<HashSet<String>> localVariables = new ArrayDeque<>();
+  private final ArrayDeque<Set<String>> localVariables = new ArrayDeque<Set<String>>();
 
   /** The symbol table for type variables. */
   private final ArrayDeque<Set<String>> typeVariables = new ArrayDeque<Set<String>>();
@@ -108,7 +110,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Map<String, @ClassGetSimpleName String> methodAndReturnType = new HashMap<>();
 
   /** List of classes not in the source codes */
-  private final Set<UnsolvedClass> missingClass = new HashSet<>();
+  private final Set<UnsolvedClassOrInterface> missingClass = new HashSet<>();
 
   /** The same as the root being used in SpeciminRunner */
   private final String rootDirectory;
@@ -117,13 +119,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * This instance maps the name of the return type of a synthetic method with the synthetic class
    * of that method
    */
-  private final Map<String, UnsolvedClass> syntheticMethodReturnTypeAndClass = new HashMap<>();
+  private final Map<String, UnsolvedClassOrInterface> syntheticMethodReturnTypeAndClass =
+      new HashMap<>();
 
   /**
    * This instance maps the name of a synthetic type with the class where there is a field declared
    * with that type
    */
-  private final Map<String, UnsolvedClass> syntheticTypeAndClass = new HashMap<>();
+  private final Map<String, UnsolvedClassOrInterface> syntheticTypeAndClass = new HashMap<>();
 
   /**
    * This is to check if the current synthetic files are enough to prevent UnsolvedSymbolException
@@ -175,6 +178,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** New files that should be added to the list of target files for the next iteration. */
   private final Set<String> addedTargetFiles = new HashSet<>();
 
+  /** Stores the sets of method declarations in the currently visiting classes. */
+  private final ArrayDeque<Set<MethodDeclaration>> declaredMethod = new ArrayDeque<>();
+
+  /** Maps the name of a class to the list of unsolved interface that it implements. */
+  private final Map<@ClassGetSimpleName String, List<@ClassGetSimpleName String>>
+      classToItsUnsolvedInterface = new HashMap<>();
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -217,6 +227,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
   }
+
   /**
    * This method sets the classAndPackageMap. This method is called in the method
    * setImportStatement, as classAndPackageMap and importStatements should always be in sync.
@@ -328,20 +339,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       SimpleName superClassSimpleName = node.getExtendedTypes().get(0).getName();
       classAndItsParent.put(className, superClassSimpleName.asString());
     }
-    addTypeVariableScope(node.getTypeParameters());
-    Visitable result = super.visit(node, arg);
-    typeVariables.removeFirst();
 
-    NodeList<ClassOrInterfaceType> interfaceList = node.getImplementedTypes();
+    NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
     // Not sure why getExtendedTypes return a list, since a class can only extends at most one class
     // in Java.
-    NodeList<ClassOrInterfaceType> superClassAndInterfaceList = node.getExtendedTypes();
-    superClassAndInterfaceList.addAll(interfaceList);
-    for (ClassOrInterfaceType interfaceType : superClassAndInterfaceList) {
-      String qualifiedName =
-          classAndPackageMap.getOrDefault(className, this.currentPackage)
-              + "."
-              + interfaceType.getName().asString();
+    NodeList<ClassOrInterfaceType> extendedAndImplementedTypes = node.getExtendedTypes();
+    extendedAndImplementedTypes.addAll(implementedTypes);
+    for (ClassOrInterfaceType implementedOrExtended : extendedAndImplementedTypes) {
+      String typeName = implementedOrExtended.getName().asString();
+      String packageName = classAndPackageMap.getOrDefault(typeName, this.currentPackage);
+      String qualifiedName = packageName + "." + typeName;
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         // add the source codes of the interface or the super class to the list of target files so
         // that UnsolvedSymbolVisitor can solve symbols for that class if needed.
@@ -353,8 +360,38 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           this.gotException = true;
         }
         addedTargetFiles.add(filePath);
+      } else {
+        UnsolvedClassOrInterface unsolvedInterface;
+        try {
+          implementedOrExtended.resolve();
+          continue;
+        } catch (UnsolvedSymbolException e) {
+          // this extended/implemented type is an interface if it is in the declaration of an
+          // interface, or if it is used with the "implements" keyword.
+          boolean typeIsAnInterface =
+              node.isInterface() || implementedTypes.contains(implementedOrExtended);
+          if (typeIsAnInterface) {
+            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName, false, true);
+            @SuppressWarnings(
+                "signature") // an empty array list is not a list of @ClassGetSimpleName, but since
+            // we will add typeName to that list right after the initialization,
+            // this code is correct.
+            List<@ClassGetSimpleName String> interfaceName =
+                classToItsUnsolvedInterface.computeIfAbsent(className, k -> new ArrayList<>());
+            interfaceName.add(typeName);
+          } else {
+            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
+          }
+        }
+        updateMissingClass(unsolvedInterface);
       }
     }
+
+    addTypeVariableScope(node.getTypeParameters());
+    declaredMethod.addFirst(new HashSet<>(node.getMethods()));
+    Visitable result = super.visit(node, arg);
+    typeVariables.removeFirst();
+    declaredMethod.removeFirst();
     return result;
   }
 
@@ -385,8 +422,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           new UnsolvedMethod(getParentClass(className), "", parametersList);
       // if the parent class can not be found in the import statements, Specimin assumes it is in
       // the same package as the child class.
-      UnsolvedClass superClass =
-          new UnsolvedClass(
+      UnsolvedClassOrInterface superClass =
+          new UnsolvedClassOrInterface(
               getParentClass(className),
               classAndPackageMap.getOrDefault(getParentClass(className), currentPackage));
       superClass.addMethod(constructorMethod);
@@ -489,7 +526,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     boolean isAField =
         !decl.getParentNode().isEmpty() && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
-      HashSet<String> currentListOfLocals = localVariables.removeFirst();
+      Set<String> currentListOfLocals = localVariables.removeFirst();
       currentListOfLocals.add(decl.getNameAsString());
       localVariables.addFirst(currentListOfLocals);
     }
@@ -515,17 +552,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else if (isTypeVar(typeAsString)) {
         // Nothing to do in this case, but we need to skip creating an unsolved class.
       }
-      /**
-       * Handles the case where the type is a simple class name. Two sub-cases are considered: 1.
-       * The class is included among the import statements. 2. The class is not included in the
-       * import statements but is in the same directory as the input class. The first sub-case is
-       * addressed by the visit method for ImportDeclaration.
-       */
+      // Handles the case where the type is a simple class name. Two sub-cases are considered: 1.
+      // The class is included among the import statements. 2. The class is not included in the
+      // import statements but is in the same directory as the input class. The first sub-case is
+      // addressed by the visit method for ImportDeclaration.
       else if (!classAndPackageMap.containsKey(typeAsString)) {
         @SuppressWarnings("signature") // since this is the simple name case
         @ClassGetSimpleName String className = typeAsString;
         String packageName = this.currentPackage;
-        UnsolvedClass newClass = new UnsolvedClass(className, packageName);
+        UnsolvedClassOrInterface newClass = new UnsolvedClassOrInterface(className, packageName);
         updateMissingClass(newClass);
       }
     }
@@ -617,7 +652,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false);
+        updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false, false);
       }
     }
 
@@ -635,10 +670,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
         String nameOfClass = classNodeSimpleName.asString();
-        updateUnsolvedClassWithMethod(node, nameOfClass, toSimpleName(nodeTypeAsString));
+        updateUnsolvedClassOrInterfaceWithMethod(
+            node, nameOfClass, toSimpleName(nodeTypeAsString), false);
       }
     }
-    HashSet<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
+    Set<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
     localVariables.addFirst(currentLocalVariables);
     Visitable result = super.visit(node, arg);
     localVariables.removeFirst();
@@ -706,7 +742,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedNameOfIncompleteClass));
       } else {
         @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
-        updateUnsolvedClassWithMethod(method, incompleteClassName, "");
+        updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
       }
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
       String methodFullyQualifiedCall = toFullyQualifiedCall(method);
@@ -719,6 +755,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // everything inside the (...) will be trimmed
       updateClassSetWithQualifiedStaticMethodCall(
           methodFullyQualifiedCall + "()", getArgumentsFromMethodCall(method));
+    } else if (haveNoScopeOrCallByThisKeyword(method)) {
+      // in this case, the method must be declared inside the interface or the superclass that the
+      // current class extends/implements.
+      if (!declaredInCurrentClass(method)) {
+        if (classToItsUnsolvedInterface.containsKey(className)) {
+          List<@ClassGetSimpleName String> relevantInterfaces =
+              classToItsUnsolvedInterface.get(className);
+          // Since these are unsolved interfaces, we have no ideas which one of them contains the
+          // signature for the current method, thus we will put the signature in the last interface.
+          String unsolvedInterface = relevantInterfaces.get(relevantInterfaces.size() - 1);
+          updateUnsolvedClassOrInterfaceWithMethod(method, unsolvedInterface, "", true);
+        } else if (classAndItsParent.containsKey(className)) {
+          String parentName = classAndItsParent.get(className);
+          updateUnsolvedClassOrInterfaceWithMethod(method, parentName, "", false);
+        }
+      }
     }
     boolean needToSetException =
         !canBeSolved(method)
@@ -745,6 +797,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(typeExpr, p);
     }
     if (isTypeVar(typeExpr.getName().asString())) {
+      return super.visit(typeExpr, p);
+    }
+    // type belonging to a class declaration will be handled by the visit method for
+    // ClassOrInterfaceDeclaration
+    if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
       return super.visit(typeExpr, p);
     }
     try {
@@ -777,7 +834,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // This method only updates type variables for unsolved classes. Other problems causing a
       // class to be unsolved will be fixed by other methods.
       Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
-      UnsolvedClass classToUpdate;
+      UnsolvedClassOrInterface classToUpdate;
       int numberOfArguments = 0;
       String typeRawName = typeExpr.getElementType().asString();
       if (typeArguments.isPresent()) {
@@ -792,10 +849,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else if (isAClassPath(typeRawName)) {
         String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
         String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
-        classToUpdate = new UnsolvedClass(className, packageName);
+        classToUpdate = new UnsolvedClassOrInterface(className, packageName);
       } else {
         String packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
-        classToUpdate = new UnsolvedClass(typeRawName, packageName);
+        classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
       }
       classToUpdate.setNumberOfTypeVariables(numberOfArguments);
       updateMissingClass(classToUpdate);
@@ -844,7 +901,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
-      updateUnsolvedClassWithClassName(type, false, creationMethod);
+      updateUnsolvedClassWithClassName(type, false, false, creationMethod);
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
@@ -865,6 +922,44 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     filePath = filePath + ".java";
     return filePath;
+  }
+
+  /**
+   * Given a method call, this method checks if that method call is declared in the currently
+   * visiting class.
+   *
+   * @param method the method call to be checked
+   * @return true if method is declared in the current clases
+   */
+  public boolean declaredInCurrentClass(MethodCallExpr method) {
+    for (Set<MethodDeclaration> methodDeclarationSet : declaredMethod) {
+      for (MethodDeclaration methodDeclared : methodDeclarationSet) {
+        if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
+          continue;
+        }
+        List<String> methodTypesOfParameters = getArgumentsFromMethodCall(method);
+        NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
+        List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
+        for (Parameter parameter : methodDeclaredParameters) {
+          try {
+            ResolvedType parameterTypeResolved = parameter.getType().resolve();
+            if (parameterTypeResolved.isPrimitive()) {
+              methodDeclaredTypesOfParameters.add(parameterTypeResolved.asPrimitive().name());
+            } else if (parameterTypeResolved.isReferenceType()) {
+              methodDeclaredTypesOfParameters.add(
+                  parameterTypeResolved.asReferenceType().getQualifiedName());
+            }
+          } catch (UnsolvedSymbolException e) {
+            // UnsolvedSymbolVisitor will not create any synthetic class at this iteration.
+            return false;
+          }
+        }
+        if (methodDeclaredTypesOfParameters.equals(methodTypesOfParameters)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -894,7 +989,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // parameterInString needs to be a fully-qualified name. As this parameter has a form of
       // class path, we can say that it is a fully-qualified name
       @SuppressWarnings("signature")
-      UnsolvedClass newClass = getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
+      UnsolvedClassOrInterface newClass =
+          getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
       updateMissingClass(newClass);
 
     } else {
@@ -902,9 +998,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
       if (parameter.getParentNode().isPresent()
           && parameter.getParentNode().get() instanceof CatchClause) {
-        updateUnsolvedClassWithClassName(className, true);
+        updateUnsolvedClassWithClassName(className, true, false);
       } else {
-        updateUnsolvedClassWithClassName(className, false);
+        updateUnsolvedClassWithClassName(className, false, false);
       }
     }
   }
@@ -923,7 +1019,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // since this type is unsolved, it could not be a primitive type
         @ClassGetSimpleName String typeName = param.getElementType().asClassOrInterfaceType().getName().asString();
-        UnsolvedClass newClass = updateUnsolvedClassWithClassName(typeName, true);
+        UnsolvedClassOrInterface newClass = updateUnsolvedClassWithClassName(typeName, true, false);
         updateMissingClass(newClass);
       }
     }
@@ -963,6 +1059,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Given an instance of MethodCallExpr, this method checks if that method has no scope or called
+   * by the "this" keyword.
+   *
+   * @param methodCall the method call to be checked.
+   * @return true if methodCall has no scope or called by a "this" keyword.
+   */
+  private boolean haveNoScopeOrCallByThisKeyword(MethodCallExpr methodCall) {
+    Optional<Expression> scope = methodCall.getScope();
+    if (scope.isEmpty()) {
+      return true;
+    }
+    return (scope.get() instanceof ThisExpr);
+  }
+
+  /**
    * Given a MethodDeclaration instance, this method checks if that MethodDeclaration is inside an
    * object creation expression.
    *
@@ -987,6 +1098,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     throw new RuntimeException("Got a method declaration with no class!");
   }
+
   /**
    * Given a class name that can either be fully-qualified or simple, this method will convert that
    * class name to a simple name.
@@ -1004,6 +1116,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     return elements.get(elements.size() - 1);
   }
+
   /**
    * This method will add a new method declaration to a synthetic class based on the unsolved method
    * call or method declaration in the original input. User can choose the desired return type for
@@ -1013,11 +1126,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param method the method call or method declaration in the original input
    * @param className the name of the synthetic class
    * @param desiredReturnType the desired return type for this method
+   * @param updatingInterface true if this method is being used to update an interface, false for
+   *     updating classes
    */
-  public void updateUnsolvedClassWithMethod(
+  public void updateUnsolvedClassOrInterfaceWithMethod(
       Node method,
       @ClassGetSimpleName String className,
-      @ClassGetSimpleName String desiredReturnType) {
+      @ClassGetSimpleName String desiredReturnType,
+      boolean updatingInterface) {
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
     if (method instanceof MethodCallExpr) {
@@ -1037,8 +1153,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
-    UnsolvedClass missingClass = updateUnsolvedClassWithClassName(className, false, thisMethod);
+    UnsolvedMethod thisMethod;
+    if (updatingInterface) {
+      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters, true);
+    } else {
+      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
+    }
+
+    UnsolvedClassOrInterface missingClass =
+        updateUnsolvedClassWithClassName(className, false, false, thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
 
     // if the return type is not specified, a synthetic return type will be created. This part of
@@ -1049,8 +1172,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // give us the fully-qualified name
       @FullyQualifiedName String packageName = missingClass.getPackageName() + "." + returnType;
       syntheticReturnTypes.add(packageName);
-      UnsolvedClass returnTypeForThisMethod =
-          new UnsolvedClass(returnType, missingClass.getPackageName());
+      UnsolvedClassOrInterface returnTypeForThisMethod =
+          new UnsolvedClassOrInterface(returnType, missingClass.getPackageName());
       this.updateMissingClass(returnTypeForThisMethod);
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
@@ -1107,7 +1230,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // is favorable, since we don't have to write any additional import statements.
     @ClassGetSimpleName String returnType = methodSolved.getReturnType().describe();
     List<String> argumentsList = getArgumentsFromMethodCall(expr);
-    UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
+    UnsolvedClassOrInterface missingClass = new UnsolvedClassOrInterface(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
     missingClass.addMethod(thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
@@ -1122,17 +1245,24 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
    *     missing classes (optional, may be omitted)
    * @param isExceptionType if the class is of exceptionType
+   * @param isUpdatingInterface indicates whether this method is being used to update an interface
    * @return the newly-created UnsolvedClass method, for further processing. This output may be
    *     ignored.
    */
-  public UnsolvedClass updateUnsolvedClassWithClassName(
+  public UnsolvedClassOrInterface updateUnsolvedClassWithClassName(
       @ClassGetSimpleName String nameOfClass,
       boolean isExceptionType,
+      boolean isUpdatingInterface,
       UnsolvedMethod... unsolvedMethods) {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
     String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
-    UnsolvedClass result = new UnsolvedClass(nameOfClass, packageName, isExceptionType);
+    UnsolvedClassOrInterface result;
+    if (isUpdatingInterface) {
+      result = new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType, true);
+    } else {
+      result = new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType);
+    }
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
       result.addMethod(unsolvedMethod);
     }
@@ -1160,7 +1290,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @ClassGetSimpleName String className = objectSolved.getClassName();
     String packageName = objectSolved.getPackageName();
     List<String> argumentsList = getArgumentsFromObjectCreation(expr);
-    UnsolvedClass missingClass = new UnsolvedClass(className, packageName);
+    UnsolvedClassOrInterface missingClass = new UnsolvedClassOrInterface(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(objectName, "", argumentsList);
     missingClass.addMethod(thisMethod);
     this.updateMissingClass(missingClass);
@@ -1198,8 +1328,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param decl the method declaration
    * @return the set of parameters of decl
    */
-  public HashSet<String> getParameterFromAMethodDeclaration(MethodDeclaration decl) {
-    HashSet<String> setOfParameters = new HashSet<>();
+  public Set<String> getParameterFromAMethodDeclaration(MethodDeclaration decl) {
+    Set<String> setOfParameters = new HashSet<>();
     for (Parameter parameter : decl.getParameters()) {
       setOfParameters.add(parameter.getName().asString());
     }
@@ -1234,10 +1364,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           "Check if isASuperCall returns true before calling updateSyntheticClassForSuperCall");
     }
     if (expr instanceof MethodCallExpr) {
-      updateUnsolvedClassWithMethod(
+      updateUnsolvedClassOrInterfaceWithMethod(
           expr.asMethodCallExpr(),
           getParentClass(className),
-          methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""));
+          methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""),
+          false);
     } else if (expr instanceof FieldAccessExpr) {
       String nameAsString = expr.asFieldAccessExpr().getNameAsString();
       updateUnsolvedSuperClassWithFields(
@@ -1268,7 +1399,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void updateUnsolvedSuperClassWithFields(
       String var, @ClassGetSimpleName String className, String packageName) {
-    UnsolvedClass relatedClass = new UnsolvedClass(className, packageName);
+    UnsolvedClassOrInterface relatedClass = new UnsolvedClassOrInterface(className, packageName);
     if (variablesAndDeclaration.containsKey(var)) {
       String variableExpression = variablesAndDeclaration.get(var);
       relatedClass.addFields(variableExpression);
@@ -1277,7 +1408,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // since it is just simple string combination, it is a simple name
       @SuppressWarnings("signature")
       @ClassGetSimpleName String variableType = "SyntheticTypeFor" + toCapital(var);
-      UnsolvedClass varType = new UnsolvedClass(variableType, packageName);
+      UnsolvedClassOrInterface varType = new UnsolvedClassOrInterface(variableType, packageName);
       syntheticTypes.add(variableType);
       relatedClass.addFields(
           setInitialValueForVariableDeclaration(variableType, variableType + " " + var));
@@ -1293,7 +1424,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if that variable is local
    */
   public boolean isALocalVar(String variableName) {
-    for (HashSet<String> varSet : localVariables) {
+    for (Set<String> varSet : localVariables) {
       // for anonymous classes, it is assumed that any matching local variable either belongs to the
       // class itself or is a final variable in the enclosing scope.
       if (varSet.contains(variableName)) {
@@ -1536,8 +1667,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return that name in @ClassGetSimpleName form
    */
   public static @ClassGetSimpleName String returnNameForMethod(String methodName) {
-    String capitalizedMethodName =
-        methodName.substring(0, 1).toUpperCase() + methodName.substring(1);
+    String capitalizedMethodName = toCapital(methodName);
     @SuppressWarnings("signature")
     @ClassGetSimpleName String returnName = capitalizedMethodName + "ReturnType";
     return returnName;
@@ -1549,18 +1679,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param missedClass the class to be updated
    */
-  public void updateMissingClass(UnsolvedClass missedClass) {
+  public void updateMissingClass(UnsolvedClassOrInterface missedClass) {
     String qualifiedName = missedClass.getQualifiedClassName();
     // If an original class from the input codebase is used with unsolved type parameters, it may be
     // misunderstood as an unresolved class.
     if (classfileIsInOriginalCodebase(qualifiedName)) {
       return;
     }
-    Iterator<UnsolvedClass> iterator = missingClass.iterator();
+    Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
-      UnsolvedClass e = iterator.next();
+      UnsolvedClassOrInterface e = iterator.next();
       if (e.equals(missedClass)) {
-
         // add new methods
         for (UnsolvedMethod method : missedClass.getMethods()) {
           // No need to check for containment, since the methods are stored
@@ -1606,7 +1735,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * current run.
    */
   public void updateSyntheticSourceCode() {
-    for (UnsolvedClass missedClass : missingClass) {
+    for (UnsolvedClassOrInterface missedClass : missingClass) {
       this.deleteOldSyntheticClass(missedClass);
       this.createMissingClass(missedClass);
     }
@@ -1618,7 +1747,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param missedClass a synthetic class to be deleted
    */
-  public void deleteOldSyntheticClass(UnsolvedClass missedClass) {
+  public void deleteOldSyntheticClass(UnsolvedClassOrInterface missedClass) {
     String classPackage = missedClass.getPackageName();
     String classDirectory = classPackage.replace(".", "/");
     String filePathStr =
@@ -1638,7 +1767,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param missedClass the class to be added
    */
-  public void createMissingClass(UnsolvedClass missedClass) {
+  public void createMissingClass(UnsolvedClassOrInterface missedClass) {
     StringBuilder fileContent = new StringBuilder();
     fileContent.append(missedClass);
     String classPackage = missedClass.getPackageName();
@@ -1670,7 +1799,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return the capitalized version of the string
    */
   public static String toCapital(String string) {
-    return string.substring(0, 1).toUpperCase() + string.substring(1);
+    return Ascii.toUpperCase(string.substring(0, 1)) + string.substring(1);
   }
 
   /**
@@ -1692,9 +1821,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public static boolean isAClassPath(String potentialClassPath) {
     List<String> elements = Splitter.onPattern("\\.").splitToList(potentialClassPath);
-    ;
     int elementsCount = elements.size();
-    return elementsCount > 1 && isCapital(elements.get(elementsCount - 1));
+    return elementsCount > 1
+        && isCapital(elements.get(elementsCount - 1))
+        // Classpaths cannot contain spaces!
+        && elements.stream().noneMatch(s -> s.contains(" "));
   }
 
   /**
@@ -1704,7 +1835,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param fullyName the fully-qualified name of the class
    * @return the corresponding instance of UnsolvedClass
    */
-  public static UnsolvedClass getSimpleSyntheticClassFromFullyQualifiedName(
+  public static UnsolvedClassOrInterface getSimpleSyntheticClassFromFullyQualifiedName(
       @FullyQualifiedName String fullyName) {
     if (!isAClassPath(fullyName)) {
       throw new RuntimeException(
@@ -1713,7 +1844,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     String className = fullyQualifiedToSimple(fullyName);
     String packageName = fullyName.replace("." + className, "");
-    return new UnsolvedClass(className, packageName);
+    return new UnsolvedClassOrInterface(className, packageName);
   }
 
   /**
@@ -1852,9 +1983,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // be a simple name.
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
-    UnsolvedClass returnClass = new UnsolvedClass(thisReturnType, packageName);
+    UnsolvedClassOrInterface returnClass =
+        new UnsolvedClassOrInterface(thisReturnType, packageName);
     UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodArguments);
-    UnsolvedClass classThatContainMethod = new UnsolvedClass(className, packageName);
+    UnsolvedClassOrInterface classThatContainMethod =
+        new UnsolvedClassOrInterface(className, packageName);
     newMethod.setStatic();
     classThatContainMethod.addMethod(newMethod);
     syntheticMethodReturnTypeAndClass.put(thisReturnType, classThatContainMethod);
@@ -1909,8 +2042,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // be a simple name.
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisFieldType = fieldTypeClassName;
-    UnsolvedClass typeClass = new UnsolvedClass(thisFieldType, packageName);
-    UnsolvedClass classThatContainField = new UnsolvedClass(className, packageName);
+    UnsolvedClassOrInterface typeClass = new UnsolvedClassOrInterface(thisFieldType, packageName);
+    UnsolvedClassOrInterface classThatContainField =
+        new UnsolvedClassOrInterface(className, packageName);
     // at this point, fieldDeclaration will become "ComExampleMyClassMyFieldType myField"
     String fieldDeclaration = fieldTypeClassName + " " + fieldName;
     if (isFinal) {
@@ -1939,7 +2073,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     for (String incorrectType : typeToCorrect.keySet()) {
       // update incorrecType if it is the type of a field in a synthetic class
       if (syntheticTypeAndClass.containsKey(incorrectType)) {
-        UnsolvedClass relatedClass = syntheticTypeAndClass.get(incorrectType);
+        UnsolvedClassOrInterface relatedClass = syntheticTypeAndClass.get(incorrectType);
         updateTypeForSyntheticClasses(
             relatedClass.getClassName(),
             relatedClass.getPackageName(),
@@ -1948,7 +2082,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             typeToCorrect.get(incorrectType));
         continue;
       }
-      UnsolvedClass relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
+      UnsolvedClassOrInterface relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
       if (relatedClass != null) {
         updateTypeForSyntheticClasses(
             relatedClass.getClassName(),
@@ -1960,7 +2094,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // if the above condition is not met, then this incorrectType is a synthetic type for the
       // fields of the parent class rather than the return type of some methods
       else {
-        for (UnsolvedClass unsolClass : missingClass) {
+        for (UnsolvedClassOrInterface unsolClass : missingClass) {
           for (String parentClass : classAndItsParent.values()) {
             // TODO: should this also check that unsolClass's package name is
             // the correct one for the parent? Martin isn't sure how to do that here.
@@ -1990,10 +2124,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       boolean updateAField,
       String incorrectTypeName,
       String correctTypeName) {
-    UnsolvedClass classToSearch = new UnsolvedClass(className, packageName);
-    Iterator<UnsolvedClass> iterator = missingClass.iterator();
+    UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
+    Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
-      UnsolvedClass missedClass = iterator.next();
+      UnsolvedClassOrInterface missedClass = iterator.next();
       // Class comparison is based on class name and package name only.
       if (missedClass.equals(classToSearch)) {
         iterator.remove(); // Remove the outdated version of this synthetic class from the list
