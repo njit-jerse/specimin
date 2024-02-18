@@ -202,8 +202,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * Check whether the visitor is inside the declaration of a member that could be used by the
-   * target methods. Symbols inside the declarations of potentially-used members will be solved if they have
-   * one of the following types: ClassOrInterfaceType and Parameters.
+   * target methods. Symbols inside the declarations of potentially-used members will be solved if
+   * they have one of the following types: ClassOrInterfaceType and Parameters.
    */
   private boolean insidePotentialUsedMember = false;
 
@@ -356,7 +356,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
-    // This is a special case, since the symbols of a ClassOrInterfaceDeclarations will be solved regardless of being inside target methods or potentially-used members.
+    // This is a special case, since the symbols of a ClassOrInterfaceDeclarations will be solved
+    // regardless of being inside target methods or potentially-used members.
     SimpleName nodeName = node.getName();
     className = nodeName.asString();
     if (node.getExtendedTypes().isNonEmpty()) {
@@ -672,15 +673,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
-    String methodQualifiedName =
+    String methodQualifiedSignature =
         this.currentPackage
             + "."
             + this.className
-            + "."
+            + "#"
             + TargetMethodFinderVisitor.removeMethodReturnType(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
-    if (targetMethodsNames.contains(methodQualifiedName)) {
+    if (targetMethodsNames.contains(methodQualifiedSignature)) {
       insideTargetMethod = true;
       Visitable result = processMethodDeclaration(node);
       insideTargetMethod = false;
@@ -692,8 +693,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return result;
     } else if (insideTargetMethod) {
       return processMethodDeclaration(node);
-    }
-    else {
+    } else {
       return super.visit(node, arg);
     }
   }
