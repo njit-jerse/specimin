@@ -194,16 +194,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Check whether the visitor is inside the declaration of a target method. Symbols inside the
    * declarations of target methods will be solved if they have one of the following types:
-   * ClassOrInterfaceType, Parameters, MethodCallExpr, FieldAccessExpr,
-   * ExplicitConstructorInvocationStmt, VariableDeclarator, NameExpr, MethodDeclaration, and
-   * ObjectCreationExpr.
+   * ClassOrInterfaceType, Parameters, VariableDeclarator, MethodCallExpr, FieldAccessExpr,
+   * ExplicitConstructorInvocationStmt, NameExpr, MethodDeclaration, and ObjectCreationExpr.
    */
   private boolean insideTargetMethod = false;
 
   /**
    * Check whether the visitor is inside the declaration of a member that could be used by the
    * target methods. Symbols inside the declarations of potentially-used members will be solved if
-   * they have one of the following types: ClassOrInterfaceType and Parameters.
+   * they have one of the following types: ClassOrInterfaceType, Parameters, and VariableDeclarator.
    */
   private boolean insidePotentialUsedMember = false;
 
@@ -579,8 +578,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       currentListOfLocals.add(decl.getNameAsString());
       localVariables.addFirst(currentListOfLocals);
     }
-
-    if (!insideTargetMethod) {
+    if (potentialUsedMembers.contains(decl.getName().asString())) {
+      insidePotentialUsedMember = true;
+    }
+    if (!insideTargetMethod && !insidePotentialUsedMember) {
       return super.visit(decl, p);
     }
 
@@ -588,7 +589,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Type declType = decl.getType();
     if (declType.isVarType()) {
       // nothing to do here. A var type could never be solved.
-      return super.visit(decl, p);
+      Visitable result = super.visit(decl, p);
+      insidePotentialUsedMember = false;
+      return result;
     }
     try {
       declType.resolve();
@@ -617,7 +620,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         updateMissingClass(newClass);
       }
     }
-    return super.visit(decl, p);
+    Visitable result = super.visit(decl, p);
+    insidePotentialUsedMember = false;
+    return result;
   }
 
   @Override
@@ -627,6 +632,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     String name = node.getNameAsString();
     if (fieldNameToClassNameMap.containsKey(name)) {
+      potentialUsedMembers.add(name);
       return super.visit(node, arg);
     }
     // this condition checks if this NameExpr is a statically imported field
