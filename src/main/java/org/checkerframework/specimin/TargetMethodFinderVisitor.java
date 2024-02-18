@@ -472,14 +472,23 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public void updateUsedClassesForInterface(ResolvedMethodDeclaration method) {
     for (ResolvedMethodDeclaration interfaceMethod : methodDeclarationToInterfaceType.keySet()) {
       if (method.getName().equals(interfaceMethod.getName())) {
-        String methodReturnType = method.getReturnType().describe();
-        String interfaceMethodReturnType = interfaceMethod.getReturnType().describe();
-        if (methodReturnType.equals(interfaceMethodReturnType)) {
-          if (method.getNumberOfParams() == interfaceMethod.getNumberOfParams()) {
-            usedClass.add(
-                methodDeclarationToInterfaceType.get(interfaceMethod).resolve().getQualifiedName());
-            usedMembers.add(interfaceMethod.getQualifiedSignature());
+        try {
+          if (method
+              .getReturnType()
+              .describe()
+              .equals(interfaceMethod.getReturnType().describe())) {
+            if (method.getNumberOfParams() == interfaceMethod.getNumberOfParams()) {
+              usedClass.add(
+                  methodDeclarationToInterfaceType
+                      .get(interfaceMethod)
+                      .resolve()
+                      .getQualifiedName());
+              usedMembers.add(interfaceMethod.getQualifiedSignature());
+            }
           }
+        } catch (UnsolvedSymbolException e) {
+          // only potentially-used members will have there symbols solved.
+          continue;
         }
       }
     }
