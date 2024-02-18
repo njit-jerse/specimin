@@ -487,7 +487,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             }
           }
         } catch (UnsolvedSymbolException e) {
-          // only potentially-used members will have there symbols solved.
+          // only potentially-used members will have their symbols solved.
           continue;
         }
       }

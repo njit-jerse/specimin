@@ -188,7 +188,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** List of target methods as specified by users. */
   private final Set<String> targetMethodsNames;
 
-  /** Fields and methods that could be called inside the target methods. */
+  /**
+   * Fields and methods that could be called inside the target methods. We call them potential-used
+   * because the usage check is simply based on the simple names of those members.
+   */
   private final Set<String> potentialUsedMembers = new HashSet<>();
 
   /**
