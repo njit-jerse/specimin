@@ -688,9 +688,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ConstructorDeclaration node, Void arg) {
     // TODO: Loi: do we need to do anything for the parameters, like we do in
     // visit(MethodDeclaration)?
+    String methodQualifiedSignature =
+        this.currentClassQualifiedName
+            + "#"
+            + TargetMethodFinderVisitor.removeMethodReturnType(
+                node.getDeclarationAsString(false, false, false));
+    if (targetMethodsNames.contains(methodQualifiedSignature)) {
+      insideTargetMethod = true;
+    }
     addTypeVariableScope(node.getTypeParameters());
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
+    if (targetMethodsNames.contains(methodQualifiedSignature)) {
+      insideTargetMethod = false;
+    }
     return result;
   }
 
@@ -703,6 +714,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
     if (targetMethodsNames.contains(methodQualifiedSignature)) {
+      // this approach will fail if target method a() is inside target method b(), but I don't see
+      // any reason why anyone would pass the arguments to Specimin that way.
       insideTargetMethod = true;
       Visitable result = processMethodDeclaration(node);
       insideTargetMethod = false;
