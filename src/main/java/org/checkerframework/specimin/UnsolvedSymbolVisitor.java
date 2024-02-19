@@ -637,6 +637,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String name = node.getNameAsString();
     if (fieldNameToClassNameMap.containsKey(name)) {
       potentialUsedMembers.add(name);
+      try {
+        // check if the type is resolved and does not extend any unresolved type.
+        ResolvedType nameExprType = node.resolve().getType();
+        if (nameExprType.isReferenceType()) {
+          ResolvedReferenceType nameExprReferenceType = nameExprType.asReferenceType();
+          nameExprReferenceType.getAllAncestors();
+          // check if all the type parameters are resolved.
+          if (!hasResolvedTypeParameters(nameExprReferenceType)) {
+            this.gotException = true;
+          }
+        }
+      } catch (UnsolvedSymbolException e) {
+        this.gotException = true;
+      }
       return super.visit(node, arg);
     }
     // this condition checks if this NameExpr is a statically imported field
@@ -991,6 +1005,29 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     filePath = filePath + ".java";
     return filePath;
+  }
+
+  /**
+   * Given a ResolvedReferenceType, this method checks if all of the type parameters of that type
+   * are resolved.
+   *
+   * @param resolvedReferenceType a resolved reference type
+   * @return true if resolvedReferenceType has no unresolved type parameters.
+   */
+  public boolean hasResolvedTypeParameters(ResolvedReferenceType resolvedReferenceType) {
+    for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> typeParameter :
+        resolvedReferenceType.getTypeParametersMap()) {
+      ResolvedType parameterType = typeParameter.b;
+      if (parameterType.isReferenceType()) {
+        try {
+          // check if parameterType extends any unresolved type.
+          parameterType.asReferenceType().getAllAncestors();
+        } catch (UnsolvedSymbolException e) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /**
