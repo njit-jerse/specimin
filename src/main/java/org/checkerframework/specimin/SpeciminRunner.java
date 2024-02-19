@@ -212,7 +212,7 @@ public class SpeciminRunner {
       cu.accept(inheritancePreserve, null);
     }
 
-    for (String targetFile : inheritancePreserve.getAddedClass()) {
+    for (String targetFile : inheritancePreserve.getAddedClasses()) {
       String directoryOfFile = targetFile.replace(".", "/") + ".java";
       File thisFile = new File(root + directoryOfFile);
       // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
@@ -223,7 +223,7 @@ public class SpeciminRunner {
     }
 
     Set<String> updatedUsedClass = finder.getUsedClass();
-    updatedUsedClass.addAll(inheritancePreserve.getAddedClass());
+    updatedUsedClass.addAll(inheritancePreserve.getAddedClasses());
     PrunerVisitor methodPruner =
         new PrunerVisitor(finder.getTargetMethods(), finder.getUsedMembers(), updatedUsedClass);
 
