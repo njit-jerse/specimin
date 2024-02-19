@@ -219,6 +219,10 @@ public class SpeciminRunner {
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
     }
+
+    // cache to avoid called Files.createDirectories repeatedly with the same arguments
+    Set<Path> createdDirectories = new HashSet<>();
+
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
       // ignore classes from the Java package.
       if (target.getKey().startsWith("java/")) {
@@ -248,13 +252,14 @@ public class SpeciminRunner {
       // This null test is very defensive and might not be required? I think getParent can
       // only return null if its input was a single element path, which targetOutputPath
       // should not be unless the user made an error.
-      if (dirContainingOutputFile != null) {
+      if (dirContainingOutputFile != null
+          && !createdDirectories.contains(dirContainingOutputFile)) {
         Files.createDirectories(dirContainingOutputFile);
+        createdDirectories.add(dirContainingOutputFile);
       }
       // Write the string representation of CompilationUnit to the file
       try {
-        PrintWriter writer =
-            new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8.name());
+        PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
         writer.print(target.getValue());
         writer.close();
       } catch (IOException e) {
