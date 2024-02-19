@@ -40,10 +40,12 @@ import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
+import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.io.BufferedWriter;
@@ -637,6 +639,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String name = node.getNameAsString();
     if (fieldNameToClassNameMap.containsKey(name)) {
       potentialUsedMembers.add(name);
+      try {
+        // check if the type is resolved and does not extend any unresolved type.
+        ResolvedType nameExprType = node.resolve().getType();
+        if (nameExprType.isReferenceType()) {
+          ResolvedReferenceType nameExprReferenceType = nameExprType.asReferenceType();
+          nameExprReferenceType.getAllAncestors();
+          // check if all the type parameters are resolved.
+          if (!hasResolvedTypeParameters(nameExprReferenceType)) {
+            this.gotException = true;
+          }
+        }
+      } catch (UnsolvedSymbolException e) {
+        this.gotException = true;
+      }
       return super.visit(node, arg);
     }
     // this condition checks if this NameExpr is a statically imported field
@@ -868,15 +884,32 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(typeExpr, p);
     }
     try {
-      typeExpr.getElementType().resolve().describe();
+      // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
+      // extends or implements a resolved class/interface.
+      typeExpr.resolve().getAllAncestors();
       return super.visit(typeExpr, p);
     }
     /*
-     * If the class file is not in the codebase yet, we got UnsolvedSymbolException.
-     * If the class file is not in the codebase and used by an anonymous class, we got UnsupportedOperationException.
-     * If the class file is in the codebase but the type variables are missing, we got IllegalArgumentException.
+     * 1. If the class file is in the codebase but extends/implements a class/interface not in the codebase, we got UnsolvedSymbolException.
+     * 2. If the class file is not in the codebase yet, we also got UnsolvedSymbolException.
+     * 3. If the class file is not in the codebase and used by an anonymous class, we got UnsupportedOperationException.
+     * 4. If the class file is in the codebase but the type variables are missing, we got IllegalArgumentException.
      */
     catch (UnsolvedSymbolException | UnsupportedOperationException | IllegalArgumentException e) {
+      // this is for case 1. By adding the class file to the list of target files,
+      // UnsolvedSymbolVisitor will take care of the unsolved extension in its next iteration.
+      String qualifiedName =
+          classAndPackageMap.getOrDefault(typeExpr.getNameAsString(), currentPackage)
+              + "."
+              + typeExpr.getNameAsString();
+      if (classfileIsInOriginalCodebase(qualifiedName)) {
+        addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
+        gotException = true;
+        return super.visit(typeExpr, p);
+      }
+
+      // below is for other three cases.
+
       // This method only updates type variables for unsolved classes. Other problems causing a
       // class to be unsolved will be fixed by other methods.
       Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
@@ -974,6 +1007,29 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     filePath = filePath + ".java";
     return filePath;
+  }
+
+  /**
+   * Given a ResolvedReferenceType, this method checks if all of the type parameters of that type
+   * are resolved.
+   *
+   * @param resolvedReferenceType a resolved reference type
+   * @return true if resolvedReferenceType has no unresolved type parameters.
+   */
+  public boolean hasResolvedTypeParameters(ResolvedReferenceType resolvedReferenceType) {
+    for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> typeParameter :
+        resolvedReferenceType.getTypeParametersMap()) {
+      ResolvedType parameterType = typeParameter.b;
+      if (parameterType.isReferenceType()) {
+        try {
+          // check if parameterType extends any unresolved type.
+          parameterType.asReferenceType().getAllAncestors();
+        } catch (UnsolvedSymbolException e) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /**
