@@ -272,7 +272,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         String packageName = importStatement.replace("." + className, "");
         if (className.equals("*")) {
           throw new RuntimeException(
-              "A wildcard import statement found. Please use explicit import" + " statements.");
+              "A wildcard import statement found in class "
+                  + this.currentPackage
+                  + "."
+                  + this.className
+                  + ". Please use explicit import statements.");
         } else {
           this.classAndPackageMap.put(className, packageName);
         }
@@ -340,7 +344,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Node visit(ImportDeclaration decl, Void arg) {
     if (decl.isAsterisk()) {
       throw new RuntimeException(
-          "A wildcard import statement found. Please use explicit import" + " statements.");
+          "A wildcard import statement found in class "
+              + this.currentPackage
+              + "."
+              + this.className
+              + ". Please use explicit import statements.");
     }
     if (decl.isStatic()) {
       String name = decl.getNameAsString();
