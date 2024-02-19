@@ -118,7 +118,8 @@ public class SpeciminRunner {
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
       existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
     }
-    UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root, existingFiles);
+    UnsolvedSymbolVisitor addMissingClass =
+        new UnsolvedSymbolVisitor(root, existingFiles, targetMethodNames);
     addMissingClass.setClassesFromJar(jarPaths);
 
     // The set of path of files that have been created by addMissingClass. We will delete all those
