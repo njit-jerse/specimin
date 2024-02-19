@@ -41,7 +41,7 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
         String qualifiedName = extendedType.resolve().getQualifiedName();
-        addedClass.add(qualifiedName);
+        addedClasses.add(qualifiedName);
       }
     }
     return super.visit(decl, p);
