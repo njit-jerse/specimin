@@ -185,8 +185,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Map<@ClassGetSimpleName String, List<@ClassGetSimpleName String>>
       classToItsUnsolvedInterface = new HashMap<>();
 
-  /** List of target methods as specified by users. */
-  private final Set<String> targetMethodsNames;
+  /** List of signatures of target methods as specified by users. */
+  private final Set<String> targetMethodsSignatures;
 
   /**
    * Fields and methods that could be called inside the target methods. We call them potential-used
@@ -217,15 +217,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param rootDirectory the root directory of the input files
    * @param setOfExistingFiles the set of existing files in the input codebase
-   * @param targetMethodNames the list of target methods as specified by the user.
+   * @param targetMethodsSignatures the list of signatures of target methods as specified by the
+   *     user.
    */
   public UnsolvedSymbolVisitor(
-      String rootDirectory, Set<Path> setOfExistingFiles, List<String> targetMethodNames) {
+      String rootDirectory, Set<Path> setOfExistingFiles, List<String> targetMethodsSignatures) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
     this.setOfExistingFiles = setOfExistingFiles;
-    this.targetMethodsNames = new HashSet<>();
-    this.targetMethodsNames.addAll(targetMethodNames);
+    this.targetMethodsSignatures = new HashSet<>();
+    this.targetMethodsSignatures.addAll(targetMethodsSignatures);
   }
 
   /**
@@ -696,13 +697,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + "#"
             + TargetMethodFinderVisitor.removeMethodReturnType(
                 node.getDeclarationAsString(false, false, false));
-    if (targetMethodsNames.contains(methodQualifiedSignature)) {
+    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
       insideTargetMethod = true;
     }
     addTypeVariableScope(node.getTypeParameters());
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
-    if (targetMethodsNames.contains(methodQualifiedSignature)) {
+    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
       insideTargetMethod = false;
     }
     return result;
@@ -716,9 +717,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + TargetMethodFinderVisitor.removeMethodReturnType(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
-    if (targetMethodsNames.contains(methodQualifiedSignature)) {
-      // this approach will fail if target method a() is inside target method b(), but I don't see
-      // any reason why anyone would pass the arguments to Specimin that way.
+    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
       insideTargetMethod = true;
       Visitable result = processMethodDeclaration(node);
       insideTargetMethod = false;
