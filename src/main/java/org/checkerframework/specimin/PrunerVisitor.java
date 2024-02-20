@@ -194,6 +194,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       return super.visit(fieldDecl, p);
     }
+
     boolean isFinal = fieldDecl.isFinal();
     // Fields must have parents, because they must be contained in a class.
     // TODO: is this the best way to do this here? So many unguarded .get() calls makes me nervous.

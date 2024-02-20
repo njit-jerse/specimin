@@ -452,9 +452,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(NameExpr expr, Void p) {
     if (insideTargetMethod) {
       Optional<Node> parentNode = expr.getParentNode();
-      if (parentNode.isEmpty()
-          || !(parentNode.get() instanceof MethodCallExpr
-              || parentNode.get() instanceof FieldAccessExpr)) {
+      if (parentNode.isEmpty() || !(parentNode.get() instanceof FieldAccessExpr)) {
         updateUsedElementWithPotentialFieldNameExpr(expr);
       }
     }
