@@ -59,9 +59,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    */
   private Set<String> classesUsedByTargetMethods;
 
-  /** This is to check whether the current compilation unit is a class or an interface. */
-  private boolean isInsideAnInterface = false;
-
   /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
    * is set by {@link #visit(MethodDeclaration, Void)}.
@@ -109,9 +106,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       decl.remove();
       return decl;
     }
-    if (decl.isInterface()) {
-      this.isInsideAnInterface = true;
-    } else {
+    if (!decl.isInterface()) {
       NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
       Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
       while (iterator.hasNext()) {
@@ -155,7 +150,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = false;
       return result;
     } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
-      if (!isInsideAnInterface) {
+      // do nothing if methodDecl is just a method signature.
+      if (methodDecl.getBody().isPresent()) {
         methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       }
       return methodDecl;

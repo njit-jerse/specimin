@@ -11,7 +11,7 @@ public class ImplicitSuperCallTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "implicitinterfaceaccess",
+        "implicitsupercall",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#foo()"});
   }

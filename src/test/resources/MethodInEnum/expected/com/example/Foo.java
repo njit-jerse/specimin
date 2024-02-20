@@ -18,9 +18,7 @@ class Foo {
         }
         ;
 
-        public abstract void testing() {
-            throw new Error();
-        }
+        public abstract void testing();
     }
 
     private void bar() {
