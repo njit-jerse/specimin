@@ -1,6 +1,8 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -31,12 +33,21 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
 
   @Override
   public void visit(FieldDeclaration decl, Void p) {
-    if (decl.getParentNode().get() instanceof ObjectCreationExpr) {
+    Node parent = decl.getParentNode().get();
+
+    if (parent instanceof ObjectCreationExpr) {
       return;
     }
-    ClassOrInterfaceDeclaration classNode =
-        (ClassOrInterfaceDeclaration) decl.getParentNode().get();
-    SimpleName classNodeSimpleName = classNode.getName();
+    SimpleName classNodeSimpleName;
+    if (parent instanceof ClassOrInterfaceDeclaration) {
+      ClassOrInterfaceDeclaration classNode = (ClassOrInterfaceDeclaration) parent;
+      classNodeSimpleName = classNode.getName();
+    } else if (parent instanceof EnumDeclaration) {
+      EnumDeclaration enumNode = (EnumDeclaration) parent;
+      classNodeSimpleName = enumNode.getName();
+    } else {
+      throw new RuntimeException("unexpected node type: " + parent.getClass());
+    }
     String className = classNodeSimpleName.asString();
     for (VariableDeclarator var : decl.getVariables()) {
       fieldNameToClassNameMap.put(var.getNameAsString(), className);

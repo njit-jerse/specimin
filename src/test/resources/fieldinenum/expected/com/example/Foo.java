@@ -2,15 +2,12 @@ package com.example;
 
 class Foo {
 
-    private enum STATUS{
-        ON {
-            int x, y;
-        },
-        OFF {
-        };
+    private enum Status {
+
+        ON(1), OFF(0)
     }
 
     private void bar() {
-        STATUS.ON.x;
+        int y = Status.ON.bitRep;
     }
 }
