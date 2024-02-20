@@ -367,14 +367,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (methodReturnType instanceof ResolvedReferenceType) {
         updateUsedClassBasedOnType(methodReturnType);
       }
-      if (call.getScope().isPresent()) {
-        Expression scope = call.getScope().get();
-        // if the scope of a method call is a field, the type of that scope will be NameExpr.
-        if (scope instanceof NameExpr) {
-          NameExpr expression = call.getScope().get().asNameExpr();
-          updateUsedElementWithPotentialFieldNameExpr(expression);
-        }
-      }
     }
     return super.visit(call, p);
   }
@@ -452,9 +444,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(NameExpr expr, Void p) {
     if (insideTargetMethod) {
       Optional<Node> parentNode = expr.getParentNode();
-      if (parentNode.isEmpty()
-          || !(parentNode.get() instanceof MethodCallExpr
-              || parentNode.get() instanceof FieldAccessExpr)) {
+      if (parentNode.isEmpty() || !(parentNode.get() instanceof FieldAccessExpr)) {
         updateUsedElementWithPotentialFieldNameExpr(expr);
       }
     }

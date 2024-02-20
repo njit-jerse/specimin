@@ -29,6 +29,7 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.Iterator;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
@@ -194,25 +195,26 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       return super.visit(fieldDecl, p);
     }
-    try {
-      fieldDecl.resolve();
-    } catch (UnsolvedSymbolException e) {
-      // The current class is employed by the target methods, although not all of its members are
-      // utilized. It's not surprising for unused members to remain unresolved.
-      fieldDecl.remove();
-      return fieldDecl;
-    }
-    String classFullName = fieldDecl.resolve().declaringType().getQualifiedName();
+
     boolean isFinal = fieldDecl.isFinal();
+    String classFullName = getEnclosingClassName(fieldDecl);
     Iterator<VariableDeclarator> iterator = fieldDecl.getVariables().iterator();
     while (iterator.hasNext()) {
-      VariableDeclarator varDecl = iterator.next();
-      String varFullName = classFullName + "#" + varDecl.getNameAsString();
+      VariableDeclarator declarator = iterator.next();
+      try {
+        declarator.resolve();
+      } catch (UnsolvedSymbolException e) {
+        // The current class is employed by the target methods, although not all of its members are
+        // utilized. It's not surprising for unused members to remain unresolved.
+        declarator.remove();
+        continue;
+      }
+      String varFullName = classFullName + "#" + declarator.getNameAsString();
 
       if (membersToEmpty.contains(varFullName)) {
-        varDecl.removeInitializer();
+        declarator.removeInitializer();
         if (isFinal) {
-          varDecl.setInitializer(getBasicInitializer(varDecl.getType()));
+          declarator.setInitializer(getBasicInitializer(declarator.getType()));
         }
       } else {
         iterator.remove();
@@ -296,5 +298,25 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
     }
     return usedTypeOnly;
+  }
+
+  /**
+   * Searches the ancestors of the given node until it finds a class or interface node, and then
+   * returns the fully-qualified name of that class or interface.
+   *
+   * <p>This method will fail if it is called on a node that is not contained in a class or
+   * interface.
+   *
+   * @param node a node contained in a class or interface
+   * @return the fully-qualified name of the inner-most containing class or interface
+   */
+  public static @FullyQualifiedName String getEnclosingClassName(Node node) {
+    Node parent = node.getParentNode().orElseThrow();
+    while (!(parent instanceof ClassOrInterfaceDeclaration)) {
+      parent = parent.getParentNode().orElseThrow();
+    }
+    @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
+    @FullyQualifiedName String result = ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    return result;
   }
 }
