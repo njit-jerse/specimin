@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -24,10 +25,10 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
-import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.Iterator;
+import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
@@ -168,20 +169,25 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration constructorDecl, Void p) {
+    String qualifiedSignature;
     try {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
-      constructorDecl.resolve().getQualifiedSignature();
+      qualifiedSignature = constructorDecl.resolve().getQualifiedSignature();
     } catch (UnsolvedSymbolException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
       constructorDecl.remove();
       return constructorDecl;
     }
-    ResolvedConstructorDeclaration resolved = constructorDecl.resolve();
-    if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
+
+    // TODO: we should be cleverer about whether to preserve the constructors of
+    // enums, but right now we don't remove any enum constants in related classes, so
+    // we need to preserve all constructors to retain compilability.
+
+    if (methodsToLeaveUnchanged.contains(qualifiedSignature)) {
       return super.visit(constructorDecl, p);
-    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
+    } else if (membersToEmpty.contains(qualifiedSignature) || isInEnum(constructorDecl)) {
       constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return constructorDecl;
     } else {
@@ -310,13 +316,36 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @param node a node contained in a class or interface
    * @return the fully-qualified name of the inner-most containing class or interface
    */
+  @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
   public static @FullyQualifiedName String getEnclosingClassName(Node node) {
     Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration)) {
+    while (!(parent instanceof ClassOrInterfaceDeclaration || parent instanceof EnumDeclaration)) {
       parent = parent.getParentNode().orElseThrow();
     }
-    @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
-    @FullyQualifiedName String result = ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    return result;
+    if (parent instanceof ClassOrInterfaceDeclaration) {
+      return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    } else if (parent instanceof EnumDeclaration) {
+      return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    } else {
+      throw new RuntimeException("unexpected kind of node: " + parent.getClass());
+    }
+  }
+
+  /**
+   * Returns true iff the innermost enclosing class/interface is an enum.
+   *
+   * @param node any node
+   * @return true if the enclosing class is an enum, false otherwise
+   */
+  public static boolean isInEnum(Node node) {
+    Optional<Node> parent = node.getParentNode();
+    while (parent.isPresent()) {
+      Node actualParent = parent.get();
+      if (actualParent instanceof EnumDeclaration) {
+        return true;
+      }
+      parent = actualParent.getParentNode();
+    }
+    return false;
   }
 }
