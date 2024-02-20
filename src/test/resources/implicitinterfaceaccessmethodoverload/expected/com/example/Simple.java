@@ -13,6 +13,6 @@ abstract class Simple implements B {
     }
 
     int foo(int x) {
-        return 0;
+        throw new Error();
     }
 }
