@@ -1,6 +1,6 @@
 package org.second;
 
-class Calculator {
+public class Calculator {
     public Calculator() {
 
     }
