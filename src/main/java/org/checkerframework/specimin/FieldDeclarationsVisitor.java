@@ -38,8 +38,8 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
         (ClassOrInterfaceDeclaration) decl.getParentNode().get();
     SimpleName classNodeSimpleName = classNode.getName();
     String className = classNodeSimpleName.asString();
-    for (VariableDeclarator var : decl.getVariables()) {
-      fieldNameToClassNameMap.put(var.getNameAsString(), className);
+    for (VariableDeclarator variableDecl : decl.getVariables()) {
+      fieldNameToClassNameMap.put(variableDecl.getNameAsString(), className);
     }
   }
 
