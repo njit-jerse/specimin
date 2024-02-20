@@ -2,7 +2,11 @@ package com.example;
 
 public interface Baz<T> {
 
-    void doSomething(T value);
+    default void doSomething(T value) {
+        throw new Error();
+    }
 
-    void doSomething(int x);
+    default void doSomething(int x) {
+        throw new Error();
+    }
 }
