@@ -111,6 +111,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
     if (decl.isInterface()) {
       this.isInsideAnInterface = true;
+      Visitable result = super.visit(decl, p);
+      this.isInsideAnInterface = false;
+      return result;
     } else {
       NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
       Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
