@@ -29,6 +29,7 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.Iterator;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
@@ -196,13 +197,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
 
     boolean isFinal = fieldDecl.isFinal();
-    // Fields must have parents, because they must be contained in a class.
-    // TODO: is this the best way to do this here? So many unguarded .get() calls makes me nervous.
-    Node parent = fieldDecl.getParentNode().get();
-    while (!(parent instanceof ClassOrInterfaceDeclaration)) {
-      parent = parent.getParentNode().get();
-    }
-    String classFullName = ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().get();
+    String classFullName = getEnclosingClassName(fieldDecl);
     Iterator<VariableDeclarator> iterator = fieldDecl.getVariables().iterator();
     while (iterator.hasNext()) {
       VariableDeclarator declarator = iterator.next();
@@ -303,5 +298,25 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
     }
     return usedTypeOnly;
+  }
+
+  /**
+   * Searches the ancestors of the given node until it finds a class or interface node, and then
+   * returns the fully-qualified name of that class or interface.
+   *
+   * <p>This method will fail if it is called on a node that is not contained in a class or
+   * interface.
+   *
+   * @param node a node contained in a class or interface
+   * @return the fully-qualified name of the inner-most containing class or interface
+   */
+  public static @FullyQualifiedName String getEnclosingClassName(Node node) {
+    Node parent = node.getParentNode().orElseThrow();
+    while (!(parent instanceof ClassOrInterfaceDeclaration)) {
+      parent = parent.getParentNode().orElseThrow();
+    }
+    @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
+    @FullyQualifiedName String result = ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    return result;
   }
 }
