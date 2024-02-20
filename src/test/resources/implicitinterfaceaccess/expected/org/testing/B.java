@@ -2,5 +2,7 @@ package org.testing;
 
 public interface B {
 
-    public int baz();
+    public default int baz() {
+        throw new Error();
+    }
 }
