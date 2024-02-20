@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.google.common.base.Ascii;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -13,8 +14,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
-
-import com.google.common.base.Ascii;
+import java.util.stream.Collectors;
 import org.junit.Assert;
 
 /** Utility class containing routines to run Specimin's tests. */
@@ -91,7 +91,8 @@ public class SpeciminTestExecutor {
     } else {
       builder.command(
           "diff",
-          "-qr",
+          "-q",
+          "-r",
           "-w",
           "-B",
           outputDir.toAbsolutePath().toString(),
@@ -122,7 +123,9 @@ public class SpeciminTestExecutor {
             + "\n Output directory: "
             + outputDir
             + "\n diff command: "
-            + String.join(" ", builder.command())
+            + builder.command().stream()
+                .filter(s -> !"-q".equals(s))
+                .collect(Collectors.joining(" "))
             + "\n Error codes: ",
         0,
         exitCode);
