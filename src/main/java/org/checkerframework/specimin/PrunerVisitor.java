@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -310,13 +311,18 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @param node a node contained in a class or interface
    * @return the fully-qualified name of the inner-most containing class or interface
    */
+  @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
   public static @FullyQualifiedName String getEnclosingClassName(Node node) {
     Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration)) {
+    while (!(parent instanceof ClassOrInterfaceDeclaration || parent instanceof EnumDeclaration)) {
       parent = parent.getParentNode().orElseThrow();
     }
-    @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
-    @FullyQualifiedName String result = ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    return result;
+    if (parent instanceof ClassOrInterfaceDeclaration) {
+      return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    } else if (parent instanceof EnumDeclaration) {
+      return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    } else {
+      throw new RuntimeException("unexpected kind of node: " + parent.getClass());
+    }
   }
 }
