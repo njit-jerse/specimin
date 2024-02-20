@@ -198,25 +198,31 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       return super.visit(fieldDecl, p);
     }
-    try {
-      fieldDecl.resolve();
-    } catch (UnsolvedSymbolException e) {
-      // The current class is employed by the target methods, although not all of its members are
-      // utilized. It's not surprising for unused members to remain unresolved.
-      fieldDecl.remove();
-      return fieldDecl;
-    }
-    String classFullName = fieldDecl.resolve().declaringType().getQualifiedName();
     boolean isFinal = fieldDecl.isFinal();
+    // Fields must have parents, because they must be contained in a class.
+    // TODO: is this the best way to do this here? So many unguarded .get() calls makes me nervous.
+    Node parent = fieldDecl.getParentNode().get();
+    while (!(parent instanceof ClassOrInterfaceDeclaration)) {
+      parent = parent.getParentNode().get();
+    }
+    String classFullName = ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().get();
     Iterator<VariableDeclarator> iterator = fieldDecl.getVariables().iterator();
     while (iterator.hasNext()) {
-      VariableDeclarator varDecl = iterator.next();
-      String varFullName = classFullName + "#" + varDecl.getNameAsString();
+      VariableDeclarator declarator = iterator.next();
+      try {
+        declarator.resolve();
+      } catch (UnsolvedSymbolException e) {
+        // The current class is employed by the target methods, although not all of its members are
+        // utilized. It's not surprising for unused members to remain unresolved.
+        declarator.remove();
+        continue;
+      }
+      String varFullName = classFullName + "#" + declarator.getNameAsString();
 
       if (membersToEmpty.contains(varFullName)) {
-        varDecl.removeInitializer();
+        declarator.removeInitializer();
         if (isFinal) {
-          varDecl.setInitializer(getBasicInitializer(varDecl.getType()));
+          declarator.setInitializer(getBasicInitializer(declarator.getType()));
         }
       } else {
         iterator.remove();
