@@ -6,13 +6,13 @@ class Foo {
 
         ON {
 
-            public static void testing() {
+            public void testing() {
                 throw new Error();
             }
         }
         , OFF {
 
-            public static void testing() {
+            public void testing() {
                 throw new Error();
             }
         }
