@@ -26,4 +26,6 @@ elif [ "${returnval}" = 2 ]; then
   echo "Some expected test outputs do not compile successfully. See the above error output for details."
 fi
 
+find . -name "*.class" -exec rm {} \;
+
 exit ${returnval}
