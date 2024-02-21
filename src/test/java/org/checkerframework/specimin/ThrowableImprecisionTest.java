@@ -4,16 +4,17 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks that two simple Java files, one of which has a dependency on the other, are
- * reduced correctly. There is one extraneous constructor in the file that doesn't have the target
- * method that ought to be removed.
+ * This test demonstrates the imprecision of Specimin when there are two or more synthetic classes
+ * with the same name. If only one or some of them extend Throwable, Specimin will imprecisely make
+ * all of them extend Throwable. This occurs due to Specimin becoming confused when faced with
+ * multiple synthetic classes sharing the same name.
  */
-public class TwoFileSimpleTest {
+public class ThrowableImprecisionTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "twofilesimple",
+        "ThrowableImprecision",
         new String[] {"com/example/Foo.java", "com/example/Baz.java"},
-        new String[] {"com.example.Foo#bar()"});
+        new String[] {"com.example.Foo#bar()", "com.example.Baz#bar()"});
   }
 }
