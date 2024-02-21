@@ -601,7 +601,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     superCall.setScope(new SuperExpr());
     methodBody.addStatement(superCall);
-    methodDeclaration.setBody(methodBody);
     try {
       ResolvedMethodDeclaration resolvedSuperCall = superCall.resolve();
       updateUsedClassWithQualifiedClassName(
