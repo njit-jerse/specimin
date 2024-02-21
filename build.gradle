@@ -16,9 +16,8 @@ repositories {
     mavenLocal()
 }
 
-mainClassName = 'org.checkerframework.specimin.SpeciminRunner'
 application {
-    mainClass = mainClassName
+    mainClass = 'org.checkerframework.specimin.SpeciminRunner'
 }
 
 dependencies {
@@ -92,7 +91,7 @@ compileJava {
 
 jar {
     manifest {
-        attributes 'Main-Class': mainClassName
+        attributes 'Main-Class': 'org.checkerframework.specimin.SpeciminRunner'
     }
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
