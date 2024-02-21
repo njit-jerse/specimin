@@ -2276,6 +2276,30 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Based on the set returned by JavaTypeCorrect, this method corrects the Throwable extension for
+   * synthetic classes as needed.
+   *
+   * @param typesToExtendThrowable the set of synthetic types that need Throwable extension.
+   */
+  public void updateTypesToExtendThrowable(Set<String> typesToExtendThrowable) {
+    for (String typeToExtendThrowable : typesToExtendThrowable) {
+      Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
+      while (iterator.hasNext()) {
+        UnsolvedClassOrInterface missedClass = iterator.next();
+        // Class comparison is based on class name and package name only.
+        if (missedClass.getClassName().equals(typeToExtendThrowable)) {
+          iterator.remove(); // Remove the outdated version of this synthetic class from the list
+          missedClass.setThrowableToTrue();
+          missingClass.add(missedClass); // Add the modified missedClass back to the list
+          this.deleteOldSyntheticClass(missedClass);
+          this.createMissingClass(missedClass);
+          return;
+        }
+      }
+    }
+  }
+
+  /**
    * Updates the types for fields or methods in a synthetic class.
    *
    * @param className The name of the synthetic class.

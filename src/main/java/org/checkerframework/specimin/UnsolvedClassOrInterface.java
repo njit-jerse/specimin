@@ -42,6 +42,9 @@ public class UnsolvedClassOrInterface {
   /** This field records if the class is a custom exception */
   private boolean isExceptionType = false;
 
+  /** The field records if the class extends Throwable type. */
+  private boolean isThrowable = false;
+
   /** This field records if the class is an interface */
   private final boolean isAnInterface;
 
@@ -145,6 +148,11 @@ public class UnsolvedClassOrInterface {
    */
   public Set<String> getClassFields() {
     return classFields;
+  }
+
+  /** Set isThrowable to true. */
+  public void setThrowableToTrue() {
+    isThrowable = true;
   }
 
   /**
@@ -275,6 +283,8 @@ public class UnsolvedClassOrInterface {
     }
     if (isExceptionType) {
       sb.append(" extends Exception");
+    } else if (isThrowable) {
+      sb.append(" extends Throwable");
     }
     sb.append(" {\n");
     for (String variableDeclarations : classFields) {
