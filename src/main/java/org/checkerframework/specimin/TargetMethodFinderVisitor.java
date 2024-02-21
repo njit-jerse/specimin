@@ -616,9 +616,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Removes a node from its parent in the compilation unit. If a node cannot be removed directly,
-   * it might be wrapped inside another node, causing removal failure. This method iterates through
-   * the parent nodes until it successfully removes the specified node.
+   * Removes a node from its compilation unit. If a node cannot be removed directly, it might be
+   * wrapped inside another node, causing removal failure. This method iterates through the parent
+   * nodes until it successfully removes the specified node.
    *
    * <p>If this explanation does not make sense to you, please refer to the following link for
    * further details: <a
