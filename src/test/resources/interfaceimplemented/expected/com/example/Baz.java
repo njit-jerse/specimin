@@ -2,5 +2,7 @@ package com.example;
 
 public interface Baz {
 
-    void doSomething();
+    default void doSomething() {
+        throw new Error();
+    }
 }

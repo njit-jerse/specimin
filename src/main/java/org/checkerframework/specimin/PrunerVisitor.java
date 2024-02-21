@@ -152,9 +152,13 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = false;
       return result;
     } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
-      // do nothing if methodDecl is just a method signature.
-      if (methodDecl.getBody().isPresent()) {
+      boolean isMethodInsideInterface = isInsideInterface(methodDecl);
+      // do nothing if methodDecl is just a method signature in a class.
+      if (methodDecl.getBody().isPresent() || isMethodInsideInterface) {
         methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+        if (isMethodInsideInterface) {
+          methodDecl.setDefault(true);
+        }
       }
       return methodDecl;
     } else {
@@ -347,5 +351,22 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       parent = actualParent.getParentNode();
     }
     return false;
+  }
+
+  /**
+   * Check if a node is inside an interface.
+   *
+   * @param node the node to be checked.
+   * @return true if node is inside an interface.
+   */
+  private boolean isInsideInterface(Node node) {
+    if (node.getParentNode().isEmpty()) {
+      return false;
+    }
+    Node parentNode = node.getParentNode().get();
+    if (parentNode instanceof ClassOrInterfaceDeclaration) {
+      return ((ClassOrInterfaceDeclaration) parentNode).isInterface();
+    }
+    return isInsideInterface(parentNode);
   }
 }
