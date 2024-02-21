@@ -2282,21 +2282,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param typesToExtendThrowable the set of synthetic types that need Throwable extension.
    */
   public void updateTypesToExtendThrowable(Set<String> typesToExtendThrowable) {
+    Set<UnsolvedClassOrInterface> modifiedClasses = new HashSet<>();
+
     for (String typeToExtendThrowable : typesToExtendThrowable) {
       Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
       while (iterator.hasNext()) {
         UnsolvedClassOrInterface missedClass = iterator.next();
-        // Class comparison is based on class name and package name only.
         if (missedClass.getClassName().equals(typeToExtendThrowable)) {
-          iterator.remove(); // Remove the outdated version of this synthetic class from the list
+          iterator.remove();
           missedClass.setThrowableToTrue();
-          missingClass.add(missedClass); // Add the modified missedClass back to the list
+          modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);
-          return;
         }
       }
     }
+
+    missingClass.addAll(modifiedClasses);
   }
 
   /**
