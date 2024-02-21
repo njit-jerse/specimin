@@ -393,9 +393,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMethod) {
-      usedMembers.add(newExpr.resolve().getQualifiedSignature());
+      ResolvedConstructorDeclaration resolved = newExpr.resolve();
+      usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
-          newExpr.resolve().getPackageName() + "." + newExpr.resolve().getClassName());
+          resolved.getPackageName() + "." + resolved.getClassName());
     }
     return super.visit(newExpr, p);
   }
@@ -403,9 +404,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt expr, Void p) {
     if (insideTargetMethod) {
-      usedMembers.add(expr.resolve().getQualifiedSignature());
+      ResolvedConstructorDeclaration resolved = expr.resolve();
+      usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
-          expr.resolve().getPackageName() + "." + expr.resolve().getClassName());
+          resolved.getPackageName() + "." + resolved.getClassName());
     }
     return super.visit(expr, p);
   }
