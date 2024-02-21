@@ -89,6 +89,15 @@ compileJava {
     options.compilerArgs += ['-Werror']
 }
 
+jar {
+    manifest {
+        attributes 'Main-Class': 'org.checkerframework.specimin.SpeciminRunner'
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
 compileJava.dependsOn 'spotlessApply'
 check.dependsOn requireJavadoc
 
