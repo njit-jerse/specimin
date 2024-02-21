@@ -1,6 +1,5 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -107,23 +106,6 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
       // remove() call is not enough to remove a MethodCallExpr.
       superCall.remove();
     }
-    removeNode(superCall);
-  }
-
-  /**
-   * Removes a node from its compilation unit. If a node cannot be removed directly, it might be
-   * wrapped inside another node, causing removal failure. This method iterates through the parent
-   * nodes until it successfully removes the specified node.
-   *
-   * <p>If this explanation does not make sense to you, please refer to the following link for
-   * further details: <a
-   * href="https://github.com/javaparser/javaparser/issues/858">https://github.com/javaparser/javaparser/issues/858</a>
-   *
-   * @param node The node to be removed.
-   */
-  private void removeNode(Node node) {
-    while (!node.remove()) {
-      node = node.getParentNode().get();
-    }
+    JavaParserUtil.removeNode(superCall);
   }
 }
