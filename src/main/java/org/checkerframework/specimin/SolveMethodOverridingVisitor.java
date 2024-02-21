@@ -27,6 +27,14 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
   /** Set containing the signatures of used classes. */
   private Set<String> usedClass;
 
+  /**
+   * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
+   * members, and used classes.
+   *
+   * @param targetMethod Set containing the signatures of target methods.
+   * @param usedMembers Set containing the signatures of used members.
+   * @param usedClass Set containing the signatures of used classes.
+   */
   public SolveMethodOverridingVisitor(
       Set<String> targetMethod, Set<String> usedMembers, Set<String> usedClass) {
     this.targetMethod = targetMethod;
@@ -70,7 +78,7 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
   /**
    * Given a MethodDeclaration, this method checks whether that method declaration overrides another
    * method. If it does, it updates the list of used classes and members accordingly. Note:
-   * methodDeclaration is assumed to be a target method.
+   * methodDeclaration is assumed to be a target or used method.
    */
   private void checkForOverridingAndUpdateUsedClasses(MethodDeclaration methodDeclaration) {
     // just a method signature, no need to check for overriding.
