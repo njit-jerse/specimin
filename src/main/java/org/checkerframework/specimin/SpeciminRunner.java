@@ -199,7 +199,7 @@ public class SpeciminRunner {
     typeCorrecter.correctTypesForAllFiles();
     Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
     addMissingClass.updateTypes(typesToChange);
-    addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesToExtendsThrowable());
+    addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
 
     for (String directory : relatedClass) {
       // directories already in parsedTargetFiles are original files in the root directory, we are

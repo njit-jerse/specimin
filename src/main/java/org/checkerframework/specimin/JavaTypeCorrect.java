@@ -45,7 +45,7 @@ class JavaTypeCorrect {
   private Map<String, Set<String>> fileAndAssociatedTypes = new HashMap<>();
 
   /** Synthetic types that need to extend Throwable. */
-  private Set<String> typesToExtendsThrowable = new HashSet<>();
+  private Set<String> typesThatExtendThrowable = new HashSet<>();
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
@@ -76,10 +76,10 @@ class JavaTypeCorrect {
   /**
    * Get the names of synthetic classes that should extend Throwable.
    *
-   * @return the value of typesToExtendsThrowable.
+   * @return the value of typesThatExtendThrowable.
    */
-  public Set<String> getTypesToExtendsThrowable() {
-    return typesToExtendsThrowable;
+  public Set<String> getTypesThatExtendThrowable() {
+    return typesThatExtendThrowable;
   }
 
   /**
@@ -170,7 +170,7 @@ class JavaTypeCorrect {
       String incorrectType = splitErrorMessage.get(4);
       String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (correctType.equals("Throwable")) {
-        typesToExtendsThrowable.add(incorrectType);
+        typesThatExtendThrowable.add(incorrectType);
       } else {
         typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
       }
