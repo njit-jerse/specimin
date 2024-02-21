@@ -15,7 +15,7 @@ for testcase in * ; do
     cd "${testcase}/expected/" || exit 1
     # javac relies on word splitting
     # shellcheck disable=SC2046
-    javac -proc:only -nowarn -classpath "../../shared/checker-qual-3.42.0.jar" $(find . -name "*.java") \
+    javac -classpath "../../shared/checker-qual-3.42.0.jar" $(find . -name "*.java") \
       || { echo "Running javac on ${testcase}/expected issues one or more errors, which are printed above."; returnval=2; }
     cd ../.. || exit 1
 done
@@ -25,5 +25,7 @@ if [ "${returnval}" = 0 ]; then
 elif [ "${returnval}" = 2 ]; then
   echo "Some expected test outputs do not compile successfully. See the above error output for details."
 fi
+
+find . -name "*.class" -exec rm {} \;
 
 exit ${returnval}

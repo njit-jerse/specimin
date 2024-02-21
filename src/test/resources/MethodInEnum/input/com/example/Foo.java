@@ -4,12 +4,12 @@ class Foo {
 
     private enum STATUS{
         ON {
-            public static void testing() {
+            public void testing() {
                 throw new RuntimeException();
             }
         },
         OFF {
-            public static void testing() {
+            public void testing() {
                 throw new RuntimeException();
             }
         };
