@@ -755,10 +755,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!insideTargetMethod) {
       return super.visit(node, p);
     }
-    potentialUsedMembers.add(node.getName().asString());
-    if (isASuperCall(node) && !canBeSolved(node)) {
+    potentialUsedMembers.add(node.getNameAsString());
+    boolean canBeSolved = canBeSolved(node);
+    if (isASuperCall(node) && !canBeSolved) {
       updateSyntheticClassForSuperCall(node);
-    } else if (canBeSolved(node)) {
+    } else if (canBeSolved) {
       return super.visit(node, p);
     } else if (isAQualifiedFieldSignature(node.toString())) {
       updateClassSetWithQualifiedFieldSignature(node.toString(), true, false);
