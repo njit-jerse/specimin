@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -16,6 +17,7 @@ import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -256,6 +258,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
 
     if (this.targetMethodNames.contains(methodName)) {
+      checkForOverridingAndUpdateUsedClasses(method);
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
@@ -573,6 +576,59 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         continue;
       }
       usedClass.add(typePara.asReferenceType().getQualifiedName());
+    }
+  }
+
+  /**
+   * Given a MethodDeclaration, this method checks whether that method declaration overrides another
+   * method. If it does, it updates the list of used classes and members accordingly. Note:
+   * methodDeclaration is assumed to be a target method.
+   */
+  private void checkForOverridingAndUpdateUsedClasses(MethodDeclaration methodDeclaration) {
+    // just a method signature, no need to check for overriding.
+    if (methodDeclaration.getBody().isEmpty()) {
+      return;
+    }
+    BlockStmt methodBody = methodDeclaration.getBody().get();
+    // JavaParser does not support solving overriding, but it does support solving super
+    // expressions. So we make a temporary super expression to figure out if this current method is
+    // overriding.
+    MethodCallExpr superCall = new MethodCallExpr();
+    superCall.setName(methodDeclaration.getName());
+    NodeList<Parameter> parameters = methodDeclaration.getParameters();
+    for (Parameter parameter : parameters) {
+      superCall.addArgument(parameter.getNameAsString());
+    }
+    superCall.setScope(new SuperExpr());
+    methodBody.addStatement(superCall);
+    methodDeclaration.setBody(methodBody);
+    try {
+      ResolvedMethodDeclaration resolvedSuperCall = superCall.resolve();
+      updateUsedClassWithQualifiedClassName(
+          resolvedSuperCall.getPackageName() + "." + resolvedSuperCall.getClassName());
+      usedMembers.add(resolvedSuperCall.getQualifiedSignature());
+    } catch (Exception e) {
+      // This catch block is necessary to avoid crashes due to ignored catch blocks. A single
+      // remove() call is not enough to remove a MethodCallExpr.
+      superCall.remove();
+    }
+    removeNode(superCall);
+  }
+
+  /**
+   * Removes a node from its parent in the compilation unit. If a node cannot be removed directly,
+   * it might be wrapped inside another node, causing removal failure. This method iterates through
+   * the parent nodes until it successfully removes the specified node.
+   *
+   * <p>If this explanation does not make sense to you, please refer to the following link for
+   * further details: <a
+   * href="https://github.com/javaparser/javaparser/issues/858">https://github.com/javaparser/javaparser/issues/858</a>
+   *
+   * @param node The node to be removed.
+   */
+  private void removeNode(Node node) {
+    while (!node.remove()) {
+      node = node.getParentNode().get();
     }
   }
 }
