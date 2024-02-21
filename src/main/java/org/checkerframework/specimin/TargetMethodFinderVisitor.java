@@ -607,6 +607,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedSuperCall.getPackageName() + "." + resolvedSuperCall.getClassName());
       usedMembers.add(resolvedSuperCall.getQualifiedSignature());
     } catch (Exception e) {
+      // The current method is not overriding, thus the super call is unresolved.
       // This catch block is necessary to avoid crashes due to ignored catch blocks. A single
       // remove() call is not enough to remove a MethodCallExpr.
       superCall.remove();
