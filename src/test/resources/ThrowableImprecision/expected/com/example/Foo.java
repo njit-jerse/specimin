@@ -4,7 +4,7 @@ import org.fortest.UnsolvedType;
 
 class Foo {
 
-    void bar() {
+    int bar() {
         return UnsolvedType.getType();
     }
 }
