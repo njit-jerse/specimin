@@ -407,7 +407,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         try {
           implementedOrExtended.resolve();
           continue;
-        } catch (UnsolvedSymbolException e) {
+        }
+        // IllegalArgumentException is when the type has one or more generic type parameters.
+        catch (UnsolvedSymbolException | IllegalArgumentException e) {
           // this extended/implemented type is an interface if it is in the declaration of an
           // interface, or if it is used with the "implements" keyword.
           boolean typeIsAnInterface =

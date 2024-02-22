@@ -188,7 +188,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       try {
         updateMethodDeclarationToInterfaceType(
             interfaceType.resolve().getAllMethods(), interfaceType);
-      } catch (UnsolvedSymbolException e) {
+      }
+      // IllegalArgumentException is when the type has one or more generic type parameters.
+      catch (UnsolvedSymbolException | IllegalArgumentException e) {
         continue;
       }
     }
