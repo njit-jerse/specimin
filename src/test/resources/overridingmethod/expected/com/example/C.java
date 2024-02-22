@@ -2,9 +2,9 @@ package com.example;
 
 import org.testing.UnsolvedType;
 
-public interface Baz<T> {
+public class C {
 
-    default UnsolvedType doSomething(T value) {
+    public void bar(int z, UnsolvedType m) {
         throw new Error();
     }
 }

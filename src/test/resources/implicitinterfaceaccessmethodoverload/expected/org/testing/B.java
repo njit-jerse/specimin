@@ -2,5 +2,7 @@ package org.testing;
 
 public interface B {
 
-    public FooReturnType foo(int parameter0, java.lang.String parameter1);
+    public default FooReturnType foo(int parameter0, java.lang.String parameter1) {
+        throw new Error();
+    }
 }

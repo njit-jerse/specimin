@@ -7,6 +7,6 @@ class Foo {
     Map<Baz, String> field;
 
     boolean bar() {
-        field.isEmpty();
+        return field.isEmpty();
     }
 }

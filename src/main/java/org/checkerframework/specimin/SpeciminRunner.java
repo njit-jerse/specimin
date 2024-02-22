@@ -176,9 +176,16 @@ public class SpeciminRunner {
               + String.join(", ", unfoundMethods));
     }
 
+    SolveMethodOverridingVisitor solveMethodOverridingVisitor =
+        new SolveMethodOverridingVisitor(
+            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(solveMethodOverridingVisitor, null);
+    }
+
     Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
     // add all files related to the targeted methods
-    for (String classFullName : finder.getUsedClass()) {
+    for (String classFullName : solveMethodOverridingVisitor.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
       File thisFile = new File(root + directoryOfFile);
       // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
@@ -209,7 +216,7 @@ public class SpeciminRunner {
       }
     }
     InheritancePreserveVisitor inheritancePreserve =
-        new InheritancePreserveVisitor(finder.getUsedClass());
+        new InheritancePreserveVisitor(solveMethodOverridingVisitor.getUsedClass());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(inheritancePreserve, null);
     }
@@ -224,10 +231,13 @@ public class SpeciminRunner {
       }
     }
 
-    Set<String> updatedUsedClass = finder.getUsedClass();
+    Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(inheritancePreserve.getAddedClasses());
     PrunerVisitor methodPruner =
-        new PrunerVisitor(finder.getTargetMethods(), finder.getUsedMembers(), updatedUsedClass);
+        new PrunerVisitor(
+            finder.getTargetMethods(),
+            solveMethodOverridingVisitor.getUsedMembers(),
+            updatedUsedClass);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);

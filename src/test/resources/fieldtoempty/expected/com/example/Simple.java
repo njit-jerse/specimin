@@ -8,6 +8,6 @@ class Simple {
 
     void test() {
         c++;
-        b++;
+        int d = b + 1;
     }
 }
