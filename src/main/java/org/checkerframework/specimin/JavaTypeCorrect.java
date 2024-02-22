@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,13 @@ class JavaTypeCorrect {
    */
   private Map<String, Set<String>> fileAndAssociatedTypes = new HashMap<>();
 
+  /** 
+    * Synthetic types that need to extend Throwable. Note that the stored Strings are simple names,
+    * which is safe because the worst thing that might happen is that an extra sythetic class might
+    * accidentally extend Throwable.
+    */
+  private Set<String> typesThatExtendThrowable = new HashSet<>();
+
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
    * rootDirectory, and rootDirectory is an absolute path
@@ -67,6 +75,15 @@ class JavaTypeCorrect {
    */
   public Map<String, String> getTypeToChange() {
     return typeToChange;
+  }
+
+  /**
+   * Get the names of synthetic classes that should extend Throwable.
+   *
+   * @return the value of typesThatExtendThrowable.
+   */
+  public Set<String> getTypesThatExtendThrowable() {
+    return typesThatExtendThrowable;
   }
 
   /**
@@ -96,14 +113,16 @@ class JavaTypeCorrect {
     try {
       String command = "javac";
       // Note: -d to a tempdir is used to avoid generating .class files amongst the user's files
-      // when compilation succeeds.
+      // when compilation succeeds. -Xmaxerrs 0 is used to print out all error messages.
       String[] arguments = {
         command,
         "-d",
         outputDir.toAbsolutePath().toString(),
         "-sourcepath",
         sourcePath,
-        sourcePath + "/" + filePath
+        sourcePath + "/" + filePath,
+        "-Xmaxerrs",
+        "0"
       };
       ProcessBuilder processBuilder = new ProcessBuilder(arguments);
       processBuilder.redirectErrorStream(true);
@@ -154,7 +173,11 @@ class JavaTypeCorrect {
     if (errorMessage.contains("cannot be converted to")) {
       String incorrectType = splitErrorMessage.get(4);
       String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+      if (correctType.equals("Throwable")) {
+        typesThatExtendThrowable.add(incorrectType);
+      } else {
+        typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+      }
     } else {
       String incorrectType = splitErrorMessage.get(5);
       String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
