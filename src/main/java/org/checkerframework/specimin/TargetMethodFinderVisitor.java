@@ -221,13 +221,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
     if (this.targetMethodNames.contains(methodName)) {
-      updateUsedClassWithQualifiedClassName(
-          method.resolve().getPackageName() + "." + method.resolve().getClassName());
       insideTargetMethod = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
-      usedClass.add(resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
+      updateUsedClassWithQualifiedClassName(
+          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
@@ -259,11 +258,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
-          method.resolve().getPackageName() + "." + resolvedMethod.getClassName());
+          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
-      usedClass.add(resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
       Type returnType = method.getType();
       // JavaParser may misinterpret unresolved array types as reference types.
       // To ensure accuracy, we resolve the type before proceeding with the check.
@@ -289,7 +287,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       String annotationName = expr.getNameAsString();
       if (importedClassToPackage.containsKey(annotationName)) {
-        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+        updateUsedClassWithQualifiedClassName(
+            importedClassToPackage.get(annotationName) + "." + annotationName);
       }
     }
     return super.visit(expr, p);
@@ -300,7 +299,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       String annotationName = expr.getNameAsString();
       if (importedClassToPackage.containsKey(annotationName)) {
-        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+        updateUsedClassWithQualifiedClassName(
+            importedClassToPackage.get(annotationName) + "." + annotationName);
       }
     }
     return super.visit(expr, p);
@@ -311,7 +311,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       String annotationName = expr.getNameAsString();
       if (importedClassToPackage.containsKey(annotationName)) {
-        usedClass.add(importedClassToPackage.get(annotationName) + "." + annotationName);
+        updateUsedClassWithQualifiedClassName(
+            importedClassToPackage.get(annotationName) + "." + annotationName);
       }
     }
     return super.visit(expr, p);
@@ -470,7 +471,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
               .describe()
               .equals(interfaceMethod.getReturnType().describe())) {
             if (method.getNumberOfParams() == interfaceMethod.getNumberOfParams()) {
-              usedClass.add(
+              updateUsedClassWithQualifiedClassName(
                   methodDeclarationToInterfaceType
                       .get(interfaceMethod)
                       .resolve()
@@ -574,7 +575,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (typePara.isPrimitive() || typePara.isTypeVariable() || typePara.isWildcard()) {
         continue;
       }
-      usedClass.add(typePara.asReferenceType().getQualifiedName());
+      updateUsedClassWithQualifiedClassName(typePara.asReferenceType().getQualifiedName());
     }
   }
 }
