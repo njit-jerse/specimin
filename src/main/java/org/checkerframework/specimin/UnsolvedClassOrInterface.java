@@ -46,7 +46,7 @@ public class UnsolvedClassOrInterface {
   private boolean isThrowable = false;
 
   /** This field records if the class is an interface */
-  public final boolean isAnInterface;
+  public boolean isAnInterface;
 
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
