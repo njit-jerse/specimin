@@ -389,7 +389,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     extendedAndImplementedTypes.addAll(implementedTypes);
     for (ClassOrInterfaceType implementedOrExtended : extendedAndImplementedTypes) {
       String typeName = implementedOrExtended.getName().asString();
-      String packageName = classAndPackageMap.getOrDefault(typeName, this.currentPackage);
+      String packageName = getPackageFromClassName(typeName);
       String qualifiedName = packageName + "." + typeName;
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         // add the source codes of the interface or the super class to the list of target files so
@@ -478,8 +478,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // the same package as the child class.
       UnsolvedClassOrInterface superClass =
           new UnsolvedClassOrInterface(
-              getParentClass(className),
-              classAndPackageMap.getOrDefault(getParentClass(className), currentPackage));
+              getParentClass(className), getPackageFromClassName(className));
       superClass.addMethod(constructorMethod);
       updateMissingClass(superClass);
       return super.visit(node, arg);
@@ -765,8 +764,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateClassSetWithQualifiedFieldSignature(node.toString(), true, false);
     } else if (unsolvedFieldCalledByASimpleClassName(node)) {
       String simpleClassName = node.getScope().toString();
-      String fullyQualifiedCall =
-          classAndPackageMap.getOrDefault(simpleClassName, currentPackage) + "." + node;
+      String fullyQualifiedCall = getPackageFromClassName(simpleClassName) + "." + node;
       updateClassSetWithQualifiedFieldSignature(fullyQualifiedCall, true, false);
     } else if (canBeSolved(node.getScope())) {
       // check if this unsolved field belongs to a synthetic class.
@@ -900,9 +898,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // this is for case 1. By adding the class file to the list of target files,
       // UnsolvedSymbolVisitor will take care of the unsolved extension in its next iteration.
       String qualifiedName =
-          classAndPackageMap.getOrDefault(typeExpr.getNameAsString(), currentPackage)
-              + "."
-              + typeExpr.getNameAsString();
+          getPackageFromClassName(typeExpr.getNameAsString()) + "." + typeExpr.getNameAsString();
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
         gotException = true;
@@ -931,7 +927,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
         classToUpdate = new UnsolvedClassOrInterface(className, packageName);
       } else {
-        String packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
+        String packageName = getPackageFromClassName(typeRawName);
         classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
       }
       classToUpdate.setNumberOfTypeVariables(numberOfArguments);
@@ -1422,7 +1418,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedMethod... unsolvedMethods) {
     // if the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class
-    String packageName = classAndPackageMap.getOrDefault(nameOfClass, currentPackage);
+    String packageName = getPackageFromClassName(nameOfClass);
     UnsolvedClassOrInterface result;
     if (isUpdatingInterface) {
       result = new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType, true);
@@ -1540,13 +1536,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateUnsolvedSuperClassWithFields(
           nameAsString,
           getParentClass(className),
-          classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
+          getPackageFromClassName(getParentClass(className)));
     } else if (expr instanceof NameExpr) {
       String nameAsString = expr.asNameExpr().getNameAsString();
       updateUnsolvedSuperClassWithFields(
           nameAsString,
           getParentClass(className),
-          classAndPackageMap.getOrDefault(getParentClass(className), this.currentPackage));
+          getPackageFromClassName(getParentClass(className)));
     } else {
       throw new RuntimeException("Unexpected expression: " + expr);
     }
@@ -1693,6 +1689,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     return parametersList;
+  }
+
+  /**
+   * Given a class name, this method returns the corresponding package name.
+   *
+   * @param className the name of a class.
+   * @return the package of that class.
+   */
+  public String getPackageFromClassName(String className) {
+    if (className.contains("<")) {
+      className = className.substring(0, className.indexOf("<"));
+    }
+    return classAndPackageMap.getOrDefault(className, currentPackage);
   }
 
   /**
