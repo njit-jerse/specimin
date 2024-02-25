@@ -40,13 +40,13 @@ public class UnsolvedClassOrInterface {
   private int numberOfTypeVariables = 0;
 
   /** This field records if the class is a custom exception */
-  public boolean isExceptionType = false;
+  private boolean isExceptionType = false;
 
   /** The field records if the class extends Throwable type. */
   private boolean isThrowable = false;
 
   /** This field records if the class is an interface */
-  private final boolean isAnInterface;
+  public final boolean isAnInterface;
 
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and

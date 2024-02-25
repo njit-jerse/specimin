@@ -1085,7 +1085,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
     if (isAnInterface) {
-      classToUpdate.isExceptionType = true;
+      classToUpdate.isAnInterface = true;
     }
     updateMissingClass(classToUpdate);
   }
