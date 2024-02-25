@@ -403,17 +403,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
         addedTargetFiles.add(filePath);
       } else {
-        UnsolvedClassOrInterface unsolvedInterface;
         try {
           implementedOrExtended.resolve();
           continue;
-        } catch (UnsolvedSymbolException e) {
+        }
+        // IllegalArgumentException is thrown when implementedOrExtended has a generic type.
+        catch (UnsolvedSymbolException | IllegalArgumentException e) {
           // this extended/implemented type is an interface if it is in the declaration of an
           // interface, or if it is used with the "implements" keyword.
           boolean typeIsAnInterface =
               node.isInterface() || implementedTypes.contains(implementedOrExtended);
           if (typeIsAnInterface) {
-            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName, false, true);
+            solvedSymbolsForTypes(implementedOrExtended, true);
             @SuppressWarnings(
                 "signature") // an empty array list is not a list of @ClassGetSimpleName, but since
             // we will add typeName to that list right after the initialization,
@@ -422,10 +423,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
                 classToItsUnsolvedInterface.computeIfAbsent(className, k -> new ArrayList<>());
             interfaceName.add(typeName);
           } else {
-            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
+            solvedSymbolsForTypes(implementedOrExtended, false);
           }
         }
-        updateMissingClass(unsolvedInterface);
       }
     }
 
@@ -923,7 +923,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // to create a missing class.
         return super.visit(typeExpr, p);
       }
-      solvedSymbolsForTypes(typeExpr);
+      solvedSymbolsForTypes(typeExpr, false);
       gotException = true;
     }
     return super.visit(typeExpr, p);
@@ -1065,7 +1065,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param typeExpr The ClassOrInterfaceType instance to resolve symbols for.
    */
-  private void solvedSymbolsForTypes(ClassOrInterfaceType typeExpr) {
+  private void solvedSymbolsForTypes(ClassOrInterfaceType typeExpr, boolean isAnInterface) {
     Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
     UnsolvedClassOrInterface classToUpdate;
     int numberOfArguments = 0;
@@ -1084,6 +1084,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
     }
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
+    if (isAnInterface) {
+      classToUpdate.isExceptionType = true;
+    }
     updateMissingClass(classToUpdate);
   }
 

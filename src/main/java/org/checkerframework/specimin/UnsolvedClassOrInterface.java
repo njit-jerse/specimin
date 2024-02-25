@@ -40,7 +40,7 @@ public class UnsolvedClassOrInterface {
   private int numberOfTypeVariables = 0;
 
   /** This field records if the class is a custom exception */
-  private boolean isExceptionType = false;
+  public boolean isExceptionType = false;
 
   /** The field records if the class extends Throwable type. */
   private boolean isThrowable = false;
