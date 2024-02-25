@@ -919,6 +919,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
       if (isTypeVar(typeRawName)) {
+        // If the type name itself is an in-scope type variable, just return without attempting
+        // to create a missing class.
         return super.visit(typeExpr, p);
       }
       solvedSymbolsForTypes(typeExpr);
