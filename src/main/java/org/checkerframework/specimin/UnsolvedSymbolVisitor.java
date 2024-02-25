@@ -478,7 +478,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // the same package as the child class.
       UnsolvedClassOrInterface superClass =
           new UnsolvedClassOrInterface(
-              getParentClass(className), getPackageFromClassName(className));
+              getParentClass(className), getPackageFromClassName(getParentClass(className)));
       superClass.addMethod(constructorMethod);
       updateMissingClass(superClass);
       return super.visit(node, arg);
