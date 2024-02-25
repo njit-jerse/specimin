@@ -913,29 +913,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
       // This method only updates type variables for unsolved classes. Other problems causing a
       // class to be unsolved will be fixed by other methods.
-      Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
-      UnsolvedClassOrInterface classToUpdate;
-      int numberOfArguments = 0;
       String typeRawName = typeExpr.getElementType().asString();
-      if (typeArguments.isPresent()) {
-        numberOfArguments = typeArguments.get().size();
-        // without any type argument
+      if (typeExpr.getTypeArguments().isPresent()) {
+        // without any type arguments
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
       if (isTypeVar(typeRawName)) {
-        // If the type name itself is an in-scope type variable, just return without attempting
-        // to create a missing class.
         return super.visit(typeExpr, p);
-      } else if (isAClassPath(typeRawName)) {
-        String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
-        String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
-        classToUpdate = new UnsolvedClassOrInterface(className, packageName);
-      } else {
-        String packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
-        classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
       }
-      classToUpdate.setNumberOfTypeVariables(numberOfArguments);
-      updateMissingClass(classToUpdate);
+      solvedSymbolsForTypes(typeExpr);
       gotException = true;
     }
     return super.visit(typeExpr, p);
@@ -1069,6 +1055,34 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     return false;
+  }
+
+  /**
+   * Resolves symbols for a given ClassOrInterfaceType instance, including its type variables if
+   * present.
+   *
+   * @param typeExpr The ClassOrInterfaceType instance to resolve symbols for.
+   */
+  private void solvedSymbolsForTypes(ClassOrInterfaceType typeExpr) {
+    Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
+    UnsolvedClassOrInterface classToUpdate;
+    int numberOfArguments = 0;
+    String typeRawName = typeExpr.getElementType().asString();
+    if (typeArguments.isPresent()) {
+      numberOfArguments = typeArguments.get().size();
+      // without any type argument
+      typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
+    }
+    if (isAClassPath(typeRawName)) {
+      String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
+      String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
+      classToUpdate = new UnsolvedClassOrInterface(className, packageName);
+    } else {
+      String packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
+      classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
+    }
+    classToUpdate.setNumberOfTypeVariables(numberOfArguments);
+    updateMissingClass(classToUpdate);
   }
 
   /**
