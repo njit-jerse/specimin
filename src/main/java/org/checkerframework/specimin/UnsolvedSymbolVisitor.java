@@ -855,12 +855,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-    boolean needToSetException =
-        !canBeSolved(method)
-            || calledByAnUnsolvedSymbol(method)
-            || calledByAnIncompleteClass(method)
-            || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
-    if (needToSetException) {
+        
+    // Though this structure looks a bit silly, it is intentional
+    // that these 4 calls to getException() produce different stacktraces,
+    // which is very helpful for debugging infinite loops.
+    if (!canBeSolved(method)) {
+      gotException();
+    } else if (calledByAnUnsolvedSymbol(method)) {
+      gotException();
+    } else if (calledByAnIncompleteClass(method)) {
+      gotException();
+    } else if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       gotException();
     }
     return super.visit(method, p);
