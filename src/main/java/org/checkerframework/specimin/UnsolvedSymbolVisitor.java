@@ -2365,7 +2365,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private void gotException() {
     if (DEBUG) {
       StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
-      System.out.println("setting gotException to true from: " + stackTraceElements[1]);
+      System.out.println("setting gotException to true from: " + stackTraceElements[2]);
     }
     this.gotException = true;
   }
