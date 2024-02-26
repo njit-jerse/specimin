@@ -916,7 +916,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               + typeExpr.getNameAsString();
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
-        gotException = true;
+        gotException();
         return super.visit(typeExpr, p);
       }
 
@@ -947,7 +947,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
       classToUpdate.setNumberOfTypeVariables(numberOfArguments);
       updateMissingClass(classToUpdate);
-      gotException = true;
+      gotException();
     }
     return super.visit(typeExpr, p);
   }
@@ -975,7 +975,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       if (!parameter.getType().isUnknownType()) {
         handleParameterResolveFailure(parameter);
-        gotException = true;
+        gotException();
       }
     }
     return super.visit(parameter, p);
