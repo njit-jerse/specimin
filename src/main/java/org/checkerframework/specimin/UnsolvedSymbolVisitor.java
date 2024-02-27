@@ -352,6 +352,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Check if UnsolvedSymbolVisitor has made any progress. This method should be called at the end
    * of each iteration.
+   *
+   * @return makeProgress.
    */
   public boolean hasMadeProgress() {
     return makeProgress;
