@@ -1891,6 +1891,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (classfileIsInOriginalCodebase(qualifiedName)) {
       return;
     }
+    if (!missingClass.contains(missedClass)) {
+      makeProgress = true;
+    }
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClassOrInterface e = iterator.next();
@@ -1919,8 +1922,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           e.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
         }
         return;
-      } else {
-        makeProgress = true;
       }
     }
     missingClass.add(missedClass);
