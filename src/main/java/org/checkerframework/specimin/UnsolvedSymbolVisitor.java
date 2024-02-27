@@ -679,10 +679,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           // check if all the type parameters are resolved.
           if (!hasResolvedTypeParameters(nameExprReferenceType)) {
             gotException();
+            // while no new files are added, this is actually a progress, because we have detected
+            // one unsolved field that is used by a target method and need to be resolved in the
+            // next iteration.
+            makeProgress = true;
           }
         }
       } catch (UnsolvedSymbolException e) {
         gotException();
+        // while no new files are added, this is actually a progress, because we have detected
+        // one unsolved field that is used by a target method and need to be resolved in the next
+        // iteration.
+        makeProgress = true;
       }
       return super.visit(node, arg);
     }
