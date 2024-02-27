@@ -222,7 +222,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This field checks if UnsolvedSymbolVisitor is making any progress. If it is not making any
-   * progress after finishing one iteration, then it is in an infinite loop.
+   * progress and gotException is set to true, then we're having an infinite loop.
    */
   private boolean makeProgress = false;
 
