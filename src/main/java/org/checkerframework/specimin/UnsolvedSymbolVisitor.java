@@ -80,8 +80,8 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * Flag for whether or not to print debugging output. Should always be false except when you
-   * are actively debugging.
+   * Flag for whether or not to print debugging output. Should always be false except when you are
+   * actively debugging.
    */
   private static final boolean DEBUG = false;
 
@@ -221,6 +221,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String currentClassQualifiedName = "";
 
   /**
+   * This field checks if UnsolvedSymbolVisitor is making any progress. If it is not making any
+   * progress after finishing one iteration, then it is in an infinite loop.
+   */
+  private boolean makeProgress = false;
+
+  /**
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
@@ -336,6 +342,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Set makeProgress to false. This method is to be used at the beginning of each iteration of the
+   * visitor.
+   */
+  public void setMakeProgressToFalse() {
+    makeProgress = false;
+  }
+
+  /**
+   * Check if UnsolvedSymbolVisitor has made any progress. This method should be called at the end
+   * of each iteration.
+   */
+  public boolean hasMadeProgress() {
+    return makeProgress;
+  }
+
+  /**
    * Get the set of target files that should be added for the next iteration.
    *
    * @return the value of addedTargetFiles.
@@ -402,6 +424,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // that UnsolvedSymbolVisitor can solve symbols for that class if needed.
         String filePath = qualifiedNameToFilePath(qualifiedName);
         if (!addedTargetFiles.contains(filePath)) {
+          makeProgress = true;
           // strictly speaking, there is no exception here. But we set gotException to true so that
           // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
           // file.
@@ -783,6 +806,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         addedTargetFiles.add(
             qualifiedNameToFilePath(
                 node.getScope().calculateResolvedType().asReferenceType().getQualifiedName()));
+        makeProgress = true;
       }
     }
 
@@ -823,6 +847,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String qualifiedNameOfIncompleteClass = getIncompleteClass(method);
       if (classfileIsInOriginalCodebase(qualifiedNameOfIncompleteClass)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedNameOfIncompleteClass));
+        makeProgress = true;
       } else {
         @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
         updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
@@ -855,7 +880,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-        
+
     // Though this structure looks a bit silly, it is intentional
     // that these 4 calls to getException() produce different stacktraces,
     // which is very helpful for debugging infinite loops.
@@ -916,6 +941,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               + typeExpr.getNameAsString();
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
+        makeProgress = true;
         gotException();
         return super.visit(typeExpr, p);
       }
@@ -1869,6 +1895,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (e.equals(missedClass)) {
         // add new methods
         for (UnsolvedMethod method : missedClass.getMethods()) {
+          if (!e.getMethods().contains(method)) {
+            makeProgress = true;
+          }
           // No need to check for containment, since the methods are stored
           // as a set (which does not permit duplicates).
           e.addMethod(method);
@@ -1876,12 +1905,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
         // add new fields
         for (String variablesDescription : missedClass.getClassFields()) {
+          if (!e.getClassFields().contains(variablesDescription)) {
+            makeProgress = true;
+          }
           e.addFields(variablesDescription);
         }
         if (missedClass.getNumberOfTypeVariables() > 0) {
+          if (e.getNumberOfTypeVariables() == 0) {
+            makeProgress = true;
+          }
           e.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
         }
         return;
+      } else {
+        makeProgress = true;
       }
     }
     missingClass.add(missedClass);
@@ -2364,8 +2401,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This indirection is here to make it easier to debug infinite loops.
-   * Never set gotException directly, but instead call this function.
+   * This indirection is here to make it easier to debug infinite loops. Never set gotException
+   * directly, but instead call this function.
    */
   private void gotException() {
     if (DEBUG) {

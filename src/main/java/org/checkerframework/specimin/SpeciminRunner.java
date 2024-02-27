@@ -125,15 +125,7 @@ public class SpeciminRunner {
     // The set of path of files that have been created by addMissingClass. We will delete all those
     // files in the end.
     Set<Path> createdClass = new HashSet<>();
-    // Set containing paths of files created by all runs of addMissingClass before the current one.
-    Set<Path> createdFilesLastRun = new HashSet<>();
     while (addMissingClass.gettingException()) {
-      if (!createdFilesLastRun.isEmpty()) {
-        if (createdClass.equals(createdFilesLastRun)) {
-          throw new RuntimeException("UnsolvedSymbolVisitor is not making any progress.");
-        }
-        createdFilesLastRun = createdClass;
-      }
       addMissingClass.setExceptionToFalse();
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
@@ -158,6 +150,13 @@ public class SpeciminRunner {
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
+      if (addMissingClass.gettingException()) {
+        if (addMissingClass.hasMadeProgress()) {
+          addMissingClass.setMakeProgressToFalse();
+        } else {
+          throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception!");
+        }
       }
     }
 
