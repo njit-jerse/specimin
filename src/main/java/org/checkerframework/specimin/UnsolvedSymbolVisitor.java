@@ -1694,7 +1694,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Given a class name, this method returns the corresponding package name.
    *
-   * @param className the name of a class, optionally with type arguments in <>.
+   * @param className the name of a class, optionally with type arguments.
    * @return the package of that class.
    */
   public String getPackageFromClassName(String className) {
