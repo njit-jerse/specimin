@@ -80,8 +80,8 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * Flag for whether or not to print debugging output. Should always be false except when you
-   * are actively debugging.
+   * Flag for whether or not to print debugging output. Should always be false except when you are
+   * actively debugging.
    */
   private static final boolean DEBUG = false;
 
@@ -853,7 +853,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-        
+
     // Though this structure looks a bit silly, it is intentional
     // that these 4 calls to getException() produce different stacktraces,
     // which is very helpful for debugging infinite loops.
@@ -1094,9 +1094,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       String packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
       if (isAnInterface) {
-        classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, true);
+        classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName, false, true);
       } else {
-        classToUpdate = new UnsolvedClassOrInterface(className, packageName);
+        classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
       }
     }
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
@@ -2398,8 +2398,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This indirection is here to make it easier to debug infinite loops.
-   * Never set gotException directly, but instead call this function.
+   * This indirection is here to make it easier to debug infinite loops. Never set gotException
+   * directly, but instead call this function.
    */
   private void gotException() {
     if (DEBUG) {
