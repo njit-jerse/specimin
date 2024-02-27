@@ -915,7 +915,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // class to be unsolved will be fixed by other methods.
       String typeRawName = typeExpr.getElementType().asString();
       if (typeExpr.getTypeArguments().isPresent()) {
-        // without any type arguments
+        // remove type arguments
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
       if (isTypeVar(typeRawName)) {
