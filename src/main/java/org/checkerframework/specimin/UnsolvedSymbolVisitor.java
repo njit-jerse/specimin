@@ -1079,15 +1079,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (isAClassPath(typeRawName)) {
       String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
       String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
-      classToUpdate = new UnsolvedClassOrInterface(className, packageName);
+      if (isAnInterface) {
+        classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, true);
+      } else {
+        classToUpdate = new UnsolvedClassOrInterface(className, packageName);
+      }
     } else {
       String packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
-      classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
+      if (isAnInterface) {
+        classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, true);
+      } else {
+        classToUpdate = new UnsolvedClassOrInterface(className, packageName);
+      }
     }
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
-    if (isAnInterface) {
-      classToUpdate.isAnInterface = true;
-    }
     updateMissingClass(classToUpdate);
   }
 
