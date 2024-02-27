@@ -80,8 +80,8 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * Flag for whether or not to print debugging output. Should always be false except when you
-   * are actively debugging.
+   * Flag for whether or not to print debugging output. Should always be false except when you are
+   * actively debugging.
    */
   private static final boolean DEBUG = false;
 
@@ -409,17 +409,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
         addedTargetFiles.add(filePath);
       } else {
-        UnsolvedClassOrInterface unsolvedInterface;
         try {
           implementedOrExtended.resolve();
           continue;
-        } catch (UnsolvedSymbolException e) {
+        }
+        // IllegalArgumentException is thrown when implementedOrExtended has a generic type.
+        catch (UnsolvedSymbolException | IllegalArgumentException e) {
           // this extended/implemented type is an interface if it is in the declaration of an
           // interface, or if it is used with the "implements" keyword.
           boolean typeIsAnInterface =
               node.isInterface() || implementedTypes.contains(implementedOrExtended);
           if (typeIsAnInterface) {
-            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName, false, true);
+            solveSymbolsForClassOrInterfaceType(implementedOrExtended, true);
             @SuppressWarnings(
                 "signature") // an empty array list is not a list of @ClassGetSimpleName, but since
             // we will add typeName to that list right after the initialization,
@@ -428,10 +429,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
                 classToItsUnsolvedInterface.computeIfAbsent(className, k -> new ArrayList<>());
             interfaceName.add(typeName);
           } else {
-            unsolvedInterface = new UnsolvedClassOrInterface(typeName, packageName);
+            solveSymbolsForClassOrInterfaceType(implementedOrExtended, false);
           }
         }
-        updateMissingClass(unsolvedInterface);
       }
     }
 
@@ -853,7 +853,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-        
+
     // Though this structure looks a bit silly, it is intentional
     // that these 4 calls to getException() produce different stacktraces,
     // which is very helpful for debugging infinite loops.
@@ -920,29 +920,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
       // This method only updates type variables for unsolved classes. Other problems causing a
       // class to be unsolved will be fixed by other methods.
-      Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
-      UnsolvedClassOrInterface classToUpdate;
-      int numberOfArguments = 0;
       String typeRawName = typeExpr.getElementType().asString();
-      if (typeArguments.isPresent()) {
-        numberOfArguments = typeArguments.get().size();
-        // without any type argument
+      if (typeExpr.getTypeArguments().isPresent()) {
+        // remove type arguments
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
       if (isTypeVar(typeRawName)) {
         // If the type name itself is an in-scope type variable, just return without attempting
         // to create a missing class.
         return super.visit(typeExpr, p);
-      } else if (isAClassPath(typeRawName)) {
-        String packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
-        String className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
-        classToUpdate = new UnsolvedClassOrInterface(className, packageName);
-      } else {
-        String packageName = getPackageFromClassName(typeRawName);
-        classToUpdate = new UnsolvedClassOrInterface(typeRawName, packageName);
       }
-      classToUpdate.setNumberOfTypeVariables(numberOfArguments);
-      updateMissingClass(classToUpdate);
+      solveSymbolsForClassOrInterfaceType(typeExpr, false);
       gotException();
     }
     return super.visit(typeExpr, p);
@@ -1076,6 +1064,38 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     return false;
+  }
+
+  /**
+   * Resolves symbols for a given ClassOrInterfaceType instance, including its type variables if
+   * present.
+   *
+   * @param typeExpr The ClassOrInterfaceType instance to resolve symbols for.
+   */
+  private void solveSymbolsForClassOrInterfaceType(
+      ClassOrInterfaceType typeExpr, boolean isAnInterface) {
+    Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
+    UnsolvedClassOrInterface classToUpdate;
+    int numberOfArguments = 0;
+    String typeRawName = typeExpr.getElementType().asString();
+    if (typeArguments.isPresent()) {
+      numberOfArguments = typeArguments.get().size();
+      // without any type argument
+      typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
+    }
+
+    String packageName, className;
+    if (isAClassPath(typeRawName)) {
+      packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
+      className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
+    } else {
+      packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
+      className = typeRawName;
+    }
+    classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
+
+    classToUpdate.setNumberOfTypeVariables(numberOfArguments);
+    updateMissingClass(classToUpdate);
   }
 
   /**
@@ -2373,8 +2393,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This indirection is here to make it easier to debug infinite loops.
-   * Never set gotException directly, but instead call this function.
+   * This indirection is here to make it easier to debug infinite loops. Never set gotException
+   * directly, but instead call this function.
    */
   private void gotException() {
     if (DEBUG) {
