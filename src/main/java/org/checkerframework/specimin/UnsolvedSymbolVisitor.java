@@ -669,6 +669,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     String name = node.getNameAsString();
     if (fieldNameToClassNameMap.containsKey(name)) {
+      boolean newlyFoundField = !potentialUsedMembers.contains(name);
       potentialUsedMembers.add(name);
       try {
         // check if the type is resolved and does not extend any unresolved type.
@@ -682,7 +683,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             // while no new files are added, this is actually a progress, because we have detected
             // one unsolved field that is used by a target method and need to be resolved in the
             // next iteration.
-            makeProgress = true;
+            if (newlyFoundField) {
+              makeProgress = true;
+            }
           }
         }
       } catch (UnsolvedSymbolException e) {
@@ -690,7 +693,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // while no new files are added, this is actually a progress, because we have detected
         // one unsolved field that is used by a target method and need to be resolved in the next
         // iteration.
-        makeProgress = true;
+        if (newlyFoundField) {
+          makeProgress = true;
+        }
       }
       return super.visit(node, arg);
     }
