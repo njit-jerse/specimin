@@ -310,6 +310,24 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Get the names of members that could be used by the target methods.
+   *
+   * @return the value of potentialUsedMembers.
+   */
+  public Set<String> getPotentialUsedMembers() {
+    return potentialUsedMembers;
+  }
+
+  /**
+   * Get the list of synthetic classes created by UnsolvedSymbolVisitor.
+   *
+   * @return the value of missingClass.
+   */
+  public Set<UnsolvedClassOrInterface> getMissingClass() {
+    return missingClass;
+  }
+
+  /**
    * Get the value of gotException
    *
    * @return gotException the value of gotException

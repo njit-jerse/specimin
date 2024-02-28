@@ -12,6 +12,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import com.github.javaparser.utils.SourceRoot;
+import com.google.common.base.Equivalence;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -127,6 +128,11 @@ public class SpeciminRunner {
     Set<Path> createdClass = new HashSet<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
+      WorkDoneByUnsolvedSymbolVisitor workDoneBeforeIteration =
+          new WorkDoneByUnsolvedSymbolVisitor(
+              addMissingClass.getPotentialUsedMembers(),
+              addMissingClass.getAddedTargetFiles(),
+              getSetOfCreatedClassInWrapper(addMissingClass.getMissingClass()));
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
         // it's important to make sure that getDeclarations and addMissingClass will visit the same
@@ -150,6 +156,15 @@ public class SpeciminRunner {
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
+      WorkDoneByUnsolvedSymbolVisitor workDoneAfterIteration =
+          new WorkDoneByUnsolvedSymbolVisitor(
+              addMissingClass.getPotentialUsedMembers(),
+              addMissingClass.getAddedTargetFiles(),
+              getSetOfCreatedClassInWrapper(addMissingClass.getMissingClass()));
+      if (workDoneBeforeIteration.equals(workDoneAfterIteration)
+          && addMissingClass.gettingException()) {
+        throw new RuntimeException("UnsolvedSymbolVisitor is stuck in an exception");
       }
     }
 
@@ -401,5 +416,22 @@ public class SpeciminRunner {
         deleteFileFamily(parentDir);
       }
     }
+  }
+
+  /**
+   * Given a set of class created by UnsolvedSymbolVisitor, this method returns a version of that
+   * set inside wrapper.
+   *
+   * @param setOfCreatedClass set of synthetic classes created by UnsolvedSymbolVisitor.
+   * @return a set of wrapper.
+   */
+  public static Set<Equivalence.Wrapper> getSetOfCreatedClassInWrapper(
+      Set<UnsolvedClassOrInterface> setOfCreatedClass) {
+    Set<Equivalence.Wrapper> wrapperSet = new HashSet<>();
+    for (UnsolvedClassOrInterface syntheticClass : setOfCreatedClass) {
+      ClassStrictEquivalence wrapper = new ClassStrictEquivalence();
+      wrapperSet.add(wrapper.wrap(syntheticClass));
+    }
+    return wrapperSet;
   }
 }
