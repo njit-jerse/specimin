@@ -259,12 +259,13 @@ public class UnsolvedClassOrInterface {
     // (each UnsovledClass corresponds to a source file), so this
     // check is sufficient for equality (it is checking the canonical name).
     return otherClass.className.equals(this.className)
-        && otherClass.packageName.equals(this.packageName);
+        && otherClass.packageName.equals(this.packageName)
+        && otherClass.methods.equals(this.methods);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(className, packageName);
+    return Objects.hash(className, packageName, methods);
   }
 
   /**
