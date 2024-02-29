@@ -40,3 +40,4 @@ jobs:
         run: |
           cd specimin-evaluation
           echo "specimin path-> $SPECIMIN"
+          python main.py
