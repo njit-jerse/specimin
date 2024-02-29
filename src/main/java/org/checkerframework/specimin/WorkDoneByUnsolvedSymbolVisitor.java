@@ -17,8 +17,8 @@ public class WorkDoneByUnsolvedSymbolVisitor {
   private Set<String> addedTargetFiles;
 
   /**
-   * A set containing wrappers for synthetic versions of used classes that are not present in the
-   * source code. These synthetic versions are created by the UnsolvedSymbolVisitor.
+   * A set containing synthetic versions of used classes that are not present in the source code.
+   * These synthetic versions are created by the UnsolvedSymbolVisitor.
    */
   private Set<String> createdSyntheticClass;
 
