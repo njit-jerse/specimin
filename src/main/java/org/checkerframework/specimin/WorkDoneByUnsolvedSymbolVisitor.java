@@ -21,19 +21,19 @@ public class WorkDoneByUnsolvedSymbolVisitor {
    * A set containing wrappers for synthetic versions of used classes that are not present in the
    * source code. These synthetic versions are created by the UnsolvedSymbolVisitor.
    */
-  private Set<Equivalence.Wrapper> createdSyntheticClass;
+  private Set<String> createdSyntheticClass;
 
   /**
    * Constructs a new instance of WorkDoneByUnsolvedSymbolVisitor.
    *
    * @param potentialUsedMembers A set of potential-used members.
    * @param addedTargetFiles A set of new files to be added as target files.
-   * @param createdSyntheticClass A set of wrappers for synthetic classes created.
+   * @param createdSyntheticClass A set of synthetic classes created.
    */
   public WorkDoneByUnsolvedSymbolVisitor(
       Set<String> potentialUsedMembers,
       Set<String> addedTargetFiles,
-      Set<Equivalence.Wrapper> createdSyntheticClass) {
+      Set<String> createdSyntheticClass) {
     this.potentialUsedMembers = potentialUsedMembers;
     this.addedTargetFiles = addedTargetFiles;
     this.createdSyntheticClass = createdSyntheticClass;
