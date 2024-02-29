@@ -33,8 +33,13 @@ jobs:
         uses: actions/checkout@v3
         with:
          repository: tahiat/specimin-evaluation
+         ref: sp_json
          path: specimin-evaluation
       - name: Run evaluation script
         run: |
           cd specimin-evaluation
           python main.py
+      - name: Run evaluation script on bugs
+        run: |
+          cd specimin-evaluation
+          python main.py bugs
