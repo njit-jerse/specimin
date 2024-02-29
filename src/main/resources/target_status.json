@@ -16,12 +16,5 @@
   "cf-3022": "PASS",
   "cf-691": "PASS",
   "Issue689": "FAIL",
-  "cf-6388": "FAIL",
-  "sp-151": "FAIL",
-  "sp-150": "FAIL",
-  "sp-149": "PASS",
-  "sp-148": "FAIL",
-  "sp-152": "FAIL",
-  "sp-153": "FAIL",
-  "sp-154": "FAIL"
+  "cf-6388": "FAIL"
 }
