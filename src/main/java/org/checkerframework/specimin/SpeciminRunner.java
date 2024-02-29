@@ -164,7 +164,7 @@ public class SpeciminRunner {
               getSetOfCreatedClassInWrapper(addMissingClass.getMissingClass()));
       if (workDoneBeforeIteration.equals(workDoneAfterIteration)
           && addMissingClass.gettingException()) {
-        throw new RuntimeException("UnsolvedSymbolVisitor is stuck in an exception");
+        throw new RuntimeException("UnsolvedSymbolVisitor is at one or more exception");
       }
     }
 
