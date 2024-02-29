@@ -25,6 +25,8 @@ jobs:
         uses: gradle/gradle-build-action@v2
       - name: Run build with Gradle Wrapper
         run: ./gradlew build expectedTestOutputsMustCompile
+      - name: export Specimin PATH
+        run: echo "SPECIMIN=$(pwd)" >> $GITHUB_ENV
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
@@ -37,4 +39,5 @@ jobs:
       - name: Run evaluation script
         run: |
           cd specimin-evaluation
+          echo "specimin path-> $SPECIMIN"
           python main.py
