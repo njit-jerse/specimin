@@ -58,15 +58,15 @@ public class SpeciminRunner {
 
     // The directory in which to output the results.
     OptionSpec<String> outputDirectoryOption =
-            optionParser.accepts("outputDirectory").withRequiredArg();
+        optionParser.accepts("outputDirectory").withRequiredArg();
 
     OptionSet options = optionParser.parse(args);
     performMinimization(
-            options.valueOf(rootOption),
-            options.valuesOf(targetFilesOption),
-            options.valuesOf(jarPath),
-            options.valuesOf(targetMethodsOption),
-            options.valueOf(outputDirectoryOption));
+        options.valueOf(rootOption),
+        options.valuesOf(targetFilesOption),
+        options.valuesOf(jarPath),
+        options.valuesOf(targetMethodsOption),
+        options.valueOf(outputDirectoryOption));
   }
 
   /**
@@ -82,12 +82,12 @@ public class SpeciminRunner {
    * @throws IOException if there is an exception
    */
   public static void performMinimization(
-          String root,
-          List<String> targetFiles,
-          List<String> jarPaths,
-          List<String> targetMethodNames,
-          String outputDirectory)
-          throws IOException {
+      String root,
+      List<String> targetFiles,
+      List<String> jarPaths,
+      List<String> targetMethodNames,
+      String outputDirectory)
+      throws IOException {
 
     // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
     // trailing slash.
@@ -97,8 +97,8 @@ public class SpeciminRunner {
 
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
-            new CombinedTypeSolver(
-                    new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+        new CombinedTypeSolver(
+            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
     for (String path : jarPaths) {
       typeSolver.add(new JarTypeSolver(path));
     }
@@ -119,7 +119,7 @@ public class SpeciminRunner {
       existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
     }
     UnsolvedSymbolVisitor addMissingClass =
-            new UnsolvedSymbolVisitor(root, existingFiles, targetMethodNames);
+        new UnsolvedSymbolVisitor(root, existingFiles, targetMethodNames);
     addMissingClass.setClassesFromJar(jarPaths);
 
     // The set of path of files that have been created by addMissingClass. We will delete all those
@@ -128,10 +128,10 @@ public class SpeciminRunner {
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
       WorkDoneByUnsolvedSymbolVisitor workDoneBeforeIteration =
-              new WorkDoneByUnsolvedSymbolVisitor(
-                      addMissingClass.getPotentialUsedMembers(),
-                      addMissingClass.getAddedTargetFiles(),
-                      getStringSetFromSyntheticClassSet(addMissingClass.getMissingClass()));
+          new WorkDoneByUnsolvedSymbolVisitor(
+              addMissingClass.getPotentialUsedMembers(),
+              addMissingClass.getAddedTargetFiles(),
+              getStringSetFromSyntheticClassSet(addMissingClass.getMissingClass()));
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
         // it's important to make sure that getDeclarations and addMissingClass will visit the same
@@ -145,8 +145,8 @@ public class SpeciminRunner {
       createdClass.addAll(addMissingClass.getCreatedClass());
       // since the root directory is updated, we need to update the SymbolSolver
       TypeSolver newTypeSolver =
-              new CombinedTypeSolver(
-                      new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+          new CombinedTypeSolver(
+              new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
       JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
       StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
       parsedTargetFiles = new HashMap<>();
@@ -157,12 +157,12 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
       WorkDoneByUnsolvedSymbolVisitor workDoneAfterIteration =
-              new WorkDoneByUnsolvedSymbolVisitor(
-                      addMissingClass.getPotentialUsedMembers(),
-                      addMissingClass.getAddedTargetFiles(),
-                      getStringSetFromSyntheticClassSet(addMissingClass.getMissingClass()));
+          new WorkDoneByUnsolvedSymbolVisitor(
+              addMissingClass.getPotentialUsedMembers(),
+              addMissingClass.getAddedTargetFiles(),
+              getStringSetFromSyntheticClassSet(addMissingClass.getMissingClass()));
       if (workDoneBeforeIteration.equals(workDoneAfterIteration)
-              && addMissingClass.gettingException()) {
+          && addMissingClass.gettingException()) {
         throw new RuntimeException("UnsolvedSymbolVisitor is at one or more exception");
       }
     }
@@ -186,13 +186,13 @@ public class SpeciminRunner {
     List<String> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
-              "Specimin could not locate the following target methods in the target files: "
-                      + String.join(", ", unfoundMethods));
+          "Specimin could not locate the following target methods in the target files: "
+              + String.join(", ", unfoundMethods));
     }
 
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
-            new SolveMethodOverridingVisitor(
-                    finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
+        new SolveMethodOverridingVisitor(
+            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }
@@ -213,10 +213,10 @@ public class SpeciminRunner {
       cu.accept(getTypesFullNameVisitor, null);
     }
     Map<String, Set<String>> filesAndAssociatedTypes =
-            getTypesFullNameVisitor.getFileAndAssociatedTypes();
+        getTypesFullNameVisitor.getFileAndAssociatedTypes();
     // correct the types of all related files before adding them to parsedTargetFiles
     JavaTypeCorrect typeCorrecter =
-            new JavaTypeCorrect(root, relatedClass, filesAndAssociatedTypes);
+        new JavaTypeCorrect(root, relatedClass, filesAndAssociatedTypes);
     typeCorrecter.correctTypesForAllFiles();
     Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
     addMissingClass.updateTypes(typesToChange);
@@ -230,7 +230,7 @@ public class SpeciminRunner {
       }
     }
     InheritancePreserveVisitor inheritancePreserve =
-            new InheritancePreserveVisitor(solveMethodOverridingVisitor.getUsedClass());
+        new InheritancePreserveVisitor(solveMethodOverridingVisitor.getUsedClass());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(inheritancePreserve, null);
     }
@@ -248,10 +248,10 @@ public class SpeciminRunner {
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(inheritancePreserve.getAddedClasses());
     PrunerVisitor methodPruner =
-            new PrunerVisitor(
-                    finder.getTargetMethods(),
-                    solveMethodOverridingVisitor.getUsedMembers(),
-                    updatedUsedClass);
+        new PrunerVisitor(
+            finder.getTargetMethods(),
+            solveMethodOverridingVisitor.getUsedMembers(),
+            updatedUsedClass);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
@@ -272,7 +272,7 @@ public class SpeciminRunner {
         String classFullyQualfiedName = getFullyQualifiedClassName(target.getKey());
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
-                classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
+            classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
         // If this condition is true, this class is a synthetic class initially created to be a
         // return type of some synthetic methods, but later javac has found the correct return type
         // for that method.
@@ -290,7 +290,7 @@ public class SpeciminRunner {
       // only return null if its input was a single element path, which targetOutputPath
       // should not be unless the user made an error.
       if (dirContainingOutputFile != null
-              && !createdDirectories.contains(dirContainingOutputFile)) {
+          && !createdDirectories.contains(dirContainingOutputFile)) {
         Files.createDirectories(dirContainingOutputFile);
         createdDirectories.add(dirContainingOutputFile);
       }
@@ -342,7 +342,7 @@ public class SpeciminRunner {
         continue;
       } else if (child instanceof ClassOrInterfaceDeclaration) {
         ClassOrInterfaceDeclaration cdecl =
-                ((ClassOrInterfaceDeclaration) child).asClassOrInterfaceDeclaration();
+            ((ClassOrInterfaceDeclaration) child).asClassOrInterfaceDeclaration();
         if (!cdecl.getMembers().isEmpty()) {
           return false;
         }
@@ -425,7 +425,7 @@ public class SpeciminRunner {
    * @return a to-string version of setOfCreatedClass.
    */
   public static Set<String> getStringSetFromSyntheticClassSet(
-          Set<UnsolvedClassOrInterface> setOfCreatedClass) {
+      Set<UnsolvedClassOrInterface> setOfCreatedClass) {
     Set<String> stringSet = new HashSet<>();
     for (UnsolvedClassOrInterface syntheticClass : setOfCreatedClass) {
       stringSet.add(syntheticClass.toString());

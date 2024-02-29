@@ -1,6 +1,5 @@
 package org.checkerframework.specimin;
 
-import com.google.common.base.Equivalence;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
