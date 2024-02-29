@@ -9,7 +9,7 @@ name: Java CI with Gradle
 
 on:
   push:
-    branches: [ main ]
+    branches: [ cicd ]
   pull_request:
     branches: [ main ]
 
@@ -24,7 +24,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
       - name: Run build with Gradle Wrapper
-        run: ./gradlew build expectedTestOutputsMustCompile
+        run:
+          cwd=$(pwd)
+          echo "Specimin Dir ---> $cwd"
+          ./gradlew build expectedTestOutputsMustCompile
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
@@ -37,4 +40,5 @@ jobs:
       - name: Run evaluation script
         run: |
           cd specimin-evaluation
-          python main.py
+          cwd=$(pwd)
+          echo "evaluation Dir ---> $cwd"
