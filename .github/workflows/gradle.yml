@@ -25,6 +25,12 @@ jobs:
         uses: gradle/gradle-build-action@v2
       - name: Run build with Gradle Wrapper
         run: ./gradlew build expectedTestOutputsMustCompile
+      - name: export Specimin PATH
+        run: export SPECIMIN=$(pwd)
+      - name: check exported path
+        run: |
+          echo "testing if env path was set"
+          echo $SPECIMIN
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
