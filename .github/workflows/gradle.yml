@@ -24,9 +24,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
       - name: Run build with Gradle Wrapper
-        run: |
-          echo "Specimin Dir ---> $(pwd)"
-          ./gradlew build expectedTestOutputsMustCompile
+        run: ./gradlew build expectedTestOutputsMustCompile
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
@@ -39,4 +37,6 @@ jobs:
       - name: Run evaluation script
         run: |
           cd specimin-evaluation
-          echo "evaluation Dir ---> $(pwd)"
+          python main.py
+      - name: Check evaluation status
+        run: echo "dirctory $(pwd)"
