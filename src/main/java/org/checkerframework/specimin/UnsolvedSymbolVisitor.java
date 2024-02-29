@@ -312,7 +312,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Get the names of members that could be used by the target methods.
    *
-   * @return the value of potentialUsedMembers.
+   * @return a copy of potentialUsedMembers.
    */
   public Set<String> getPotentialUsedMembers() {
     Set<String> copyOfPotentialUsedMembers = new HashSet<>();
@@ -363,7 +363,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Get the set of target files that should be added for the next iteration.
    *
-   * @return the value of addedTargetFiles.
+   * @return a copy of addedTargetFiles.
    */
   public Set<String> getAddedTargetFiles() {
     Set<String> copyOfTargetFiles = new HashSet<>();
