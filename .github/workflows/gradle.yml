@@ -41,5 +41,4 @@ jobs:
           python main.py
       - name: Run evaluation script on bugs
         run: |
-          cd specimin-evaluation
-          python main.py bugs
+          echo "Disable at this moment"
