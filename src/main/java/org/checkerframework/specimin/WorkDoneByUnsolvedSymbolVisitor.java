@@ -24,7 +24,7 @@ public class WorkDoneByUnsolvedSymbolVisitor {
   private Set<Equivalence.Wrapper> createdSyntheticClass;
 
   /**
-   * Constructs a new instance of {@code WorkDoneByUnsolvedSymbolVisitor}.
+   * Constructs a new instance of WorkDoneByUnsolvedSymbolVisitor.
    *
    * @param potentialUsedMembers A set of potential-used members.
    * @param addedTargetFiles A set of new files to be added as target files.
