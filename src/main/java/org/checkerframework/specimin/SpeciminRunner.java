@@ -127,6 +127,11 @@ public class SpeciminRunner {
     Set<Path> createdClass = new HashSet<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
+      UnsolvedSymbolVisitorProgress workDoneBeforeIteration =
+          new UnsolvedSymbolVisitorProgress(
+              addMissingClass.getPotentialUsedMembers(),
+              addMissingClass.getAddedTargetFiles(),
+              addMissingClass.getSyntheticClassesAsAStringSet());
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
         // it's important to make sure that getDeclarations and addMissingClass will visit the same
@@ -150,6 +155,15 @@ public class SpeciminRunner {
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
+      UnsolvedSymbolVisitorProgress workDoneAfterIteration =
+          new UnsolvedSymbolVisitorProgress(
+              addMissingClass.getPotentialUsedMembers(),
+              addMissingClass.getAddedTargetFiles(),
+              addMissingClass.getSyntheticClassesAsAStringSet());
+      if (workDoneBeforeIteration.equals(workDoneAfterIteration)
+          && addMissingClass.gettingException()) {
+        throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception");
       }
     }
 
