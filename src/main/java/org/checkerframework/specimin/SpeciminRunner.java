@@ -127,8 +127,8 @@ public class SpeciminRunner {
     Set<Path> createdClass = new HashSet<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
-      WorkDoneByUnsolvedSymbolVisitor workDoneBeforeIteration =
-          new WorkDoneByUnsolvedSymbolVisitor(
+      UnsolvedSymbolVisitorProgress workDoneBeforeIteration =
+          new UnsolvedSymbolVisitorProgress(
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsString());
@@ -156,8 +156,8 @@ public class SpeciminRunner {
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
-      WorkDoneByUnsolvedSymbolVisitor workDoneAfterIteration =
-          new WorkDoneByUnsolvedSymbolVisitor(
+      UnsolvedSymbolVisitorProgress workDoneAfterIteration =
+          new UnsolvedSymbolVisitorProgress(
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsString());

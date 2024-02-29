@@ -5,7 +5,7 @@ import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** A simple class to keep track of the progress of UnsolvedSymbolVisitor. */
-public class WorkDoneByUnsolvedSymbolVisitor {
+public class UnsolvedSymbolVisitorProgress {
 
   /**
    * Fields and methods that could be called inside the target methods. We call them potential-used
@@ -23,13 +23,13 @@ public class WorkDoneByUnsolvedSymbolVisitor {
   private Set<String> createdSyntheticClass;
 
   /**
-   * Constructs a new instance of WorkDoneByUnsolvedSymbolVisitor.
+   * Constructs a new instance of UnsolvedSymbolVisitorProgress.
    *
    * @param potentialUsedMembers A set of potential-used members.
    * @param addedTargetFiles A set of new files to be added as target files.
    * @param createdSyntheticClass A set of synthetic classes created.
    */
-  public WorkDoneByUnsolvedSymbolVisitor(
+  public UnsolvedSymbolVisitorProgress(
       Set<String> potentialUsedMembers,
       Set<String> addedTargetFiles,
       Set<String> createdSyntheticClass) {
@@ -40,10 +40,10 @@ public class WorkDoneByUnsolvedSymbolVisitor {
 
   @Override
   public boolean equals(@Nullable Object obj) {
-    if (!(obj instanceof WorkDoneByUnsolvedSymbolVisitor)) {
+    if (!(obj instanceof UnsolvedSymbolVisitorProgress)) {
       return false;
     }
-    WorkDoneByUnsolvedSymbolVisitor other = (WorkDoneByUnsolvedSymbolVisitor) obj;
+    UnsolvedSymbolVisitorProgress other = (UnsolvedSymbolVisitorProgress) obj;
     return potentialUsedMembers.equals(other.potentialUsedMembers)
         && addedTargetFiles.equals(other.addedTargetFiles)
         && createdSyntheticClass.equals(other.createdSyntheticClass);
