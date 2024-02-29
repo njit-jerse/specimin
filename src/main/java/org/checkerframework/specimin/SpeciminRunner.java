@@ -131,7 +131,7 @@ public class SpeciminRunner {
           new WorkDoneByUnsolvedSymbolVisitor(
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
-              getStringSetFromSyntheticClassSet(addMissingClass.getMissingClass()));
+              addMissingClass.getSyntheticClassesAsString());
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
         // it's important to make sure that getDeclarations and addMissingClass will visit the same
@@ -160,7 +160,7 @@ public class SpeciminRunner {
           new WorkDoneByUnsolvedSymbolVisitor(
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
-              getStringSetFromSyntheticClassSet(addMissingClass.getMissingClass()));
+              addMissingClass.getSyntheticClassesAsString());
       if (workDoneBeforeIteration.equals(workDoneAfterIteration)
           && addMissingClass.gettingException()) {
         throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception");
@@ -415,21 +415,5 @@ public class SpeciminRunner {
         deleteFileFamily(parentDir);
       }
     }
-  }
-
-  /**
-   * Given a set of class created by UnsolvedSymbolVisitor, this method returns a to-string version
-   * of that set.
-   *
-   * @param setOfCreatedClass set of synthetic classes created by UnsolvedSymbolVisitor.
-   * @return a to-string version of setOfCreatedClass.
-   */
-  public static Set<String> getStringSetFromSyntheticClassSet(
-      Set<UnsolvedClassOrInterface> setOfCreatedClass) {
-    Set<String> stringSet = new HashSet<>();
-    for (UnsolvedClassOrInterface syntheticClass : setOfCreatedClass) {
-      stringSet.add(syntheticClass.toString());
-    }
-    return stringSet;
   }
 }

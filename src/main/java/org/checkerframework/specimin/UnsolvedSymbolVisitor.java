@@ -321,14 +321,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get the list of synthetic classes created by UnsolvedSymbolVisitor.
+   * Return the list of synthetic classes created by the UnsolvedSymbolVisitor in the form of
+   * strings.
    *
-   * @return the value of missingClass.
+   * @return the set of created synthetic classes represented as strings.
    */
-  public Set<UnsolvedClassOrInterface> getMissingClass() {
-    Set<UnsolvedClassOrInterface> copyOfMissingClass = new HashSet<>();
-    copyOfMissingClass.addAll(missingClass);
-    return copyOfMissingClass;
+  public Set<String> getSyntheticClassesAsString() {
+    Set<String> syntheticClassesAsString = new HashSet<>();
+    for (UnsolvedClassOrInterface syntheticClass : missingClass) {
+      syntheticClassesAsString.add(syntheticClass.toString());
+    }
+    return syntheticClassesAsString;
   }
 
   /**
