@@ -38,4 +38,4 @@ jobs:
         run: |
           cd specimin-evaluation
       - name: Check evaluation status
-        run: echo "dirctory $(pwd)"
+        run: diff -iq src/test/resources/target_status.json specimin-evaluation/ISSUES/target_status.json
