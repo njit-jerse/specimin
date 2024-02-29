@@ -310,6 +310,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Get the names of members that could be used by the target methods.
+   *
+   * @return a copy of potentialUsedMembers.
+   */
+  public Set<String> getPotentialUsedMembers() {
+    Set<String> copyOfPotentialUsedMembers = new HashSet<>();
+    copyOfPotentialUsedMembers.addAll(potentialUsedMembers);
+    return copyOfPotentialUsedMembers;
+  }
+
+  /**
+   * Return the set of synthetic classes created by the UnsolvedSymbolVisitor in the form of a set
+   * of strings.
+   *
+   * @return the set of created synthetic classes represented as a set of strings.
+   */
+  public Set<String> getSyntheticClassesAsAStringSet() {
+    Set<String> syntheticClassesAsString = new HashSet<>();
+    for (UnsolvedClassOrInterface syntheticClass : missingClass) {
+      syntheticClassesAsString.add(syntheticClass.toString());
+    }
+    return syntheticClassesAsString;
+  }
+
+  /**
    * Get the value of gotException
    *
    * @return gotException the value of gotException
@@ -338,10 +363,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Get the set of target files that should be added for the next iteration.
    *
-   * @return the value of addedTargetFiles.
+   * @return a copy of addedTargetFiles.
    */
   public Set<String> getAddedTargetFiles() {
-    return addedTargetFiles;
+    Set<String> copyOfTargetFiles = new HashSet<>();
+    copyOfTargetFiles.addAll(addedTargetFiles);
+    return copyOfTargetFiles;
   }
 
   @Override
