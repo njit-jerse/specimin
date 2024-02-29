@@ -38,5 +38,6 @@ jobs:
       - name: Run evaluation script
         run: |
           cd specimin-evaluation
+          python main.py
       - name: Check evaluation status
         run: diff -u src/main/resources/target_status.json specimin-evaluation/ISSUES/target_status.json
