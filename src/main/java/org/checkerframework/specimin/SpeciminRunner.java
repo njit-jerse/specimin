@@ -163,7 +163,7 @@ public class SpeciminRunner {
               getStringSetFromSyntheticClassSet(addMissingClass.getMissingClass()));
       if (workDoneBeforeIteration.equals(workDoneAfterIteration)
           && addMissingClass.gettingException()) {
-        throw new RuntimeException("UnsolvedSymbolVisitor is at one or more exception");
+        throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception");
       }
     }
 
