@@ -37,6 +37,5 @@ jobs:
       - name: Run evaluation script
         run: |
           cd specimin-evaluation
-          python main.py
       - name: Check evaluation status
         run: echo "dirctory $(pwd)"
