@@ -315,7 +315,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return the value of potentialUsedMembers.
    */
   public Set<String> getPotentialUsedMembers() {
-    return potentialUsedMembers;
+    Set<String> copyOfPotentialUsedMembers = new HashSet<>();
+    copyOfPotentialUsedMembers.addAll(potentialUsedMembers);
+    return copyOfPotentialUsedMembers;
   }
 
   /**
@@ -324,7 +326,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return the value of missingClass.
    */
   public Set<UnsolvedClassOrInterface> getMissingClass() {
-    return missingClass;
+    Set<UnsolvedClassOrInterface> copyOfMissingClass = new HashSet<>();
+    copyOfMissingClass.addAll(missingClass);
+    return copyOfMissingClass;
   }
 
   /**
@@ -359,7 +363,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return the value of addedTargetFiles.
    */
   public Set<String> getAddedTargetFiles() {
-    return addedTargetFiles;
+    Set<String> copyOfTargetFiles = new HashSet<>();
+    copyOfTargetFiles.addAll(addedTargetFiles);
+    return copyOfTargetFiles;
   }
 
   @Override
