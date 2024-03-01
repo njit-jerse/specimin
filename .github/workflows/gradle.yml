@@ -41,3 +41,5 @@ jobs:
           cd specimin-evaluation
           echo "specimin path-> $SPECIMIN"
           python main.py
+      - name: Check evaluation status
+        run: diff -u src/main/resources/target_status.json specimin-evaluation/ISSUES/target_status.json
