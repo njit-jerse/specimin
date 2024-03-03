@@ -1,9 +1,11 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.comments.Comment;
 
 /**
  * A class containing useful static functions using JavaParser.
@@ -57,5 +59,19 @@ public class JavaParserUtil {
     }
     methodParameter += ")";
     return methodName + methodParameter;
+  }
+
+  /**
+   * Given a compilation unit, this method returns a no-comment version of that compilation unit.
+   *
+   * @param cu a compilation unit
+   * @return cu without any comments
+   */
+  public static CompilationUnit removeCommentsFromCompilationUnit(CompilationUnit cu) {
+    CompilationUnit cuWithNoComments = cu;
+    for (Comment child : cuWithNoComments.getAllComments()) {
+      child.remove();
+    }
+    return cuWithNoComments;
   }
 }

@@ -297,7 +297,7 @@ public class SpeciminRunner {
       // Write the string representation of CompilationUnit to the file
       try {
         PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
-        writer.print(target.getValue());
+        writer.print(JavaParserUtil.removeCommentsFromCompilationUnit(target.getValue()));
         writer.close();
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
