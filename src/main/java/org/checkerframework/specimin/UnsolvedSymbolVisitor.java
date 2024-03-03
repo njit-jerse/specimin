@@ -760,10 +760,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
     String methodQualifiedSignature =
-        this.currentClassQualifiedName
-            + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnType(
-                node.getDeclarationAsString(false, false, false));
+        this.currentClassQualifiedName + "#" + JavaParserUtil.extractMethodSignature(node);
     String methodSimpleName = node.getName().asString();
     if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
       insideTargetMethod = true;

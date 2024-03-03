@@ -1,6 +1,9 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 
 /**
  * A class containing useful static functions using JavaParser.
@@ -33,5 +36,25 @@ public class JavaParserUtil {
     while (!node.remove()) {
       node = node.getParentNode().get();
     }
+  }
+
+  /**
+   * Get the signature of a method, not including the fully qualified class path.
+   *
+   * @param method The method declaration.
+   * @return The method signature without the class path.
+   */
+  public static String extractMethodSignature(MethodDeclaration method) {
+    String methodName = method.getName().asString();
+    String methodParameter = "(";
+    NodeList<Parameter> listOfParemeters = method.getParameters();
+    for (int index = 0; index < listOfParemeters.size(); index++) {
+      if (index == listOfParemeters.size() - 1) {
+        methodParameter += listOfParemeters.get(index).getType().asString() + ")";
+      } else {
+        methodParameter += listOfParemeters.get(index).getType().asString() + ", ";
+      }
+    }
+    return methodName + methodParameter;
   }
 }
