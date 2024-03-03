@@ -50,11 +50,12 @@ public class JavaParserUtil {
     NodeList<Parameter> listOfParemeters = method.getParameters();
     for (int index = 0; index < listOfParemeters.size(); index++) {
       if (index == listOfParemeters.size() - 1) {
-        methodParameter += listOfParemeters.get(index).getType().asString() + ")";
+        methodParameter += listOfParemeters.get(index).getType().asString();
       } else {
         methodParameter += listOfParemeters.get(index).getType().asString() + ", ";
       }
     }
+    methodParameter += ")";
     return methodName + methodParameter;
   }
 }
