@@ -13,6 +13,6 @@ public class MismatchTypeParameterTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "mismatchtypeparameter",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar()"});
+        new String[] {"com.example.Simple#bar(int)"});
   }
 }
