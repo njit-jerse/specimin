@@ -164,7 +164,8 @@ public class SpeciminRunner {
       if (workDoneBeforeIteration.equals(workDoneAfterIteration)
           && addMissingClass.gettingException()) {
         // Two possible cases here:
-        // 1: The types of synthetic methods do not match, in which case JavaTypeCorrect will handle
+        // 1: The types of synthetic methods do not match the context's expectations, in which case
+        // JavaTypeCorrect will handle
         // it.
         // 2: addMissingClass fails to resolve symbols, and we expect to receive exceptions from
         // TargetMethodFinderVisitor.
