@@ -188,8 +188,7 @@ public class SpeciminRunner {
     addMissingClass.updateTypes(typesToChange);
     addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
     // in order for the newly updated files to be considered when solving symbols, we need to update
-    // the
-    // type solver and the map of parsed target files.
+    // the type solver and the map of parsed target files.
     typeSolver =
         new CombinedTypeSolver(
             new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
