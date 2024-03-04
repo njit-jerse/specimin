@@ -163,8 +163,38 @@ public class SpeciminRunner {
               addMissingClass.getSyntheticClassesAsAStringSet());
       if (workDoneBeforeIteration.equals(workDoneAfterIteration)
           && addMissingClass.gettingException()) {
-        throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception");
+        // Two possible cases here:
+        // 1: The types of synthetic methods do not match the context's expectations, in which case
+        // JavaTypeCorrect will handle it.
+        // 2: addMissingClass fails to resolve symbols, and we expect to receive exceptions from
+        // TargetMethodFinderVisitor.
+        break;
       }
+    }
+
+    // update the synthetic types by using error messages from javac.
+    GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(getTypesFullNameVisitor, null);
+    }
+    Map<String, Set<String>> filesAndAssociatedTypes =
+        getTypesFullNameVisitor.getFileAndAssociatedTypes();
+    // correct the types of all related files before adding them to parsedTargetFiles
+    JavaTypeCorrect typeCorrecter =
+        new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
+    typeCorrecter.correctTypesForAllFiles();
+    Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
+    addMissingClass.updateTypes(typesToChange);
+    addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
+    // in order for the newly updated files to be considered when solving symbols, we need to update
+    // the type solver and the map of parsed target files.
+    typeSolver =
+        new CombinedTypeSolver(
+            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+    symbolSolver = new JavaSymbolSolver(typeSolver);
+    StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
+    for (String targetFile : targetFiles) {
+      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -208,19 +238,6 @@ public class SpeciminRunner {
         relatedClass.add(directoryOfFile);
       }
     }
-    GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(getTypesFullNameVisitor, null);
-    }
-    Map<String, Set<String>> filesAndAssociatedTypes =
-        getTypesFullNameVisitor.getFileAndAssociatedTypes();
-    // correct the types of all related files before adding them to parsedTargetFiles
-    JavaTypeCorrect typeCorrecter =
-        new JavaTypeCorrect(root, relatedClass, filesAndAssociatedTypes);
-    typeCorrecter.correctTypesForAllFiles();
-    Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
-    addMissingClass.updateTypes(typesToChange);
-    addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
 
     for (String directory : relatedClass) {
       // directories already in parsedTargetFiles are original files in the root directory, we are
