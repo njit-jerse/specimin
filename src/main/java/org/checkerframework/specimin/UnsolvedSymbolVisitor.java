@@ -429,7 +429,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         // add the source codes of the interface or the super class to the list of target files so
         // that UnsolvedSymbolVisitor can solve symbols for that class if needed.
-        addToListOfTargetFiles(qualifiedName);
+        String filePath = qualifiedNameToFilePath(qualifiedName);
+        if (!addedTargetFiles.contains(filePath)) {
+          // strictly speaking, there is no exception here. But we set gotException to true so that
+          // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
+          // file.
+          gotException();
+        }
+        addedTargetFiles.add(filePath);
       } else {
         try {
           implementedOrExtended.resolve();
@@ -471,23 +478,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.currentClassQualifiedName = "";
     }
     return result;
-  }
-
-  /**
-   * Helper method to add the file for the class specificed by the given qualified name to the list
-   * of added target files.
-   *
-   * @param qualifiedName a fully-qualified name of a class that exists in the original codebase
-   */
-  private void addToListOfTargetFiles(String qualifiedName) {
-    String filePath = qualifiedNameToFilePath(qualifiedName);
-    if (!addedTargetFiles.contains(filePath)) {
-      // strictly speaking, there is no exception here. But we set gotException to true so that
-      // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
-      // file.
-      gotException();
-    }
-    addedTargetFiles.add(filePath);
   }
 
   @Override
@@ -949,7 +939,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // UnsolvedSymbolVisitor will take care of the unsolved extension in its next iteration.
       String qualifiedName =
           getPackageFromClassName(typeExpr.getNameAsString()) + "." + typeExpr.getNameAsString();
-
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
         gotException();
