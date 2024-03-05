@@ -174,8 +174,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
-  /** The list of existing files in the input codebase. */
-  private Set<Path> setOfExistingFiles;
+  /** The set of existing classes in the input codebase. */
+  private Set<String> setOfExistingClasses;
 
   /**
    * Mapping of statically imported members where keys are the imported members and values are their
@@ -224,15 +224,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
-   * @param setOfExistingFiles the set of existing files in the input codebase
+   * @param setOfExistingClasses the set of existing classes in the input codebase
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
    */
   public UnsolvedSymbolVisitor(
-      String rootDirectory, Set<Path> setOfExistingFiles, List<String> targetMethodsSignatures) {
+      String rootDirectory,
+      Set<String> setOfExistingClasses,
+      List<String> targetMethodsSignatures) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
-    this.setOfExistingFiles = setOfExistingFiles;
+    this.setOfExistingClasses = setOfExistingClasses;
     this.targetMethodsSignatures = new HashSet<>();
     this.targetMethodsSignatures.addAll(targetMethodsSignatures);
   }
@@ -1134,13 +1136,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public boolean belongsToARealClassFile(FieldAccessExpr node) {
     Expression nodeScope = node.getScope();
-    String filePath =
-        rootDirectory + nodeScope.calculateResolvedType().describe().replace(".", "/");
-    if (filePath.contains("<")) {
-      filePath = filePath.substring(0, filePath.indexOf("<"));
-    }
-    filePath = filePath + ".java";
-    return setOfExistingFiles.contains(Path.of(filePath).toAbsolutePath().normalize());
+    return setOfExistingClasses.contains(nodeScope.calculateResolvedType().describe());
   }
 
   /**
@@ -1951,14 +1947,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the corresponding class file is originally in the input codebase.
    */
   public boolean classfileIsInOriginalCodebase(String qualifiedName) {
-    String relativeClassPath = qualifiedName.replace(".", "/");
-    int indexOfTypeVariables = relativeClassPath.indexOf("<");
-    if (indexOfTypeVariables != -1) {
-      relativeClassPath = relativeClassPath.substring(0, indexOfTypeVariables);
-    }
-    relativeClassPath = relativeClassPath + ".java";
-    return this.setOfExistingFiles.contains(
-        Paths.get(this.rootDirectory + "/" + relativeClassPath).toAbsolutePath());
+    return this.setOfExistingClasses.contains(qualifiedName);
   }
 
   /**

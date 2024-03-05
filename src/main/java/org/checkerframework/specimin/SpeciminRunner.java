@@ -111,15 +111,18 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
-    // the set of Java files already exist in the input codebase
-    Set<Path> existingFiles = new HashSet<>();
+    // the set of Java classes already exist in the input codebase
+    Set<String> existingClasses = new HashSet<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
-      existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
+      for (ClassOrInterfaceDeclaration declaredClass :
+          compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
+        existingClasses.add(declaredClass.getFullyQualifiedName().get());
+      }
     }
     UnsolvedSymbolVisitor addMissingClass =
-        new UnsolvedSymbolVisitor(root, existingFiles, targetMethodNames);
+        new UnsolvedSymbolVisitor(root, existingClasses, targetMethodNames);
     addMissingClass.setClassesFromJar(jarPaths);
 
     // The set of path of files that have been created by addMissingClass. We will delete all those
