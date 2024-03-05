@@ -361,10 +361,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
-      usedMembers.add(call.resolve().getQualifiedSignature());
+      ResolvedMethodDeclaration decl = call.resolve();
+      usedMembers.add(decl.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
-          call.resolve().getPackageName() + "." + call.resolve().getClassName());
-      ResolvedType methodReturnType = call.resolve().getReturnType();
+          decl.getPackageName() + "." + decl.getClassName());
+      ResolvedType methodReturnType = decl.getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
         updateUsedClassBasedOnType(methodReturnType);
       }
