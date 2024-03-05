@@ -5,6 +5,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -118,11 +119,10 @@ public class SpeciminRunner {
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
-      for (ClassOrInterfaceDeclaration declaredClass :
-          compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
+      for (TypeDeclaration declaredClass : compilationUnit.getTypes()) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
           existingClassesToFilePath.put(
-              declaredClass.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
+              declaredClass.getFullyQualifiedName().get().toString(), pathOfCurrentJavaFile);
         }
       }
     }
