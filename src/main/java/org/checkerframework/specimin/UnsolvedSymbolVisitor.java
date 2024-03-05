@@ -174,8 +174,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
-  /** The set of existing classes in the input codebase. */
-  private Set<String> setOfExistingClasses;
+  /* The set of Java classes in the original codebase mapped with their corresponding Java files. */
+  private Map<String, Path> existingClassesToFilePath;
 
   /**
    * Mapping of statically imported members where keys are the imported members and values are their
@@ -224,17 +224,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
-   * @param setOfExistingClasses the set of existing classes in the input codebase
+   * @param existingClassesToFilePath the set of existing classes in the input codebase mapped to
+   *     corresponding Java files.
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
    */
   public UnsolvedSymbolVisitor(
       String rootDirectory,
-      Set<String> setOfExistingClasses,
+      Map<String, Path> existingClassesToFilePath,
       List<String> targetMethodsSignatures) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
-    this.setOfExistingClasses = setOfExistingClasses;
+    this.existingClassesToFilePath = existingClassesToFilePath;
     this.targetMethodsSignatures = new HashSet<>();
     this.targetMethodsSignatures.addAll(targetMethodsSignatures);
   }
@@ -1026,12 +1027,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return The relative file path corresponding to the qualified name.
    */
   public String qualifiedNameToFilePath(String qualifiedName) {
-    String filePath = qualifiedName.replace(".", "/");
-    if (filePath.contains("<")) {
-      filePath = filePath.substring(filePath.indexOf("<"));
+    if (!existingClassesToFilePath.containsKey(qualifiedName)) {
+      throw new RuntimeException(
+          "qualifiedNameToFilePath only works for classes in the original directory");
     }
-    filePath = filePath + ".java";
-    return filePath;
+    Path absoluteFilePath = existingClassesToFilePath.get(qualifiedName);
+    // theoretically rootDirectory should already be absolute as stated in README.
+    Path absoluteRootDirectory = Paths.get(rootDirectory).toAbsolutePath();
+    return absoluteRootDirectory.relativize(absoluteFilePath).toString();
   }
 
   /**
@@ -1136,7 +1139,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public boolean belongsToARealClassFile(FieldAccessExpr node) {
     Expression nodeScope = node.getScope();
-    return setOfExistingClasses.contains(nodeScope.calculateResolvedType().describe());
+    return existingClassesToFilePath.containsKey(nodeScope.calculateResolvedType().describe());
   }
 
   /**
@@ -1947,7 +1950,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the corresponding class file is originally in the input codebase.
    */
   public boolean classfileIsInOriginalCodebase(String qualifiedName) {
-    return this.setOfExistingClasses.contains(qualifiedName);
+    return this.existingClassesToFilePath.containsKey(qualifiedName);
   }
 
   /**
