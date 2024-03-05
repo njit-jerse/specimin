@@ -1783,6 +1783,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
       // If none do, then default to the first wildcard import.
+      // TODO: log a warning about this once we have a logger
       String wildcardPkg = wildcardImports.get(0);
       return wildcardPkg;
     }
