@@ -1,13 +1,12 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks the case where there are two wildcard imports, but the used class
- * that one of them refers to is actually in the input. In that case, the output should
- * use that input class rather than putting it in the wrong place.
+ * This test checks the case where there are two wildcard imports, but the used class that one of
+ * them refers to is actually in the input. In that case, the output should use that input class
+ * rather than putting it in the wrong place.
  */
 public class WildcardImport3Test {
   @Test

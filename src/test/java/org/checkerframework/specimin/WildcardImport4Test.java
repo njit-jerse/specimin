@@ -1,13 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks the case where there is a wildcard import, but there is a matching
- * class in the same package as the target class. In that case, the wildcard import should
- * be ignored.
+ * This test checks the case where there is a wildcard import, but there is a matching class in the
+ * same package as the target class. In that case, the wildcard import should be ignored.
  */
 public class WildcardImport4Test {
   @Test

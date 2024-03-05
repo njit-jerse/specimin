@@ -148,8 +148,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private final Set<Path> createdClass = new HashSet<>();
 
-  /** List of import statement from the current compilation unit that is being visited */
+  /**
+   * List of fully-qualified names of classes that are directly imported (i.e., without the use of a
+   * wildcard import statement.)
+   */
   private List<String> importStatement = new ArrayList<>();
+
+  /** The packages that were imported via wildcard ("*") imports. */
+  private final List<String> wildcardImports = new ArrayList<>(1);
 
   /** This map the classes in the compilation unit with the related package */
   private final Map<String, String> classAndPackageMap = new HashMap<>();
@@ -279,8 +285,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
         if (className.equals("*")) {
-          throw new RuntimeException(
-              "A wildcard import statement found. Please use explicit import" + " statements.");
+          System.out.println("adding this package to wildcard imports (via loc 1): " + packageName);
+          this.wildcardImports.add(packageName);
         } else {
           this.classAndPackageMap.put(className, packageName);
         }
@@ -374,8 +380,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Node visit(ImportDeclaration decl, Void arg) {
     if (decl.isAsterisk()) {
-      throw new RuntimeException(
-          "A wildcard import statement found. Please use explicit import" + " statements.");
+      System.out.println(
+          "adding this package to wildcard imports (via loc 2): " + decl.getNameAsString());
+      wildcardImports.add(decl.getNameAsString());
     }
     if (decl.isStatic()) {
       String name = decl.getNameAsString();
@@ -1756,10 +1763,40 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return the package of that class.
    */
   public String getPackageFromClassName(String className) {
+    System.out.println("getting package for class: " + className);
     if (className.contains("<")) {
       className = className.substring(0, className.indexOf("<"));
     }
-    return classAndPackageMap.getOrDefault(className, currentPackage);
+    String pkg = classAndPackageMap.get(className);
+    if (pkg != null) {
+      System.out.println("pkg: " + pkg);
+      return pkg;
+    } else {
+      // Check if there is a wildcard import. If there isn't always use
+      // currentPackage.
+      if (wildcardImports.size() == 0) {
+        System.out.println("no wildcard imports, defaulting to current package");
+        return currentPackage;
+      }
+      // If there is a wildcard import, check if there is a matching class
+      // in the original codebase in the current package. If so, use that.
+      if (classfileIsInOriginalCodebase(currentPackage + "." + className)) {
+        System.out.println("original codebase has " + currentPackage + "." + className);
+        return currentPackage;
+      }
+      // If not, then check for each wildcard import if the original codebase
+      // contains an appropriate class. If so, use it.
+      for (String wildcardPkg : wildcardImports) {
+        if (classfileIsInOriginalCodebase(wildcardPkg + "." + className)) {
+          System.out.println("original codebase has " + wildcardPkg + "." + className);
+          return wildcardPkg;
+        }
+      }
+      // If none do, then default to the first wildcard import.
+      System.out.println(
+          "no original found, defaulting to: " + wildcardImports.get(0) + "." + className);
+      return wildcardImports.get(0);
+    }
   }
 
   /**

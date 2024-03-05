@@ -1,13 +1,12 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks the case where there are two wildcard imports: unsolved classes
- * are placed in the first one (this is an arbitrary choice, but Specimin has no way
- * to do better without access to the classpath).
+ * This test checks the case where there are two wildcard imports: unsolved classes are placed in
+ * the first one (this is an arbitrary choice, but Specimin has no way to do better without access
+ * to the classpath).
  */
 public class WildcardImport2Test {
   @Test
