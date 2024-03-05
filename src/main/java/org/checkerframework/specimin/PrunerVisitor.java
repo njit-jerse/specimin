@@ -28,6 +28,7 @@ import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.Set;
@@ -87,6 +88,17 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
+    Set<String> toRemove = new HashSet<>();
+    for (String classUsedByTargetMethods : classesUsedByTargetMethods) {
+      if (classUsedByTargetMethods.contains("<")) {
+        toRemove.add(classUsedByTargetMethods);
+      }
+    }
+    for (String s : toRemove) {
+      classesUsedByTargetMethods.remove(s);
+      String withoutAngleBrackets = s.substring(0, s.indexOf("<"));
+      classesUsedByTargetMethods.add(withoutAngleBrackets);
+    }
   }
 
   @Override
