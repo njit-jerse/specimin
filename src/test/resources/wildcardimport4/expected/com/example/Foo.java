@@ -1,4 +1,4 @@
-package org.anotherexample;
+package com.example;
 
 public class Foo {
     void fooMethod() {

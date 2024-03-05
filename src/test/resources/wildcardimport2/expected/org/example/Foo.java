@@ -1,7 +1,12 @@
 package org.example;
 
 public class Foo {
-    FooMethodReturnType fooMethod() {
+
+    public Foo() {
+        throw new Error();
+    }
+
+    public FooMethodReturnType fooMethod() {
         throw new Error();
     }
 }

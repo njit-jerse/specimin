@@ -1,6 +1,6 @@
 package com.example;
 
-import org.example.Foo;
+import org.anotherexample.Foo;
 
 class Simple {
     void bar() {
