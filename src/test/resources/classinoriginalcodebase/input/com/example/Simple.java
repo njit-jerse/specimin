@@ -10,7 +10,7 @@ public class Simple {
     }
 }
 
-// SomeClass is unsolved,and there is no SomeClass.java in the original codebase. However, no synthetic SomeClass should be created.
+// SomeClass is unsolved, and there is no SomeClass.java in the original codebase. However, no synthetic SomeClass should be created.
 class SomeClass extends UnsolvedType {
 
  }
