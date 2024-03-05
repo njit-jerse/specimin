@@ -1,7 +1,7 @@
 package org.anotherexample;
 
 public class Foo {
-    void fooMethod() {
+    public void fooMethod() {
         throw new Error();
     }
 }
