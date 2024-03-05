@@ -174,7 +174,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
-  /* The set of Java classes in the original codebase mapped with their corresponding Java files. */
+  /**
+   * The set of Java classes in the original codebase mapped with their corresponding Java files.
+   */
   private Map<String, Path> existingClassesToFilePath;
 
   /**
