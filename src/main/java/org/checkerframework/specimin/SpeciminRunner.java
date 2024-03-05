@@ -120,8 +120,10 @@ public class SpeciminRunner {
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
       for (ClassOrInterfaceDeclaration declaredClass :
           compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
-        existingClassesToFilePath.put(
-            declaredClass.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
+        if (declaredClass.getFullyQualifiedName().isPresent()) {
+          existingClassesToFilePath.put(
+              declaredClass.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
+        }
       }
     }
     UnsolvedSymbolVisitor addMissingClass =
