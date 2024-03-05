@@ -97,12 +97,12 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // the result of getNameAsString is actually the package name. This renaming is just to
       // make the code less confusing.
       String importedPackage = classFullName;
+      // the parent of an import is always the corresponding compilation unit, thanks to the
+      // JLS' requirements about the placement of import statements (JLS 7.3)
       CompilationUnit parent = (CompilationUnit) decl.getParentNode().orElseThrow();
       decl.remove();
       for (String usedClassFQN : classesUsedByTargetMethods) {
         if (usedClassFQN.startsWith(importedPackage)) {
-          // the parent of an import is always the corresponding compilation unit, thanks to the
-          // JLS' requirements about the placement of import statements
           parent.addImport(usedClassFQN);
         }
       }
