@@ -2,7 +2,6 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.comments.Comment;
@@ -41,24 +40,30 @@ public class JavaParserUtil {
   }
 
   /**
-   * Get the signature of a method, not including the fully qualified class path.
+   * Get the signature of a method, not including the fully qualified class path. This method is a
+   * simplified version of getDeclarationAsString from JavaParser.
    *
    * @param method The method declaration.
    * @return The method signature without the class path.
    */
   public static String extractMethodSignature(MethodDeclaration method) {
-    String methodName = method.getName().asString();
-    String methodParameter = "(";
-    NodeList<Parameter> listOfParemeters = method.getParameters();
-    for (int index = 0; index < listOfParemeters.size(); index++) {
-      if (index == listOfParemeters.size() - 1) {
-        methodParameter += listOfParemeters.get(index).getType().asString();
+    StringBuilder sb = new StringBuilder();
+    sb.append(method.getNameAsString());
+    sb.append("(");
+    boolean firstParam = true;
+    for (Parameter param : method.getParameters()) {
+      if (firstParam) {
+        firstParam = false;
       } else {
-        methodParameter += listOfParemeters.get(index).getType().asString() + ", ";
+        sb.append(", ");
+      }
+      sb.append(param.getType().asString());
+      if (param.isVarArgs()) {
+        sb.append("...");
       }
     }
-    methodParameter += ")";
-    return methodName + methodParameter;
+    sb.append(")");
+    return sb.toString();
   }
 
   /**
