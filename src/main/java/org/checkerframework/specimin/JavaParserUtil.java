@@ -57,7 +57,7 @@ public class JavaParserUtil {
       } else {
         sb.append(", ");
       }
-      sb.append(param.getType().asString());
+      sb.append(param.getType().toString());
       if (param.isVarArgs()) {
         sb.append("...");
       }
