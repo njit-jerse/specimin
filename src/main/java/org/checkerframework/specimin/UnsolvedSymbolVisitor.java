@@ -284,10 +284,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (importParts.size() > 0) {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
-        if (className.equals("*")) {
-          System.out.println("adding this package to wildcard imports (via loc 1): " + packageName);
-          this.wildcardImports.add(packageName);
-        } else {
+        if (!className.equals("*")) {
           this.classAndPackageMap.put(className, packageName);
         }
       }
@@ -380,8 +377,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Node visit(ImportDeclaration decl, Void arg) {
     if (decl.isAsterisk()) {
-      System.out.println(
-          "adding this package to wildcard imports (via loc 2): " + decl.getNameAsString());
       wildcardImports.add(decl.getNameAsString());
     }
     if (decl.isStatic()) {
@@ -434,14 +429,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         // add the source codes of the interface or the super class to the list of target files so
         // that UnsolvedSymbolVisitor can solve symbols for that class if needed.
-        String filePath = qualifiedNameToFilePath(qualifiedName);
-        if (!addedTargetFiles.contains(filePath)) {
-          // strictly speaking, there is no exception here. But we set gotException to true so that
-          // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
-          // file.
-          gotException();
-        }
-        addedTargetFiles.add(filePath);
+        addToListOfTargetFiles(qualifiedName);
       } else {
         try {
           implementedOrExtended.resolve();
@@ -483,6 +471,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.currentClassQualifiedName = "";
     }
     return result;
+  }
+
+  /**
+   * Helper method to add the file for the class specificed by the given qualified name to the list
+   * of added target files.
+   *
+   * @param qualifiedName a fully-qualified name of a class that exists in the original codebase
+   */
+  private void addToListOfTargetFiles(String qualifiedName) {
+    String filePath = qualifiedNameToFilePath(qualifiedName);
+    if (!addedTargetFiles.contains(filePath)) {
+      // strictly speaking, there is no exception here. But we set gotException to true so that
+      // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
+      // file.
+      gotException();
+    }
+    addedTargetFiles.add(filePath);
   }
 
   @Override
@@ -660,7 +665,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       else if (!classAndPackageMap.containsKey(typeAsString)) {
         @SuppressWarnings("signature") // since this is the simple name case
         @ClassGetSimpleName String className = typeAsString;
-        String packageName = this.currentPackage;
+        String packageName = getPackageFromClassName(className);
         UnsolvedClassOrInterface newClass = new UnsolvedClassOrInterface(className, packageName);
         updateMissingClass(newClass);
       }
@@ -944,6 +949,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // UnsolvedSymbolVisitor will take care of the unsolved extension in its next iteration.
       String qualifiedName =
           getPackageFromClassName(typeExpr.getNameAsString()) + "." + typeExpr.getNameAsString();
+
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
         gotException();
@@ -1123,8 +1129,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
       className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
     } else {
-      packageName = classAndPackageMap.getOrDefault(typeRawName, currentPackage);
       className = typeRawName;
+      packageName = getPackageFromClassName(className);
     }
     classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
 
@@ -1763,39 +1769,33 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return the package of that class.
    */
   public String getPackageFromClassName(String className) {
-    System.out.println("getting package for class: " + className);
     if (className.contains("<")) {
       className = className.substring(0, className.indexOf("<"));
     }
     String pkg = classAndPackageMap.get(className);
     if (pkg != null) {
-      System.out.println("pkg: " + pkg);
       return pkg;
     } else {
       // Check if there is a wildcard import. If there isn't always use
       // currentPackage.
       if (wildcardImports.size() == 0) {
-        System.out.println("no wildcard imports, defaulting to current package");
         return currentPackage;
       }
       // If there is a wildcard import, check if there is a matching class
       // in the original codebase in the current package. If so, use that.
       if (classfileIsInOriginalCodebase(currentPackage + "." + className)) {
-        System.out.println("original codebase has " + currentPackage + "." + className);
         return currentPackage;
       }
       // If not, then check for each wildcard import if the original codebase
       // contains an appropriate class. If so, use it.
       for (String wildcardPkg : wildcardImports) {
         if (classfileIsInOriginalCodebase(wildcardPkg + "." + className)) {
-          System.out.println("original codebase has " + wildcardPkg + "." + className);
           return wildcardPkg;
         }
       }
       // If none do, then default to the first wildcard import.
-      System.out.println(
-          "no original found, defaulting to: " + wildcardImports.get(0) + "." + className);
-      return wildcardImports.get(0);
+      String wildcardPkg = wildcardImports.get(0);
+      return wildcardPkg;
     }
   }
 
@@ -2168,7 +2168,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     String methodCall = method.toString();
     String classCaller = method.getScope().get().toString();
-    String packageOfClass = this.classAndPackageMap.get(classCaller);
+    String packageOfClass = getPackageFromClassName(classCaller);
     return packageOfClass + "." + methodCall;
   }
 

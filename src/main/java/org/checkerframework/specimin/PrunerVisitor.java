@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -91,6 +92,22 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @Override
   public Node visit(ImportDeclaration decl, Void p) {
     String classFullName = decl.getNameAsString();
+    if (decl.isAsterisk()) {
+      // This looks weird, but in testing I found that iff decl represents a wildcard,
+      // the result of getNameAsString is actually the package name. This renaming is just to
+      // make the code less confusing.
+      String importedPackage = classFullName;
+      CompilationUnit parent = (CompilationUnit) decl.getParentNode().orElseThrow();
+      decl.remove();
+      for (String usedClassFQN : classesUsedByTargetMethods) {
+        if (usedClassFQN.startsWith(importedPackage)) {
+          // the parent of an import is always the corresponding compilation unit, thanks to the
+          // JLS' requirements about the placement of import statements
+          parent.addImport(usedClassFQN);
+        }
+      }
+      return decl;
+    }
     if (decl.isStatic()) {
       classFullName = classFullName.substring(0, classFullName.lastIndexOf("."));
     }
