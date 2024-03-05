@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -27,6 +28,7 @@ import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.Set;
@@ -86,11 +88,38 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
+    Set<String> toRemove = new HashSet<>();
+    for (String classUsedByTargetMethods : classesUsedByTargetMethods) {
+      if (classUsedByTargetMethods.contains("<")) {
+        toRemove.add(classUsedByTargetMethods);
+      }
+    }
+    for (String s : toRemove) {
+      classesUsedByTargetMethods.remove(s);
+      String withoutAngleBrackets = s.substring(0, s.indexOf("<"));
+      classesUsedByTargetMethods.add(withoutAngleBrackets);
+    }
   }
 
   @Override
   public Node visit(ImportDeclaration decl, Void p) {
     String classFullName = decl.getNameAsString();
+    if (decl.isAsterisk()) {
+      // This looks weird, but in testing I found that iff decl represents a wildcard,
+      // the result of getNameAsString is actually the package name. This renaming is just to
+      // make the code less confusing.
+      String importedPackage = classFullName;
+      // the parent of an import is always the corresponding compilation unit, thanks to the
+      // JLS' requirements about the placement of import statements (JLS 7.3)
+      CompilationUnit parent = (CompilationUnit) decl.getParentNode().orElseThrow();
+      decl.remove();
+      for (String usedClassFQN : classesUsedByTargetMethods) {
+        if (usedClassFQN.startsWith(importedPackage)) {
+          parent.addImport(usedClassFQN);
+        }
+      }
+      return decl;
+    }
     if (decl.isStatic()) {
       classFullName = classFullName.substring(0, classFullName.lastIndexOf("."));
     }
