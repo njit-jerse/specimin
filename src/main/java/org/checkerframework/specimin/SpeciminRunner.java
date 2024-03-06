@@ -5,6 +5,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -111,15 +112,22 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
-    // the set of Java files already exist in the input codebase
-    Set<Path> existingFiles = new HashSet<>();
+    // the set of Java classes in the original codebase mapped with their corresponding Java files.
+    Map<String, Path> existingClassesToFilePath = new HashMap<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
-      existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
+      Path pathOfCurrentJavaFile =
+          compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
+      for (TypeDeclaration declaredClass : compilationUnit.getTypes()) {
+        if (declaredClass.getFullyQualifiedName().isPresent()) {
+          existingClassesToFilePath.put(
+              declaredClass.getFullyQualifiedName().get().toString(), pathOfCurrentJavaFile);
+        }
+      }
     }
     UnsolvedSymbolVisitor addMissingClass =
-        new UnsolvedSymbolVisitor(root, existingFiles, targetMethodNames);
+        new UnsolvedSymbolVisitor(root, existingClassesToFilePath, targetMethodNames);
     addMissingClass.setClassesFromJar(jarPaths);
 
     // The set of path of files that have been created by addMissingClass. We will delete all those
