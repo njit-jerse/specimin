@@ -181,7 +181,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
   /**
-   * The fully-qualified name of each Java class in the original codebase mapped to the corresponding Java file.
+   * The fully-qualified name of each Java class in the original codebase mapped to the
+   * corresponding Java file.
    */
   private Map<String, Path> existingClassesToFilePath;
 
@@ -232,7 +233,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
-   * @param existingClassesToFilePath The fully-qualified name of each Java class in the original 
+   * @param existingClassesToFilePath The fully-qualified name of each Java class in the original
    *     codebase mapped to the corresponding Java file.
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
@@ -245,7 +246,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.gotException = true;
     this.existingClassesToFilePath = existingClassesToFilePath;
     this.targetMethodsSignatures = new HashSet<>();
-    this.targetMethodsSignatures.addAll(targetMethodsSignatures);
+    for (String methodSignature : targetMethodsSignatures) {
+      this.targetMethodsSignatures.add(methodSignature.replaceAll("\\s", ""));
+    }
   }
 
   /**
@@ -750,9 +753,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnType(
+            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
-    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
+    if (targetMethodsSignatures.contains(methodQualifiedSignature.replace("\\s", ""))) {
       insideTargetMethod = true;
     }
     addTypeVariableScope(node.getTypeParameters());
@@ -769,10 +772,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnType(
+            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
-    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
+    if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
       insideTargetMethod = true;
       Visitable result = processMethodDeclaration(node);
       insideTargetMethod = false;
