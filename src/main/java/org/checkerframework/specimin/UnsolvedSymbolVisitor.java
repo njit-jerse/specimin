@@ -175,7 +175,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
   /**
-   * The set of Java classes in the original codebase mapped with their corresponding Java files.
+   * The fully-qualified name of each Java class in the original codebase mapped to the corresponding Java file.
    */
   private Map<String, Path> existingClassesToFilePath;
 
@@ -226,8 +226,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
-   * @param existingClassesToFilePath the set of existing classes in the input codebase mapped to
-   *     corresponding Java files.
+   * @param existingClassesToFilePath The fully-qualified name of each Java class in the original 
+   *     codebase mapped to the corresponding Java file.
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
    */
