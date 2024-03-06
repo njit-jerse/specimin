@@ -180,8 +180,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
-  /** The list of existing files in the input codebase. */
-  private Set<Path> setOfExistingFiles;
+  /**
+   * The fully-qualified name of each Java class in the original codebase mapped to the corresponding Java file.
+   */
+  private Map<String, Path> existingClassesToFilePath;
 
   /**
    * Mapping of statically imported members where keys are the imported members and values are their
@@ -230,15 +232,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
-   * @param setOfExistingFiles the set of existing files in the input codebase
+   * @param existingClassesToFilePath The fully-qualified name of each Java class in the original 
+   *     codebase mapped to the corresponding Java file.
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
    */
   public UnsolvedSymbolVisitor(
-      String rootDirectory, Set<Path> setOfExistingFiles, List<String> targetMethodsSignatures) {
+      String rootDirectory,
+      Map<String, Path> existingClassesToFilePath,
+      List<String> targetMethodsSignatures) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
-    this.setOfExistingFiles = setOfExistingFiles;
+    this.existingClassesToFilePath = existingClassesToFilePath;
     this.targetMethodsSignatures = new HashSet<>();
     this.targetMethodsSignatures.addAll(targetMethodsSignatures);
   }
@@ -1026,12 +1031,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return The relative file path corresponding to the qualified name.
    */
   public String qualifiedNameToFilePath(String qualifiedName) {
-    String filePath = qualifiedName.replace(".", "/");
-    if (filePath.contains("<")) {
-      filePath = filePath.substring(filePath.indexOf("<"));
+    if (!existingClassesToFilePath.containsKey(qualifiedName)) {
+      throw new RuntimeException(
+          "qualifiedNameToFilePath only works for classes in the original directory");
     }
-    filePath = filePath + ".java";
-    return filePath;
+    Path absoluteFilePath = existingClassesToFilePath.get(qualifiedName);
+    // theoretically rootDirectory should already be absolute as stated in README.
+    Path absoluteRootDirectory = Paths.get(rootDirectory).toAbsolutePath();
+    return absoluteRootDirectory.relativize(absoluteFilePath).toString();
   }
 
   /**
@@ -1136,13 +1143,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public boolean belongsToARealClassFile(FieldAccessExpr node) {
     Expression nodeScope = node.getScope();
-    String filePath =
-        rootDirectory + nodeScope.calculateResolvedType().describe().replace(".", "/");
-    if (filePath.contains("<")) {
-      filePath = filePath.substring(0, filePath.indexOf("<"));
-    }
-    filePath = filePath + ".java";
-    return setOfExistingFiles.contains(Path.of(filePath).toAbsolutePath().normalize());
+    return existingClassesToFilePath.containsKey(nodeScope.calculateResolvedType().describe());
   }
 
   /**
@@ -1978,14 +1979,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the corresponding class file is originally in the input codebase.
    */
   public boolean classfileIsInOriginalCodebase(String qualifiedName) {
-    String relativeClassPath = qualifiedName.replace(".", "/");
-    int indexOfTypeVariables = relativeClassPath.indexOf("<");
-    if (indexOfTypeVariables != -1) {
-      relativeClassPath = relativeClassPath.substring(0, indexOfTypeVariables);
-    }
-    relativeClassPath = relativeClassPath + ".java";
-    return this.setOfExistingFiles.contains(
-        Paths.get(this.rootDirectory + "/" + relativeClassPath).toAbsolutePath());
+    return this.existingClassesToFilePath.containsKey(qualifiedName);
   }
 
   /**
