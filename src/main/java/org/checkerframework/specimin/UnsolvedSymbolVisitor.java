@@ -1088,12 +1088,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
         for (Parameter parameter : methodDeclaredParameters) {
           try {
-            ResolvedType parameterTypeResolved = parameter.getType().resolve();
-            if (parameterTypeResolved.isPrimitive()) {
-              methodDeclaredTypesOfParameters.add(parameterTypeResolved.asPrimitive().name());
-            } else if (parameterTypeResolved.isReferenceType()) {
-              methodDeclaredTypesOfParameters.add(
-                  parameterTypeResolved.asReferenceType().getQualifiedName());
+            if (isTypeVar(parameter.getTypeAsString())) {
+              methodDeclaredTypesOfParameters.add(parameter.getTypeAsString());
+            } else {
+              ResolvedType parameterTypeResolved = parameter.getType().resolve();
+              if (parameterTypeResolved.isPrimitive()) {
+                methodDeclaredTypesOfParameters.add(parameterTypeResolved.asPrimitive().name());
+              } else if (parameterTypeResolved.isReferenceType()) {
+                methodDeclaredTypesOfParameters.add(
+                    parameterTypeResolved.asReferenceType().getQualifiedName());
+              }
             }
           } catch (UnsolvedSymbolException e) {
             // UnsolvedSymbolVisitor will not create any synthetic class at this iteration.
