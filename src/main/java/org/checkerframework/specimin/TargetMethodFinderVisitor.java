@@ -266,7 +266,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
-      // String methodToRemove = methodName;
       // make sure that differences in spacing does not interfere with the result
       for (String unfound : unfoundMethods) {
         if (unfound.replaceAll("\\s", "").equals(methodWithoutAnySpace)) {
