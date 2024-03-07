@@ -258,14 +258,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
       updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
     }
-    if (this.targetMethodNames.contains(methodName.replaceAll("\\s", ""))) {
+    String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
+    if (this.targetMethodNames.contains(methodWithoutAnySpace)) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
-      unfoundMethods.remove(methodName);
+      // String methodToRemove = methodName;
+      // make sure that differences in spacing does not interfere with the result
+      for (String unfound : unfoundMethods) {
+        if (unfound.replaceAll("\\s", "").equals(methodWithoutAnySpace)) {
+          unfoundMethods.remove(unfound);
+          break;
+        }
+      }
       Type returnType = method.getType();
       // JavaParser may misinterpret unresolved array types as reference types.
       // To ensure accuracy, we resolve the type before proceeding with the check.
