@@ -202,7 +202,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Map<@ClassGetSimpleName String, List<@ClassGetSimpleName String>>
       classToItsUnsolvedInterface = new HashMap<>();
 
-  /** List of signatures of target methods as specified by users. */
+  /**
+   * List of signatures of target methods as specified by users. All signatures have spaces removed
+   * for ease of comparison.
+   */
   private final Set<String> targetMethodsSignatures;
 
   /**

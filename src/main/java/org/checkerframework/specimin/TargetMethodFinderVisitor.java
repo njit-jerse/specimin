@@ -48,7 +48,8 @@ import java.util.stream.Collectors;
 public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   /**
    * The names of the target methods. The format is
-   * class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...). All the names will have
+   * spaces remove for ease of comparison.
    */
   private Set<String> targetMethodNames;
 
