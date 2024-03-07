@@ -10,9 +10,10 @@ import org.junit.Test;
 public class ParameterWithAnnotationsTest {
   @Test
   public void runTest() throws IOException {
-    SpeciminTestExecutor.runTestWithoutJarPaths(
+    SpeciminTestExecutor.runTest(
         "parameterwithannotations",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar(int, UnsolvedType)"});
+        new String[] {"com.example.Simple#bar(int, UnsolvedType)"},
+        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
   }
 }
