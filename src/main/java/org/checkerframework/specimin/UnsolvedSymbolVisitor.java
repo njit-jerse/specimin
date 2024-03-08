@@ -14,6 +14,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -614,6 +615,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(BlockStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
+    Visitable result = super.visit(node, p);
+    localVariables.removeFirst();
+    return result;
+  }
+
+  @Override
+  public Visitable visit(LambdaExpr node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.addFirst(currentLocalVariables);
+
+    // add the parameters to the local variable map
+    for (Parameter lambdaParam : node.getParameters()) {
+      currentLocalVariables.add(lambdaParam.getNameAsString());
+    }
+
     Visitable result = super.visit(node, p);
     localVariables.removeFirst();
     return result;
