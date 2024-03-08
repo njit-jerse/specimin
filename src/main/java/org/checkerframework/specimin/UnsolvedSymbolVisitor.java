@@ -622,16 +622,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(LambdaExpr node, Void p) {
-    HashSet<String> currentLocalVariables = new HashSet<>();
-    localVariables.addFirst(currentLocalVariables);
 
     // add the parameters to the local variable map
+    // Note that lambdas DO NOT CREATE A NEW SCOPE
+    // (why? ask whoever designed the feature...)
     for (Parameter lambdaParam : node.getParameters()) {
-      currentLocalVariables.add(lambdaParam.getNameAsString());
+      localVariables.getFirst().add(lambdaParam.getNameAsString());
     }
 
     Visitable result = super.visit(node, p);
-    localVariables.removeFirst();
+
+    // then remove them
+    for (Parameter lambdaParam : node.getParameters()) {
+      localVariables.getFirst().remove(lambdaParam.getNameAsString());
+    }
     return result;
   }
 
