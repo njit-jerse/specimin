@@ -876,8 +876,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(method, p);
     }
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
-      updateClassSetWithQualifiedStaticMethodCall(
-          method.toString(), getArgumentsFromMethodCall(method));
+      updateClassSetWithStaticMethodCall(method);
     } else if (calledByAnIncompleteClass(method)) {
       String qualifiedNameOfIncompleteClass = getIncompleteClass(method);
       if (classfileIsInOriginalCodebase(qualifiedNameOfIncompleteClass)) {
@@ -887,16 +886,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
       }
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
-      String methodFullyQualifiedCall = toFullyQualifiedCall(method);
-      updateClassSetWithQualifiedStaticMethodCall(
-          methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
+      updateClassSetWithStaticMethodCall(method);
     } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
       String methodName = method.getNameAsString();
       @FullyQualifiedName String className = staticImportedMembersMap.get(methodName);
       String methodFullyQualifiedCall = className + "." + methodName;
+      String pkgName = className.substring(0, className.lastIndexOf('.'));
       // everything inside the (...) will be trimmed
       updateClassSetWithQualifiedStaticMethodCall(
-          methodFullyQualifiedCall + "()", getArgumentsFromMethodCall(method));
+          methodFullyQualifiedCall + "()", getArgumentTypesFromMethodCall(method, pkgName));
     } else if (haveNoScopeOrCallByThisKeyword(method)) {
       // in this case, the method must be declared inside the interface or the superclass that the
       // current class extends/implements.
@@ -1104,7 +1102,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
           continue;
         }
-        List<String> methodTypesOfParameters = getArgumentsFromMethodCall(method);
+        List<String> methodTypesOfArguments = getArgumentTypesFromMethodCall(method, null);
         NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
         List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
         for (Parameter parameter : methodDeclaredParameters) {
@@ -1125,7 +1123,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             return false;
           }
         }
-        if (methodDeclaredTypesOfParameters.equals(methodTypesOfParameters)) {
+        if (methodDeclaredTypesOfParameters.equals(methodTypesOfArguments)) {
           return true;
         }
       }
@@ -1335,7 +1333,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     List<String> listOfParameters = new ArrayList<>();
     if (method instanceof MethodCallExpr) {
       methodName = ((MethodCallExpr) method).getNameAsString();
-      listOfParameters = getArgumentsFromMethodCall(((MethodCallExpr) method));
+      listOfParameters =
+          getArgumentTypesFromMethodCall(
+              ((MethodCallExpr) method), getPackageFromClassName(className));
     }
     // method is a MethodDeclaration
     else {
@@ -1483,7 +1483,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // a @FullyQualifiedName if the class is not of primitive type. However, this
     // is favorable, since we don't have to write any additional import statements.
     @ClassGetSimpleName String returnType = methodSolved.getReturnType().describe();
-    List<String> argumentsList = getArgumentsFromMethodCall(expr);
+    List<String> argumentsList = getArgumentTypesFromMethodCall(expr, packageName);
     UnsolvedClassOrInterface missingClass = new UnsolvedClassOrInterface(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
     missingClass.addMethod(thisMethod);
@@ -1769,9 +1769,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Given a method call, this method returns the list of types of the parameters of that method
    *
    * @param method the method to be analyzed
+   * @param pkgName the name of the package of the class that contains the method being called. This
+   *     is only used when creating a functional interface if one of the parameters is a lambda. If
+   *     this argument is null, then this method throws if it encounters a lambda.
    * @return the types of parameters of method
    */
-  public List<String> getArgumentsFromMethodCall(MethodCallExpr method) {
+  public List<String> getArgumentTypesFromMethodCall(
+      MethodCallExpr method, @Nullable String pkgName) {
     List<String> parametersList = new ArrayList<>();
     NodeList<Expression> paraList = method.getArguments();
     for (Expression parameter : paraList) {
@@ -1779,23 +1783,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // and instead compute their arity and provide an appropriate
       // functional interface from java.util.function.
       if (parameter.isLambdaExpr()) {
-        LambdaExpr lambda = parameter.asLambdaExpr();
-        int cparam = lambda.getParameters().size();
-        boolean isvoid = isLambdaVoidReturn(lambda);
-        // check arity:
-        if (cparam == 0) {
-          parametersList.add("java.util.function.Supplier<?>");
-        } else if (cparam == 1 && isvoid) {
-          parametersList.add("java.util.function.Consumer<?>");
-        } else if (cparam == 1 && !isvoid) {
-          parametersList.add("java.util.function.Function<?, ?>");
-        } else if (cparam == 2 && !isvoid) {
-          parametersList.add("java.util.function.BiFunction<?, ?, ?>");
-        } else {
-          // TODO: construct our own, I think.
+        if (pkgName == null) {
+          throw new RuntimeException("encountered a lambda when the package name was unknown");
         }
-        // we also need to run at least once more to solve java.util.function class...
-        this.gotException();
+        LambdaExpr lambda = parameter.asLambdaExpr();
+        parametersList.add(resolveLambdaType(lambda, pkgName));
         continue;
       }
 
@@ -1809,6 +1801,45 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     return parametersList;
+  }
+
+  /**
+   * Resolves a type for a lambda expression, possibly by creating a new functional interface.
+   *
+   * @param lambda the lambda expression
+   * @param pkgName the package in which a new functional interface should be created, if necessary
+   * @return the fully-qualified name of a functional interface that is in-scope and is a supertype
+   *     of the given lambda, according to javac's arity-based typechecking rules for functions
+   */
+  private String resolveLambdaType(LambdaExpr lambda, String pkgName) {
+    int cparam = lambda.getParameters().size();
+    boolean isvoid = isLambdaVoidReturn(lambda);
+    // we need to run at least once more to solve the functional interface we're about to create
+    this.gotException();
+    // check arity:
+    if (cparam == 0) {
+      return "java.util.function.Supplier<?>";
+    } else if (cparam == 1 && isvoid) {
+      return "java.util.function.Consumer<?>";
+    } else if (cparam == 1 && !isvoid) {
+      return "java.util.function.Function<?, ?>";
+    } else if (cparam == 2 && !isvoid) {
+      return "java.util.function.BiFunction<?, ?, ?>";
+    } else {
+      String funcInterfaceName = isvoid ? "Supplier" + cparam : "Function" + cparam;
+      UnsolvedClassOrInterface funcInterface =
+          new UnsolvedClassOrInterface(funcInterfaceName, pkgName, false, true);
+      int ctypeVars = cparam + (isvoid ? 0 : 1);
+      funcInterface.setNumberOfTypeVariables(ctypeVars);
+      String[] params = funcInterface.getTypeVariablesAsStringWithoutBrackets().split(", ");
+      String returnType = isvoid ? "void" : "T" + cparam;
+      UnsolvedMethod apply =
+          new UnsolvedMethod(
+              "apply", returnType, List.of(params).subList(0, params.length - 1), true);
+      funcInterface.addMethod(apply);
+      updateMissingClass(funcInterface);
+      return pkgName + "." + funcInterfaceName;
+    }
   }
 
   /**
@@ -2267,21 +2298,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Creates a synthetic class corresponding to a static method called by a qualified class name.
-   * Ensure to check with {@link #isAnUnsolvedStaticMethodCalledByAQualifiedClassName} before
-   * calling this method.
+   * Creates a synthetic class corresponding to a static method call.
    *
-   * @param methodCall the method call to be used as input. This method call must contain one or
-   *     more dot separated identifiers, followed by a single pair of parentheses containing
-   *     arguments
-   * @param methodArguments the list of arguments for this method call
+   * @param methodCall the method call to be used as input, in string form. This _must_ be a
+   *     fully-qualified static method call, or this method will throw.
+   * @param methodArgTypes the types of the arguments of the method, as strings
    */
   public void updateClassSetWithQualifiedStaticMethodCall(
-      String methodCall, List<String> methodArguments) {
-    // As this code involves complex string operations, we'll use a method call as an example,
-    // following its progression through the code.
-    // Suppose this is our method call: com.example.MyClass.process()
-    // At this point, our method call become: com.example.MyClass.process
+      String methodCall, List<String> methodArgTypes) {
+    List<String> methodParts = methodParts(methodCall);
+    updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArgTypes);
+  }
+
+  /**
+   * Breaks apart a static, fully-qualified method call into its dot-separated parts. Helper method
+   * for {@link #updateClassSetWithQualifiedStaticMethodCallImpl(List, List)}; should not be called
+   * directly.
+   *
+   * @param methodCall a fully-qualified static method call
+   * @return the list of the parts of the method call
+   */
+  private List<String> methodParts(String methodCall) {
     String methodCallWithoutParen = methodCall.substring(0, methodCall.indexOf('('));
     List<String> methodParts = Splitter.onPattern("[.]").splitToList(methodCallWithoutParen);
     int lengthMethodParts = methodParts.size();
@@ -2290,6 +2327,40 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           "Need to check the method call with unsolvedAndNotSimple before using"
               + " isAnUnsolvedStaticMethodCalledByAQualifiedClassName");
     }
+    return methodParts;
+  }
+
+  /**
+   * Creates a synthetic class corresponding to a static method call.
+   *
+   * @param method the method call to be used as input
+   */
+  public void updateClassSetWithStaticMethodCall(MethodCallExpr method) {
+    String methodCall = method.toString();
+    if (!isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
+      methodCall = toFullyQualifiedCall(method);
+    }
+    List<String> methodParts = methodParts(methodCall);
+    String packageName = methodParts.get(0);
+    List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName);
+    updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArguments);
+  }
+
+  /**
+   * Helper method for {@link #updateClassSetWithQualifiedStaticMethodCall(String, List)} and {@link
+   * #updateClassSetWithStaticMethodCall(MethodCallExpr)}. You should always call one of those
+   * instead.
+   *
+   * @param methodParts the parts of the method call
+   * @param methodArgTypes the types of the arguments of the method call
+   */
+  private void updateClassSetWithQualifiedStaticMethodCallImpl(
+      List<String> methodParts, List<String> methodArgTypes) {
+    // As this code involves complex string operations, we'll use a method call as an example,
+    // following its progression through the code.
+    // Suppose this is our method call: com.example.MyClass.process()
+    // At this point, our method call become: com.example.MyClass.process
+    int lengthMethodParts = methodParts.size();
     String returnTypeClassName = toCapital(methodParts.get(0));
     String packageName = methodParts.get(0);
     // According to the above example, methodName will be process
@@ -2312,7 +2383,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @ClassGetSimpleName String thisReturnType = returnTypeClassName;
     UnsolvedClassOrInterface returnClass =
         new UnsolvedClassOrInterface(thisReturnType, packageName);
-    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodArguments);
+    UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodArgTypes);
     UnsolvedClassOrInterface classThatContainMethod =
         new UnsolvedClassOrInterface(className, packageName);
     newMethod.setStatic();
