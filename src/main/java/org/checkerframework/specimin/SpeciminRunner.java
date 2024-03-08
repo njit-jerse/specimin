@@ -218,10 +218,6 @@ public class SpeciminRunner {
     TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodNames);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
-      System.out.println("about to call the TargetMethodFinder visitor on this cu: " + cu);
-    }
-
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
     }
 
