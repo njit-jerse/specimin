@@ -11,7 +11,7 @@ public class LambdaTriConsumerTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-            "lambdatriconsumer",
+        "lambdatriconsumer",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar(LambdaUser)"});
   }
