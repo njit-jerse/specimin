@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The main visitor for Specimin's first phase, which locates the target method(s) and compiles
@@ -47,7 +48,8 @@ import java.util.Set;
 public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   /**
    * The names of the target methods. The format is
-   * class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...). All the names will have
+   * spaces remove for ease of comparison.
    */
   private Set<String> targetMethodNames;
 
@@ -110,7 +112,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public TargetMethodFinderVisitor(List<String> methodNames) {
     targetMethodNames = new HashSet<>();
-    targetMethodNames.addAll(methodNames);
+    for (String methodSignature : methodNames) {
+      this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
+    }
     unfoundMethods = new ArrayList<>(methodNames);
     importedClassToPackage = new HashMap<>();
   }
@@ -243,7 +247,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodDeclaration method, Void p) {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
-    String methodName = this.classFQName + "#" + removeMethodReturnType(methodDeclAsString);
+    String methodName =
+        this.classFQName + "#" + removeMethodReturnTypeAndAnnotations(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
@@ -253,15 +258,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
       updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
     }
-
-    if (this.targetMethodNames.contains(methodName)) {
+    String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
+    if (this.targetMethodNames.contains(methodWithoutAnySpace)) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
-      unfoundMethods.remove(methodName);
+      // make sure that differences in spacing does not interfere with the result
+      for (String unfound : unfoundMethods) {
+        if (unfound.replaceAll("\\s", "").equals(methodWithoutAnySpace)) {
+          unfoundMethods.remove(unfound);
+          break;
+        }
+      }
       Type returnType = method.getType();
       // JavaParser may misinterpret unresolved array types as reference types.
       // To ensure accuracy, we resolve the type before proceeding with the check.
@@ -363,8 +374,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       ResolvedMethodDeclaration decl = call.resolve();
       usedMembers.add(decl.getQualifiedSignature());
-      updateUsedClassWithQualifiedClassName(
-          decl.getPackageName() + "." + decl.getClassName());
+      updateUsedClassWithQualifiedClassName(decl.getPackageName() + "." + decl.getClassName());
       ResolvedType methodReturnType = decl.getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
         updateUsedClassBasedOnType(methodReturnType);
@@ -490,18 +500,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * Given a method declaration, this method return the declaration of that method without the
-   * return type.
+   * return type and any possible annotation.
    *
    * @param methodDeclaration the method declaration to be used as input
-   * @return methodDeclaration without the return type
+   * @return methodDeclaration without the return type and any possible annotation.
    */
-  public static String removeMethodReturnType(String methodDeclaration) {
+  public static String removeMethodReturnTypeAndAnnotations(String methodDeclaration) {
     String methodDeclarationWithoutParen =
         methodDeclaration.substring(0, methodDeclaration.indexOf("("));
     List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
     String methodName = methodParts.get(methodParts.size() - 1);
     String methodReturnType = methodDeclaration.substring(0, methodDeclaration.indexOf(methodName));
-    return methodDeclaration.replace(methodReturnType, "");
+    String methodWithoutReturnType = methodDeclaration.replace(methodReturnType, "");
+    methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
+    String filteredMethodDeclaration =
+        methodParts.stream().filter(part -> !part.startsWith("@")).collect(Collectors.joining(" "));
+    return filteredMethodDeclaration;
   }
 
   /**

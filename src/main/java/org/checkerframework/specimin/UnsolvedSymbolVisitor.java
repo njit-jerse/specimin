@@ -202,7 +202,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Map<@ClassGetSimpleName String, List<@ClassGetSimpleName String>>
       classToItsUnsolvedInterface = new HashMap<>();
 
-  /** List of signatures of target methods as specified by users. */
+  /**
+   * List of signatures of target methods as specified by users. All signatures have spaces removed
+   * for ease of comparison.
+   */
   private final Set<String> targetMethodsSignatures;
 
   /**
@@ -246,7 +249,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     this.gotException = true;
     this.existingClassesToFilePath = existingClassesToFilePath;
     this.targetMethodsSignatures = new HashSet<>();
-    this.targetMethodsSignatures.addAll(targetMethodsSignatures);
+    for (String methodSignature : targetMethodsSignatures) {
+      this.targetMethodsSignatures.add(methodSignature.replaceAll("\\s", ""));
+    }
   }
 
   /**
@@ -751,9 +756,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnType(
+            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
-    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
+    if (targetMethodsSignatures.contains(methodQualifiedSignature.replace("\\s", ""))) {
       insideTargetMethod = true;
     }
     addTypeVariableScope(node.getTypeParameters());
@@ -770,10 +775,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnType(
+            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
-    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
+    if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
       insideTargetMethod = true;
       Visitable result = processMethodDeclaration(node);
       insideTargetMethod = false;
