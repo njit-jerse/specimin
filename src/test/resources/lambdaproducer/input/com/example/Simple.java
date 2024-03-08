@@ -5,6 +5,6 @@ import org.example.LambdaUser;
 class Simple {
     // Target method.
     void bar(LambdaUser user) {
-        user.use(() -> { 42 } );
+        user.use(() -> 42);
     }
 }

@@ -1,8 +1,7 @@
 package org.checkerframework.specimin;
 
-import org.junit.Test;
-
 import java.io.IOException;
+import org.junit.Test;
 
 /**
  * This test checks that we can infer a type that's reasonable when a lambda is passed to a function
@@ -12,7 +11,7 @@ public class LambdaProducerTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-            "lambdaproducer",
+        "lambdaproducer",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar(LambdaUser)"});
   }
