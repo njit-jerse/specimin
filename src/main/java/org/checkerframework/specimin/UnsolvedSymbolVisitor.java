@@ -1778,9 +1778,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // and instead treat them as AA 'a, AA 'b, 'a -> 'b, which we
       // express in Java as java.util.function.Function<?, ?>.
       // If this type doesn't match the arity of the lambda, JavaTypeCorrect
-      // can fix it later. TODO: can it tho?
+      // can fix it later. TODO: can it tho? It cannot.
       if (parameter.isLambdaExpr()) {
-        parametersList.add("java.util.function.Function<?, ?>");
+        parametersList.add("java.util.function.Consumer<?>");
         // we also need to run at least once more to solve java.util.function.Function...
         this.gotException();
         continue;
