@@ -1,9 +1,9 @@
 package org.example;
 
-import java.util.Function;
+import java.util.function.Function;
 
 public class LambdaUser {
-    public static use(Function<?, ?> p1) {
+    public UseReturnType use(Function<?, ?> parameter0) {
         throw new Error();
     }
 }

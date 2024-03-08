@@ -1753,6 +1753,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return true;
     }
     for (Expression parameter : paraList) {
+      if (parameter.isLambdaExpr()) {
+        // Skip lambdas here and treat them specially later.
+        continue;
+      }
       if (!canBeSolved(parameter)) {
         return false;
       }
@@ -1766,10 +1770,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param method the method to be analyzed
    * @return the types of parameters of method
    */
-  public static List<String> getArgumentsFromMethodCall(MethodCallExpr method) {
+  public List<String> getArgumentsFromMethodCall(MethodCallExpr method) {
     List<String> parametersList = new ArrayList<>();
     NodeList<Expression> paraList = method.getArguments();
     for (Expression parameter : paraList) {
+      // Special case for lambdas: don't try to resolve their type,
+      // and instead treat them as AA 'a, AA 'b, 'a -> 'b, which we
+      // express in Java as java.util.function.Function<?, ?>.
+      // If this type doesn't match the arity of the lambda, JavaTypeCorrect
+      // can fix it later. TODO: can it tho?
+      if (parameter.isLambdaExpr()) {
+        parametersList.add("java.util.function.Function<?, ?>");
+        // we also need to run at least once more to solve java.util.function.Function...
+        this.gotException();
+        continue;
+      }
+
       ResolvedType type = parameter.calculateResolvedType();
       // for reference type, we need the fully-qualified name to avoid having to add additional
       // import statements.
