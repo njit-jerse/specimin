@@ -26,6 +26,7 @@ import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.TryStmt;
@@ -1778,8 +1779,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // and instead compute their arity and provide an appropriate
       // functional interface from java.util.function.
       if (parameter.isLambdaExpr()) {
-        // TODO: compute arity properly
-        parametersList.add("java.util.function.Consumer<?>");
+        LambdaExpr lambda = parameter.asLambdaExpr();
+        int cparam = lambda.getParameters().size();
+        boolean isvoid = isLambdaVoidReturn(lambda);
+        // check arity:
+        if (cparam == 0) {
+          parametersList.add("java.util.function.Supplier<?>");
+        } else if (cparam == 1 && isvoid) {
+          parametersList.add("java.util.function.Consumer<?>");
+        } else if (cparam == 1 && !isvoid) {
+          parametersList.add("java.util.function.Function<?, ?>");
+        } else if (cparam == 2 && !isvoid) {
+          parametersList.add("java.util.function.BiFunction<?, ?, ?>");
+        } else {
+          // TODO: construct our own, I think.
+        }
         // we also need to run at least once more to solve java.util.function class...
         this.gotException();
         continue;
@@ -1795,6 +1809,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     return parametersList;
+  }
+
+  /**
+   * Determines if a lambda has a void return.
+   *
+   * @param lambda a lambda expression
+   * @return true iff the lambda has a void return
+   */
+  private boolean isLambdaVoidReturn(LambdaExpr lambda) {
+    if (lambda.getExpressionBody().isPresent()) {
+      return false;
+    }
+    BlockStmt body = lambda.getBody().asBlockStmt();
+    return body.stream().noneMatch(node -> node instanceof ReturnStmt);
   }
 
   /**
