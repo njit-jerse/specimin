@@ -1775,13 +1775,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     NodeList<Expression> paraList = method.getArguments();
     for (Expression parameter : paraList) {
       // Special case for lambdas: don't try to resolve their type,
-      // and instead treat them as AA 'a, AA 'b, 'a -> 'b, which we
-      // express in Java as java.util.function.Function<?, ?>.
-      // If this type doesn't match the arity of the lambda, JavaTypeCorrect
-      // can fix it later. TODO: can it tho? It cannot.
+      // and instead compute their arity and provide an appropriate
+      // functional interface from java.util.function.
       if (parameter.isLambdaExpr()) {
+        // TODO: compute arity properly
         parametersList.add("java.util.function.Consumer<?>");
-        // we also need to run at least once more to solve java.util.function.Function...
+        // we also need to run at least once more to solve java.util.function class...
         this.gotException();
         continue;
       }
