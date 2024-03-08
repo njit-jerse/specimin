@@ -277,6 +277,11 @@ public class UnsolvedClassOrInterface {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
     if (isAnInterface) {
+      // For synthetic interfaces created for lambdas only.
+      if (methods.size() == 1
+          && (className.startsWith("Function") || className.startsWith("Supplier"))) {
+        sb.append("@FunctionalInterface\n");
+      }
       sb.append("public interface ").append(className).append(getTypeVariablesAsString());
     } else {
       sb.append("public class ").append(className).append(getTypeVariablesAsString());

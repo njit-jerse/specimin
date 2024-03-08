@@ -1838,6 +1838,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               "apply", returnType, List.of(params).subList(0, params.length - 1), true);
       funcInterface.addMethod(apply);
       updateMissingClass(funcInterface);
+
       StringBuilder typeArgs = new StringBuilder();
       typeArgs.append("<");
       for (int i = 0; i < ctypeVars; ++i) {
