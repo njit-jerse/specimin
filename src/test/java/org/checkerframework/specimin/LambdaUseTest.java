@@ -13,6 +13,6 @@ public class LambdaUseTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "lambdause",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar()"});
+        new String[] {"com.example.Simple#bar(LambdaUser)"});
   }
 }
