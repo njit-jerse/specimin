@@ -1831,11 +1831,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           new UnsolvedClassOrInterface(funcInterfaceName, pkgName, false, true);
       int ctypeVars = cparam + (isvoid ? 0 : 1);
       funcInterface.setNumberOfTypeVariables(ctypeVars);
-      String[] params = funcInterface.getTypeVariablesAsStringWithoutBrackets().split(", ");
+      String[] paramArray = funcInterface.getTypeVariablesAsStringWithoutBrackets().split(", ");
+      List<String> params = List.of(paramArray);
+      if (!isvoid) {
+        // remove the last element of params, because that's the return type, not a parameter
+        params = params.subList(0, params.size() - 1);
+      }
       String returnType = isvoid ? "void" : "T" + cparam;
-      UnsolvedMethod apply =
-          new UnsolvedMethod(
-              "apply", returnType, List.of(params).subList(0, params.length - 1), true);
+      UnsolvedMethod apply = new UnsolvedMethod("apply", returnType, params, true);
       funcInterface.addMethod(apply);
       updateMissingClass(funcInterface);
 
