@@ -4,8 +4,8 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks that we can infer a type that's reasonable when a lambda is passed to a function
- * in a synthetic class.
+ * This test checks that we infer java.util.function.Supplier when a lambda that takes no
+ * parameters but does return a value is passed to a function in a synthetic class.
  */
 public class LambdaSupplierTest {
   @Test
