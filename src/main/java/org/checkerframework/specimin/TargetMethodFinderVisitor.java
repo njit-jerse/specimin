@@ -105,8 +105,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       methodDeclarationToInterfaceType = new HashMap<>();
 
   /**
-   * This map connects non-primary classes with their corresponding primary classes. A primary class
-   * is a class that has the same name as the Java file where the class is declared.
+   * This map connects the fully-qualified names of non-primary classes with the fully-qualified
+   * names of their corresponding primary classes. A primary class is a class that has the same name
+   * as the Java file where the class is declared.
    */
   Map<String, String> nonPrimaryClassesToPrimaryClass;
 
@@ -115,6 +116,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *
    * @param methodNames the names of the target methods, the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
+   *     corresponding primary classes
    */
   public TargetMethodFinderVisitor(
       List<String> methodNames, Map<String, String> nonPrimaryClassesToPrimaryClass) {

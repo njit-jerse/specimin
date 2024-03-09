@@ -114,7 +114,8 @@ public class SpeciminRunner {
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
-    // This map connects non-primary classes with their corresponding primary classes. A primary
+    // This map connects the fully-qualified names of non-primary classes with the fully-qualified
+    // names of their corresponding primary classes. A primary
     // class is a class that has the same name as the Java file where the class is declared.
     Map<String, String> nonPrimaryClassesToPrimaryClass = new HashMap<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
