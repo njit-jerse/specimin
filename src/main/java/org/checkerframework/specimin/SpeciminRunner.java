@@ -123,18 +123,21 @@ public class SpeciminRunner {
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
-      // the first get() is safe because cu is not from a jar file.
-      // the second get() is safe because primary type here is definitely not a local declaration,
-      // which does not have a fully-qualified name.
-      String primaryTypeQualifiedName =
-          compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
+      String primaryTypeQualifiedName = "";
+      if (compilationUnit.getPrimaryType().isPresent()) {
+        // the get() is safe because primary type here is definitely not a local declaration,
+        // which does not have a fully-qualified name.
+        primaryTypeQualifiedName =
+            compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
+      }
       for (TypeDeclaration declaredClass : compilationUnit.getTypes()) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
           String declaredClassQualifiedName =
               declaredClass.getFullyQualifiedName().get().toString();
           existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
-          // which means this class is not a primary class.
-          if (!declaredClassQualifiedName.equals(primaryTypeQualifiedName)) {
+          // which means this class is not a primary class, and there is a primary class.
+          if (!primaryTypeQualifiedName.equals("")
+              && !declaredClassQualifiedName.equals(primaryTypeQualifiedName)) {
             nonPrimaryClassesToPrimaryClass.put(
                 declaredClassQualifiedName, primaryTypeQualifiedName);
           }
