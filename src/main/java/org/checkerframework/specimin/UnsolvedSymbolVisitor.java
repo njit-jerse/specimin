@@ -1536,7 +1536,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param node the expression to be checked
    * @return true if method is a super call
    */
-  public static boolean isASuperCall(Expression node) {
+  public boolean isASuperCall(Expression node) {
     if (node instanceof MethodCallExpr) {
       Optional<Expression> caller = node.asMethodCallExpr().getScope();
       if (caller.isEmpty()) {
@@ -1545,7 +1545,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return caller.get().isSuperExpr();
     } else if (node instanceof FieldAccessExpr) {
       Expression caller = node.asFieldAccessExpr().getScope();
-      return caller.isSuperExpr();
+      String fieldName = ((FieldAccessExpr) node).getNameAsString();
+      return caller.isSuperExpr()
+          || (caller.isThisExpr() && !fieldNameToClassNameMap.containsKey(fieldName));
     } else if (node instanceof NameExpr) {
       // an unsolved name expression implies that it is declared in the parent class
       return !canBeSolved(node);
