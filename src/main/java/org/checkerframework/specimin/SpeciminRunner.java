@@ -114,15 +114,33 @@ public class SpeciminRunner {
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
+    // This map connects the fully-qualified names of non-primary classes with the fully-qualified
+    // names of their corresponding primary classes. A primary
+    // class is a class that has the same name as the Java file where the class is declared.
+    Map<String, String> nonPrimaryClassesToPrimaryClass = new HashMap<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
+      String primaryTypeQualifiedName = "";
+      if (compilationUnit.getPrimaryType().isPresent()) {
+        // the get() is safe because primary type here is definitely not a local declaration,
+        // which does not have a fully-qualified name.
+        primaryTypeQualifiedName =
+            compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
+      }
       for (TypeDeclaration declaredClass : compilationUnit.getTypes()) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
-          existingClassesToFilePath.put(
-              declaredClass.getFullyQualifiedName().get().toString(), pathOfCurrentJavaFile);
+          String declaredClassQualifiedName =
+              declaredClass.getFullyQualifiedName().get().toString();
+          existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
+          // which means this class is not a primary class, and there is a primary class.
+          if (!primaryTypeQualifiedName.equals("")
+              && !declaredClassQualifiedName.equals(primaryTypeQualifiedName)) {
+            nonPrimaryClassesToPrimaryClass.put(
+                declaredClassQualifiedName, primaryTypeQualifiedName);
+          }
         }
       }
     }
@@ -215,7 +233,8 @@ public class SpeciminRunner {
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
 
-    TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodNames);
+    TargetMethodFinderVisitor finder =
+        new TargetMethodFinderVisitor(targetMethodNames, nonPrimaryClassesToPrimaryClass);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);

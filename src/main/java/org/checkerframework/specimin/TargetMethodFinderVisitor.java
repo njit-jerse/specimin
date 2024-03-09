@@ -105,18 +105,29 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       methodDeclarationToInterfaceType = new HashMap<>();
 
   /**
+   * This map connects the fully-qualified names of non-primary classes with the fully-qualified
+   * names of their corresponding primary classes. A primary class is a class that has the same name
+   * as the Java file where the class is declared.
+   */
+  Map<String, String> nonPrimaryClassesToPrimaryClass;
+
+  /**
    * Create a new target method finding visitor.
    *
    * @param methodNames the names of the target methods, the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
+   *     corresponding primary classes
    */
-  public TargetMethodFinderVisitor(List<String> methodNames) {
+  public TargetMethodFinderVisitor(
+      List<String> methodNames, Map<String, String> nonPrimaryClassesToPrimaryClass) {
     targetMethodNames = new HashSet<>();
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
     unfoundMethods = new ArrayList<>(methodNames);
     importedClassToPackage = new HashMap<>();
+    this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
   }
 
   /**
@@ -564,7 +575,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * Updates the list of used classes with the given qualified class name and its corresponding
-   * enclosing classes, if applicable (in the case of nested classes).
+   * primary classes and enclosing classes. This includes cases such as classes not sharing the same
+   * name as their Java files or nested classes.
    *
    * @param qualifiedClassName The qualified class name to be included in the list of used classes.
    */
@@ -578,6 +590,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       qualifiedClassName = qualifiedClassName.substring(0, qualifiedClassName.indexOf("<"));
     }
     usedClass.add(qualifiedClassName);
+
+    // in case this class is not a primary class.
+    if (nonPrimaryClassesToPrimaryClass.containsKey(qualifiedClassName)) {
+      updateUsedClassWithQualifiedClassName(
+          nonPrimaryClassesToPrimaryClass.get(qualifiedClassName));
+    }
+
     String potentialOuterClass =
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
     if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
