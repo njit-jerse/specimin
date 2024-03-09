@@ -390,6 +390,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (methodReturnType instanceof ResolvedReferenceType) {
         updateUsedClassBasedOnType(methodReturnType);
       }
+      // Special case for lambdas to preserve artificial functional
+      // interfaces.
+      for (int i = 0; i < call.getArguments().size(); ++i) {
+        Expression arg = call.getArgument(i);
+        if (arg.isLambdaExpr()) {
+          updateUsedClassBasedOnType(decl.getParam(i).getType());
+        }
+      }
     }
     return super.visit(call, p);
   }
@@ -576,6 +584,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // in case of type variables
     if (!qualifiedClassName.contains(".")) {
       return;
+    }
+    // strip type variables, if they're present
+    if (qualifiedClassName.contains("<")) {
+      qualifiedClassName = qualifiedClassName.substring(0, qualifiedClassName.indexOf("<"));
     }
     usedClass.add(qualifiedClassName);
 
