@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** A simple class to keep track of the progress of UnsolvedSymbolVisitor. */
@@ -52,5 +53,14 @@ public class UnsolvedSymbolVisitorProgress {
   @Override
   public int hashCode() {
     return Objects.hash(potentialUsedMembers, addedTargetFiles, createdSyntheticClass);
+  }
+
+  @Override
+  public String toString() {
+    return new StringJoiner(",", "[", "]")
+        .add("potentialUsedMembers=" + potentialUsedMembers.toString())
+        .add("addedTargetFiles=" + addedTargetFiles.toString())
+        .add("createdSyntheticClass=" + createdSyntheticClass.toString())
+        .toString();
   }
 }
