@@ -279,7 +279,8 @@ public class UnsolvedClassOrInterface {
     if (isAnInterface) {
       // For synthetic interfaces created for lambdas only.
       if (methods.size() == 1
-          && (className.startsWith("Function") || className.startsWith("Consumer"))) {
+          && (className.startsWith("SyntheticFunction")
+              || className.startsWith("SyntheticConsumer"))) {
         sb.append("@FunctionalInterface\n");
       }
       sb.append("public interface ").append(className).append(getTypeVariablesAsString());

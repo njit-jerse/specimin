@@ -1826,7 +1826,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else if (cparam == 2 && !isvoid) {
       return "java.util.function.BiFunction<?, ?, ?>";
     } else {
-      String funcInterfaceName = isvoid ? "Consumer" + cparam : "Function" + cparam;
+      String funcInterfaceName =
+          isvoid ? "SyntheticConsumer" + cparam : "SyntheticFunction" + cparam;
       UnsolvedClassOrInterface funcInterface =
           new UnsolvedClassOrInterface(funcInterfaceName, pkgName, false, true);
       int ctypeVars = cparam + (isvoid ? 0 : 1);
