@@ -6,6 +6,6 @@ class Baz {
 class NonPrimary {
 
     static void printMessage() {
-        throw new Error();
+        System.out.println("This method will be emptied");
     }
 }
