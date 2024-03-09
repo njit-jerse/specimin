@@ -1545,7 +1545,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return caller.get().isSuperExpr();
     } else if (node instanceof FieldAccessExpr) {
       Expression caller = node.asFieldAccessExpr().getScope();
-      return caller.isSuperExpr();
+      return caller.isSuperExpr() || caller.isThisExpr();
     } else if (node instanceof NameExpr) {
       // an unsolved name expression implies that it is declared in the parent class
       return !canBeSolved(node);
