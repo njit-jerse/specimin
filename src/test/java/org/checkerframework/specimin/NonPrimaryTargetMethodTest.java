@@ -8,8 +8,8 @@ public class NonPrimaryTargetMethodTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "nonprimaryclass",
-        new String[] {"com/example/Foo.java"},
-        new String[] {"com.example.Foo#bar()"});
+        "nonprimarytargetmethod",
+        new String[] {"com/example/Baz.java"},
+        new String[] {"com.example.NonPrimary#printMessage()"});
   }
 }
