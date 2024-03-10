@@ -151,6 +151,8 @@ public class SpeciminRunner {
     // The set of path of files that have been created by addMissingClass. We will delete all those
     // files in the end.
     Set<Path> createdClass = new HashSet<>();
+    Map<String, String> typesToChange = new HashMap<>();
+    Set<String> typesThatExtendThrowable = new HashSet<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
       UnsolvedSymbolVisitorProgress workDoneBeforeIteration =
@@ -192,35 +194,28 @@ public class SpeciminRunner {
         // Two possible cases here:
         // 1: The types of synthetic methods do not match the context's expectations, in which case
         // JavaTypeCorrect will handle it.
-        // 2: addMissingClass fails to resolve symbols, and we expect to receive exceptions from
-        // TargetMethodFinderVisitor.
-        break;
+        // 2: addMissingClass fails to resolve symbols, and we should throw an exception.
+        JavaTypeCorrect typeCorrecter = getTypeCorrecter(root, parsedTargetFiles);
+        typesToChange = typeCorrecter.getTypeToChange();
+        typesThatExtendThrowable = typeCorrecter.getTypesThatExtendThrowable();
+        if (!typesToChange.isEmpty() || !typesThatExtendThrowable.isEmpty()) {
+          addMissingClass.updateTypes(typesToChange);
+          addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
+          // in order for the newly updated files to be considered when solving symbols, we need to
+          // update
+          // the type solver and the map of parsed target files.
+          typeSolver =
+              new CombinedTypeSolver(
+                  new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+          symbolSolver = new JavaSymbolSolver(typeSolver);
+          StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
+          for (String targetFile : targetFiles) {
+            parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+          }
+        } else {
+          throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception");
+        }
       }
-    }
-
-    // update the synthetic types by using error messages from javac.
-    GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(getTypesFullNameVisitor, null);
-    }
-    Map<String, Set<String>> filesAndAssociatedTypes =
-        getTypesFullNameVisitor.getFileAndAssociatedTypes();
-    // correct the types of all related files before adding them to parsedTargetFiles
-    JavaTypeCorrect typeCorrecter =
-        new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
-    typeCorrecter.correctTypesForAllFiles();
-    Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
-    addMissingClass.updateTypes(typesToChange);
-    addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
-    // in order for the newly updated files to be considered when solving symbols, we need to update
-    // the type solver and the map of parsed target files.
-    typeSolver =
-        new CombinedTypeSolver(
-            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
-    symbolSolver = new JavaSymbolSolver(typeSolver);
-    StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
-    for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -407,6 +402,30 @@ public class SpeciminRunner {
    */
   private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
     return StaticJavaParser.parse(Path.of(root, path));
+  }
+
+  /**
+   * Creates an instance of JavaTypeCorrect and executes it on the currently parsed target files.
+   *
+   * @param root The root directory of all target files.
+   * @param parsedTargetFiles A map where each target file path is associated with its corresponding
+   *     compilation unit.
+   * @return An instance of JavaTypeCorrect.
+   */
+  private static JavaTypeCorrect getTypeCorrecter(
+      String root, Map<String, CompilationUnit> parsedTargetFiles) {
+    // Update the synthetic types using error messages from javac.
+    GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(getTypesFullNameVisitor, null);
+    }
+    Map<String, Set<String>> filesAndAssociatedTypes =
+        getTypesFullNameVisitor.getFileAndAssociatedTypes();
+    Set<String> targetFiles = parsedTargetFiles.keySet();
+    // Correct the types of all related files before adding them to parsedTargetFiles.
+    JavaTypeCorrect typeCorrecter = new JavaTypeCorrect(root, targetFiles, filesAndAssociatedTypes);
+    typeCorrecter.correctTypesForAllFiles();
+    return typeCorrecter;
   }
 
   /**
