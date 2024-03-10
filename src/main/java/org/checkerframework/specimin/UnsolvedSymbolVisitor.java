@@ -1277,6 +1277,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     throw new RuntimeException("Got a method declaration with no class!");
   }
 
+  /**
+   * Given a type variable, update the list of synthetic classes accordingly. Node: while the type
+   * of the input for this method is ClassOrInterfaceType, it is actually a type variable. Make sure
+   * to check with {@link UnsolvedSymbolVisitor#isTypeVar(String)} before calling this method.
+   *
+   * @param type a type variable to be used as input.
+   */
   private void updateSyntheticClassesForTypeVar(ClassOrInterfaceType type) {
     String typeSimpleName = type.getNameAsString();
     for (Map<String, NodeList<ClassOrInterfaceType>> typeScope : typeVariables) {
@@ -1289,7 +1296,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             // quoted from the documentation of Oracle: "A type variable with multiple bounds is a
             // subtype of all the types listed in the bound. If one of the bounds is a class, it
             // must be specified first."
-            // Since the first bound is also unsolved, it is better to assume it to be a class.
+            // If the first bound is also unsolved, it is better to assume it to be a class.
             if (index == 0) {
               solveSymbolsForClassOrInterfaceType(boundOfType.get(index), false);
             } else {
