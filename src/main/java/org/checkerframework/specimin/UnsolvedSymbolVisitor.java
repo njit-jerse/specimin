@@ -1292,15 +1292,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         for (int index = 0; index < boundOfType.size(); index++) {
           try {
             boundOfType.get(index).resolve();
-          } catch (UnsolvedSymbolException e) {
-            // quoted from the documentation of Oracle: "A type variable with multiple bounds is a
-            // subtype of all the types listed in the bound. If one of the bounds is a class, it
-            // must be specified first."
-            // If the first bound is also unsolved, it is better to assume it to be a class.
-            if (index == 0) {
-              solveSymbolsForClassOrInterfaceType(boundOfType.get(index), false);
-            } else {
-              solveSymbolsForClassOrInterfaceType(boundOfType.get(index), true);
+          } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+            if (e instanceof UnsolvedSymbolException) {
+              // quoted from the documentation of Oracle: "A type variable with multiple bounds is a
+              // subtype of all the types listed in the bound. If one of the bounds is a class, it
+              // must be specified first."
+              // If the first bound is also unsolved, it is better to assume it to be a class.
+              if (index == 0) {
+                solveSymbolsForClassOrInterfaceType(boundOfType.get(index), false);
+              } else {
+                solveSymbolsForClassOrInterfaceType(boundOfType.get(index), true);
+              }
             }
           }
         }
