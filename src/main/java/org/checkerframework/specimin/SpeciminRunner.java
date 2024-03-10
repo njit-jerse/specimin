@@ -195,8 +195,7 @@ public class SpeciminRunner {
         // 1. UnsolvedSymbolVisitor has finished its iteration, and we need to run JavaTypeCorrect
         // to update the types for newly created synthetic files.
         // 2: The types of synthetic methods do not match the context's expectations in a way that
-        // make UnsolvedSymbolVisitor stuck, in which case
-        // JavaTypeCorrect will handle it.
+        // make UnsolvedSymbolVisitor stuck, in which case JavaTypeCorrect will handle it.
         // 3: UnsolvedSymbolVisitor fails to resolve symbols, and we should throw an exception.
         JavaTypeCorrect typeCorrecter = getTypeCorrecter(root, parsedTargetFiles);
         typesToChange = typeCorrecter.getTypeToChange();
