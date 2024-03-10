@@ -923,16 +923,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!typeExpr.isReferenceType()) {
       return super.visit(typeExpr, p);
     }
-    if (isTypeVar(typeExpr.getName().asString())) {
-      updateSyntheticClassesForTypeVar(typeExpr);
-      return super.visit(typeExpr, p);
-    }
     // type belonging to a class declaration will be handled by the visit method for
     // ClassOrInterfaceDeclaration
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
       return super.visit(typeExpr, p);
     }
     if (!insideTargetMethod && !insidePotentialUsedMember) {
+      return super.visit(typeExpr, p);
+    }
+    if (isTypeVar(typeExpr.getName().asString())) {
+      updateSyntheticClassesForTypeVar(typeExpr);
       return super.visit(typeExpr, p);
     }
     try {
