@@ -212,7 +212,7 @@ public class SpeciminRunner {
         for (String targetFile : targetFiles) {
           parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
         }
-        boolean noTypesUpdated = !typesToChange.isEmpty() && !typesThatExtendThrowable.isEmpty();
+        boolean noTypesUpdated = typesToChange.isEmpty() && typesThatExtendThrowable.isEmpty();
         // this is case 3:
         if (addMissingClass.gettingException() && noProgress && noTypesUpdated) {
           throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception");
