@@ -1,13 +1,12 @@
 package com.example;
 
-class Simple {
+import org.testing.UnsolvedType;
+
+class Simple<I extends UnsolvedType> {
+
+    I field;
 
     void bar() {
-        Object obj = new Object();
-        obj = baz(obj);
-    }
-
-    Object baz(Object obj) {
-        throw new Error();
+        field.print();
     }
 }
