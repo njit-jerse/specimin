@@ -101,10 +101,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The symbol table to keep track of local variables in the current input file */
   private final ArrayDeque<Set<String>> localVariables = new ArrayDeque<Set<String>>();
 
-  /**
-   * The symbol table for type variables. If a type variable extends more than one type, only the
-   * first type is taken into account.
-   */
+  /** The symbol table for type variables. A type variable is mapped to the list of its bounds. */
   private final ArrayDeque<Map<String, NodeList<ClassOrInterfaceType>>> typeVariables =
       new ArrayDeque<>();
 
