@@ -189,30 +189,33 @@ public class SpeciminRunner {
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
-      if (workDoneBeforeIteration.equals(workDoneAfterIteration)
-          && addMissingClass.gettingException()) {
-        // Two possible cases here:
-        // 1: The types of synthetic methods do not match the context's expectations, in which case
+      boolean noProgress = workDoneBeforeIteration.equals(workDoneAfterIteration);
+      if (!addMissingClass.gettingException() || noProgress) {
+        // Three possible cases here:
+        // 1. UnsolvedSymbolVisitor has finished its iteration, and we need to run JavaTypeCorrect
+        // to update the types for newly created synthetic files.
+        // 2: The types of synthetic methods do not match the context's expectations in a way that
+        // make UnsolvedSymbolVisitor stuck, in which case
         // JavaTypeCorrect will handle it.
-        // 2: addMissingClass fails to resolve symbols, and we should throw an exception.
+        // 3: UnsolvedSymbolVisitor fails to resolve symbols, and we should throw an exception.
         JavaTypeCorrect typeCorrecter = getTypeCorrecter(root, parsedTargetFiles);
         typesToChange = typeCorrecter.getTypeToChange();
         typesThatExtendThrowable = typeCorrecter.getTypesThatExtendThrowable();
-        if (!typesToChange.isEmpty() || !typesThatExtendThrowable.isEmpty()) {
-          addMissingClass.updateTypes(typesToChange);
-          addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
-          // in order for the newly updated files to be considered when solving symbols, we need to
-          // update
-          // the type solver and the map of parsed target files.
-          typeSolver =
-              new CombinedTypeSolver(
-                  new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
-          symbolSolver = new JavaSymbolSolver(typeSolver);
-          StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
-          for (String targetFile : targetFiles) {
-            parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-          }
-        } else {
+        addMissingClass.updateTypes(typesToChange);
+        addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
+        // in order for the newly updated files to be considered when solving symbols, we need to
+        // update the type solver and the map of parsed target files.
+        typeSolver =
+            new CombinedTypeSolver(
+                new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+        symbolSolver = new JavaSymbolSolver(typeSolver);
+        StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
+        for (String targetFile : targetFiles) {
+          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        }
+        boolean noTypesUpdated = !typesToChange.isEmpty() || !typesThatExtendThrowable.isEmpty();
+        // this is case 3:
+        if (addMissingClass.gettingException() && noProgress && noTypesUpdated) {
           throw new RuntimeException("UnsolvedSymbolVisitor is stuck at one or more exception");
         }
       }
