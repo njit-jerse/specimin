@@ -2,7 +2,7 @@ package org.testing;
 
 public class UnsolvedType {
 
-    public java.util.List getList() {
+    public java.util.List<String> getList() {
         throw new Error();
     }
 
