@@ -1299,8 +1299,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               // subtype of all the types listed in the bound. If one of the bounds is a class, it
               // must be specified first."
               // If the first bound is also unsolved, it is better to assume it to be a class.
-              boolean shouldBeAClass = (index == 0);
-              solveSymbolsForClassOrInterfaceType(boundOfType.get(index), shouldBeAClass);
+              boolean shouldBeAnInterface = !(index == 0);
+              solveSymbolsForClassOrInterfaceType(boundOfType.get(index), shouldBeAnInterface);
             }
           }
         }
