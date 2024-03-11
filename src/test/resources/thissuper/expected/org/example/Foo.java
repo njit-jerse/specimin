@@ -2,5 +2,5 @@ package org.example;
 
 public class Foo {
 
-    public Object y;
+    public SyntheticTypeForY y;
 }

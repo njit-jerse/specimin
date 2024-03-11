@@ -180,8 +180,7 @@ class JavaTypeCorrect {
         // (e.g., in a superclass) that has a type that doesn't match the
         // type of the RHS. In this case, the "correct" type is wrong, and
         // the "incorrect" type is the actual type of the RHS.
-        // TODO: fix it here, or can we do this at the time the synthetic field
-        // is created?
+        typeToChange.put(correctType, incorrectType);
       } else {
         typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
       }
