@@ -132,22 +132,40 @@ class JavaTypeCorrect {
               new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
       String line;
       // incorrect constraint type will be updated here. Other types will be updated by
-      // updateTypeToChange
-      String incorrectConstraintType = "";
-      String correctConstraintType = "";
+      // updateTypeToChange. The following pairs of two-line errors are recognized:
+      // incompatible constraint types: "equality constraints", "lower bounds"
+      // bad operand types for binary operator: "first type", "second type"
+      String[] firstConstraints = {"equality constraints: ", "first type: "};
+      String[] secondConstraints = {"lower bounds: ", "second type: "};
+      String firstConstraintType = "";
       while ((line = reader.readLine()) != null) {
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
         }
-        // the type error with constraint types will be in a pair of lines:
-        // equality constraint: correctType
-        // lower bounds: incorrectType
-        if (line.contains("equality constraints: ")) {
-          correctConstraintType = line.trim().replace("equality constraints: ", "");
+        // these type error with constraint types will be in a pair of lines
+        for (String firstConstraint : firstConstraints) {
+          if (line.contains(firstConstraint)) {
+            firstConstraintType = line.replace(firstConstraint, "").trim();
+          }
         }
-        if (line.contains("lower bounds: ")) {
-          incorrectConstraintType = line.trim().replace("lower bounds: ", "");
-          typeToChange.put(incorrectConstraintType, correctConstraintType);
+        for (String secondConstraint : secondConstraints) {
+          if (line.contains(secondConstraint)) {
+            String secondConstraintType = line.replace(secondConstraint, "").trim();
+            if (isSynthetic(firstConstraintType)) {
+              typeToChange.put(firstConstraintType, secondConstraintType);
+            } else if (isSynthetic(secondConstraintType)) {
+              typeToChange.put(secondConstraintType, firstConstraintType);
+            } else {
+              throw new RuntimeException(
+                  "JavaTypeCorrect found two incompatible types, but neither is "
+                      + "synthetic:\n"
+                      + "first constraint type: "
+                      + firstConstraintType
+                      + "\nsecond constraint type: "
+                      + secondConstraintType);
+            }
+            firstConstraintType = "";
+          }
         }
       }
     } catch (Exception e) {
@@ -175,7 +193,7 @@ class JavaTypeCorrect {
       String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (correctType.equals("Throwable")) {
         typesThatExtendThrowable.add(incorrectType);
-      } else if (correctType.contains("SyntheticTypeFor")) {
+      } else if (isSynthetic(correctType)) {
         // This situation occurs if we have created a synthetic field
         // (e.g., in a superclass) that has a type that doesn't match the
         // type of the RHS. In this case, the "correct" type is wrong, and
@@ -214,5 +232,19 @@ class JavaTypeCorrect {
       }
     }
     return type;
+  }
+
+  /**
+   * returns true iff the given simple type's name matches one of the patterns used by
+   * UnsolvedSymbolVisitor when creating synthetic classes
+   *
+   * @param typename a simple type name
+   * @return true if the name can be synthetic
+   */
+  public static boolean isSynthetic(String typename) {
+    return typename.startsWith("SyntheticTypeFor")
+        || typename.endsWith("ReturnType")
+        || typename.startsWith("SyntheticFunction")
+        || typename.startsWith("SyntheticConsumer");
   }
 }
