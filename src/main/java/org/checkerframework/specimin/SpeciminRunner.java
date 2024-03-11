@@ -194,8 +194,7 @@ public class SpeciminRunner {
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
-        // 2: addMissingClass is stuck for some unknown reasons, in which case we should throw an
-        // exception.
+        // 2: addMissingClass is stuck for some unknown reasons.
         // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
         // above should solve it.
 
@@ -217,9 +216,11 @@ public class SpeciminRunner {
                 typeCorrecter.getTypesThatExtendThrowable());
         boolean atLeastOneTypeIsUpdated = changeAtLeastOneType || extendAtLeastOneType;
 
-        // this is case 2.
+        // this is case 2. We will stop addMissingClass. In the next phase,
+        // TargetMethodFinderVisitor will give us a meaningful exception message regarding which
+        // element in the input is not solvable.
         if (!atLeastOneTypeIsUpdated && gettingStuck) {
-          throw new RuntimeException("addMissingClass is stuck at one or more exception!");
+          break;
         }
 
         // in order for the newly updated files to be considered when solving symbols, we need to
