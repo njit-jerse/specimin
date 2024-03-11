@@ -1294,6 +1294,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             boundOfType.get(index).resolve();
           } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
             if (e instanceof UnsolvedSymbolException) {
+              this.gotException();
               // quoted from the documentation of Oracle: "A type variable with multiple bounds is a
               // subtype of all the types listed in the bound. If one of the bounds is a class, it
               // must be specified first."
