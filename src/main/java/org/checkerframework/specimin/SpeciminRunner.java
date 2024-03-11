@@ -216,8 +216,8 @@ public class SpeciminRunner {
                 || addMissingClass.updateTypesToExtendThrowable(
                     typeCorrecter.getTypesThatExtendThrowable());
 
-        // this is case 3.
-        if (!atLeastOneTypeIsUpdated) {
+        // this is case 2.
+        if (!atLeastOneTypeIsUpdated && gettingStuck) {
           throw new RuntimeException("addMissingClass is stuck at one or more exception!");
         }
 
