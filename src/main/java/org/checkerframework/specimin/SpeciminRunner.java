@@ -192,6 +192,13 @@ public class SpeciminRunner {
           workDoneAfterIteration.equals(workDoneBeforeIteration)
               && addMissingClass.gettingException();
       if (gettingStuck || !addMissingClass.gettingException()) {
+        // Three possible cases here:
+        // 1: addMissingClass has finished its iteration.
+        // 2: addMissingClass is stuck for some unknown reasons, in which case we should throw an
+        // exception.
+        // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
+        // above should solve it.
+
         // update the synthetic types by using error messages from javac.
         GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
         for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -204,8 +211,16 @@ public class SpeciminRunner {
             new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
         typeCorrecter.correctTypesForAllFiles();
         typesToChange = typeCorrecter.getTypeToChange();
-        addMissingClass.updateTypes(typesToChange);
-        addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
+        boolean atLeastOneTypeIsUpdated =
+            addMissingClass.updateTypes(typesToChange)
+                || addMissingClass.updateTypesToExtendThrowable(
+                    typeCorrecter.getTypesThatExtendThrowable());
+
+        // this is case 3.
+        if (!atLeastOneTypeIsUpdated) {
+          throw new RuntimeException("addMissingClass is stuck at one or more exception!");
+        }
+
         // in order for the newly updated files to be considered when solving symbols, we need to
         // update the type solver and the map of parsed target files.
         typeSolver =
@@ -216,24 +231,6 @@ public class SpeciminRunner {
         for (String targetFile : targetFiles) {
           parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
         }
-        // Three possible cases here:
-        // 1: addMissingClass has finished its iteration.
-        // 2: addMissingClass is stuck for some unknown reasons, in which case we should throw an
-        // exception.
-        // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
-        // above should solve it.
-
-        // this is case 1.
-        if (!addMissingClass.gettingException()) {
-          break;
-        }
-
-        // this is case 2.
-        if (typesToChange.isEmpty() && typeCorrecter.getTypesThatExtendThrowable().isEmpty()) {
-          throw new RuntimeException("addMissingClass is stuck at one or more exception!");
-        }
-
-        // for case 3, we simply let addMissingClass continue its iteration.
       }
     }
 
