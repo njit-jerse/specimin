@@ -8,6 +8,8 @@ class Simple {
     UnsolvedType unsolvedField;
 
     int bar(List<String> input) {
-        return bar(unsolvedField.getList());
+        int number = bar(unsolvedField.getList());
+        String aString = unsolvedField.getList().get(unsolvedField.getInt());
+        return 0;
     }
 }
