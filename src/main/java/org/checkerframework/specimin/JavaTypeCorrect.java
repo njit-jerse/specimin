@@ -44,11 +44,11 @@ class JavaTypeCorrect {
    */
   private Map<String, Set<String>> fileAndAssociatedTypes = new HashMap<>();
 
-  /**
-   * Synthetic types that need to extend Throwable. Note that the stored Strings are simple names,
-   * which is safe because the worst thing that might happen is that an extra sythetic class might
-   * accidentally extend Throwable.
-   */
+  /** 
+    * Synthetic types that need to extend Throwable. Note that the stored Strings are simple names,
+    * which is safe because the worst thing that might happen is that an extra sythetic class might
+    * accidentally extend Throwable.
+    */
   private Set<String> typesThatExtendThrowable = new HashSet<>();
 
   /**
@@ -175,13 +175,6 @@ class JavaTypeCorrect {
       String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (correctType.equals("Throwable")) {
         typesThatExtendThrowable.add(incorrectType);
-      } else if (correctType.contains("SyntheticTypeFor")) {
-        // This situation occurs if we have created a synthetic field
-        // (e.g., in a superclass) that has a type that doesn't match the
-        // type of the RHS. In this case, the "correct" type is wrong, and
-        // the "incorrect" type is the actual type of the RHS.
-        // TODO: fix it here, or can we do this at the time the synthetic field
-        // is created?
       } else {
         typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
       }
