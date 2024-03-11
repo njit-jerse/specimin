@@ -47,4 +47,4 @@ jobs:
         run: |
           cd specimin-evaluation
           sh check_compilation.sh
-          diff <(jq -S . src/main/resources/min_program_compile_status.json) <(jq -S . specimin-evaluation/ISSUES/compile_status.json)
+          diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
