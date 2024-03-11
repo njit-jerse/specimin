@@ -43,8 +43,13 @@ jobs:
           python main.py
       - name: Check evaluation status
         run: diff -uw src/main/resources/target_status.json specimin-evaluation/ISSUES/target_status.json
+      - name: Compile minimized programs
+        run: |
+          cd specimin-evaluation
+          sh check_compilation.sh
       - name: Check targets compile status
         run: |
           cd specimin-evaluation
           sh check_compilation.sh
+          cd ..
           diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
