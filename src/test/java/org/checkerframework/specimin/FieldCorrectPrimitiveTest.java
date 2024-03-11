@@ -1,13 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks that when Specimin puts a field into a superclass,
- * any constraints on that field's type based on assignments in the target
- * method(s) are respected.
+ * This test checks that when Specimin puts a field into a superclass, any constraints on that
+ * field's type based on assignments in the target method(s) are respected.
  */
 public class FieldCorrectPrimitiveTest {
   @Test

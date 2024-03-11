@@ -1,5 +1,5 @@
 package org.example;
 
 public class Foo {
-    public int x;
+    public Object x;
 }

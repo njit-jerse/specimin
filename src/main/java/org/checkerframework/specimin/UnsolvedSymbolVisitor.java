@@ -172,12 +172,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Set<String> syntheticReturnTypes = new HashSet<>();
 
   /**
-   * This set has all the name of synthetic types created by this visitor. These types represent the
-   * type of fields in the parent class of the current class.
-   */
-  private final Set<String> syntheticTypes = new HashSet<>();
-
-  /**
    * A mapping of field name to the name of the class currently being visited and its inner classes
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
@@ -1661,15 +1655,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       relatedClass.addFields(variableExpression);
       updateMissingClass(relatedClass);
     } else {
-      // since it is just simple string combination, it is a simple name
+      // since it is just simple string, it is a simple name
       @SuppressWarnings("signature")
-      @ClassGetSimpleName String variableType = "SyntheticTypeFor" + toCapital(var);
-      UnsolvedClassOrInterface varType = new UnsolvedClassOrInterface(variableType, packageName);
-      syntheticTypes.add(variableType);
+      @ClassGetSimpleName String variableType = "Object";
       relatedClass.addFields(
           setInitialValueForVariableDeclaration(variableType, variableType + " " + var));
       updateMissingClass(relatedClass);
-      updateMissingClass(varType);
     }
   }
 
