@@ -277,6 +277,12 @@ public class UnsolvedClassOrInterface {
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(packageName).append(";\n");
     if (isAnInterface) {
+      // For synthetic interfaces created for lambdas only.
+      if (methods.size() == 1
+          && (className.startsWith("SyntheticFunction")
+              || className.startsWith("SyntheticConsumer"))) {
+        sb.append("@FunctionalInterface\n");
+      }
       sb.append("public interface ").append(className).append(getTypeVariablesAsString());
     } else {
       sb.append("public class ").append(className).append(getTypeVariablesAsString());
@@ -309,12 +315,37 @@ public class UnsolvedClassOrInterface {
     StringBuilder result = new StringBuilder();
     // if class A has three type variables, the expression will be A<T, T1, T2>
     result.append("<");
+    getTypeVariablesImpl(result);
+    result.append(">");
+    return result.toString();
+  }
+
+  /**
+   * Return a synthetic representation for type variables of the current class, without surrounding
+   * angle brackets.
+   *
+   * @return the synthetic representation for type variables
+   */
+  public String getTypeVariablesAsStringWithoutBrackets() {
+    if (numberOfTypeVariables == 0) {
+      return "";
+    }
+    StringBuilder result = new StringBuilder();
+    getTypeVariablesImpl(result);
+    return result.toString();
+  }
+
+  /**
+   * Helper method for {@link #getTypeVariablesAsStringWithoutBrackets} and {@link
+   * #getTypeVariablesAsString()}.
+   *
+   * @param result a string builder. Will be side-effected.
+   */
+  private void getTypeVariablesImpl(StringBuilder result) {
     for (int i = 0; i < numberOfTypeVariables; i++) {
       String typeExpression = "T" + ((i > 0) ? i : "");
       result.append(typeExpression).append(", ");
     }
     result.delete(result.length() - 2, result.length());
-    result.append(">");
-    return result.toString();
   }
 }

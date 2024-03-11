@@ -12,6 +12,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.BooleanLiteralExpr;
 import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.DoubleLiteralExpr;
@@ -68,6 +69,13 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * is set by {@link #visit(MethodDeclaration, Void)}.
    */
   private boolean insideTargetMethod = false;
+
+  /**
+   * This boolean tracks whether the element currently being visited is inside an interface
+   * annotated as @FunctionalInterface. This annotation is added to allow lambdas in target methods
+   * to be passed to other methods, so the methods in such interfaces need to be preserved.
+   */
+  private boolean insideFunctionInterface = false;
 
   /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
@@ -132,6 +140,11 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    for (AnnotationExpr anno : decl.getAnnotations()) {
+      if (anno.getNameAsString().equals("FunctionalInterface")) {
+        insideFunctionInterface = true;
+      }
+    }
     decl = minimizeTypeParameters(decl);
     if (!classesUsedByTargetMethods.contains(decl.resolve().getQualifiedName())) {
       decl.remove();
@@ -153,7 +166,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
       decl.setImplementedTypes(implementedInterfaces);
     }
-    return super.visit(decl, p);
+    Visitable result = super.visit(decl, p);
+    insideFunctionInterface = false;
+    return result;
   }
 
   @Override
@@ -164,6 +179,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
+    if (insideFunctionInterface) {
+      return methodDecl;
+    }
     try {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
