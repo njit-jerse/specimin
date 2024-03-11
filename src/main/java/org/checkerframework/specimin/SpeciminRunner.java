@@ -211,10 +211,11 @@ public class SpeciminRunner {
             new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
         typeCorrecter.correctTypesForAllFiles();
         typesToChange = typeCorrecter.getTypeToChange();
-        boolean atLeastOneTypeIsUpdated =
-            addMissingClass.updateTypes(typesToChange)
-                || addMissingClass.updateTypesToExtendThrowable(
-                    typeCorrecter.getTypesThatExtendThrowable());
+        boolean changeAtLeastOneType = addMissingClass.updateTypes(typesToChange);
+        boolean extendAtLeastOneType =
+            addMissingClass.updateTypesToExtendThrowable(
+                typeCorrecter.getTypesThatExtendThrowable());
+        boolean atLeastOneTypeIsUpdated = changeAtLeastOneType && extendAtLeastOneType;
 
         // this is case 2.
         if (!atLeastOneTypeIsUpdated && gettingStuck) {
