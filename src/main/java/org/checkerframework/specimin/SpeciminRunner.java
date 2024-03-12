@@ -226,7 +226,6 @@ public class SpeciminRunner {
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
       cu.accept(annoRemover, null);
-      annoRemover.processAnnotations(cu);
     }
 
     // Use a two-phase approach: the first phase finds the target(s) and records
