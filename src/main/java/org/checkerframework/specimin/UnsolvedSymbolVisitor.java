@@ -2602,8 +2602,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           // TODO: I think we need to first locate the FQN for the type to extend,
           // but this should be fine (TDD refactoring style) for now
           String extendedType = typesToExtend.get(typeToExtend);
-          String fqn = getPackageFromClassName(extendedType) + "." + extendedType;
-          missedClass.extend(fqn);
+          if (!isAClassPath(extendedType)) {
+            extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
+          }
+          missedClass.extend(extendedType);
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);
