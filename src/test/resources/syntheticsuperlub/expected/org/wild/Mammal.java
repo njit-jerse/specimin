@@ -1,6 +1,6 @@
 package org.wild;
 public class Mammal {
 
-    public SyntheticTypeForPaws paws;
+    public com.example.SyntheticTypeForPaws paws;
 
 }

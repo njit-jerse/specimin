@@ -1,5 +1,7 @@
 package org.wild;
 
-public class RegularPaws implements SyntheticTypeForPaws {
-
+public class RegularPaws extends com.example.SyntheticTypeForPaws {
+    public RegularPaws() {
+         throw new Error();
+     }
 }

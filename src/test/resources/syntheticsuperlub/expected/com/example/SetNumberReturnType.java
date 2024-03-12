@@ -1,4 +1,4 @@
-package org.wild;
+package com.example;
 
 public class SetNumberReturnType {
 
