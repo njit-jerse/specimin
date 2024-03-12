@@ -142,6 +142,7 @@ public class SpeciminRunner {
     // The set of path of files that have been created by addMissingClass. We will delete all those
     // files in the end.
     Set<Path> createdClass = new HashSet<>();
+    Map<String, String> typesToChange = new HashMap<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
       UnsolvedSymbolVisitorProgress workDoneBeforeIteration =
@@ -174,16 +175,40 @@ public class SpeciminRunner {
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
-      if (workDoneBeforeIteration.equals(workDoneAfterIteration)
-          && addMissingClass.gettingException()) {
-        // Two possible cases here:
-        // 1: The types of synthetic methods do not match the context's expectations, in which case
-        // JavaTypeCorrect will handle it.
-        // 2: addMissingClass fails to resolve symbols, and we expect to receive exceptions from
-        // TargetMethodFinderVisitor.
-        break;
-      }
-    }
+      boolean gettingStuck =
+          workDoneAfterIteration.equals(workDoneBeforeIteration)
+              && addMissingClass.gettingException();
+      if (gettingStuck || !addMissingClass.gettingException()) {
+        // Three possible cases here:
+        // 1: addMissingClass has finished its iteration.
+        // 2: addMissingClass is stuck for some unknown reasons.
+        // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
+        // below should solve it.
+
+        // update the synthetic types by using error messages from javac.
+        GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
+        for (CompilationUnit cu : parsedTargetFiles.values()) {
+          cu.accept(getTypesFullNameVisitor, null);
+        }
+        Map<String, Set<String>> filesAndAssociatedTypes =
+            getTypesFullNameVisitor.getFileAndAssociatedTypes();
+        // correct the types of all related files before adding them to parsedTargetFiles
+        JavaTypeCorrect typeCorrecter =
+            new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
+        typeCorrecter.correctTypesForAllFiles();
+        typesToChange = typeCorrecter.getTypeToChange();
+        boolean changeAtLeastOneType = addMissingClass.updateTypes(typesToChange);
+        boolean extendAtLeastOneType =
+            addMissingClass.updateTypesToExtendThrowable(
+                typeCorrecter.getTypesThatExtendThrowable());
+        boolean atLeastOneTypeIsUpdated = changeAtLeastOneType || extendAtLeastOneType;
+
+        // this is case 2. We will stop addMissingClass. In the next phase,
+        // TargetMethodFinderVisitor will give us a meaningful exception message regarding which
+        // element in the input is not solvable.
+        if (!atLeastOneTypeIsUpdated && gettingStuck) {
+          break;
+        }
 
     // update the synthetic types by using error messages from javac.
     GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
@@ -203,7 +228,7 @@ public class SpeciminRunner {
     // the type solver and the map of parsed target files.
     updateStaticSolver(root, jarPaths);
     for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
     UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
