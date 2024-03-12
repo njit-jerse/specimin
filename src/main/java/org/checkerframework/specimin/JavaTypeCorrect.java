@@ -223,15 +223,20 @@ class JavaTypeCorrect {
     if (Splitter.onPattern("\\.").splitToList(type).size() > 1) {
       return type;
     }
+    String typeVariable = "";
+    if (type.contains("<")) {
+      typeVariable = type.substring(type.indexOf("<"));
+      type = type.substring(0, type.indexOf("<"));
+    }
     if (fileAndAssociatedTypes.containsKey(filePath)) {
       Set<String> fullyQualifiedType = fileAndAssociatedTypes.get(filePath);
       for (String typeFullName : fullyQualifiedType) {
         if (typeFullName.substring(typeFullName.lastIndexOf(".") + 1).equals(type)) {
-          return typeFullName;
+          return typeFullName + typeVariable;
         }
       }
     }
-    return type;
+    return type + typeVariable;
   }
 
   /**
