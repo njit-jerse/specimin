@@ -196,7 +196,7 @@ public class SpeciminRunner {
         // 1: addMissingClass has finished its iteration.
         // 2: addMissingClass is stuck for some unknown reasons.
         // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
-        // above should solve it.
+        // below should solve it.
 
         // update the synthetic types by using error messages from javac.
         GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
