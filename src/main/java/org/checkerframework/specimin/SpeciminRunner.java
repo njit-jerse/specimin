@@ -224,8 +224,7 @@ public class SpeciminRunner {
           break;
         } else if (atLeastOneTypeIsUpdated) {
           // this is case 3: ensure that unsolved symbol solver is called at least once, to force us
-          // to
-          // reach a correct fixpoint
+          // to reach a correct fixpoint
           addMissingClass.gotException();
           continue;
         }
