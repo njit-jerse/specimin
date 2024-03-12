@@ -152,9 +152,9 @@ class JavaTypeCorrect {
           if (line.contains(secondConstraint)) {
             String secondConstraintType = line.replace(secondConstraint, "").trim();
             if (isSynthetic(firstConstraintType)) {
-              typeToChange.put(firstConstraintType, secondConstraintType);
+              changeType(firstConstraintType, secondConstraintType);
             } else if (isSynthetic(secondConstraintType)) {
-              typeToChange.put(secondConstraintType, firstConstraintType);
+              changeType(secondConstraintType, firstConstraintType);
             } else {
               throw new RuntimeException(
                   "JavaTypeCorrect found two incompatible types, but neither is "
@@ -168,7 +168,7 @@ class JavaTypeCorrect {
           }
         }
       }
-    } catch (Exception e) {
+    } catch (IOException e) {
       System.out.println(e);
     }
   }
@@ -198,15 +198,33 @@ class JavaTypeCorrect {
         // (e.g., in a superclass) that has a type that doesn't match the
         // type of the RHS. In this case, the "correct" type is wrong, and
         // the "incorrect" type is the actual type of the RHS.
-        typeToChange.put(correctType, incorrectType);
+        changeType(correctType, incorrectType);
       } else {
-        typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+        changeType(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
       }
     } else {
       String incorrectType = splitErrorMessage.get(5);
       String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+      changeType(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
     }
+  }
+
+  /**
+   * All instances of the synthetic "incorrect type" will be replaced with the "correct type" in the
+   * output of Specimin. This method does handle cases where at least two different types need to be
+   * matched (i.e., upper bounds), and should always be called rather than updating {@link
+   * #typeToChange} directly.
+   *
+   * @param incorrectType an incorrect synthetic type that is causing a type error
+   * @param correctType a correct type that the incorrect type must be a supertype of, based on the
+   *     output of javac
+   */
+  private void changeType(String incorrectType, String correctType) {
+    if (typeToChange.containsKey(incorrectType)) {
+      // TODO: fix me
+      throw new RuntimeException("updating a synthetic type a second time: " + incorrectType);
+    }
+    typeToChange.put(incorrectType, correctType);
   }
 
   /**
