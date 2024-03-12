@@ -287,7 +287,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MarkerAnnotationExpr expr, Void p) {
     if (!insideTargetMethod) {
-      expr.remove();
+      if (!expr.getNameAsString().equals("FunctionalInterface")) {
+        expr.remove();
+      }
     }
     return super.visit(expr, p);
   }
@@ -295,7 +297,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(NormalAnnotationExpr expr, Void p) {
     if (!insideTargetMethod) {
-      expr.remove();
+      if (!expr.getNameAsString().equals("FunctionalInterface")) {
+        expr.remove();
+      }
     }
     return super.visit(expr, p);
   }
@@ -303,7 +307,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(SingleMemberAnnotationExpr expr, Void p) {
     if (!insideTargetMethod) {
-      expr.remove();
+      if (!expr.getNameAsString().equals("FunctionalInterface")) {
+        expr.remove();
+      }
     }
     return super.visit(expr, p);
   }
