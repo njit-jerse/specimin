@@ -193,9 +193,10 @@ public class UnsolvedClassOrInterface {
    */
   public void extend(String className) {
     String result = "extends " + className;
-    if (this.extendsClause != null && !this.extendsClause.equals(result)) {
-      throw new RuntimeException("cannot add a second extends clause to synthetic class: " + this);
-    }
+    //    if (this.extendsClause != null && !this.extendsClause.equals(result)) {
+    //      throw new RuntimeException("cannot add a second extends clause to synthetic class: " +
+    // this);
+    //    }
     this.extendsClause = result;
   }
 

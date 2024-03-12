@@ -206,8 +206,12 @@ class JavaTypeCorrect {
         // type of the RHS. In this case, the "correct" type is wrong, and
         // the "incorrect" type is the actual type of the RHS.
         changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
-      } else {
+      } else if (isSynthetic(rhs)) {
         changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
+      } else {
+        // In this case, neither is truly synthetic (both must be used
+        // in the target), so make the rhs a subtype of the lhs
+        extendedTypes.put(rhs, lhs);
       }
     } else {
       // TODO: what error message triggers this code? Do we have test cases for it?
@@ -215,8 +219,10 @@ class JavaTypeCorrect {
       String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (isSynthetic(lhs)) {
         changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
-      } else {
+      } else if (isSynthetic(rhs)) {
         changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
+      } else {
+        extendedTypes.put(rhs, lhs);
       }
     }
   }

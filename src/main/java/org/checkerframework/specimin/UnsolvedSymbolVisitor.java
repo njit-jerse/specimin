@@ -2678,7 +2678,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * This indirection is here to make it easier to debug infinite loops. Never set gotException
    * directly, but instead call this function.
    */
-  private void gotException() {
+  public void gotException() {
     if (DEBUG) {
       StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
       System.out.println("setting gotException to true from: " + stackTraceElements[2]);

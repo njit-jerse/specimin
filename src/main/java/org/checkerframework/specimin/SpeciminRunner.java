@@ -196,7 +196,9 @@ public class SpeciminRunner {
         // 1: addMissingClass has finished its iteration.
         // 2: addMissingClass is stuck for some unknown reasons.
         // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
-        // below should solve it.
+        // below should solve it. In this case (only), we should trigger another round
+        // of iteration of the unsolved symbol visitor, since JavaTypeCorrect may have caused
+        // some new symbols to be unsolved.
 
         // update the synthetic types by using error messages from javac.
         GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
@@ -220,6 +222,12 @@ public class SpeciminRunner {
         // element in the input is not solvable.
         if (!atLeastOneTypeIsUpdated && gettingStuck) {
           break;
+        } else if (atLeastOneTypeIsUpdated) {
+          // this is case 3: ensure that unsolved symbol solver is called at least once, to force us
+          // to
+          // reach a correct fixpoint
+          addMissingClass.gotException();
+          continue;
         }
 
         // in order for the newly updated files to be considered when solving symbols, we need to
@@ -303,7 +311,6 @@ public class SpeciminRunner {
 
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(inheritancePreserve.getAddedClasses());
-    System.out.println("updated used classes: " + updatedUsedClass);
     PrunerVisitor methodPruner =
         new PrunerVisitor(
             finder.getTargetMethods(),
