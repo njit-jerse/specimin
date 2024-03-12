@@ -19,7 +19,10 @@ import com.github.javaparser.ast.expr.DoubleLiteralExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
+import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
@@ -279,6 +282,30 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
 
     return super.visit(fieldDecl, p);
+  }
+
+  @Override
+  public Visitable visit(MarkerAnnotationExpr expr, Void p) {
+    if (!insideTargetMethod) {
+      expr.remove();
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(NormalAnnotationExpr expr, Void p) {
+    if (!insideTargetMethod) {
+      expr.remove();
+    }
+    return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(SingleMemberAnnotationExpr expr, Void p) {
+    if (!insideTargetMethod) {
+      expr.remove();
+    }
+    return super.visit(expr, p);
   }
 
   /**
