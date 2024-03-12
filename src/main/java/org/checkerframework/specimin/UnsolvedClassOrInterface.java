@@ -39,11 +39,8 @@ public class UnsolvedClassOrInterface {
   /** This field records the number of type variables for this class */
   private int numberOfTypeVariables = 0;
 
-  /** This field records if the class is a custom exception */
-  private boolean isExceptionType = false;
-
-  /** The field records if the class extends Throwable type. */
-  private boolean isThrowable = false;
+  /** The field records the extends/implements clauses, if one exists. */
+  private @Nullable String extendsClause;
 
   /** This field records if the class is an interface */
   private final boolean isAnInterface;
@@ -92,7 +89,9 @@ public class UnsolvedClassOrInterface {
     this.methods = new LinkedHashSet<>();
     this.packageName = packageName;
     this.classFields = new LinkedHashSet<>();
-    this.isExceptionType = isException;
+    if (isException) {
+      this.extendsClause = " extends Exception";
+    }
     this.isAnInterface = isAnInterface;
   }
 
@@ -150,11 +149,6 @@ public class UnsolvedClassOrInterface {
     return classFields;
   }
 
-  /** Set isThrowable to true. */
-  public void setThrowableToTrue() {
-    isThrowable = true;
-  }
-
   /**
    * Add a method to the class
    *
@@ -190,6 +184,18 @@ public class UnsolvedClassOrInterface {
    */
   public int getNumberOfTypeVariables() {
     return this.numberOfTypeVariables;
+  }
+
+  /**
+   * Adds an extends clause to this class.
+   *
+   * @param className a fully-qualified class name for the class to be extended
+   */
+  public void extend(String className) {
+    if (this.extendsClause != null) {
+      throw new RuntimeException("cannot add a second extends clause to synthetic class: " + this);
+    }
+    this.extendsClause = " extends " + className;
   }
 
   /**
@@ -295,10 +301,8 @@ public class UnsolvedClassOrInterface {
     } else {
       sb.append("public class ").append(className).append(getTypeVariablesAsString());
     }
-    if (isExceptionType) {
-      sb.append(" extends Exception");
-    } else if (isThrowable) {
-      sb.append(" extends Throwable");
+    if (extendsClause != null) {
+      sb.append(" " + extendsClause);
     }
     sb.append(" {\n");
     for (String variableDeclarations : classFields) {
