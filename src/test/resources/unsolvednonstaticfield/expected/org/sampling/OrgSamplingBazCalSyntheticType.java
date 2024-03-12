@@ -1,6 +1,6 @@
 package org.sampling;
 
-public class OrgSamplingBazMyFieldType {
+public class OrgSamplingBazCalSyntheticType {
 
     public DoAdditionReturnType doAddition() {
         throw new Error();

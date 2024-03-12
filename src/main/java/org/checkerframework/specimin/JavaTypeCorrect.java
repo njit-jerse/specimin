@@ -299,6 +299,7 @@ class JavaTypeCorrect {
     return typename.startsWith("SyntheticTypeFor")
         || typename.endsWith("ReturnType")
         || typename.startsWith("SyntheticFunction")
-        || typename.startsWith("SyntheticConsumer");
+        || typename.startsWith("SyntheticConsumer")
+        || typename.endsWith("SyntheticType");
   }
 }

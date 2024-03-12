@@ -2505,7 +2505,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName = packageName + "." + fieldParts.get(i);
     }
     // At this point, fieldTypeClassName will be ComExampleMyClassMyFieldType
-    fieldTypeClassName = fieldTypeClassName + toCapital(className) + toCapital(fieldName) + "Type";
+    fieldTypeClassName =
+        fieldTypeClassName + toCapital(className) + toCapital(fieldName) + "SyntheticType";
     // since fieldTypeClassName is just a single long string without any dot in the middle, it will
     // be a simple name.
     @SuppressWarnings("signature")
