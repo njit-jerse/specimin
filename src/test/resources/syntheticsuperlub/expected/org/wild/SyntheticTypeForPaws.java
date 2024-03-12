@@ -1,7 +1,7 @@
 package org.wild;
 
-interface SyntheticTypeForPaws {
-    public default SetNumberReturnType setNumber(int 4) {
+public interface SyntheticTypeForPaws {
+    public default SetNumberReturnType setNumber(int parameter0) {
         throw new Error();
     }
 }
