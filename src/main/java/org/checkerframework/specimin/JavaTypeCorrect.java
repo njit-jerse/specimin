@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -231,6 +232,17 @@ class JavaTypeCorrect {
       extendedTypes.put(otherCorrectType, incorrectType);
     }
     typeToChange.put(incorrectType, correctType);
+
+    // keep the two output maps in-sync
+    Set<String> mustFix = new HashSet<>(1);
+    for (Map.Entry<String, String> extendedTypesEntry : extendedTypes.entrySet()) {
+      if (incorrectType.equals(extendedTypesEntry.getValue())) {
+        mustFix.add(extendedTypesEntry.getKey());
+      }
+    }
+    for (String mustFixKey : mustFix) {
+      extendedTypes.put(mustFixKey, correctType);
+    }
   }
 
   /**
