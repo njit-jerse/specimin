@@ -225,11 +225,17 @@ class JavaTypeCorrect {
   private void changeType(String incorrectType, String correctType) {
     if (typeToChange.containsKey(incorrectType)) {
       String otherCorrectType = typeToChange.get(incorrectType);
-      typeToChange.remove(incorrectType);
-      // TODO: what if one of these "correct" types is non-synthetic?
-      // Is that possible?
-      extendedTypes.put(correctType, incorrectType);
-      extendedTypes.put(otherCorrectType, incorrectType);
+      if (!otherCorrectType.equals(correctType)) {
+        // we require a LUB
+        typeToChange.remove(incorrectType);
+        // TODO: what if one of these "correct" types is non-synthetic?
+        // Is that possible?
+        extendedTypes.put(correctType, incorrectType);
+        extendedTypes.put(otherCorrectType, incorrectType);
+        // once we've made this lub correction, we don't want to
+        // continue with our fix strategy
+        return;
+      }
     }
     typeToChange.put(incorrectType, correctType);
 
