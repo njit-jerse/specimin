@@ -10,7 +10,6 @@ import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -33,21 +32,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
    * compilation unit.
    */
   Map<String, String> classToFullClassName = new HashMap<>();
-
-  /** The set of annotations predefined by java.lang. */
-  static final Set<String> javaLangPredefinedAnnotations =
-      new HashSet<>(
-          Arrays.asList(
-              "Override",
-              "Deprecated",
-              "SuppressWarnings",
-              "SafeVarargs",
-              "FunctionalInterface",
-              "Retention",
-              "Documented",
-              "Target",
-              "Inherited",
-              "Repeatable"));
 
   /** The set of full names of solvable annotations. */
   private Set<String> solvedAnnotationFullName = new HashSet<>();
@@ -119,7 +103,7 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
     if (!UnsolvedSymbolVisitor.isAClassPath(annotationName)) {
       if (!classToFullClassName.containsKey(annotationName)) {
         // An annotation not imported and from the java.lang package is not our concern.
-        if (!javaLangPredefinedAnnotations.contains(annotationName)) {
+        if (!JavaLangUtils.isJavaLangName(annotationName)) {
           annotation.remove();
         }
         return;
