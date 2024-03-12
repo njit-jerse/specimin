@@ -9,12 +9,9 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -302,42 +299,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
     return result;
-  }
-
-  @Override
-  public Visitable visit(MarkerAnnotationExpr expr, Void p) {
-    if (insideTargetMethod) {
-      String annotationName = expr.getNameAsString();
-      if (importedClassToPackage.containsKey(annotationName)) {
-        updateUsedClassWithQualifiedClassName(
-            importedClassToPackage.get(annotationName) + "." + annotationName);
-      }
-    }
-    return super.visit(expr, p);
-  }
-
-  @Override
-  public Visitable visit(NormalAnnotationExpr expr, Void p) {
-    if (insideTargetMethod) {
-      String annotationName = expr.getNameAsString();
-      if (importedClassToPackage.containsKey(annotationName)) {
-        updateUsedClassWithQualifiedClassName(
-            importedClassToPackage.get(annotationName) + "." + annotationName);
-      }
-    }
-    return super.visit(expr, p);
-  }
-
-  @Override
-  public Visitable visit(SingleMemberAnnotationExpr expr, Void p) {
-    if (insideTargetMethod) {
-      String annotationName = expr.getNameAsString();
-      if (importedClassToPackage.containsKey(annotationName)) {
-        updateUsedClassWithQualifiedClassName(
-            importedClassToPackage.get(annotationName) + "." + annotationName);
-      }
-    }
-    return super.visit(expr, p);
   }
 
   @Override

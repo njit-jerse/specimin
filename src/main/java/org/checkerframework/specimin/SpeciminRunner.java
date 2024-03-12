@@ -206,8 +206,8 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
-      UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
       cu.accept(annoRemover, null);
     }
 
@@ -273,6 +273,13 @@ public class SpeciminRunner {
 
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(inheritancePreserve.getAddedClasses());
+
+    // remove the unsolved annotations in the newly added files.
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(annoRemover, null);
+    }
+
+    updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
     PrunerVisitor methodPruner =
         new PrunerVisitor(
             finder.getTargetMethods(),

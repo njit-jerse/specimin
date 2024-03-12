@@ -38,6 +38,9 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
   static final Set<String> javaLangPredefinedAnnotations =
       new HashSet<>(Arrays.asList("Override", "Deprecated", "SuppressWarnings"));
 
+  /** The set of full names of solvable annotations. */
+  private Set<String> solvedAnnotationFullName = new HashSet<>();
+
   /**
    * Create a new instance of UnsolvedAnnotationRemoverVisitor
    *
@@ -55,6 +58,17 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
         throw new RuntimeException(e);
       }
     }
+  }
+
+  /**
+   * Get a copy of the set of solved annotations.
+   *
+   * @return copy a copy of the set of solved annotations.
+   */
+  public Set<String> getSolvedAnnotationFullName() {
+    Set<String> copy = new HashSet<>();
+    copy.addAll(solvedAnnotationFullName);
+    return copy;
   }
 
   @Override
@@ -103,6 +117,8 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
     }
     if (!classToJarPath.containsKey(annotationName)) {
       annotation.remove();
+    } else {
+      solvedAnnotationFullName.add(annotationName);
     }
   }
 }
