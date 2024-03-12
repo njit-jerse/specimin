@@ -46,6 +46,7 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclar
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.resolution.types.ResolvedTypeVariable;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
@@ -102,8 +103,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The symbol table to keep track of local variables in the current input file */
   private final ArrayDeque<Set<String>> localVariables = new ArrayDeque<Set<String>>();
 
-  /** The symbol table for type variables. */
-  private final ArrayDeque<Set<String>> typeVariables = new ArrayDeque<Set<String>>();
+  /** The symbol table for type variables. A type variable is mapped to the list of its bounds. */
+  private final ArrayDeque<Map<String, NodeList<ClassOrInterfaceType>>> typeVariables =
+      new ArrayDeque<>();
 
   /** The simple name of the class currently visited */
   private @ClassGetSimpleName String className = "";
@@ -705,19 +707,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String name = node.getNameAsString();
     if (fieldNameToClassNameMap.containsKey(name)) {
       potentialUsedMembers.add(name);
-      try {
-        // check if the type is resolved and does not extend any unresolved type.
+      if (!canBeSolved(node)) {
+        gotException();
+      } else {
+        // check if all the type parameters are resolved.
         ResolvedType nameExprType = node.resolve().getType();
         if (nameExprType.isReferenceType()) {
           ResolvedReferenceType nameExprReferenceType = nameExprType.asReferenceType();
           nameExprReferenceType.getAllAncestors();
-          // check if all the type parameters are resolved.
           if (!hasResolvedTypeParameters(nameExprReferenceType)) {
             gotException();
           }
         }
-      } catch (UnsolvedSymbolException e) {
-        gotException();
       }
       return super.visit(node, arg);
     }
@@ -941,15 +942,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!typeExpr.isReferenceType()) {
       return super.visit(typeExpr, p);
     }
-    if (isTypeVar(typeExpr.getName().asString())) {
-      return super.visit(typeExpr, p);
-    }
     // type belonging to a class declaration will be handled by the visit method for
     // ClassOrInterfaceDeclaration
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
       return super.visit(typeExpr, p);
     }
     if (!insideTargetMethod && !insidePotentialUsedMember) {
+      return super.visit(typeExpr, p);
+    }
+    if (isTypeVar(typeExpr.getName().asString())) {
+      updateSyntheticClassesForTypeVar(typeExpr);
       return super.visit(typeExpr, p);
     }
     try {
@@ -1292,6 +1294,37 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     throw new RuntimeException("Got a method declaration with no class!");
+  }
+
+  /**
+   * Given a type variable, update the list of synthetic classes accordingly. Node: while the type
+   * of the input for this method is ClassOrInterfaceType, it is actually a type variable. Make sure
+   * to check with {@link UnsolvedSymbolVisitor#isTypeVar(String)} before calling this method.
+   *
+   * @param type a type variable to be used as input.
+   */
+  private void updateSyntheticClassesForTypeVar(ClassOrInterfaceType type) {
+    String typeSimpleName = type.getNameAsString();
+    for (Map<String, NodeList<ClassOrInterfaceType>> typeScope : typeVariables) {
+      if (typeScope.containsKey(typeSimpleName)) {
+        NodeList<ClassOrInterfaceType> boundOfType = typeScope.get(typeSimpleName);
+        for (int index = 0; index < boundOfType.size(); index++) {
+          try {
+            boundOfType.get(index).resolve();
+          } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+            if (e instanceof UnsolvedSymbolException) {
+              this.gotException();
+              // quoted from the documentation of Oracle: "A type variable with multiple bounds is a
+              // subtype of all the types listed in the bound. If one of the bounds is a class, it
+              // must be specified first."
+              // If the first bound is also unsolved, it is better to assume it to be a class.
+              boolean shouldBeAnInterface = !(index == 0);
+              solveSymbolsForClassOrInterfaceType(boundOfType.get(index), shouldBeAnInterface);
+            }
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -1699,8 +1732,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *     that there is no such type variable, but not that the input is a valid type.
    */
   private boolean isTypeVar(String typeName) {
-    for (Set<String> scope : typeVariables) {
-      if (scope.contains(typeName)) {
+    for (Map<String, NodeList<ClassOrInterfaceType>> scope : typeVariables) {
+      if (scope.containsKey(typeName)) {
         return true;
       }
     }
@@ -1714,9 +1747,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param typeParameters a list of type parameters
    */
   private void addTypeVariableScope(List<TypeParameter> typeParameters) {
-    Set<String> typeVariableScope = new HashSet<>();
+    Map<String, NodeList<ClassOrInterfaceType>> typeVariableScope = new HashMap<>();
     for (TypeParameter t : typeParameters) {
-      typeVariableScope.add(t.getName().asString());
+      typeVariableScope.put(t.getNameAsString(), t.getTypeBound());
     }
     typeVariables.addFirst(typeVariableScope);
   }
@@ -1957,7 +1990,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public static boolean canBeSolved(Expression expr) {
     try {
-      expr.calculateResolvedType();
+      ResolvedType resolvedType = expr.calculateResolvedType();
+      if (resolvedType.isTypeVariable()) {
+        for (ResolvedTypeParameterDeclaration.Bound bound :
+            resolvedType.asTypeParameter().getBounds()) {
+          bound.getType().asReferenceType();
+        }
+      }
       return true;
     } catch (Exception e) {
       return false;
@@ -2006,7 +2045,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param method the method call to be analyzed
    * @return the name of the synthetic class of that method
    */
-  public static @FullyQualifiedName String getIncompleteClass(MethodCallExpr method) {
+  public @FullyQualifiedName String getIncompleteClass(MethodCallExpr method) {
     // if calledByAnIncompleteClass returns true for this method call, we know that it has
     // a caller.
     ResolvedType callerExpression = method.getScope().get().calculateResolvedType();
@@ -2020,9 +2059,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @FullyQualifiedName String boundedQualifiedType =
           callerExpression.asConstraintType().getBound().asReferenceType().getQualifiedName();
       return boundedQualifiedType;
-    } else {
-      throw new RuntimeException("Unexpected expression: " + callerExpression);
+    } else if (callerExpression instanceof ResolvedTypeVariable) {
+      String typeSimpleName = callerExpression.asTypeVariable().describe();
+      for (Map<String, NodeList<ClassOrInterfaceType>> typeScope : typeVariables) {
+        if (typeScope.containsKey(typeSimpleName)) {
+          // a type parameter can extend a class and many interfaces. However, the class will always
+          // be listed first.
+          return typeScope.get(typeSimpleName).get(0).resolve().getQualifiedName();
+        }
+      }
     }
+    throw new RuntimeException("Unexpected expression: " + callerExpression);
   }
 
   /**
