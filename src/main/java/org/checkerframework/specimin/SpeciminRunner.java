@@ -212,27 +212,6 @@ public class SpeciminRunner {
       }
     }
 
-    // update the synthetic types by using error messages from javac.
-    GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(getTypesFullNameVisitor, null);
-    }
-    Map<String, Set<String>> filesAndAssociatedTypes =
-        getTypesFullNameVisitor.getFileAndAssociatedTypes();
-    // correct the types of all related files before adding them to parsedTargetFiles
-    JavaTypeCorrect typeCorrecter =
-        new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
-    typeCorrecter.correctTypesForAllFiles();
-    typesToChange = typeCorrecter.getTypeToChange();
-    addMissingClass.updateTypes(typesToChange);
-    addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
-    // in order for the newly updated files to be considered when solving symbols, we need to update
-    // the type solver and the map of parsed target files.
-    updateStaticSolver(root, jarPaths);
-    for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-    }
-
     UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(annoRemover, null);
