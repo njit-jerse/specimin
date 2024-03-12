@@ -192,12 +192,7 @@ public class UnsolvedClassOrInterface {
    * @param className a fully-qualified class name for the class to be extended
    */
   public void extend(String className) {
-    String result = "extends " + className;
-    //    if (this.extendsClause != null && !this.extendsClause.equals(result)) {
-    //      throw new RuntimeException("cannot add a second extends clause to synthetic class: " +
-    // this);
-    //    }
-    this.extendsClause = result;
+    this.extendsClause = "extends " + className;
   }
 
   /**

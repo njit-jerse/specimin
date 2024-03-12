@@ -16,10 +16,18 @@ public final class JavaLangUtils {
     return javaLangClassesAndInterfaces.contains(simpleName);
   }
 
+  /**
+   * Don't call this.
+   */
   private JavaLangUtils() {
     throw new Error("cannot be instantiated");
   }
 
+  /**
+   * Internal set for the java lang types. The list comes from downloading
+   * the java.lang summary Javadoc page and then applying some transformations
+   * to it. TODO: figure out what those were and script it.
+   */
   private static final Set<String> javaLangClassesAndInterfaces = new HashSet<>();
 
   static {
