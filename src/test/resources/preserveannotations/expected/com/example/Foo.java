@@ -6,7 +6,7 @@ import org.checkerframework.checker.index.qual.Positive;
 class Foo {
 
     @Positive
-    public int baz() {
+    public static int baz() {
         throw new Error();
     }
 }

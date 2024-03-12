@@ -5,10 +5,10 @@ import org.checkerframework.checker.index.qual.Positive;
 
 class Foo {
     @Positive
-    public int baz() {
+    public static int baz() {
         return 1;
     }
 
     @NonNegative
-    public int foo() { return 0;}
+    public static int foo() { return 0;}
 }
