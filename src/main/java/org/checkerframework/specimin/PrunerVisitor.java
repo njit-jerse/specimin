@@ -284,36 +284,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     return super.visit(fieldDecl, p);
   }
 
-  @Override
-  public Visitable visit(MarkerAnnotationExpr expr, Void p) {
-    if (!insideTargetMethod) {
-      if (!expr.getNameAsString().equals("FunctionalInterface")) {
-        expr.remove();
-      }
-    }
-    return super.visit(expr, p);
-  }
-
-  @Override
-  public Visitable visit(NormalAnnotationExpr expr, Void p) {
-    if (!insideTargetMethod) {
-      if (!expr.getNameAsString().equals("FunctionalInterface")) {
-        expr.remove();
-      }
-    }
-    return super.visit(expr, p);
-  }
-
-  @Override
-  public Visitable visit(SingleMemberAnnotationExpr expr, Void p) {
-    if (!insideTargetMethod) {
-      if (!expr.getNameAsString().equals("FunctionalInterface")) {
-        expr.remove();
-      }
-    }
-    return super.visit(expr, p);
-  }
-
   /**
    * Creates a basic initializer expression for a specified field type. The way the initial value is
    * chosen is based on the document of the Java Language:
