@@ -10,7 +10,7 @@ public class PreserveAnnotationsTest {
     SpeciminTestExecutor.runTest(
         "preserveannotations",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#baz()"},
+        new String[] {"com.example.Simple#test()"},
         new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
   }
 }

@@ -1,11 +1,13 @@
 package com.example;
 
-import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.checker.index.qual.NonNegative;
 
 class Simple {
 
-    public void baz() {
-        @ClassGetSimpleName
-        String className = "";
+    @NonNegative
+    public int test() {
+        @NonNegative
+        int postive = Foo.baz();
+        return postive;
     }
 }
