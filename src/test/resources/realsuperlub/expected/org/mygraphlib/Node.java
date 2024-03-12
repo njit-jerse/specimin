@@ -2,9 +2,9 @@ package org.mygraphlib;
 
 public class Node {
 
-    public Node child;
+    public org.mygraphlib.Node child;
 
-    public Node getChild() {
+    public org.mygraphlib.Node getChild() {
         throw new Error();
     }
 }

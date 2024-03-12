@@ -223,8 +223,12 @@ class JavaTypeCorrect {
    */
   private void changeType(String incorrectType, String correctType) {
     if (typeToChange.containsKey(incorrectType)) {
-      // TODO: fix me
-      throw new RuntimeException("updating a synthetic type a second time: " + incorrectType);
+      String otherCorrectType = typeToChange.get(incorrectType);
+      typeToChange.remove(incorrectType);
+      // TODO: what if one of these "correct" types is non-synthetic?
+      // Is that possible?
+      extendedTypes.put(correctType, incorrectType);
+      extendedTypes.put(otherCorrectType, incorrectType);
     }
     typeToChange.put(incorrectType, correctType);
   }
