@@ -233,7 +233,7 @@ class JavaTypeCorrect {
         extendedTypes.put(correctType, incorrectType);
         extendedTypes.put(otherCorrectType, incorrectType);
         // once we've made this lub correction, we don't want to
-        // continue with our fix strategy
+        // continue with our main fix strategy
         return;
       }
     }

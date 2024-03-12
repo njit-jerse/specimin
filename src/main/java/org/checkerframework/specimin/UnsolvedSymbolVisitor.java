@@ -1697,10 +1697,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // since it is just simple string combination, it is a simple name
       @SuppressWarnings("signature")
       @ClassGetSimpleName String variableType = "SyntheticTypeFor" + toCapital(var);
-      UnsolvedClassOrInterface varType = new UnsolvedClassOrInterface(variableType, packageName);
+      UnsolvedClassOrInterface varType =
+          new UnsolvedClassOrInterface(variableType, getPackageFromClassName(variableType));
       syntheticTypes.add(variableType);
       relatedClass.addFields(
-          setInitialValueForVariableDeclaration(variableType, variableType + " " + var));
+          setInitialValueForVariableDeclaration(
+              variableType, varType.getQualifiedClassName() + " " + var));
       updateMissingClass(relatedClass);
       updateMissingClass(varType);
     }
@@ -2539,7 +2541,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public boolean updateTypes(Map<String, String> typeToCorrect) {
     boolean atLeastOneTypeIsUpdated = false;
     for (String incorrectType : typeToCorrect.keySet()) {
-      // update incorrecType if it is the type of a field in a synthetic class
+      // update incorrectType if it is the type of a field in a synthetic class
       if (syntheticTypeAndClass.containsKey(incorrectType)) {
         UnsolvedClassOrInterface relatedClass = syntheticTypeAndClass.get(incorrectType);
         atLeastOneTypeIsUpdated |=
