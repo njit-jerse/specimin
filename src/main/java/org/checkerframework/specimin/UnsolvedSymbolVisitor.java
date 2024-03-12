@@ -2608,7 +2608,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           if (!isAClassPath(extendedType)) {
             extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
           }
-          System.out.println("extendedType: " + extendedType);
           missedClass.extend(extendedType);
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
