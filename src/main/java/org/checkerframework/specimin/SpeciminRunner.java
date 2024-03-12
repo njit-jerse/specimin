@@ -7,7 +7,6 @@ import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
-import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
@@ -96,15 +95,7 @@ public class SpeciminRunner {
       root = root + "/";
     }
 
-    // Set up the parser's symbol solver, so that we can resolve definitions.
-    CombinedTypeSolver typeSolver =
-        new CombinedTypeSolver(
-            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
-    for (String path : jarPaths) {
-      typeSolver.add(new JarTypeSolver(path));
-    }
-    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
-    StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
+    updateStaticSolver(root, jarPaths);
 
     // Keys are paths to files, values are parsed ASTs
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
@@ -170,11 +161,7 @@ public class SpeciminRunner {
       addMissingClass.updateSyntheticSourceCode();
       createdClass.addAll(addMissingClass.getCreatedClass());
       // since the root directory is updated, we need to update the SymbolSolver
-      TypeSolver newTypeSolver =
-          new CombinedTypeSolver(
-              new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
-      JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
-      StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
+      updateStaticSolver(root, jarPaths);
       parsedTargetFiles = new HashMap<>();
       for (String targetFile : targetFiles) {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
@@ -214,11 +201,7 @@ public class SpeciminRunner {
     addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
     // in order for the newly updated files to be considered when solving symbols, we need to update
     // the type solver and the map of parsed target files.
-    typeSolver =
-        new CombinedTypeSolver(
-            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
-    symbolSolver = new JavaSymbolSolver(typeSolver);
-    StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
+    updateStaticSolver(root, jarPaths);
     for (String targetFile : targetFiles) {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
@@ -349,6 +332,25 @@ public class SpeciminRunner {
     }
     // delete all the temporary files created by UnsolvedSymbolVisitor
     deleteFiles(createdClass);
+  }
+
+  /**
+   * Update the static solver for JavaParser.
+   *
+   * @param root the root directory of the files to parse.
+   * @param jarPaths the list of jar files to be used as input.
+   * @throws IOException if something went wrong.
+   */
+  private static void updateStaticSolver(String root, List<String> jarPaths) throws IOException {
+    // Set up the parser's symbol solver, so that we can resolve definitions.
+    CombinedTypeSolver typeSolver =
+        new CombinedTypeSolver(
+            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+    for (String path : jarPaths) {
+      typeSolver.add(new JarTypeSolver(path));
+    }
+    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
+    StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
   }
 
   /**
