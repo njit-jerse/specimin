@@ -2529,28 +2529,32 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * synthetic classes.
    *
    * @param typeToCorrect the Map to be analyzed
+   * @return true if at least one synthetic type is updated
    */
-  public void updateTypes(Map<String, String> typeToCorrect) {
+  public boolean updateTypes(Map<String, String> typeToCorrect) {
+    boolean atLeastOneTypeIsUpdated = false;
     for (String incorrectType : typeToCorrect.keySet()) {
       // update incorrecType if it is the type of a field in a synthetic class
       if (syntheticTypeAndClass.containsKey(incorrectType)) {
         UnsolvedClassOrInterface relatedClass = syntheticTypeAndClass.get(incorrectType);
-        updateTypeForSyntheticClasses(
-            relatedClass.getClassName(),
-            relatedClass.getPackageName(),
-            true,
-            incorrectType,
-            typeToCorrect.get(incorrectType));
+        atLeastOneTypeIsUpdated |=
+            updateTypeForSyntheticClasses(
+                relatedClass.getClassName(),
+                relatedClass.getPackageName(),
+                true,
+                incorrectType,
+                typeToCorrect.get(incorrectType));
         continue;
       }
       UnsolvedClassOrInterface relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
       if (relatedClass != null) {
-        updateTypeForSyntheticClasses(
-            relatedClass.getClassName(),
-            relatedClass.getPackageName(),
-            false,
-            incorrectType,
-            typeToCorrect.get(incorrectType));
+        atLeastOneTypeIsUpdated |=
+            updateTypeForSyntheticClasses(
+                relatedClass.getClassName(),
+                relatedClass.getPackageName(),
+                false,
+                incorrectType,
+                typeToCorrect.get(incorrectType));
       }
       // if the above condition is not met, then this incorrectType is a synthetic type for the
       // fields of the parent class rather than the return type of some methods
@@ -2560,7 +2564,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             // TODO: should this also check that unsolClass's package name is
             // the correct one for the parent? Martin isn't sure how to do that here.
             if (unsolClass.getClassName().equals(parentClass)) {
-              unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
+              atLeastOneTypeIsUpdated |=
+                  unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
               this.deleteOldSyntheticClass(unsolClass);
               this.createMissingClass(unsolClass);
             }
@@ -2568,6 +2573,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
+    return atLeastOneTypeIsUpdated;
   }
 
   /**
@@ -2575,8 +2581,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * synthetic classes as needed.
    *
    * @param typesToExtendThrowable the set of synthetic types that need Throwable extension.
+   * @return true if at least one synthetic type is updated.
    */
-  public void updateTypesToExtendThrowable(Set<String> typesToExtendThrowable) {
+  public boolean updateTypesToExtendThrowable(Set<String> typesToExtendThrowable) {
+    boolean atLeastOneTypeIsUpdated = false;
     Set<UnsolvedClassOrInterface> modifiedClasses = new HashSet<>();
 
     for (String typeToExtendThrowable : typesToExtendThrowable) {
@@ -2584,6 +2592,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       while (iterator.hasNext()) {
         UnsolvedClassOrInterface missedClass = iterator.next();
         if (missedClass.getClassName().equals(typeToExtendThrowable)) {
+          atLeastOneTypeIsUpdated = true;
           iterator.remove();
           missedClass.setThrowableToTrue();
           modifiedClasses.add(missedClass);
@@ -2594,6 +2603,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
 
     missingClass.addAll(modifiedClasses);
+    return atLeastOneTypeIsUpdated;
   }
 
   /**
@@ -2604,13 +2614,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param updateAField True if updating the type of a field, false to update the type of a method.
    * @param incorrectTypeName The name of the current incorrect type.
    * @param correctTypeName The name of the desired correct type.
+   * @return true if the update is successful.
    */
-  public void updateTypeForSyntheticClasses(
+  public boolean updateTypeForSyntheticClasses(
       String className,
       String packageName,
       boolean updateAField,
       String incorrectTypeName,
       String correctTypeName) {
+    boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
@@ -2619,14 +2631,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (missedClass.equals(classToSearch)) {
         iterator.remove(); // Remove the outdated version of this synthetic class from the list
         if (updateAField) {
-          missedClass.updateFieldByType(incorrectTypeName, correctTypeName);
+          updatedSuccessfully |= missedClass.updateFieldByType(incorrectTypeName, correctTypeName);
         } else {
-          missedClass.updateMethodByReturnType(incorrectTypeName, correctTypeName);
+          updatedSuccessfully |=
+              missedClass.updateMethodByReturnType(incorrectTypeName, correctTypeName);
         }
         missingClass.add(missedClass); // Add the modified missedClass back to the list
         this.deleteOldSyntheticClass(missedClass);
         this.createMissingClass(missedClass);
-        return;
+        return updatedSuccessfully;
       }
     }
     throw new RuntimeException("Could not find the corresponding missing class!");

@@ -100,11 +100,12 @@ public class UnsolvedMethod {
       return false;
     }
     UnsolvedMethod other = (UnsolvedMethod) o;
-    // This set of fields is based on the JLS' overloading rules, which
-    // permit an overload if any of the name, return type, or parameter types differ.
-    return other.returnType.equals(this.returnType)
-        && other.name.equals(this.name)
-        && other.parameterList.equals(parameterList);
+    // This set of fields is based on the JLS' overloading rules. According to the documentation of
+    // Oracle: "You cannot declare more than one method with the same name and the same number and
+    // type of arguments, because the compiler cannot tell them apart. The compiler does not
+    // consider return type when differentiating methods, so you cannot declare two methods with the
+    // same signature even if they have a different return type."
+    return other.name.equals(this.name) && other.parameterList.equals(parameterList);
   }
 
   @Override

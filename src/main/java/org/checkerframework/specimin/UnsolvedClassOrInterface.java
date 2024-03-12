@@ -198,13 +198,17 @@ public class UnsolvedClassOrInterface {
    *
    * @param currentReturnType the current return type of this method
    * @param desiredReturnType the new return type
+   * @return true if a type is successfully updated
    */
-  public void updateMethodByReturnType(String currentReturnType, String desiredReturnType) {
+  public boolean updateMethodByReturnType(String currentReturnType, String desiredReturnType) {
+    boolean successfullyUpdated = false;
     for (UnsolvedMethod method : methods) {
       if (method.getReturnType().equals(currentReturnType)) {
         method.setReturnType(desiredReturnType);
+        successfullyUpdated = true;
       }
     }
+    return successfullyUpdated;
   }
 
   /**
@@ -212,8 +216,10 @@ public class UnsolvedClassOrInterface {
    *
    * @param currentType the current type
    * @param correctType the desired type
+   * @return true if a type is successfully updated.
    */
-  public void updateFieldByType(String currentType, String correctType) {
+  public boolean updateFieldByType(String currentType, String correctType) {
+    boolean successfullyUpdated = false;
     Iterator<String> iterator = classFields.iterator();
     Set<String> newFields = new HashSet<>();
     while (iterator.hasNext()) {
@@ -237,6 +243,7 @@ public class UnsolvedClassOrInterface {
       String fieldType = elements.get(0);
       String fieldName = elements.get(1);
       if (fieldType.equals(currentType)) {
+        successfullyUpdated = true;
         iterator.remove();
         newFields.add(
             UnsolvedSymbolVisitor.setInitialValueForVariableDeclaration(
@@ -247,6 +254,7 @@ public class UnsolvedClassOrInterface {
     for (String field : newFields) {
       classFields.add(field);
     }
+    return successfullyUpdated;
   }
 
   @Override
