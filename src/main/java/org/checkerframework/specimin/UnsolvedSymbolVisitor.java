@@ -2598,15 +2598,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
       while (iterator.hasNext()) {
         UnsolvedClassOrInterface missedClass = iterator.next();
-        if (missedClass.getClassName().equals(typeToExtend)) {
+        // typeToExtend can be either a simple name or an FQN, due to the limitations
+        // of Javac
+        if (typeToExtend.equals(missedClass.getQualifiedClassName())
+            || typeToExtend.equals(missedClass.getClassName())) {
           atLeastOneTypeIsUpdated = true;
           iterator.remove();
-          // TODO: I think we need to first locate the FQN for the type to extend,
-          // but this should be fine (TDD refactoring style) for now
           String extendedType = typesToExtend.get(typeToExtend);
           if (!isAClassPath(extendedType)) {
             extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
           }
+          System.out.println("extendedType: " + extendedType);
           missedClass.extend(extendedType);
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
