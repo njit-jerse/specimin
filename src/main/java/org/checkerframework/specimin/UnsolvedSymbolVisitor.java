@@ -1918,8 +1918,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       className = className.substring(0, className.indexOf("<"));
     }
     if (JavaLangUtils.isJavaLangName(className)) {
-      // no package name is necessary, since these classes are always imported
-      // automatically
+      // it's important not to accidentally put java.lang classes
+      // (like e.g., Exception or Throwable) into a wildcard import
+      // or the current package.
       return "java.lang";
     }
     String pkg = classAndPackageMap.get(className);
