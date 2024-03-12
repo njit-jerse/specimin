@@ -1915,6 +1915,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (className.contains("<")) {
       className = className.substring(0, className.indexOf("<"));
     }
+    if (JavaLangUtils.isJavaLangName(className)) {
+      // no package name is necessary, since these classes are always imported
+      // automatically
+      return "java.lang";
+    }
     String pkg = classAndPackageMap.get(className);
     if (pkg != null) {
       return pkg;
@@ -2597,7 +2602,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           // TODO: I think we need to first locate the FQN for the type to extend,
           // but this should be fine (TDD refactoring style) for now
           String extendedType = typesToExtend.get(typeToExtend);
-          missedClass.extend(extendedType);
+          String fqn = getPackageFromClassName(extendedType) + "." + extendedType;
+          missedClass.extend(fqn);
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);
