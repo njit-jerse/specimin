@@ -36,7 +36,18 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
 
   /** The set of annotations predefined by java.lang. */
   static final Set<String> javaLangPredefinedAnnotations =
-      new HashSet<>(Arrays.asList("Override", "Deprecated", "SuppressWarnings"));
+      new HashSet<>(
+          Arrays.asList(
+              "Override",
+              "Deprecated",
+              "SuppressWarnings",
+              "SafeVarargs",
+              "FunctionalInterface",
+              "Retention",
+              "Documented",
+              "Target",
+              "Inherited",
+              "Repeatable"));
 
   /** The set of full names of solvable annotations. */
   private Set<String> solvedAnnotationFullName = new HashSet<>();

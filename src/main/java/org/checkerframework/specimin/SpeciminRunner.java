@@ -209,6 +209,8 @@ public class SpeciminRunner {
         if (!atLeastOneTypeIsUpdated && gettingStuck) {
           break;
         }
+      }
+    }
 
     // update the synthetic types by using error messages from javac.
     GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
@@ -221,14 +223,14 @@ public class SpeciminRunner {
     JavaTypeCorrect typeCorrecter =
         new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
     typeCorrecter.correctTypesForAllFiles();
-    Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
+    typesToChange = typeCorrecter.getTypeToChange();
     addMissingClass.updateTypes(typesToChange);
     addMissingClass.updateTypesToExtendThrowable(typeCorrecter.getTypesThatExtendThrowable());
     // in order for the newly updated files to be considered when solving symbols, we need to update
     // the type solver and the map of parsed target files.
     updateStaticSolver(root, jarPaths);
     for (String targetFile : targetFiles) {
-          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
     UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
