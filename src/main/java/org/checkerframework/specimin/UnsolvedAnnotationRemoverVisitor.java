@@ -92,9 +92,8 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
   public void processAnnotations(AnnotationExpr annotation) {
     String annotationName = annotation.getNameAsString();
     if (!UnsolvedSymbolVisitor.isAClassPath(annotationName)) {
-      // An annotation not imported is from the java.lang package or the same package as the input
-      // file, which is not our concern.
       if (!classToFullClassName.containsKey(annotationName)) {
+        // An annotation not imported and from the java.lang package is not our concern.
         if (!javaLangPredefinedAnnotations.contains(annotationName)) {
           annotation.remove();
         }
