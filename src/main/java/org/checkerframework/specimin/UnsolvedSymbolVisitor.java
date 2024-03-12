@@ -2490,7 +2490,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // update incorrecType if it is the type of a field in a synthetic class
       if (syntheticTypeAndClass.containsKey(incorrectType)) {
         UnsolvedClassOrInterface relatedClass = syntheticTypeAndClass.get(incorrectType);
-        atLeastOneTypeIsUpdated =
+        atLeastOneTypeIsUpdated |=
             updateTypeForSyntheticClasses(
                 relatedClass.getClassName(),
                 relatedClass.getPackageName(),
@@ -2501,7 +2501,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
       UnsolvedClassOrInterface relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
       if (relatedClass != null) {
-        atLeastOneTypeIsUpdated =
+        atLeastOneTypeIsUpdated |=
             updateTypeForSyntheticClasses(
                 relatedClass.getClassName(),
                 relatedClass.getPackageName(),
@@ -2517,7 +2517,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             // TODO: should this also check that unsolClass's package name is
             // the correct one for the parent? Martin isn't sure how to do that here.
             if (unsolClass.getClassName().equals(parentClass)) {
-              atLeastOneTypeIsUpdated =
+              atLeastOneTypeIsUpdated |=
                   unsolClass.updateFieldByType(incorrectType, typeToCorrect.get(incorrectType));
               this.deleteOldSyntheticClass(unsolClass);
               this.createMissingClass(unsolClass);
@@ -2584,9 +2584,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (missedClass.equals(classToSearch)) {
         iterator.remove(); // Remove the outdated version of this synthetic class from the list
         if (updateAField) {
-          updatedSuccessfully = missedClass.updateFieldByType(incorrectTypeName, correctTypeName);
+          updatedSuccessfully |= missedClass.updateFieldByType(incorrectTypeName, correctTypeName);
         } else {
-          updatedSuccessfully =
+          updatedSuccessfully |=
               missedClass.updateMethodByReturnType(incorrectTypeName, correctTypeName);
         }
         missingClass.add(missedClass); // Add the modified missedClass back to the list
