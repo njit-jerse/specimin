@@ -2577,24 +2577,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Based on the set returned by JavaTypeCorrect, this method corrects the Throwable extension for
-   * synthetic classes as needed.
+   * Based on the map returned by JavaTypeCorrect, this method corrects the extends/implements
+   * clauses for synthetic classes as needed.
    *
-   * @param typesToExtendThrowable the set of synthetic types that need Throwable extension.
+   * @param typesToExtend the set of synthetic types that need to be updated
    * @return true if at least one synthetic type is updated.
    */
-  public boolean updateTypesToExtendThrowable(Set<String> typesToExtendThrowable) {
+  public boolean updateTypesWithExtends(Map<String, String> typesToExtend) {
     boolean atLeastOneTypeIsUpdated = false;
     Set<UnsolvedClassOrInterface> modifiedClasses = new HashSet<>();
 
-    for (String typeToExtendThrowable : typesToExtendThrowable) {
+    for (String typeToExtend : typesToExtend.keySet()) {
       Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
       while (iterator.hasNext()) {
         UnsolvedClassOrInterface missedClass = iterator.next();
-        if (missedClass.getClassName().equals(typeToExtendThrowable)) {
+        if (missedClass.getClassName().equals(typeToExtend)) {
           atLeastOneTypeIsUpdated = true;
           iterator.remove();
-          missedClass.setThrowableToTrue();
+          // TODO: I think we need to first locate the FQN for the type to extend,
+          // but this should be fine (TDD refactoring style) for now
+          String extendedType = typesToExtend.get(typeToExtend);
+          missedClass.extend(extendedType);
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);

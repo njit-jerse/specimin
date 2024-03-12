@@ -212,8 +212,7 @@ public class SpeciminRunner {
         typesToChange = typeCorrecter.getTypeToChange();
         boolean changeAtLeastOneType = addMissingClass.updateTypes(typesToChange);
         boolean extendAtLeastOneType =
-            addMissingClass.updateTypesToExtendThrowable(
-                typeCorrecter.getTypesThatExtendThrowable());
+            addMissingClass.updateTypesWithExtends(typeCorrecter.getExtendedTypes());
         boolean atLeastOneTypeIsUpdated = changeAtLeastOneType || extendAtLeastOneType;
 
         // this is case 2. We will stop addMissingClass. In the next phase,

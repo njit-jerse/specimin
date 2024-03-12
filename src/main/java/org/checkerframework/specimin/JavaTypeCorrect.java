@@ -9,7 +9,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,11 +44,12 @@ class JavaTypeCorrect {
   private Map<String, Set<String>> fileAndAssociatedTypes = new HashMap<>();
 
   /**
-   * Synthetic types that need to extend Throwable. Note that the stored Strings are simple names,
-   * which is safe because the worst thing that might happen is that an extra sythetic class might
-   * accidentally extend Throwable.
+   * Synthetic types that need to extend or implement a class/interface. Note that the stored
+   * Strings are simple names (because javac's error messages only give simple names), which is safe
+   * because the worst thing that might happen is that an extra synthetic class might accidentally
+   * extend or implement an unnecessary interface.
    */
-  private Set<String> typesThatExtendThrowable = new HashSet<>();
+  private Map<String, String> extendedTypes = new HashMap<>();
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
@@ -78,12 +78,14 @@ class JavaTypeCorrect {
   }
 
   /**
-   * Get the names of synthetic classes that should extend Throwable.
+   * Get the simple names of synthetic classes that should extend or implement a class/interface (it
+   * is not known at this point which). Both keys and values are simple names, due to javac
+   * limitations.
    *
-   * @return the value of typesThatExtendThrowable.
+   * @return the map described above.
    */
-  public Set<String> getTypesThatExtendThrowable() {
-    return typesThatExtendThrowable;
+  public Map<String, String> getExtendedTypes() {
+    return extendedTypes;
   }
 
   /**
@@ -192,7 +194,7 @@ class JavaTypeCorrect {
       String incorrectType = splitErrorMessage.get(4);
       String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (correctType.equals("Throwable")) {
-        typesThatExtendThrowable.add(incorrectType);
+        extendedTypes.put(incorrectType, "Throwable");
       } else if (isSynthetic(correctType)) {
         // This situation occurs if we have created a synthetic field
         // (e.g., in a superclass) that has a type that doesn't match the
