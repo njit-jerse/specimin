@@ -209,6 +209,10 @@ public class SpeciminRunner {
         if (!atLeastOneTypeIsUpdated && gettingStuck) {
           break;
         }
+
+        // in order for the newly updated files to be considered when solving symbols, we need to
+        // update the type solver and the map of parsed target files.
+        updateStaticSolver(root, jarPaths);
       }
     }
 
