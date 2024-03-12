@@ -303,6 +303,7 @@ public class SpeciminRunner {
 
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(inheritancePreserve.getAddedClasses());
+    System.out.println("updated used classes: " + updatedUsedClass);
     PrunerVisitor methodPruner =
         new PrunerVisitor(
             finder.getTargetMethods(),

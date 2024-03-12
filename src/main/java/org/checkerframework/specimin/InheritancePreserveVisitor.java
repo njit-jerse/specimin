@@ -18,6 +18,7 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
 
   /** List of fully-qualified classnames to be added to the list of used classes. */
   public Set<String> addedClasses = new HashSet<>();
+
   /**
    * Constructs an InheritancePreserveVisitor with the specified set of used classes.
    *

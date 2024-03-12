@@ -140,14 +140,18 @@ class JavaTypeCorrect {
       String[] firstConstraints = {"equality constraints: ", "first type: "};
       String[] secondConstraints = {"lower bounds: ", "second type: "};
       String firstConstraintType = "";
+
+      lines:
       while ((line = reader.readLine()) != null) {
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
+          continue lines;
         }
         // these type error with constraint types will be in a pair of lines
         for (String firstConstraint : firstConstraints) {
           if (line.contains(firstConstraint)) {
             firstConstraintType = line.replace(firstConstraint, "").trim();
+            continue lines;
           }
         }
         for (String secondConstraint : secondConstraints) {
@@ -167,6 +171,7 @@ class JavaTypeCorrect {
                       + secondConstraintType);
             }
             firstConstraintType = "";
+            continue lines;
           }
         }
       }
@@ -191,23 +196,28 @@ class JavaTypeCorrect {
      * 2. error: incompatible types: found <type1> required <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      String incorrectType = splitErrorMessage.get(4);
-      String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      if (correctType.equals("Throwable")) {
-        extendedTypes.put(incorrectType, "Throwable");
-      } else if (isSynthetic(correctType)) {
+      String rhs = splitErrorMessage.get(4);
+      String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
+      if (lhs.equals("Throwable")) {
+        extendedTypes.put(rhs, "Throwable");
+      } else if (isSynthetic(lhs)) {
         // This situation occurs if we have created a synthetic field
         // (e.g., in a superclass) that has a type that doesn't match the
         // type of the RHS. In this case, the "correct" type is wrong, and
         // the "incorrect" type is the actual type of the RHS.
-        changeType(correctType, incorrectType);
+        changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
       } else {
-        changeType(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+        changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
       }
     } else {
-      String incorrectType = splitErrorMessage.get(5);
-      String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      changeType(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+      // TODO: what error message triggers this code? Do we have test cases for it?
+      String rhs = splitErrorMessage.get(5);
+      String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
+      if (isSynthetic(lhs)) {
+        changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
+      } else {
+        changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
+      }
     }
   }
 
@@ -225,10 +235,12 @@ class JavaTypeCorrect {
     if (typeToChange.containsKey(incorrectType)) {
       String otherCorrectType = typeToChange.get(incorrectType);
       if (!otherCorrectType.equals(correctType)) {
-        // we require a LUB
+        // we require a LUB: don't do a direct conversion between the types, but
+        // instead retain the "incorrect" synthetic type as a mutual top type
+        // for the two other "correct" types.
         typeToChange.remove(incorrectType);
         // TODO: what if one of these "correct" types is non-synthetic?
-        // Is that possible?
+        // Is that possible? What would the consequences be if so?
         extendedTypes.put(correctType, incorrectType);
         extendedTypes.put(otherCorrectType, incorrectType);
         // once we've made this lub correction, we don't want to
@@ -250,7 +262,7 @@ class JavaTypeCorrect {
    *     of type.
    */
   public String tryResolveFullyQualifiedType(String type, String filePath) {
-    // type is already in the fully qualifed format
+    // type is already in the fully qualified format
     if (Splitter.onPattern("\\.").splitToList(type).size() > 1) {
       return type;
     }
