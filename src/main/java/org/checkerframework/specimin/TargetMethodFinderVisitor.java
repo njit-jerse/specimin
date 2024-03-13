@@ -260,12 +260,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         this.classFQName + "#" + removeMethodReturnTypeAndAnnotations(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
-      ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
-      ResolvedConstructorDeclaration resolved = parentExpression.resolve();
-      String methodPackage = resolved.getPackageName();
-      String methodClass = resolved.getClassName();
-      usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
-      updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
+      Node parentNode = method.getParentNode().get();
+      // it could also be an enum declaration, but those are handled separately
+      if (parentNode instanceof ObjectCreationExpr) {
+        ObjectCreationExpr parentExpression = (ObjectCreationExpr) parentNode;
+        ResolvedConstructorDeclaration resolved = parentExpression.resolve();
+        String methodPackage = resolved.getPackageName();
+        String methodClass = resolved.getClassName();
+        usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
+        updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
+      }
     }
     String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
     if (this.targetMethodNames.contains(methodWithoutAnySpace)) {
@@ -437,7 +441,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
         // name, such as org and org.example, will also be considered as FieldAccessExpr.
-        System.out.println(e);
       }
     }
     Expression caller = expr.getScope();
