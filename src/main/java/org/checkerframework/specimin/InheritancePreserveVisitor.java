@@ -4,6 +4,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -48,7 +49,14 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
-        String qualifiedName = extendedType.resolve().getQualifiedName();
+        String qualifiedName;
+        try {
+          qualifiedName = extendedType.resolve().getQualifiedName();
+        }
+        // since Specimin does not create synthetic inheritance for interfaces.
+        catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          continue;
+        }
         addedClasses.add(qualifiedName);
       }
     }
