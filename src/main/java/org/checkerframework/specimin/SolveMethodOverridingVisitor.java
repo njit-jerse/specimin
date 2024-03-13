@@ -64,7 +64,7 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
     String methodSignature;
     try {
       methodSignature = method.resolve().getQualifiedSignature();
-    } catch (UnsolvedSymbolException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       // this method is not used by target methods, so it is unresolved.
       return super.visit(method, p);
     }

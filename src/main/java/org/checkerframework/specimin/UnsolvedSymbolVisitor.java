@@ -625,7 +625,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(LambdaExpr node, Void p) {
-
+    boolean noLocalScope = localVariables.isEmpty();
+    if (noLocalScope) {
+      localVariables.addFirst(new HashSet<>());
+    }
     // add the parameters to the local variable map
     // Note that lambdas DO NOT CREATE A NEW SCOPE
     // (why? ask whoever designed the feature...)
@@ -636,8 +639,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(node, p);
 
     // then remove them
-    for (Parameter lambdaParam : node.getParameters()) {
-      localVariables.getFirst().remove(lambdaParam.getNameAsString());
+    if (noLocalScope) {
+      localVariables.removeFirst();
+    } else {
+      for (Parameter lambdaParam : node.getParameters()) {
+        localVariables.getFirst().remove(lambdaParam.getNameAsString());
+      }
     }
     return result;
   }
@@ -954,10 +961,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateSyntheticClassesForTypeVar(typeExpr);
       return super.visit(typeExpr, p);
     }
+    if (updateTargetFilesForExistingClassWithInheritance(typeExpr)) {
+      return super.visit(typeExpr, p);
+    }
     try {
-      // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
-      // extends or implements a resolved class/interface.
-      typeExpr.resolve().getAllAncestors();
+      typeExpr.resolve();
       return super.visit(typeExpr, p);
     }
     /*
@@ -1252,6 +1260,41 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return variableDeclaration + " = false";
     } else {
       return variableDeclaration + " = null";
+    }
+  }
+
+  /**
+   * Updates the list of target files if the given type extends another class or interface and its
+   * class file is present in the original codebase.
+   *
+   * @param classOrInterfaceType A type that may have inheritance.
+   * @return True if the updating process was successful; otherwise, false.
+   */
+  private boolean updateTargetFilesForExistingClassWithInheritance(
+      ClassOrInterfaceType classOrInterfaceType) {
+    // Extracting class information
+    String classSimpleName = classOrInterfaceType.getNameAsString();
+    String fullyQualifiedName = getPackageFromClassName(classSimpleName) + "." + classSimpleName;
+
+    // Checking if the class file exists in the original codebase
+    if (!classfileIsInOriginalCodebase(fullyQualifiedName)) {
+      return false;
+    }
+
+    ResolvedReferenceType resolvedClass;
+    try {
+      resolvedClass = classOrInterfaceType.resolve();
+      if (!resolvedClass.getAllAncestors().isEmpty()) {
+        String pathOfThisCurrentType = qualifiedNameToFilePath(fullyQualifiedName);
+        if (!addedTargetFiles.contains(pathOfThisCurrentType)) {
+          addedTargetFiles.add(pathOfThisCurrentType);
+          gotException();
+        }
+        return true;
+      }
+      return false;
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return false;
     }
   }
 

@@ -18,6 +18,7 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
 
   /** List of fully-qualified classnames to be added to the list of used classes. */
   public Set<String> addedClasses = new HashSet<>();
+
   /**
    * Constructs an InheritancePreserveVisitor with the specified set of used classes.
    *
@@ -33,7 +34,14 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
    * @return The value of addedClasses.
    */
   public Set<String> getAddedClasses() {
-    return addedClasses;
+    Set<String> copyOfAddedClasses = new HashSet<>();
+    copyOfAddedClasses.addAll(addedClasses);
+    return copyOfAddedClasses;
+  }
+
+  /** Empty the list of added classes. */
+  public void emptyAddedClasses() {
+    addedClasses = new HashSet<>();
   }
 
   @Override
