@@ -9,8 +9,10 @@ import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
+import java.util.HashSet;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -81,11 +83,22 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
     // is technically optional, but it is widely used.)
     if (isAbstract(overridden) || (overridden == null && isOverride(method))) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
+      Set<String> returnAndParamTypes = new HashSet<>();
+      try {
+        returnAndParamTypes.add(resolvedMethod.getReturnType().describe());
+        for (int i = 0; i < resolvedMethod.getNumberOfParams(); ++i) {
+          ResolvedParameterDeclaration param = resolvedMethod.getParam(i);
+          returnAndParamTypes.add(param.describeType());
+        }
+      } catch (UnsolvedSymbolException e) {
+        // In this case, don't keep the method (it won't compile anyway,
+        // since some needed symbol isn't available). TODO: find a way to trigger the
+        // creation of a synthetic class for the unsolved symbol at this point.
+        return super.visit(method, p);
+      }
       usedMembers.add(resolvedMethod.getQualifiedSignature());
-      usedClass.add(resolvedMethod.getReturnType().describe());
-      for (int i = 0; i < resolvedMethod.getNumberOfParams(); ++i) {
-        ResolvedParameterDeclaration param = resolvedMethod.getParam(i);
-        usedClass.add(param.describeType());
+      for (String type : returnAndParamTypes) {
+        usedClass.add(type);
       }
     }
     return super.visit(method, p);
