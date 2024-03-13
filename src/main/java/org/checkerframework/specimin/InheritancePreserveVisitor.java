@@ -57,9 +57,36 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
         catch (UnsolvedSymbolException | UnsupportedOperationException e) {
           continue;
         }
-        addedClasses.add(qualifiedName);
+        updateAddedClassWithQualifiedClassName(qualifiedName);
       }
     }
     return super.visit(decl, p);
+  }
+
+  /**
+   * (This method is copied from TargetMethodFinderVisitor).
+   *
+   * <p>Updates the list of used classes with the given qualified class name and its corresponding
+   * primary classes and enclosing classes. This includes cases such as classes not sharing the same
+   * name as their Java files or nested classes.
+   *
+   * @param qualifiedClassName The qualified class name to be included in the list of used classes.
+   */
+  public void updateAddedClassWithQualifiedClassName(String qualifiedClassName) {
+    // in case of type variables
+    if (!qualifiedClassName.contains(".")) {
+      return;
+    }
+    // strip type variables, if they're present
+    if (qualifiedClassName.contains("<")) {
+      qualifiedClassName = qualifiedClassName.substring(0, qualifiedClassName.indexOf("<"));
+    }
+    addedClasses.add(qualifiedClassName);
+
+    String potentialOuterClass =
+        qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
+    if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
+      updateAddedClassWithQualifiedClassName(potentialOuterClass);
+    }
   }
 }
