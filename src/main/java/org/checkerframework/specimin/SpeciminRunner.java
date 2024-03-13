@@ -271,24 +271,30 @@ public class SpeciminRunner {
         parsedTargetFiles.put(directory, parseJavaFile(root, directory));
       }
     }
-    InheritancePreserveVisitor inheritancePreserve =
-        new InheritancePreserveVisitor(solveMethodOverridingVisitor.getUsedClass());
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(inheritancePreserve, null);
-    }
-
-    for (String targetFile : inheritancePreserve.getAddedClasses()) {
-      String directoryOfFile = targetFile.replace(".", "/") + ".java";
-      File thisFile = new File(root + directoryOfFile);
-      // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
-      // create synthetic files for them
-      if (thisFile.exists()) {
-        parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+    Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
+    Set<String> totalSetOfAddedInheritedClasses = classToFindInheritance;
+    InheritancePreserveVisitor inheritancePreserve;
+    while (!classToFindInheritance.isEmpty()) {
+      inheritancePreserve = new InheritancePreserveVisitor(classToFindInheritance);
+      for (CompilationUnit cu : parsedTargetFiles.values()) {
+        cu.accept(inheritancePreserve, null);
       }
+      for (String targetFile : inheritancePreserve.getAddedClasses()) {
+        String directoryOfFile = targetFile.replace(".", "/") + ".java";
+        File thisFile = new File(root + directoryOfFile);
+        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
+        // create synthetic files for them
+        if (thisFile.exists()) {
+          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+        }
+      }
+      classToFindInheritance = inheritancePreserve.getAddedClasses();
+      totalSetOfAddedInheritedClasses.addAll(classToFindInheritance);
+      inheritancePreserve.emptyAddedClasses();
     }
 
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
-    updatedUsedClass.addAll(inheritancePreserve.getAddedClasses());
+    updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
 
     // remove the unsolved annotations in the newly added files.
     for (CompilationUnit cu : parsedTargetFiles.values()) {

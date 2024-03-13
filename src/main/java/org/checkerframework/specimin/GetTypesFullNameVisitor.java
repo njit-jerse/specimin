@@ -37,8 +37,8 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
-    // Nested type classes don't have a separate class file.
-    if (!decl.isNestedType()) {
+    // Nested type and local classes don't have a separate class file.
+    if (!decl.isNestedType() && !decl.isLocalClassDeclaration()) {
       fileDirectory = decl.getFullyQualifiedName().get().replace(".", "/") + ".java";
       fileAndAssociatedTypes.put(fileDirectory, new HashSet<>());
     }
