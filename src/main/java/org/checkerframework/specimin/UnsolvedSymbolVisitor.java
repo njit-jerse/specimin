@@ -418,10 +418,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // regardless of being inside target methods or potentially-used members.
     SimpleName nodeName = node.getName();
     className = nodeName.asString();
-
+    boolean isLocalDeclaration = node.isLocalClassDeclaration();
     if (node.isNestedType()) {
       this.currentClassQualifiedName += "." + node.getName().asString();
-    } else {
+    } else if (!isLocalDeclaration) {
+      // the purpose of keeping track of class name is to recognize the signatures of target
+      // methods. Since we don't take methods inside local classes as target methods, we don't need
+      // to keep track of class name in this case.
       this.currentClassQualifiedName = node.getFullyQualifiedName().orElseThrow();
     }
     if (node.getExtendedTypes().isNonEmpty()) {
@@ -489,7 +492,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.currentClassQualifiedName =
           this.currentClassQualifiedName.substring(
               0, this.currentClassQualifiedName.lastIndexOf('.'));
-    } else {
+    } else if (!isLocalDeclaration) {
       this.currentClassQualifiedName = "";
     }
     return result;
