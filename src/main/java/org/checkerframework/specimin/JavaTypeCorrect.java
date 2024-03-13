@@ -141,8 +141,11 @@ class JavaTypeCorrect {
       String[] secondConstraints = {"lower bounds: ", "second type: "};
       String firstConstraintType = "";
 
+      StringBuilder lines = new StringBuilder("\n");
+
       lines:
       while ((line = reader.readLine()) != null) {
+        lines.append(line);
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
           continue lines;
@@ -162,13 +165,11 @@ class JavaTypeCorrect {
             } else if (isSynthetic(secondConstraintType)) {
               changeType(secondConstraintType, firstConstraintType);
             } else {
-              throw new RuntimeException(
-                  "JavaTypeCorrect found two incompatible types, but neither is "
-                      + "synthetic:\n"
-                      + "first constraint type: "
-                      + firstConstraintType
-                      + "\nsecond constraint type: "
-                      + secondConstraintType);
+              // We used to throw an exception here. However, sometimes
+              // this case does happen while reducing large projects - we saw
+              // it while reducing e.g. Apache Cassandra. It may still indicate
+              // a problem when we encounter it, but I'm not sure that it is:
+              // this may happen sometimes during intermediate stages of Specimin.
             }
             firstConstraintType = "";
             continue lines;
