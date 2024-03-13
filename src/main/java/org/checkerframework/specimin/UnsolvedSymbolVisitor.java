@@ -418,10 +418,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // regardless of being inside target methods or potentially-used members.
     SimpleName nodeName = node.getName();
     className = nodeName.asString();
-
+    boolean isLocalDeclaration = node.isLocalClassDeclaration();
     if (node.isNestedType()) {
       this.currentClassQualifiedName += "." + node.getName().asString();
-    } else {
+    } else if (!isLocalDeclaration) {
+      // the purpose of keeping track of class name is to recognize the signatures of target
+      // methods. Since we don't take methods inside local classes as target methods, we don't need
+      // to keep track of class name in this case.
       this.currentClassQualifiedName = node.getFullyQualifiedName().orElseThrow();
     }
     if (node.getExtendedTypes().isNonEmpty()) {
@@ -489,7 +492,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.currentClassQualifiedName =
           this.currentClassQualifiedName.substring(
               0, this.currentClassQualifiedName.lastIndexOf('.'));
-    } else {
+    } else if (!isLocalDeclaration) {
       this.currentClassQualifiedName = "";
     }
     return result;
@@ -625,7 +628,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(LambdaExpr node, Void p) {
-
+    boolean noLocalScope = localVariables.isEmpty();
+    if (noLocalScope) {
+      localVariables.addFirst(new HashSet<>());
+    }
     // add the parameters to the local variable map
     // Note that lambdas DO NOT CREATE A NEW SCOPE
     // (why? ask whoever designed the feature...)
@@ -636,8 +642,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(node, p);
 
     // then remove them
-    for (Parameter lambdaParam : node.getParameters()) {
-      localVariables.getFirst().remove(lambdaParam.getNameAsString());
+    if (noLocalScope) {
+      localVariables.removeFirst();
+    } else {
+      for (Parameter lambdaParam : node.getParameters()) {
+        localVariables.getFirst().remove(lambdaParam.getNameAsString());
+      }
     }
     return result;
   }
@@ -966,6 +976,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateSyntheticClassesForTypeVar(typeExpr);
       return super.visit(typeExpr, p);
     }
+    if (updateTargetFilesListForExistingClassWithInheritance(typeExpr)) {
+      return super.visit(typeExpr, p);
+    }
     try {
       // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
       // extends or implements a resolved class/interface.
@@ -1264,6 +1277,41 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return variableDeclaration + " = false";
     } else {
       return variableDeclaration + " = null";
+    }
+  }
+
+  /**
+   * Updates the list of target files if the given type extends another class or interface and its
+   * class file is present in the original codebase.
+   *
+   * <p>Note: this method only updates the list of target files if the inheritance is resolved.
+   *
+   * @param classOrInterfaceType A type that may have inheritance.
+   * @return True if the updating process was successful; otherwise, false.
+   */
+  private boolean updateTargetFilesListForExistingClassWithInheritance(
+      ClassOrInterfaceType classOrInterfaceType) {
+    String classSimpleName = classOrInterfaceType.getNameAsString();
+    String fullyQualifiedName = getPackageFromClassName(classSimpleName) + "." + classSimpleName;
+
+    if (!classfileIsInOriginalCodebase(fullyQualifiedName)) {
+      return false;
+    }
+
+    ResolvedReferenceType resolvedClass;
+    try {
+      resolvedClass = classOrInterfaceType.resolve();
+      if (!resolvedClass.getAllAncestors().isEmpty()) {
+        String pathOfThisCurrentType = qualifiedNameToFilePath(fullyQualifiedName);
+        if (!addedTargetFiles.contains(pathOfThisCurrentType)) {
+          addedTargetFiles.add(pathOfThisCurrentType);
+          gotException();
+        }
+        return true;
+      }
+      return false;
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return false;
     }
   }
 
