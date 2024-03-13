@@ -17,21 +17,6 @@ class WrappedSet<K, V> implements Set<V> {
     }
 
     @Override
-    public boolean equals(Object object) {
-        throw new Error();
-    }
-
-    @Override
-    public int hashCode() {
-        throw new Error();
-    }
-
-    @Override
-    public String toString() {
-        throw new Error();
-    }
-
-    @Override
     public Iterator<V> iterator() {
         throw new Error();
     }

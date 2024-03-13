@@ -71,6 +71,7 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
     if (targetMethod.contains(methodSignature) || usedMembers.contains(methodSignature)) {
       checkForOverridingAndUpdateUsedClasses(method);
     }
+
     return super.visit(method, p);
   }
 
