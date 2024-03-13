@@ -90,7 +90,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
           ResolvedParameterDeclaration param = resolvedMethod.getParam(i);
           returnAndParamTypes.add(param.describeType());
         }
-      } catch (UnsolvedSymbolException e) {
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // In this case, don't keep the method (it won't compile anyway,
         // since some needed symbol isn't available). TODO: find a way to trigger the
         // creation of a synthetic class for the unsolved symbol at this point.
@@ -98,6 +98,16 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
       }
       usedMembers.add(resolvedMethod.getQualifiedSignature());
       for (String type : returnAndParamTypes) {
+        type = type.trim();
+        if (type.contains("<")) {
+          // remove generics, if present, since this type will be used in
+          // an import
+          type = type.substring(0, type.indexOf("<"));
+        }
+        // also remove array types
+        if (type.contains("[]")) {
+          type = type.replace("[]", "");
+        }
         usedClass.add(type);
       }
     }
