@@ -1,11 +1,6 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.SuperExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -71,7 +66,6 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
     if (targetMethod.contains(methodSignature) || usedMembers.contains(methodSignature)) {
       checkForOverridingAndUpdateUsedClasses(method);
     }
-
     return super.visit(method, p);
   }
 
@@ -81,32 +75,11 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
    * methodDeclaration is assumed to be a target or used method.
    */
   private void checkForOverridingAndUpdateUsedClasses(MethodDeclaration methodDeclaration) {
-    // just a method signature, no need to check for overriding.
-    if (methodDeclaration.getBody().isEmpty()) {
-      return;
-    }
-    BlockStmt methodBody = methodDeclaration.getBody().get();
-    // JavaParser does not support solving overriding, but it does support solving super
-    // expressions. So we make a temporary super expression to figure out if this current method is
-    // overriding.
-    MethodCallExpr superCall = new MethodCallExpr();
-    superCall.setName(methodDeclaration.getName());
-    NodeList<Parameter> parameters = methodDeclaration.getParameters();
-    for (Parameter parameter : parameters) {
-      superCall.addArgument(parameter.getNameAsString());
-    }
-    superCall.setScope(new SuperExpr());
-    methodBody.addStatement(superCall);
-    try {
-      ResolvedMethodDeclaration resolvedSuperCall = superCall.resolve();
+    ResolvedMethodDeclaration resolvedSuperCall =
+        MustImplementMethodsVisitor.getOverriddenMethod(methodDeclaration);
+    if (resolvedSuperCall != null) {
       usedClass.add(resolvedSuperCall.getPackageName() + "." + resolvedSuperCall.getClassName());
       usedMembers.add(resolvedSuperCall.getQualifiedSignature());
-    } catch (Exception e) {
-      // The current method is not overriding, thus the super call is unresolved.
-      // This catch block is necessary to avoid crashes due to ignored catch blocks. A single
-      // remove() call is not enough to remove a MethodCallExpr.
-      superCall.remove();
     }
-    JavaParserUtil.removeNode(superCall);
   }
 }

@@ -118,7 +118,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
    * Given a MethodDeclaration, this method returns the method that it overrides, if one exists. If
    * not, it returns null.
    */
-  private @Nullable ResolvedMethodDeclaration getOverriddenMethod(
+  public static @Nullable ResolvedMethodDeclaration getOverriddenMethod(
       MethodDeclaration methodDeclaration) {
     // just a method signature, no need to check for overriding.
     if (methodDeclaration.getBody().isEmpty()) {
