@@ -4,6 +4,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -259,12 +260,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         this.classFQName + "#" + removeMethodReturnTypeAndAnnotations(methodDeclAsString);
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
-      ObjectCreationExpr parentExpression = (ObjectCreationExpr) method.getParentNode().get();
-      ResolvedConstructorDeclaration resolved = parentExpression.resolve();
-      String methodPackage = resolved.getPackageName();
-      String methodClass = resolved.getClassName();
-      usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
-      updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
+      Node parentNode = method.getParentNode().get();
+      // it could also be an enum declaration, but those are handled separately
+      if (parentNode instanceof ObjectCreationExpr) {
+        ObjectCreationExpr parentExpression = (ObjectCreationExpr) parentNode;
+        ResolvedConstructorDeclaration resolved = parentExpression.resolve();
+        String methodPackage = resolved.getPackageName();
+        String methodClass = resolved.getClassName();
+        usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
+        updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
+      }
     }
     String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
     if (this.targetMethodNames.contains(methodWithoutAnySpace)) {
@@ -402,6 +407,18 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolved.getPackageName() + "." + resolved.getClassName());
     }
     return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(EnumConstantDeclaration expr, Void p) {
+    // this is a bit hacky, but we don't remove any enum constant declarations if they
+    // are ever used, so it's safer to just preserve anything that they use by pretending
+    // that we're inside a target method.
+    boolean oldInsideTargetMethod = insideTargetMethod;
+    insideTargetMethod = true;
+    Visitable result = super.visit(expr, p);
+    insideTargetMethod = oldInsideTargetMethod;
+    return result;
   }
 
   @Override
