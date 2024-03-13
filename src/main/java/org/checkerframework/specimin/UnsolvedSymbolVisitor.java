@@ -961,7 +961,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateSyntheticClassesForTypeVar(typeExpr);
       return super.visit(typeExpr, p);
     }
-    if (updateTargetFilesForExistingClassWithInheritance(typeExpr)) {
+    if (updateTargetFilesListForExistingClassWithInheritance(typeExpr)) {
       return super.visit(typeExpr, p);
     }
     try {
@@ -1270,13 +1270,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param classOrInterfaceType A type that may have inheritance.
    * @return True if the updating process was successful; otherwise, false.
    */
-  private boolean updateTargetFilesForExistingClassWithInheritance(
+  private boolean updateTargetFilesListForExistingClassWithInheritance(
       ClassOrInterfaceType classOrInterfaceType) {
-    // Extracting class information
     String classSimpleName = classOrInterfaceType.getNameAsString();
     String fullyQualifiedName = getPackageFromClassName(classSimpleName) + "." + classSimpleName;
 
-    // Checking if the class file exists in the original codebase
     if (!classfileIsInOriginalCodebase(fullyQualifiedName)) {
       return false;
     }
