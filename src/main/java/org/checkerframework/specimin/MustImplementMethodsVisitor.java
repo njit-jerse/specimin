@@ -58,6 +58,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  @SuppressWarnings("nullness:return") // ok to return null, because this is a void visitor
   public Visitable visit(ClassOrInterfaceDeclaration type, Void p) {
     if (type.getFullyQualifiedName().isPresent()
         && usedClass.contains(type.getFullyQualifiedName().get())) {
