@@ -739,7 +739,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // not a field of any class, or if it is a field of a class but is explicitly referenced, such
     // as "Math.number," we handle it in other visit methods.
     if (!canBeSolved(node)) {
-      System.out.println("node: " + node);
       Optional<Node> parentNode = node.getParentNode();
       // we take care of MethodCallExpr and FieldAccessExpr cases in other visit methods
       if (parentNode.isEmpty()
