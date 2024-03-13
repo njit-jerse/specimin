@@ -75,13 +75,14 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
     ResolvedMethodDeclaration overridden = getOverriddenMethod(method);
-    // two cases: the method is a solvable override, and we can show that
+    // two cases: the method is a solvable override that will be preserved, and we can show that
     // it is abstract (before the ||), or we can't solve the override but there
     // is an @Override annotation. This relies on the use of @Override when
     // implementing required methods from interfaces in the target code,
     // but unfortunately I think it's the best that we can do here. (@Override
     // is technically optional, but it is widely used.)
-    if (isAbstract(overridden) || (overridden == null && isOverride(method))) {
+    if (isPreservedAndAbstract(overridden) || (overridden == null && isOverride(method))) {
+      System.out.println("overridden: " + overridden.getQualifiedSignature());
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       Set<String> returnAndParamTypes = new HashSet<>();
       try {
@@ -120,8 +121,10 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
    * @param method a possibly-null method declaration
    * @return true iff the input is non-null and abstract
    */
-  private boolean isAbstract(@Nullable ResolvedMethodDeclaration method) {
-    return method != null && method.isAbstract();
+  private boolean isPreservedAndAbstract(@Nullable ResolvedMethodDeclaration method) {
+    return method != null
+        && method.isAbstract()
+        && usedMembers.contains(method.getQualifiedSignature());
   }
 
   /**
