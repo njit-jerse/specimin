@@ -930,6 +930,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(EnumConstantDeclaration expr, Void p) {
+    // this is a bit hacky, but we don't remove any enum constant declarations if they
+    // are ever used, so it's safer to just preserve anything that they use by pretending
+    // that we're inside a target method.
+    boolean oldInsideTargetMethod = insideTargetMethod;
+    insideTargetMethod = true;
+    Visitable result = super.visit(expr, p);
+    insideTargetMethod = oldInsideTargetMethod;
+    return result;
+  }
+
+  @Override
   public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
     // Workaround for a JavaParser bug: When a type is referenced using its fully-qualified name,
     // like

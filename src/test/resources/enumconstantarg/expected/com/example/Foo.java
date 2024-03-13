@@ -8,10 +8,8 @@ class Foo {
 
         PREFIX(Op.EQ), CONTAINS(Op.CONTAINS), SPARSE(Op.NOT_EQ);
 
-        Op op;
-
         Mode(Op op) {
-            this.op = op;
+            throw new Error();
         }
     }
 

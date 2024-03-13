@@ -4,6 +4,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -405,6 +406,18 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(EnumConstantDeclaration expr, Void p) {
+    // this is a bit hacky, but we don't remove any enum constant declarations if they
+    // are ever used, so it's safer to just preserve anything that they use by pretending
+    // that we're inside a target method.
+    boolean oldInsideTargetMethod = insideTargetMethod;
+    insideTargetMethod = true;
+    Visitable result = super.visit(expr, p);
+    insideTargetMethod = oldInsideTargetMethod;
+    return result;
+  }
+
+  @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
     if (insideTargetMethod) {
       String fullNameOfClass;
@@ -424,6 +437,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
         // name, such as org and org.example, will also be considered as FieldAccessExpr.
+        System.out.println(e);
       }
     }
     Expression caller = expr.getScope();
