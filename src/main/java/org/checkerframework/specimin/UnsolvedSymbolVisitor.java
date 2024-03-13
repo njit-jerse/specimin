@@ -1697,10 +1697,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // since it is just simple string combination, it is a simple name
       @SuppressWarnings("signature")
       @ClassGetSimpleName String variableType = "SyntheticTypeFor" + toCapital(var);
-      UnsolvedClassOrInterface varType = new UnsolvedClassOrInterface(variableType, packageName);
+      UnsolvedClassOrInterface varType =
+          new UnsolvedClassOrInterface(variableType, getPackageFromClassName(variableType));
       syntheticTypes.add(variableType);
       relatedClass.addFields(
-          setInitialValueForVariableDeclaration(variableType, variableType + " " + var));
+          setInitialValueForVariableDeclaration(
+              variableType, varType.getQualifiedClassName() + " " + var));
       updateMissingClass(relatedClass);
       updateMissingClass(varType);
     }
@@ -1916,8 +1918,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       className = className.substring(0, className.indexOf("<"));
     }
     if (JavaLangUtils.isJavaLangName(className)) {
-      // no package name is necessary, since these classes are always imported
-      // automatically
+      // it's important not to accidentally put java.lang classes
+      // (like e.g., Exception or Throwable) into a wildcard import
+      // or the current package.
       return "java.lang";
     }
     String pkg = classAndPackageMap.get(className);
@@ -2540,7 +2543,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public boolean updateTypes(Map<String, String> typeToCorrect) {
     boolean atLeastOneTypeIsUpdated = false;
     for (String incorrectType : typeToCorrect.keySet()) {
-      // update incorrecType if it is the type of a field in a synthetic class
+      // update incorrectType if it is the type of a field in a synthetic class
       if (syntheticTypeAndClass.containsKey(incorrectType)) {
         UnsolvedClassOrInterface relatedClass = syntheticTypeAndClass.get(incorrectType);
         atLeastOneTypeIsUpdated |=
@@ -2597,14 +2600,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
       while (iterator.hasNext()) {
         UnsolvedClassOrInterface missedClass = iterator.next();
-        if (missedClass.getClassName().equals(typeToExtend)) {
+        // typeToExtend can be either a simple name or an FQN, due to the limitations
+        // of Javac
+        if (typeToExtend.equals(missedClass.getQualifiedClassName())
+            || typeToExtend.equals(missedClass.getClassName())) {
           atLeastOneTypeIsUpdated = true;
           iterator.remove();
-          // TODO: I think we need to first locate the FQN for the type to extend,
-          // but this should be fine (TDD refactoring style) for now
           String extendedType = typesToExtend.get(typeToExtend);
-          String fqn = getPackageFromClassName(extendedType) + "." + extendedType;
-          missedClass.extend(fqn);
+          if (!isAClassPath(extendedType)) {
+            extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
+          }
+          missedClass.extend(extendedType);
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);
@@ -2674,7 +2680,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * This indirection is here to make it easier to debug infinite loops. Never set gotException
    * directly, but instead call this function.
    */
-  private void gotException() {
+  public void gotException() {
     if (DEBUG) {
       StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
       System.out.println("setting gotException to true from: " + stackTraceElements[2]);

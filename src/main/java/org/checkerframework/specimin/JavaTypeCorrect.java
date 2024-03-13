@@ -140,37 +140,43 @@ class JavaTypeCorrect {
       String[] firstConstraints = {"equality constraints: ", "first type: "};
       String[] secondConstraints = {"lower bounds: ", "second type: "};
       String firstConstraintType = "";
+
+      StringBuilder lines = new StringBuilder("\n");
+
+      lines:
       while ((line = reader.readLine()) != null) {
+        lines.append(line);
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
+          continue lines;
         }
         // these type error with constraint types will be in a pair of lines
         for (String firstConstraint : firstConstraints) {
           if (line.contains(firstConstraint)) {
             firstConstraintType = line.replace(firstConstraint, "").trim();
+            continue lines;
           }
         }
         for (String secondConstraint : secondConstraints) {
           if (line.contains(secondConstraint)) {
             String secondConstraintType = line.replace(secondConstraint, "").trim();
             if (isSynthetic(firstConstraintType)) {
-              typeToChange.put(firstConstraintType, secondConstraintType);
+              changeType(firstConstraintType, secondConstraintType);
             } else if (isSynthetic(secondConstraintType)) {
-              typeToChange.put(secondConstraintType, firstConstraintType);
+              changeType(secondConstraintType, firstConstraintType);
             } else {
-              throw new RuntimeException(
-                  "JavaTypeCorrect found two incompatible types, but neither is "
-                      + "synthetic:\n"
-                      + "first constraint type: "
-                      + firstConstraintType
-                      + "\nsecond constraint type: "
-                      + secondConstraintType);
+              // We used to throw an exception here. However, sometimes
+              // this case does happen while reducing large projects - we saw
+              // it while reducing e.g. Apache Cassandra. It may still indicate
+              // a problem when we encounter it, but I'm not sure that it is:
+              // this may happen sometimes during intermediate stages of Specimin.
             }
             firstConstraintType = "";
+            continue lines;
           }
         }
       }
-    } catch (Exception e) {
+    } catch (IOException e) {
       System.out.println(e);
     }
   }
@@ -191,24 +197,66 @@ class JavaTypeCorrect {
      * 2. error: incompatible types: found <type1> required <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      String incorrectType = splitErrorMessage.get(4);
-      String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      if (correctType.equals("Throwable")) {
-        extendedTypes.put(incorrectType, "Throwable");
-      } else if (isSynthetic(correctType)) {
+      String rhs = splitErrorMessage.get(4);
+      String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
+      if (lhs.equals("Throwable")) {
+        extendedTypes.put(rhs, "Throwable");
+      } else if (isSynthetic(lhs)) {
         // This situation occurs if we have created a synthetic field
         // (e.g., in a superclass) that has a type that doesn't match the
         // type of the RHS. In this case, the "correct" type is wrong, and
         // the "incorrect" type is the actual type of the RHS.
-        typeToChange.put(correctType, incorrectType);
+        changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
+      } else if (isSynthetic(rhs)) {
+        changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
       } else {
-        typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+        // In this case, neither is truly synthetic (both must be used
+        // in the target), so make the rhs a subtype of the lhs
+        extendedTypes.put(rhs, lhs);
       }
     } else {
-      String incorrectType = splitErrorMessage.get(5);
-      String correctType = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      typeToChange.put(incorrectType, tryResolveFullyQualifiedType(correctType, filePath));
+      // TODO: what error message triggers this code? Do we have test cases for it?
+      String rhs = splitErrorMessage.get(5);
+      String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
+      if (isSynthetic(lhs)) {
+        changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
+      } else if (isSynthetic(rhs)) {
+        changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
+      } else {
+        extendedTypes.put(rhs, lhs);
+      }
     }
+  }
+
+  /**
+   * All instances of the synthetic "incorrect type" will be replaced with the "correct type" in the
+   * output of Specimin. This method does handle cases where at least two different types need to be
+   * matched (i.e., upper bounds), and should always be called rather than updating {@link
+   * #typeToChange} directly.
+   *
+   * @param incorrectType an incorrect synthetic type that is causing a type error
+   * @param correctType a correct type that the incorrect type must be a supertype of, based on the
+   *     output of javac
+   */
+  private void changeType(String incorrectType, String correctType) {
+    if (typeToChange.containsKey(incorrectType)) {
+      String otherCorrectType = typeToChange.get(incorrectType);
+      if (!otherCorrectType.equals(correctType)) {
+        // we require a LUB: don't do a direct conversion between the types, but
+        // instead retain the "incorrect" synthetic type as a mutual top type
+        // for the two other "correct" types.
+        typeToChange.remove(incorrectType);
+        // TODO: what if one of these "correct" types is non-synthetic?
+        // Is that possible? What would the consequences be if so?
+        extendedTypes.put(correctType, incorrectType);
+        extendedTypes.put(otherCorrectType, incorrectType);
+        // once we've made this lub correction, we don't want to
+        // continue with our main fix strategy
+        return;
+      }
+    }
+
+    typeToChange.put(incorrectType, correctType);
   }
 
   /**
@@ -221,7 +269,7 @@ class JavaTypeCorrect {
    *     of type.
    */
   public String tryResolveFullyQualifiedType(String type, String filePath) {
-    // type is already in the fully qualifed format
+    // type is already in the fully qualified format
     if (Splitter.onPattern("\\.").splitToList(type).size() > 1) {
       return type;
     }

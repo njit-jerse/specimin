@@ -192,10 +192,7 @@ public class UnsolvedClassOrInterface {
    * @param className a fully-qualified class name for the class to be extended
    */
   public void extend(String className) {
-    if (this.extendsClause != null) {
-      throw new RuntimeException("cannot add a second extends clause to synthetic class: " + this);
-    }
-    this.extendsClause = " extends " + className;
+    this.extendsClause = "extends " + className;
   }
 
   /**
@@ -248,7 +245,10 @@ public class UnsolvedClassOrInterface {
       // space.
       String fieldType = elements.get(0);
       String fieldName = elements.get(1);
-      if (fieldType.equals(currentType)) {
+      // endsWith here is important, because the output of javac (i.e., what it prints in the error
+      // message, which turns into currentType) is always a simple name, but fields in superclasses
+      // are output using FQNs
+      if (fieldType.endsWith(currentType)) {
         successfullyUpdated = true;
         iterator.remove();
         newFields.add(

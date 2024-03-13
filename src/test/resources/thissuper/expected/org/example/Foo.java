@@ -2,5 +2,5 @@ package org.example;
 
 public class Foo {
 
-    public SyntheticTypeForY y;
+    public com.example.SyntheticTypeForY y;
 }
