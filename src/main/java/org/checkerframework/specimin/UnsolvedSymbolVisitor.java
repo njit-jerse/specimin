@@ -965,7 +965,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(typeExpr, p);
     }
     try {
-      typeExpr.resolve();
+      // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
+      // extends or implements a resolved class/interface.
+      typeExpr.resolve().getAllAncestors();
       return super.visit(typeExpr, p);
     }
     /*
@@ -1266,6 +1268,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /**
    * Updates the list of target files if the given type extends another class or interface and its
    * class file is present in the original codebase.
+   *
+   * <p>Note: this method only updates the list of target files if the inheritance is resolved.
    *
    * @param classOrInterfaceType A type that may have inheritance.
    * @return True if the updating process was successful; otherwise, false.
