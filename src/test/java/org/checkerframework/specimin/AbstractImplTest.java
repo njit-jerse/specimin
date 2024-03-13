@@ -13,6 +13,6 @@ public class AbstractImplTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "abstractimpl",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar()"});
+        new String[] {"com.example.Simple#bar(K, Collection<V>)"});
   }
 }
