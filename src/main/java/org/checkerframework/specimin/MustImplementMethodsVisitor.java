@@ -252,6 +252,10 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
   /**
    * Given a MethodDeclaration, this method returns the method that it overrides, if one exists in
    * one of its super classes. If one does not exist, it returns null.
+   *
+   * @param methodDeclaration the method declaration to check
+   * @return the method that this method overrides, if one exists in a superclass. Null if no such
+   *     method exists.
    */
   public static @Nullable ResolvedMethodDeclaration getOverriddenMethodInSuperClass(
       MethodDeclaration methodDeclaration) {
