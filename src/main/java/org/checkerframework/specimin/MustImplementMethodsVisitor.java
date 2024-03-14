@@ -82,7 +82,6 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
     // but unfortunately I think it's the best that we can do here. (@Override
     // is technically optional, but it is widely used.)
     if (isPreservedAndAbstract(overridden) || (overridden == null && isOverride(method))) {
-      System.out.println("overridden: " + overridden.getQualifiedSignature());
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       Set<String> returnAndParamTypes = new HashSet<>();
       try {
