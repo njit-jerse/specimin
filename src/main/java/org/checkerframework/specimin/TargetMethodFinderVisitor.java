@@ -622,11 +622,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // generic class, interface, method, or constructor
       ResolvedTypeParameterDeclaration asTypeParameter = type.asTypeParameter();
       for (ResolvedTypeParameterDeclaration.Bound bound : asTypeParameter.getBounds()) {
-        updateUsedClassWithQualifiedClassName(bound.getType(), usedClass, nonPrimaryClassesToPrimaryClass);
+        updateUsedClassWithQualifiedClassName(
+            bound.getType().describe(), usedClass, nonPrimaryClassesToPrimaryClass);
       }
       return;
     }
-    updateUsedClassWithQualifiedClassName(type.describe(), usedClass, nonPrimaryClassesToPrimaryClass);
+    updateUsedClassWithQualifiedClassName(
+        type.describe(), usedClass, nonPrimaryClassesToPrimaryClass);
     if (!type.isReferenceType()) {
       return;
     }
