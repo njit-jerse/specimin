@@ -26,6 +26,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -589,6 +590,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param type The resolved type of the used element.
    */
   public void updateUsedClassBasedOnType(ResolvedType type) {
+    if (type.isTypeVariable()) {
+      ResolvedTypeParameterDeclaration asTypeParameter = type.asTypeParameter();
+      for (ResolvedTypeParameterDeclaration.Bound bound : asTypeParameter.getBounds()) {
+        updateUsedClassWithQualifiedClassName(bound.getType().describe());
+      }
+    }
     updateUsedClassWithQualifiedClassName(type.describe());
     if (!type.isReferenceType()) {
       return;
