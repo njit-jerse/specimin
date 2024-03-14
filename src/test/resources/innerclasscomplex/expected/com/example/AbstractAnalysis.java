@@ -13,7 +13,7 @@ public abstract class AbstractAnalysis {
         public class ForwardDFOComparator implements Comparator<Block> {
 
             @SuppressWarnings("nullness:unboxing.of.nullable")
-                        public int compare(Block b1, Block b2) {
+            public int compare(Block b1, Block b2) {
                 return depthFirstOrder.get(b1) - depthFirstOrder.get(b2);
             }
         }

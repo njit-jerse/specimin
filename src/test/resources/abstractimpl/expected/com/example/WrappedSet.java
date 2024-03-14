@@ -10,55 +10,55 @@ class WrappedSet<K, V> implements Set<V> {
         throw new Error();
     }
 
-        public int size() {
+    public int size() {
         throw new Error();
     }
 
-        public Iterator<V> iterator() {
+    public Iterator<V> iterator() {
         throw new Error();
     }
 
-        public void clear() {
+    public void clear() {
         throw new Error();
     }
 
-        public boolean remove(Object o) {
+    public boolean remove(Object o) {
         throw new Error();
     }
 
-        public boolean removeAll(Collection<?> c) {
+    public boolean removeAll(Collection<?> c) {
         throw new Error();
     }
 
-        public boolean retainAll(Collection<?> c) {
+    public boolean retainAll(Collection<?> c) {
         throw new Error();
     }
 
-        public boolean addAll(Collection<? extends V> collection) {
+    public boolean addAll(Collection<? extends V> collection) {
         throw new Error();
     }
 
-        public boolean contains(Object o) {
+    public boolean contains(Object o) {
         throw new Error();
     }
 
-        public boolean containsAll(Collection<?> c) {
+    public boolean containsAll(Collection<?> c) {
         throw new Error();
     }
 
-        public boolean add(V value) {
+    public boolean add(V value) {
         throw new Error();
     }
 
-        public <T> T[] toArray(T[] type) {
+    public <T> T[] toArray(T[] type) {
         throw new Error();
     }
 
-        public Object[] toArray() {
+    public Object[] toArray() {
         throw new Error();
     }
 
-        public boolean isEmpty() {
+    public boolean isEmpty() {
         throw new Error();
     }
 }

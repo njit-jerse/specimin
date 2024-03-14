@@ -7,7 +7,7 @@ class BigSimple {
 }
 
 public class Simple extends BigSimple {
-        public void printMessage() {
+    public void printMessage() {
         super.printMessage();
         BigSimple obj = new BigSimple();
     }

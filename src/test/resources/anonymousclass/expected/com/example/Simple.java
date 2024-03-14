@@ -8,7 +8,7 @@ public class Simple {
         int localVar = 42;
         SomeClass myObject = new SomeClass() {
 
-                        public int getLocalVar() {
+            public int getLocalVar() {
                 return localVar;
             }
         };
