@@ -147,8 +147,16 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
    * @return true iff the given method definitely overrides a preserved method
    */
   private boolean isOverride(MethodDeclaration method) {
-    ResolvedMethodDeclaration resolved = method.resolve();
-    String signature = resolved.getSignature();
+    ResolvedMethodDeclaration resolved;
+    String signature;
+    try {
+      resolved = method.resolve();
+      signature = resolved.getSignature();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      // Some part of the signature isn't being preserved, so this shouldn't be preserved,
+      // either.
+      return false;
+    }
     Node typeElt = PrunerVisitor.getEnclosingClassLike(method);
 
     // Whether or not to fall back on the presence of an @Override annotation. We want
