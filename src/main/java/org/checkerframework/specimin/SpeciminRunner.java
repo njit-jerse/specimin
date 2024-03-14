@@ -302,11 +302,21 @@ public class SpeciminRunner {
     }
 
     updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
+
+    MustImplementMethodsVisitor mustImplementMethodsVisitor =
+        new MustImplementMethodsVisitor(
+            solveMethodOverridingVisitor.getUsedMembers(),
+            updatedUsedClass,
+            existingClassesToFilePath);
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(mustImplementMethodsVisitor, null);
+    }
+
     PrunerVisitor methodPruner =
         new PrunerVisitor(
             finder.getTargetMethods(),
-            solveMethodOverridingVisitor.getUsedMembers(),
-            updatedUsedClass);
+            mustImplementMethodsVisitor.getUsedMembers(),
+            mustImplementMethodsVisitor.getUsedClass());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
