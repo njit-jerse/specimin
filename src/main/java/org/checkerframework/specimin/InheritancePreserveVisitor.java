@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -52,6 +53,11 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
         String qualifiedName;
         try {
           qualifiedName = extendedType.resolve().getQualifiedName();
+          if (extendedType.getTypeArguments().isPresent()) {
+            for (Type typeAgrument : extendedType.getTypeArguments().get()) {
+              updateAddedClassWithQualifiedClassName(typeAgrument.resolve().describe());
+            }
+          }
         }
         // since Specimin does not create synthetic inheritance for interfaces.
         catch (UnsolvedSymbolException | UnsupportedOperationException e) {
