@@ -12,12 +12,7 @@ public class AnonClassScopeTest {
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "anonclassscope",
-        new String[] {
-          "com/example/Simple.java",
-          "com/example/ForwardingObject.java",
-          "com/example/ForwardingMapEntry.java",
-          "com/example/ForwardingMap.java"
-        },
-        new String[] {"com.example.Simple#checkedEntry(Entry<Class<? extends B>, B>)"});
+        new String[] {"com/example/Simple.java"},
+        new String[] {"com.example.Simple#test()"});
   }
 }
