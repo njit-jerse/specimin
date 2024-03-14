@@ -2,10 +2,12 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
@@ -420,10 +422,11 @@ public class SpeciminRunner {
    */
   private static boolean isEmptyCompilationUnit(CompilationUnit cu) {
     for (Node child : cu.getChildNodes()) {
-      if (child instanceof PackageDeclaration) {
-        // Package declarations don't count for the purposes of
+      if (child instanceof PackageDeclaration
+          || child instanceof ImportDeclaration
+          || child instanceof Comment) {
+        // Package declarations, imports, and comments don't count for the purposes of
         // deciding whether to entirely remove a compilation unit.
-        continue;
       } else if (child instanceof ClassOrInterfaceDeclaration) {
         ClassOrInterfaceDeclaration cdecl =
             ((ClassOrInterfaceDeclaration) child).asClassOrInterfaceDeclaration();
