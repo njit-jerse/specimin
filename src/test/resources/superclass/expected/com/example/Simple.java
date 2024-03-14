@@ -7,7 +7,6 @@ class BigSimple {
 }
 
 public class Simple extends BigSimple {
-    @Override
     public void printMessage() {
         super.printMessage();
         BigSimple obj = new BigSimple();

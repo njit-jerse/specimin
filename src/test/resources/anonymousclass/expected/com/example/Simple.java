@@ -8,7 +8,6 @@ public class Simple {
         int localVar = 42;
         SomeClass myObject = new SomeClass() {
 
-            @Override
             public int getLocalVar() {
                 return localVar;
             }
