@@ -1,17 +1,22 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
+import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
 import java.util.HashSet;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -30,15 +35,23 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
   private Set<String> usedClass;
 
   /**
+   * for checking if class files are in the original codebase. TODO: refactor so this information is
+   * separate
+   */
+  private UnsolvedSymbolVisitor unsolvedSymbolVisitor;
+
+  /**
    * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
    * members, and used classes.
    *
    * @param usedMembers Set containing the signatures of used members.
    * @param usedClass Set containing the signatures of used classes.
    */
-  public MustImplementMethodsVisitor(Set<String> usedMembers, Set<String> usedClass) {
+  public MustImplementMethodsVisitor(
+      Set<String> usedMembers, Set<String> usedClass, UnsolvedSymbolVisitor unsolvedSymbolVisitor) {
     this.usedMembers = usedMembers;
     this.usedClass = usedClass;
+    this.unsolvedSymbolVisitor = unsolvedSymbolVisitor;
   }
 
   /**
@@ -127,16 +140,95 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Returns true iff the given method declaration has an @Override annotation. This is a coarse
-   * approximation (@Override is optional, unfortunately), but it's the best we can do given the
-   * limits of JavaParser.
+   * Returns true iff the given method declaration is overriding a preserved unimplemented method in
+   * an implemented interface. This is an expensive check that searches the implemented interfaces.
    *
    * @param method the method declaration to check
-   * @return true iff there is an override annotation on the given method
+   * @return true iff the given method definitely overrides a preserved method
    */
   private boolean isOverride(MethodDeclaration method) {
-    return method.getAnnotationByName("Override").isPresent()
-        || method.getAnnotationByName("java.lang.Override").isPresent();
+    ResolvedMethodDeclaration resolved = method.resolve();
+    String signature = resolved.getSignature();
+    Node typeElt = PrunerVisitor.getEnclosingClassLike(method);
+
+    // Whether or not to fall back on the presence of an @Override annotation. We want
+    // to avoid that as much as we can, but when we can't solve an implemented interface,
+    // we'll be required to do so to get cases like AbstractImplTest correct (e.g., that
+    // test contains a class that implement java.util.Set).
+    boolean useFallback = false;
+
+    if (typeElt instanceof EnumDeclaration) {
+      EnumDeclaration enumDecl = (EnumDeclaration) typeElt;
+      for (ClassOrInterfaceType implementedType : enumDecl.getImplementedTypes()) {
+        try {
+          implementedType.resolve();
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          // in this case, we're implmenting an interface that we don't control. Fallback on
+          // whether there is an @Override annotation.
+          useFallback = true;
+          continue;
+        }
+        for (Node member : implementedType.getChildNodes()) {
+          if (member instanceof MethodDeclaration) {
+            MethodDeclaration memberAsDecl = (MethodDeclaration) member;
+            try {
+              ResolvedMethodDeclaration resolvedMemberDecl = memberAsDecl.resolve();
+              if (resolvedMemberDecl.isAbstract()
+                  && resolvedMemberDecl.getSignature().equals(signature)) {
+                return true;
+              }
+            } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+              // expected to occur some of the time
+            }
+          }
+        }
+      }
+    } else if (typeElt instanceof ClassOrInterfaceDeclaration) {
+      ClassOrInterfaceDeclaration asClass = (ClassOrInterfaceDeclaration) typeElt;
+      for (ClassOrInterfaceType implementedType : asClass.getImplementedTypes()) {
+        ResolvedReferenceType resolvedInterface;
+        try {
+          resolvedInterface = implementedType.resolve();
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          // in this case, we're implmenting an interface that we don't control. Fallback on
+          // whether there is an @Override annotation.
+          useFallback = true;
+          continue;
+        }
+        boolean inOutput =
+            unsolvedSymbolVisitor.classfileIsInOriginalCodebase(
+                resolvedInterface.getQualifiedName());
+        ResolvedTypeParametersMap typeParametersMap = resolvedInterface.typeParametersMap();
+        String targetSignature = signature;
+        for (String name : typeParametersMap.getNames()) {
+          String simpleName = name.substring(name.lastIndexOf('.') + 1);
+          String localName = typeParametersMap.getValueBySignature(name).get().describe();
+          targetSignature = targetSignature.replaceAll(localName, simpleName);
+        }
+        targetSignature = erase(targetSignature);
+        for (ResolvedMethodDeclaration methodInInterface :
+            resolvedInterface.getAllMethodsVisibleToInheritors()) {
+          if (methodInInterface.isAbstract()
+              && erase(methodInInterface.getSignature()).equals(targetSignature)) {
+            boolean result =
+                !inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature());
+            return result;
+          }
+        }
+      }
+    } else {
+      throw new RuntimeException(
+          "unexpected enclosing structure " + typeElt + " for method " + method);
+    }
+    // if useFallback is false, this always returns false. Otherwise, the presence/absence
+    // of an @Override annotation is the deciding factor.
+    return useFallback
+        && (method.getAnnotationByName("Override").isPresent()
+            || method.getAnnotationByName("java.lang.Override").isPresent());
+  }
+
+  private static String erase(String signature) {
+    return signature.replaceAll("<.*>", "");
   }
 
   /**

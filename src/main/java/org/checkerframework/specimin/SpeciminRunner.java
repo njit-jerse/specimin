@@ -305,7 +305,7 @@ public class SpeciminRunner {
 
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
         new MustImplementMethodsVisitor(
-            solveMethodOverridingVisitor.getUsedMembers(), updatedUsedClass);
+            solveMethodOverridingVisitor.getUsedMembers(), updatedUsedClass, addMissingClass);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(mustImplementMethodsVisitor, null);
     }

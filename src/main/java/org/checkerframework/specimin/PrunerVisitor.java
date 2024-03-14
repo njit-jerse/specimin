@@ -376,10 +376,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    */
   @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
   public static @FullyQualifiedName String getEnclosingClassName(Node node) {
-    Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration || parent instanceof EnumDeclaration)) {
-      parent = parent.getParentNode().orElseThrow();
-    }
+    Node parent = getEnclosingClassLike(node);
     if (parent instanceof ClassOrInterfaceDeclaration) {
       return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
     } else if (parent instanceof EnumDeclaration) {
@@ -387,6 +384,23 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     } else {
       throw new RuntimeException("unexpected kind of node: " + parent.getClass());
     }
+  }
+
+  /**
+   * Returns the innermost enclosing class-like element for the given node. A class-like element is
+   * a class, interface, or enum (i.e., something that would be a {@link
+   * javax.lang.model.element.TypeElement} in javac's internal model). This method will throw if no
+   * such element exists.
+   *
+   * @param node a node that is contained in a class-like structure
+   * @return the nearest enclosing class-like node
+   */
+  public static Node getEnclosingClassLike(Node node) {
+    Node parent = node.getParentNode().orElseThrow();
+    while (!(parent instanceof ClassOrInterfaceDeclaration || parent instanceof EnumDeclaration)) {
+      parent = parent.getParentNode().orElseThrow();
+    }
+    return parent;
   }
 
   /**

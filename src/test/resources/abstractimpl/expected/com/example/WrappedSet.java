@@ -2,7 +2,6 @@ package com.example;
 
 import java.util.Set;
 import java.util.Iterator;
-import java.util.Spliterator;
 import java.util.Collection;
 
 class WrappedSet<K, V> implements Set<V> {
@@ -18,11 +17,6 @@ class WrappedSet<K, V> implements Set<V> {
 
     @Override
     public Iterator<V> iterator() {
-        throw new Error();
-    }
-
-    @Override
-    public Spliterator<V> spliterator() {
         throw new Error();
     }
 
