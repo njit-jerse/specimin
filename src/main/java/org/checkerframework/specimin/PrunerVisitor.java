@@ -136,13 +136,42 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       return decl;
     }
     if (decl.isStatic()) {
-      classFullName = classFullName.substring(0, classFullName.lastIndexOf("."));
-    }
-    if (classesUsedByTargetMethods.contains(classFullName)) {
+      // if it's a static import, classFullName will actually be a method name
+      if (isUsedMethod(classFullName)) {
+        return super.visit(decl, p);
+      }
+    } else if (classesUsedByTargetMethods.contains(classFullName)) {
       return super.visit(decl, p);
     }
     decl.remove();
     return decl;
+  }
+
+  /**
+   * Checks if the given static import of a method or field is a used method or field
+   *
+   * @param staticImport a fully-qualified static name of a method or field, dot-separated
+   * @return true if a method with this name will be preserved
+   */
+  private boolean isUsedMethod(String staticImport) {
+    for (String methodSignature : methodsToLeaveUnchanged) {
+      if (methodSignature.startsWith(staticImport)) {
+        return true;
+      }
+    }
+    int lastDotIndex = staticImport.lastIndexOf('.');
+    StringBuilder asFieldNameBuilder = new StringBuilder(staticImport);
+    asFieldNameBuilder.setCharAt(lastDotIndex, '#');
+    String asFieldName = asFieldNameBuilder.toString();
+    for (String member : membersToEmpty) {
+      if (member.startsWith(staticImport)) {
+        return true;
+      }
+      if (member.equals(asFieldName)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Override
