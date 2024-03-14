@@ -26,6 +26,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -616,8 +617,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param type The resolved type of the used element.
    */
   public void updateUsedClassBasedOnType(ResolvedType type) {
-    updateUsedClassWithQualifiedClassName(
-        type.describe(), usedClass, nonPrimaryClassesToPrimaryClass);
+    if (type.isTypeVariable()) {
+      // From JLS 4.4: A type variable is introduced by the declaration of a type parameter of a
+      // generic class, interface, method, or constructor
+      ResolvedTypeParameterDeclaration asTypeParameter = type.asTypeParameter();
+      for (ResolvedTypeParameterDeclaration.Bound bound : asTypeParameter.getBounds()) {
+        updateUsedClassWithQualifiedClassName(bound.getType(), usedClass, nonPrimaryClassesToPrimaryClass);
+      }
+      return;
+    }
+    updateUsedClassWithQualifiedClassName(type.describe(), usedClass, nonPrimaryClassesToPrimaryClass);
     if (!type.isReferenceType()) {
       return;
     }
