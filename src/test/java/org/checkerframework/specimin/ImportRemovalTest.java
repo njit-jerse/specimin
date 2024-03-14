@@ -9,7 +9,7 @@ public class ImportRemovalTest {
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "importremoval",
-        new String[] {"com/example/Simple.java"},
+        new String[] {"com/example/Simple.java", "com/example/NonsensicalList.java"},
         new String[] {"com.example.Simple#bar()"});
   }
 }
