@@ -17,7 +17,9 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
+import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -34,11 +36,8 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
   /** Set containing the signatures of used classes. */
   private Set<String> usedClass;
 
-  /**
-   * for checking if class files are in the original codebase. TODO: refactor so this information is
-   * separate
-   */
-  private UnsolvedSymbolVisitor unsolvedSymbolVisitor;
+  /** for checking if class files are in the original codebase. */
+  private Map<String, Path> existingClassesToFilePath;
 
   /**
    * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
@@ -46,12 +45,13 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
    *
    * @param usedMembers Set containing the signatures of used members.
    * @param usedClass Set containing the signatures of used classes.
+   * @param existingClassesToFilePath map from existing classes to file paths
    */
   public MustImplementMethodsVisitor(
-      Set<String> usedMembers, Set<String> usedClass, UnsolvedSymbolVisitor unsolvedSymbolVisitor) {
+      Set<String> usedMembers, Set<String> usedClass, Map<String, Path> existingClassesToFilePath) {
     this.usedMembers = usedMembers;
     this.usedClass = usedClass;
-    this.unsolvedSymbolVisitor = unsolvedSymbolVisitor;
+    this.existingClassesToFilePath = existingClassesToFilePath;
   }
 
   /**
@@ -199,7 +199,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
       // if the method is actually invoked (if not, it will be removed from the interface
       // elsewhere).
       boolean inOutput =
-          unsolvedSymbolVisitor.classfileIsInOriginalCodebase(resolvedInterface.getQualifiedName());
+          this.existingClassesToFilePath.containsKey(resolvedInterface.getQualifiedName());
 
       // It's necessary to viewpoint-adapt the type parameters so that the signature we're looking
       // for matches the one that we'll find in the interface's definition. This code
