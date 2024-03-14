@@ -103,7 +103,8 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
     if (!UnsolvedSymbolVisitor.isAClassPath(annotationName)) {
       if (!classToFullClassName.containsKey(annotationName)) {
         // An annotation not imported and from the java.lang package is not our concern.
-        if (!JavaLangUtils.isJavaLangName(annotationName)) {
+        // Never preserve @Override, since it causes compile errors but does not fix them.
+        if (!JavaLangUtils.isJavaLangName(annotationName) || "Override".equals(annotationName)) {
           annotation.remove();
         }
         return;

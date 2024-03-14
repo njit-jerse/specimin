@@ -228,12 +228,10 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
           resolvedInterface.getAllMethodsVisibleToInheritors()) {
         if (methodInInterface.isAbstract()
             && erase(methodInInterface.getSignature()).equals(targetSignature)) {
-          // once we've found the correct method, we return to the question of whether we
+          // once we've found the correct method, we return to whether we
           // control it or not. If we don't, it must be preserved. If we do, then we only
           // preserve it if the PrunerVisitor won't remove it.
-          boolean result =
-              !inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature());
-          return result;
+          return !inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature());
         }
       }
     }
