@@ -50,9 +50,8 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
-        String qualifiedName;
         try {
-          qualifiedName = extendedType.resolve().getQualifiedName();
+          updateAddedClassWithQualifiedClassName(extendedType.resolve().getQualifiedName());
           if (extendedType.getTypeArguments().isPresent()) {
             for (Type typeAgrument : extendedType.getTypeArguments().get()) {
               updateAddedClassWithQualifiedClassName(typeAgrument.resolve().describe());
@@ -63,7 +62,6 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
         catch (UnsolvedSymbolException | UnsupportedOperationException e) {
           continue;
         }
-        updateAddedClassWithQualifiedClassName(qualifiedName);
       }
     }
     return super.visit(decl, p);
