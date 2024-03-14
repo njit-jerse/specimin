@@ -234,7 +234,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
-    boolean oldInsideTargetMethod = insideTargetMethod;
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
@@ -246,7 +245,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           nonPrimaryClassesToPrimaryClass);
     }
     Visitable result = super.visit(method, p);
-    insideTargetMethod = oldInsideTargetMethod;
+    insideTargetMethod = false;
     return result;
   }
 
@@ -258,7 +257,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
-    boolean oldInsideTargetMethod = insideTargetMethod;
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
     String methodName =
@@ -310,7 +308,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     Visitable result = super.visit(method, p);
-    insideTargetMethod = oldInsideTargetMethod;
+    insideTargetMethod = false;
     return result;
   }
 

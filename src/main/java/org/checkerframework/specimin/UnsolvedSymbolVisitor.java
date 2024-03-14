@@ -654,7 +654,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(VariableDeclarator decl, Void p) {
-    boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
     // This part is to update the symbol table.
     boolean isAField =
         !decl.getParentNode().isEmpty() && (decl.getParentNode().get() instanceof FieldDeclaration);
@@ -675,7 +674,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (declType.isVarType()) {
       // nothing to do here. A var type could never be solved.
       Visitable result = super.visit(decl, p);
-      insidePotentialUsedMember = oldInsidePotentialUsedMember;
+      insidePotentialUsedMember = false;
       return result;
     }
     try {
@@ -706,7 +705,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     Visitable result = super.visit(decl, p);
-    insidePotentialUsedMember = oldInsidePotentialUsedMember;
+    insidePotentialUsedMember = false;
     return result;
   }
 
@@ -791,14 +790,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + "#"
             + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
-    boolean oldInsideTargetMethod = insideTargetMethod;
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replace("\\s", ""))) {
       insideTargetMethod = true;
     }
     addTypeVariableScope(node.getTypeParameters());
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
-    insideTargetMethod = oldInsideTargetMethod;
+    if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
+      insideTargetMethod = false;
+    }
     return result;
   }
 
@@ -811,16 +811,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
-      boolean oldInsideTargetMethod = insideTargetMethod;
       insideTargetMethod = true;
       Visitable result = processMethodDeclaration(node);
-      insideTargetMethod = oldInsideTargetMethod;
+      insideTargetMethod = false;
       return result;
     } else if (potentialUsedMembers.contains(methodSimpleName)) {
-      boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
       insidePotentialUsedMember = true;
       Visitable result = processMethodDeclaration(node);
-      insidePotentialUsedMember = oldInsidePotentialUsedMember;
+      insidePotentialUsedMember = false;
       return result;
     } else if (insideTargetMethod) {
       return processMethodDeclaration(node);

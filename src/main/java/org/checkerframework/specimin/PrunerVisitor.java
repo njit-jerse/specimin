@@ -75,7 +75,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * annotated as @FunctionalInterface. This annotation is added to allow lambdas in target methods
    * to be passed to other methods, so the methods in such interfaces need to be preserved.
    */
-  private boolean insideFunctionalInterface = false;
+  private boolean insideFunctionInterface = false;
 
   /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
@@ -176,10 +176,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
-    boolean oldInsideFunctionalInterface = insideFunctionalInterface;
     for (AnnotationExpr anno : decl.getAnnotations()) {
       if (anno.getNameAsString().equals("FunctionalInterface")) {
-        insideFunctionalInterface = true;
+        insideFunctionInterface = true;
       }
     }
     decl = minimizeTypeParameters(decl);
@@ -204,7 +203,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       decl.setImplementedTypes(implementedInterfaces);
     }
     Visitable result = super.visit(decl, p);
-    insideFunctionalInterface = oldInsideFunctionalInterface;
+    insideFunctionInterface = false;
     return result;
   }
 
@@ -216,7 +215,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
-    if (insideFunctionalInterface) {
+    if (insideFunctionInterface) {
       return methodDecl;
     }
     try {
@@ -231,10 +230,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
-      boolean oldInsideTargetMethod = insideTargetMethod;
       insideTargetMethod = true;
       Visitable result = super.visit(methodDecl, p);
-      insideTargetMethod = oldInsideTargetMethod;
+      insideTargetMethod = false;
       return result;
     } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
