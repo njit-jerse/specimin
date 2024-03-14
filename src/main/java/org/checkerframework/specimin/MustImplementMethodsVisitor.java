@@ -87,14 +87,15 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
-    ResolvedMethodDeclaration overridden = getOverriddenMethod(method);
+    ResolvedMethodDeclaration overridden = getOverriddenMethodInSuperClass(method);
     // two cases: the method is a solvable override that will be preserved, and we can show that
     // it is abstract (before the ||), or we can't solve the override but there
     // is an @Override annotation. This relies on the use of @Override when
     // implementing required methods from interfaces in the target code,
     // but unfortunately I think it's the best that we can do here. (@Override
     // is technically optional, but it is widely used.)
-    if (isPreservedAndAbstract(overridden) || (overridden == null && isOverride(method))) {
+    if (isPreservedAndAbstract(overridden)
+        || (overridden == null && overridesAnInterfaceMethod(method))) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       Set<String> returnAndParamTypes = new HashSet<>();
       try {
@@ -144,9 +145,9 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
    * an implemented interface. This is an expensive check that searches the implemented interfaces.
    *
    * @param method the method declaration to check
-   * @return true iff the given method definitely overrides a preserved method
+   * @return true iff the given method definitely overrides a preserved method in an interface
    */
-  private boolean isOverride(MethodDeclaration method) {
+  private boolean overridesAnInterfaceMethod(MethodDeclaration method) {
     ResolvedMethodDeclaration resolved;
     String signature;
     try {
@@ -159,91 +160,102 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
     }
     Node typeElt = PrunerVisitor.getEnclosingClassLike(method);
 
-    // Whether or not to fall back on the presence of an @Override annotation. We want
-    // to avoid that as much as we can, but when we can't solve an implemented interface,
-    // we'll be required to do so to get cases like AbstractImplTest correct (e.g., that
-    // test contains a class that implement java.util.Set).
-    boolean useFallback = false;
-
     if (typeElt instanceof EnumDeclaration) {
-      EnumDeclaration enumDecl = (EnumDeclaration) typeElt;
-      for (ClassOrInterfaceType implementedType : enumDecl.getImplementedTypes()) {
-        try {
-          implementedType.resolve();
-        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-          // in this case, we're implmenting an interface that we don't control. Fallback on
-          // whether there is an @Override annotation.
-          useFallback = true;
-          continue;
-        }
-        for (Node member : implementedType.getChildNodes()) {
-          if (member instanceof MethodDeclaration) {
-            MethodDeclaration memberAsDecl = (MethodDeclaration) member;
-            try {
-              ResolvedMethodDeclaration resolvedMemberDecl = memberAsDecl.resolve();
-              if (resolvedMemberDecl.isAbstract()
-                  && resolvedMemberDecl.getSignature().equals(signature)) {
-                return true;
-              }
-            } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-              // expected to occur some of the time
-            }
-          }
-        }
-      }
+      EnumDeclaration asEnum = (EnumDeclaration) typeElt;
+      return overridesAnInterfaceMethodImpl(asEnum.getImplementedTypes(), signature);
     } else if (typeElt instanceof ClassOrInterfaceDeclaration) {
       ClassOrInterfaceDeclaration asClass = (ClassOrInterfaceDeclaration) typeElt;
-      for (ClassOrInterfaceType implementedType : asClass.getImplementedTypes()) {
-        ResolvedReferenceType resolvedInterface;
-        try {
-          resolvedInterface = implementedType.resolve();
-        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-          // in this case, we're implmenting an interface that we don't control. Fallback on
-          // whether there is an @Override annotation.
-          useFallback = true;
-          continue;
-        }
-        boolean inOutput =
-            unsolvedSymbolVisitor.classfileIsInOriginalCodebase(
-                resolvedInterface.getQualifiedName());
-        ResolvedTypeParametersMap typeParametersMap = resolvedInterface.typeParametersMap();
-        String targetSignature = signature;
-        for (String name : typeParametersMap.getNames()) {
-          String simpleName = name.substring(name.lastIndexOf('.') + 1);
-          String localName = typeParametersMap.getValueBySignature(name).get().describe();
-          targetSignature = targetSignature.replaceAll(localName, simpleName);
-        }
-        targetSignature = erase(targetSignature);
-        for (ResolvedMethodDeclaration methodInInterface :
-            resolvedInterface.getAllMethodsVisibleToInheritors()) {
-          if (methodInInterface.isAbstract()
-              && erase(methodInInterface.getSignature()).equals(targetSignature)) {
-            boolean result =
-                !inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature());
-            return result;
-          }
-        }
-      }
+      return overridesAnInterfaceMethodImpl(asClass.getImplementedTypes(), signature);
     } else {
       throw new RuntimeException(
           "unexpected enclosing structure " + typeElt + " for method " + method);
     }
-    // if useFallback is false, this always returns false. Otherwise, the presence/absence
-    // of an @Override annotation is the deciding factor.
-    return useFallback
-        && (method.getAnnotationByName("Override").isPresent()
-            || method.getAnnotationByName("java.lang.Override").isPresent());
   }
 
+  /**
+   * Helper method for overridesAnInterfaceMethod, to allow the same code to be shared in the enum
+   * and class cases.
+   *
+   * @param implementedTypes the types of the implemented interfaces
+   * @param signature the signature we're looking for
+   * @return see {@link #overridesAnInterfaceMethod(MethodDeclaration)}
+   */
+  private boolean overridesAnInterfaceMethodImpl(
+      NodeList<ClassOrInterfaceType> implementedTypes, String signature) {
+    for (ClassOrInterfaceType implementedType : implementedTypes) {
+      ResolvedReferenceType resolvedInterface;
+      try {
+        resolvedInterface = implementedType.resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        // In this case, we're implementing an interface that we don't control
+        // or that will not be preserved.
+        continue;
+      }
+      // This boolean is important to distinguish between the case of
+      // an interface that's in the input/output (and therefore could change)
+      // and an interface that's not, such as java.util.Set from the JDK. For
+      // the latter, we need to preserve required overrides in all cases, even if
+      // they are not used. For the former, we only need to preserve required overrides
+      // if the method is actually invoked (if not, it will be removed from the interface
+      // elsewhere).
+      boolean inOutput =
+          unsolvedSymbolVisitor.classfileIsInOriginalCodebase(resolvedInterface.getQualifiedName());
+
+      // It's necessary to viewpoint-adapt the type parameters so that the signature we're looking
+      // for matches the one that we'll find in the interface's definition. This code
+      // substitutes type variables in reverse: the target signature is adjusted to match
+      // the view of the type parameters from the perspective of the interface. For example,
+      // if the implemented interface is Set<V>, this code will change the target signature
+      // add(V) to add(E), because in the definition of java.util.Set the type variable is
+      // called E.
+      ResolvedTypeParametersMap typeParametersMap = resolvedInterface.typeParametersMap();
+      String targetSignature = signature;
+      for (String name : typeParametersMap.getNames()) {
+        String interfaceViewpointName = name.substring(name.lastIndexOf('.') + 1);
+        String localViewpointName = typeParametersMap.getValueBySignature(name).get().describe();
+        targetSignature = targetSignature.replaceAll(localViewpointName, interfaceViewpointName);
+      }
+      // Type parameters in the types are erased (as they would be by javac when doing method
+      // dispatching).
+      // This means e.g. that a parameter with the type java.util.Collection<?> will become
+      // java.util.Collection
+      // (i.e., a raw type). Note though that this doesn't mean there are no type variables in the
+      // signature:
+      // add(E) is still add(E).
+      targetSignature = erase(targetSignature);
+
+      for (ResolvedMethodDeclaration methodInInterface :
+          resolvedInterface.getAllMethodsVisibleToInheritors()) {
+        if (methodInInterface.isAbstract()
+            && erase(methodInInterface.getSignature()).equals(targetSignature)) {
+          // once we've found the correct method, we return to the question of whether we
+          // control it or not. If we don't, it must be preserved. If we do, then we only
+          // preserve it if the PrunerVisitor won't remove it.
+          boolean result =
+              !inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature());
+          return result;
+        }
+      }
+    }
+    // if we don't find an overridden method in any of the implemented interfaces, return false.
+    return false;
+  }
+
+  /**
+   * Erases type arguments from a method signature string.
+   *
+   * @param signature the signature
+   * @return the same signature without type arguments
+   */
   private static String erase(String signature) {
     return signature.replaceAll("<.*>", "");
   }
 
   /**
-   * Given a MethodDeclaration, this method returns the method that it overrides, if one exists. If
-   * not, it returns null.
+   * Given a MethodDeclaration, this method returns the method that it overrides, if one exists in
+   * one of its super classes. If one does not exist, it returns null.
    */
-  public static @Nullable ResolvedMethodDeclaration getOverriddenMethod(
+  public static @Nullable ResolvedMethodDeclaration getOverriddenMethodInSuperClass(
       MethodDeclaration methodDeclaration) {
     // just a method signature, no need to check for overriding.
     if (methodDeclaration.getBody().isEmpty()) {

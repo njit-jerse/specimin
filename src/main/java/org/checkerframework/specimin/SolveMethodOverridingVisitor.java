@@ -76,7 +76,7 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
    */
   private void checkForOverridingAndUpdateUsedClasses(MethodDeclaration methodDeclaration) {
     ResolvedMethodDeclaration resolvedSuperCall =
-        MustImplementMethodsVisitor.getOverriddenMethod(methodDeclaration);
+        MustImplementMethodsVisitor.getOverriddenMethodInSuperClass(methodDeclaration);
     if (resolvedSuperCall != null) {
       usedClass.add(resolvedSuperCall.getPackageName() + "." + resolvedSuperCall.getClassName());
       usedMembers.add(resolvedSuperCall.getQualifiedSignature());
