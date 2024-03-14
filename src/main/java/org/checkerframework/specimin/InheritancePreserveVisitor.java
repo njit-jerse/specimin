@@ -6,8 +6,8 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -22,20 +22,13 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
   /** List of fully-qualified classnames to be added to the list of used classes. */
   public Set<String> addedClasses = new HashSet<>();
 
-  /** A map that connects non-primary classes to their corresponding primary classes. */
-  private Map<String, String> nonPrimaryToPrimaryClass;
-
   /**
    * Constructs an InheritancePreserveVisitor with the specified set of used classes.
    *
    * @param usedClass The set of classes used by the target methods.
-   * @param nonPrimaryToPrimaryClass Map connecting non-primary classes to corresponding primary
-   *     classes.
    */
-  public InheritancePreserveVisitor(
-      Set<String> usedClass, Map<String, String> nonPrimaryToPrimaryClass) {
+  public InheritancePreserveVisitor(Set<String> usedClass) {
     this.usedClass = usedClass;
-    this.nonPrimaryToPrimaryClass = nonPrimaryToPrimaryClass;
   }
 
   /**
@@ -59,12 +52,16 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
         try {
+          // Including a non-primary to primary map in this context may lead to an infinite loop,
+          // especially if the superclass is nested within the current class file, resulting in
+          // infinite file visits. The TargetMethodFinderVisitor already addresses the updating job
+          // in such cases. (Refer to the SuperClass test for an example.)
           TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
-              extendedType.resolve().describe(), addedClasses, nonPrimaryToPrimaryClass);
+              extendedType.resolve().describe(), addedClasses, new HashMap<>());
           if (extendedType.getTypeArguments().isPresent()) {
             for (Type typeAgrument : extendedType.getTypeArguments().get()) {
               TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
-                  typeAgrument.resolve().describe(), addedClasses, nonPrimaryToPrimaryClass);
+                  typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
             }
           }
         }

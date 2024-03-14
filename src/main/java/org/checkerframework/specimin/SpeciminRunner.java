@@ -275,8 +275,7 @@ public class SpeciminRunner {
     Set<String> totalSetOfAddedInheritedClasses = classToFindInheritance;
     InheritancePreserveVisitor inheritancePreserve;
     while (!classToFindInheritance.isEmpty()) {
-      inheritancePreserve =
-          new InheritancePreserveVisitor(classToFindInheritance, nonPrimaryClassesToPrimaryClass);
+      inheritancePreserve = new InheritancePreserveVisitor(classToFindInheritance);
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         cu.accept(inheritancePreserve, null);
       }
