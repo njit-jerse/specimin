@@ -240,7 +240,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
       updateUsedClassWithQualifiedClassName(
-          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
+          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
+          usedClass,
+          nonPrimaryClassesToPrimaryClass);
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = false;
@@ -269,7 +271,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         String methodPackage = resolved.getPackageName();
         String methodClass = resolved.getClassName();
         usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
-        updateUsedClassWithQualifiedClassName(methodPackage + "." + methodClass);
+        updateUsedClassWithQualifiedClassName(
+            methodPackage + "." + methodClass, usedClass, nonPrimaryClassesToPrimaryClass);
       }
     }
     String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
@@ -277,7 +280,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
-          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName());
+          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
+          usedClass,
+          nonPrimaryClassesToPrimaryClass);
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       // make sure that differences in spacing does not interfere with the result
@@ -330,7 +335,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         if (paramType.isReferenceType()) {
           String paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
-          updateUsedClassWithQualifiedClassName(paraTypeFullName);
+          updateUsedClassWithQualifiedClassName(
+              paraTypeFullName, usedClass, nonPrimaryClassesToPrimaryClass);
           for (ResolvedType typeParameterValue :
               paramType.asReferenceType().typeParametersValues()) {
             String typeParameterValueName = typeParameterValue.describe();
@@ -339,7 +345,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
               typeParameterValueName =
                   typeParameterValueName.substring(0, typeParameterValueName.indexOf("<"));
             }
-            updateUsedClassWithQualifiedClassName(typeParameterValueName);
+            updateUsedClassWithQualifiedClassName(
+                typeParameterValueName, usedClass, nonPrimaryClassesToPrimaryClass);
           }
         }
       }
@@ -352,7 +359,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (insideTargetMethod) {
       ResolvedMethodDeclaration decl = call.resolve();
       usedMembers.add(decl.getQualifiedSignature());
-      updateUsedClassWithQualifiedClassName(decl.getPackageName() + "." + decl.getClassName());
+      updateUsedClassWithQualifiedClassName(
+          decl.getPackageName() + "." + decl.getClassName(),
+          usedClass,
+          nonPrimaryClassesToPrimaryClass);
       ResolvedType methodReturnType = decl.getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
         updateUsedClassBasedOnType(methodReturnType);
@@ -394,7 +404,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedConstructorDeclaration resolved = newExpr.resolve();
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
-          resolved.getPackageName() + "." + resolved.getClassName());
+          resolved.getPackageName() + "." + resolved.getClassName(),
+          usedClass,
+          nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(newExpr, p);
   }
@@ -405,7 +417,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedConstructorDeclaration resolved = expr.resolve();
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
-          resolved.getPackageName() + "." + resolved.getClassName());
+          resolved.getPackageName() + "." + resolved.getClassName(),
+          usedClass,
+          nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(expr, p);
   }
@@ -431,7 +445,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // field is declared
         fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
-        updateUsedClassWithQualifiedClassName(fullNameOfClass);
+        updateUsedClassWithQualifiedClassName(
+            fullNameOfClass, usedClass, nonPrimaryClassesToPrimaryClass);
         ResolvedType exprResolvedType = expr.resolve().getType();
         updateUsedClassBasedOnType(exprResolvedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
@@ -484,7 +499,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
                   methodDeclarationToInterfaceType
                       .get(interfaceMethod)
                       .resolve()
-                      .getQualifiedName());
+                      .getQualifiedName(),
+                  usedClass,
+                  nonPrimaryClassesToPrimaryClass);
               usedMembers.add(interfaceMethod.getQualifiedSignature());
             }
           }
@@ -546,7 +563,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // while the name of the method is declaringType(), it actually returns the class where the
       // field is declared
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
-      updateUsedClassWithQualifiedClassName(classFullName);
+      updateUsedClassWithQualifiedClassName(
+          classFullName, usedClass, nonPrimaryClassesToPrimaryClass);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
       updateUsedClassBasedOnType(exprDecl.getType());
     }
@@ -558,8 +576,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * name as their Java files or nested classes.
    *
    * @param qualifiedClassName The qualified class name to be included in the list of used classes.
+   * @param usedClass The set of used classes to be updated.
+   * @param nonPrimaryClassesToPrimaryClass Map connecting non-primary classes to their
+   *     corresponding primary classes.
    */
-  public void updateUsedClassWithQualifiedClassName(String qualifiedClassName) {
+  public static void updateUsedClassWithQualifiedClassName(
+      String qualifiedClassName,
+      Set<String> usedClass,
+      Map<String, String> nonPrimaryClassesToPrimaryClass) {
     // in case of type variables
     if (!qualifiedClassName.contains(".")) {
       return;
@@ -573,13 +597,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // in case this class is not a primary class.
     if (nonPrimaryClassesToPrimaryClass.containsKey(qualifiedClassName)) {
       updateUsedClassWithQualifiedClassName(
-          nonPrimaryClassesToPrimaryClass.get(qualifiedClassName));
+          nonPrimaryClassesToPrimaryClass.get(qualifiedClassName),
+          usedClass,
+          nonPrimaryClassesToPrimaryClass);
     }
 
     String potentialOuterClass =
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
     if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
-      updateUsedClassWithQualifiedClassName(potentialOuterClass);
+      updateUsedClassWithQualifiedClassName(
+          potentialOuterClass, usedClass, nonPrimaryClassesToPrimaryClass);
     }
   }
 
@@ -595,11 +622,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // generic class, interface, method, or constructor
       ResolvedTypeParameterDeclaration asTypeParameter = type.asTypeParameter();
       for (ResolvedTypeParameterDeclaration.Bound bound : asTypeParameter.getBounds()) {
-        updateUsedClassWithQualifiedClassName(bound.getType().describe());
+        updateUsedClassWithQualifiedClassName(
+            bound.getType().describe(), usedClass, nonPrimaryClassesToPrimaryClass);
       }
       return;
     }
-    updateUsedClassWithQualifiedClassName(type.describe());
+    updateUsedClassWithQualifiedClassName(
+        type.describe(), usedClass, nonPrimaryClassesToPrimaryClass);
     if (!type.isReferenceType()) {
       return;
     }
@@ -609,7 +638,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (typePara.isPrimitive() || typePara.isTypeVariable() || typePara.isWildcard()) {
         continue;
       }
-      updateUsedClassWithQualifiedClassName(typePara.asReferenceType().getQualifiedName());
+      updateUsedClassWithQualifiedClassName(
+          typePara.asReferenceType().getQualifiedName(),
+          usedClass,
+          nonPrimaryClassesToPrimaryClass);
     }
   }
 }

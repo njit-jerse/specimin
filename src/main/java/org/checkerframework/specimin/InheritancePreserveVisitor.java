@@ -2,9 +2,11 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -49,15 +51,24 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
-        String qualifiedName;
         try {
-          qualifiedName = extendedType.resolve().getQualifiedName();
+          // Including a non-primary to primary map in this context may lead to an infinite loop,
+          // especially if the superclass is nested within the current class file, resulting in
+          // infinite file visits. The TargetMethodFinderVisitor already addresses the updating job
+          // in such cases. (Refer to the SuperClass test for an example.)
+          TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+              extendedType.resolve().describe(), addedClasses, new HashMap<>());
+          if (extendedType.getTypeArguments().isPresent()) {
+            for (Type typeAgrument : extendedType.getTypeArguments().get()) {
+              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+                  typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
+            }
+          }
         }
         // since Specimin does not create synthetic inheritance for interfaces.
         catch (UnsolvedSymbolException | UnsupportedOperationException e) {
           continue;
         }
-        addedClasses.add(qualifiedName);
       }
     }
     return super.visit(decl, p);
