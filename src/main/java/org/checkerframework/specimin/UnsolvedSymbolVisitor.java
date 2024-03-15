@@ -839,15 +839,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     boolean canBeSolved = canBeSolved(node);
     if (isASuperCall(node) && !canBeSolved) {
       updateSyntheticClassForSuperCall(node);
+    } else if (updatedAddedTargetFilesForPotentialEnum(node)) {
+      return super.visit(node, p);
     } else if (canBeSolved) {
-      ResolvedValueDeclaration resolved = node.resolve();
-      if (resolved.isEnumConstant()) {
-        String filePathName = qualifiedNameToFilePath(resolved.getType().describe());
-        if (!addedTargetFiles.contains(filePathName)) {
-          gotException();
-          addedTargetFiles.add(filePathName);
-        }
-      }
       return super.visit(node, p);
     } else if (isAQualifiedFieldSignature(node.toString())) {
       updateClassSetWithQualifiedFieldSignature(node.toString(), true, false);
@@ -1102,6 +1096,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // theoretically rootDirectory should already be absolute as stated in README.
     Path absoluteRootDirectory = Paths.get(rootDirectory).toAbsolutePath();
     return absoluteRootDirectory.relativize(absoluteFilePath).toString();
+  }
+
+  /**
+   * Updates the list of added target files based on a FieldAccessExpr if it represents an enum
+   * constant.
+   *
+   * @param expr the FieldAccessExpr potentially representing an Enum constant.
+   * @return true if the update was successful, false otherwise.
+   */
+  public boolean updatedAddedTargetFilesForPotentialEnum(FieldAccessExpr expr) {
+    ResolvedValueDeclaration resolved;
+    try {
+      resolved = expr.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return false;
+    }
+    if (resolved.isEnumConstant()) {
+      String filePathName = qualifiedNameToFilePath(resolved.getType().describe());
+      if (!addedTargetFiles.contains(filePathName)) {
+        gotException();
+        addedTargetFiles.add(filePathName);
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
