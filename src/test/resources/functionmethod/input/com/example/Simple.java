@@ -4,8 +4,8 @@ import java.util.List;
 
 class Simple {
     // Target method.
-    public int bar(List<SqlNode> nodes) {
-        return Util.transform(nodes, SqlNode::getParserPosition));
+    public List<Integer> bar(List<SqlNode> nodes) {
+        return transform(nodes, SqlNode::getParserPosition);
     }
 
 

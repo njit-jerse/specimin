@@ -1,12 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks that Specimin doesn't crash when encountering a used
- * method that takes a function as a parameter.
+ * This test checks that Specimin doesn't crash when encountering a used method that takes a
+ * function as a parameter.
  */
 public class FunctionMethodTest {
   @Test
