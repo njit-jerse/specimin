@@ -358,15 +358,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       ResolvedMethodDeclaration decl = call.resolve();
-      usedMembers.add(decl.getQualifiedSignature());
-      updateUsedClassWithQualifiedClassName(
-          decl.getPackageName() + "." + decl.getClassName(),
-          usedClass,
-          nonPrimaryClassesToPrimaryClass);
-      ResolvedType methodReturnType = decl.getReturnType();
-      if (methodReturnType instanceof ResolvedReferenceType) {
-        updateUsedClassBasedOnType(methodReturnType, usedClass, nonPrimaryClassesToPrimaryClass);
-      }
+      preserveMethodDecl(decl);
       // Special case for lambdas to preserve artificial functional
       // interfaces.
       for (int i = 0; i < call.getArguments().size(); ++i) {
@@ -378,6 +370,24 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(call, p);
+  }
+
+  /**
+   * Helper method for preserving a used method. This code is called for both method call
+   * expressions and method refs.
+   *
+   * @param decl a resolved method declaration to be preserved
+   */
+  private void preserveMethodDecl(ResolvedMethodDeclaration decl) {
+    usedMembers.add(decl.getQualifiedSignature());
+    updateUsedClassWithQualifiedClassName(
+        decl.getPackageName() + "." + decl.getClassName(),
+        usedClass,
+        nonPrimaryClassesToPrimaryClass);
+    ResolvedType methodReturnType = decl.getReturnType();
+    if (methodReturnType instanceof ResolvedReferenceType) {
+      updateUsedClassBasedOnType(methodReturnType, usedClass, nonPrimaryClassesToPrimaryClass);
+    }
   }
 
   @Override
