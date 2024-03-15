@@ -17,6 +17,7 @@ public class EnumConstructorVisitor extends VoidVisitorAdapter<Void> {
   /** Set of classes used by the target method. */
   private Set<String> usedClass;
 
+  /** Check whether the visitor is inside an enum used by target methods. */
   private ArrayDeque<Boolean> insideUsedEnum;
 
   /**
