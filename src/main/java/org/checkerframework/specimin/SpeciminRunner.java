@@ -6,6 +6,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
@@ -136,6 +137,10 @@ public class SpeciminRunner {
           }
         }
       }
+      for (EnumDeclaration enumDeclaration : compilationUnit.findAll(EnumDeclaration.class)) {
+        existingClassesToFilePath.put(
+            enumDeclaration.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
+      }
     }
     UnsolvedSymbolVisitor addMissingClass =
         new UnsolvedSymbolVisitor(root, existingClassesToFilePath, targetMethodNames);
@@ -246,10 +251,16 @@ public class SpeciminRunner {
           "Specimin could not locate the following target methods in the target files: "
               + String.join(", ", unfoundMethods));
     }
-
+    EnumConstructorVisitor enumConstructorVisitor =
+        new EnumConstructorVisitor(finder.getUsedClass());
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(enumConstructorVisitor, null);
+    }
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
         new SolveMethodOverridingVisitor(
-            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
+            finder.getTargetMethods(),
+            finder.getUsedMembers(),
+            enumConstructorVisitor.getUsedClass());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }

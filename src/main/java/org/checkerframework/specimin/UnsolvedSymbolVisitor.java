@@ -43,6 +43,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -799,6 +800,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (targetMethodsSignatures.contains(methodQualifiedSignature)) {
       insideTargetMethod = false;
     }
+
+    if (node.getParentNode().get() instanceof EnumDeclaration) {
+      // this is the only case where we might need a constructor that does not appear inside the
+      // target method.
+      for (Parameter parameter : node.getParameters()) {
+        Type paraType = parameter.getType();
+        if (paraType.isClassOrInterfaceType()) {
+          solveSymbolsForClassOrInterfaceType(paraType.asClassOrInterfaceType(), false);
+        }
+      }
+    }
     return result;
   }
 
@@ -837,6 +849,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (isASuperCall(node) && !canBeSolved) {
       updateSyntheticClassForSuperCall(node);
     } else if (canBeSolved) {
+      ResolvedValueDeclaration resolved = node.resolve();
+      if (resolved.isEnumConstant()) {
+        String filePathName = qualifiedNameToFilePath(resolved.getType().describe());
+        if (!addedTargetFiles.contains(filePathName)) {
+          gotException();
+          addedTargetFiles.add(filePathName);
+        }
+      }
       return super.visit(node, p);
     } else if (isAQualifiedFieldSignature(node.toString())) {
       updateClassSetWithQualifiedFieldSignature(node.toString(), true, false);
@@ -941,9 +961,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(EnumConstantDeclaration expr, Void p) {
-    // this is a bit hacky, but we don't remove any enum constant declarations if they
-    // are ever used, so it's safer to just preserve anything that they use by pretending
-    // that we're inside a target method.
+    // this is a bit hacky, but we don't remove any enum constant declarations if they are ever
+    // used, so it's safer to just preserve anything that they use by pretending that we're inside a
+    // target method.
     boolean oldInsideTargetMethod = insideTargetMethod;
     insideTargetMethod = true;
     Visitable result = super.visit(expr, p);

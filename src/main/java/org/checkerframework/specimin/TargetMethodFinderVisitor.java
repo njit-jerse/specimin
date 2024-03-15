@@ -298,7 +298,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       try {
         ResolvedType resolvedType = returnType.resolve();
         if (resolvedType instanceof ResolvedReferenceType) {
-          updateUsedClassBasedOnType(resolvedType);
+          updateUsedClassBasedOnType(resolvedType, usedClass, nonPrimaryClassesToPrimaryClass);
         }
       } catch (UnsupportedOperationException e) {
         // Occurs if the type is a type variable, so there is nothing to do:
@@ -365,14 +365,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           nonPrimaryClassesToPrimaryClass);
       ResolvedType methodReturnType = decl.getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
-        updateUsedClassBasedOnType(methodReturnType);
+        updateUsedClassBasedOnType(methodReturnType, usedClass, nonPrimaryClassesToPrimaryClass);
       }
       // Special case for lambdas to preserve artificial functional
       // interfaces.
       for (int i = 0; i < call.getArguments().size(); ++i) {
         Expression arg = call.getArgument(i);
         if (arg.isLambdaExpr()) {
-          updateUsedClassBasedOnType(decl.getParam(i).getType());
+          updateUsedClassBasedOnType(
+              decl.getParam(i).getType(), usedClass, nonPrimaryClassesToPrimaryClass);
         }
       }
     }
@@ -386,7 +387,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     try {
       ResolvedReferenceType typeResolved = type.resolve();
-      updateUsedClassBasedOnType(typeResolved);
+      updateUsedClassBasedOnType(typeResolved, usedClass, nonPrimaryClassesToPrimaryClass);
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
@@ -451,7 +452,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         updateUsedClassWithQualifiedClassName(
             fullNameOfClass, usedClass, nonPrimaryClassesToPrimaryClass);
         ResolvedType exprResolvedType = expr.resolve().getType();
-        updateUsedClassBasedOnType(exprResolvedType);
+        updateUsedClassBasedOnType(exprResolvedType, usedClass, nonPrimaryClassesToPrimaryClass);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // when the type is a primitive array, we will have an UnsupportedOperationException
         if (e instanceof UnsupportedOperationException) {
@@ -465,7 +466,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     Expression caller = expr.getScope();
     if (caller instanceof SuperExpr) {
       ResolvedType callerResolvedType = caller.calculateResolvedType();
-      updateUsedClassBasedOnType(callerResolvedType);
+      updateUsedClassBasedOnType(callerResolvedType, usedClass, nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(expr, p);
   }
@@ -544,7 +545,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private void resolveUnionType(UnionType type) {
     for (ReferenceType param : type.getElements()) {
       ResolvedType paramType = param.resolve();
-      updateUsedClassBasedOnType(paramType);
+      updateUsedClassBasedOnType(paramType, usedClass, nonPrimaryClassesToPrimaryClass);
     }
   }
 
@@ -597,7 +598,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       updateUsedClassWithQualifiedClassName(
           classFullName, usedClass, nonPrimaryClassesToPrimaryClass);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
-      updateUsedClassBasedOnType(exprDecl.getType());
+      updateUsedClassBasedOnType(exprDecl.getType(), usedClass, nonPrimaryClassesToPrimaryClass);
     }
   }
 
@@ -646,8 +647,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * can be a method, a field, a variable, or a parameter.
    *
    * @param type The resolved type of the used element.
+   * @param usedClass set of used class to be updated.
+   * @param nonPrimaryClassesToPrimaryClass the map that connects non primary type to primary type.
    */
-  public void updateUsedClassBasedOnType(ResolvedType type) {
+  public static void updateUsedClassBasedOnType(
+      ResolvedType type,
+      Set<String> usedClass,
+      Map<String, String> nonPrimaryClassesToPrimaryClass) {
     if (type.isTypeVariable()) {
       // From JLS 4.4: A type variable is introduced by the declaration of a type parameter of a
       // generic class, interface, method, or constructor
