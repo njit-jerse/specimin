@@ -11,6 +11,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
@@ -357,18 +358,19 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(MethodReferenceExpr ref, Void p) {
+    if (insideTargetMethod) {
+      ResolvedMethodDeclaration decl = ref.resolve();
+      preserveMethodDecl(decl);
+    }
+    return super.visit(ref, p);
+  }
+
+  @Override
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       ResolvedMethodDeclaration decl = call.resolve();
-      usedMembers.add(decl.getQualifiedSignature());
-      updateUsedClassWithQualifiedClassName(
-          decl.getPackageName() + "." + decl.getClassName(),
-          usedClass,
-          nonPrimaryClassesToPrimaryClass);
-      ResolvedType methodReturnType = decl.getReturnType();
-      if (methodReturnType instanceof ResolvedReferenceType) {
-        updateUsedClassBasedOnType(methodReturnType);
-      }
+      preserveMethodDecl(decl);
       // Special case for lambdas to preserve artificial functional
       // interfaces.
       for (int i = 0; i < call.getArguments().size(); ++i) {
@@ -379,6 +381,24 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(call, p);
+  }
+
+  /**
+   * Helper method for preserving a used method. This code is called for both method call
+   * expressions and method refs.
+   *
+   * @param decl a resolved method declaration to be preserved
+   */
+  private void preserveMethodDecl(ResolvedMethodDeclaration decl) {
+    usedMembers.add(decl.getQualifiedSignature());
+    updateUsedClassWithQualifiedClassName(
+        decl.getPackageName() + "." + decl.getClassName(),
+        usedClass,
+        nonPrimaryClassesToPrimaryClass);
+    ResolvedType methodReturnType = decl.getReturnType();
+    if (methodReturnType instanceof ResolvedReferenceType) {
+      updateUsedClassBasedOnType(methodReturnType);
+    }
   }
 
   @Override
