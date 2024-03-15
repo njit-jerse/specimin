@@ -31,6 +31,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import java.util.ArrayList;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -48,7 +49,7 @@ public class SpeciminRunner {
     // for symbol resolution from source code and to organize the output directory.
     OptionSpec<String> rootOption = optionParser.accepts("root").withRequiredArg();
 
-    OptionSpec<String> jarPath = optionParser.accepts("jarPath").withOptionalArg();
+    var jar = optionParser.accepts("jarPath").withOptionalArg().ofType(String.class);
 
     // This option is the relative paths to the target file(s) - the .java file(s) containing
     // target method(s) - from the root.
@@ -63,10 +64,15 @@ public class SpeciminRunner {
         optionParser.accepts("outputDirectory").withRequiredArg();
 
     OptionSet options = optionParser.parse(args);
+    String jarDirectory = options.valueOf(jar);
+    System.out.println("jar directory " + jarDirectory);
+
+    List<String> jarFiles = getJarFiles(jarDirectory);
+
     performMinimization(
         options.valueOf(rootOption),
         options.valuesOf(targetFilesOption),
-        options.valuesOf(jarPath),
+        jarFiles,
         options.valuesOf(targetMethodsOption),
         options.valueOf(outputDirectoryOption));
   }
@@ -502,5 +508,27 @@ public class SpeciminRunner {
         deleteFileFamily(parentDir);
       }
     }
+  }
+
+  /**
+   * Given a directory, this method will return all the .jar files stored in the directory.
+   *
+   * @param directoryPath the directory of the jar files
+   */
+  private static List<String> getJarFiles(String directoryPath) {
+    List<String> jarFiles = new ArrayList<>();
+
+    File directory = new File(directoryPath);
+    if (directory.isDirectory()) {
+      File[] files = directory.listFiles();
+      if (files != null) {
+        for (File file : files) {
+          if (file.isFile() && file.getName().endsWith(".jar")) {
+            jarFiles.add(file.getAbsolutePath());
+          }
+        }
+      }
+    }
+    return jarFiles;
   }
 }
