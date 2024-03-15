@@ -590,7 +590,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // if expr is the name of a class in a static call, we can't resolve its value.
       return;
     }
-    System.out.println(exprDecl);
     if (exprDecl instanceof ResolvedFieldDeclaration) {
       // while the name of the method is declaringType(), it actually returns the class where the
       // field is declared
@@ -599,8 +598,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           classFullName, usedClass, nonPrimaryClassesToPrimaryClass);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
       updateUsedClassBasedOnType(exprDecl.getType());
-    } else {
-      System.out.println(exprDecl.getClass());
     }
   }
 
