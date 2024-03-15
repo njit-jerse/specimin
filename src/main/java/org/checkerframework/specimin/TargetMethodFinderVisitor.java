@@ -440,6 +440,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(FieldAccessExpr expr, Void p) {
     if (insideTargetMethod) {
       String fullNameOfClass;
+      if (updateUsedClassAndMemberForEnumConstant(expr)) {
+        return super.visit(expr, p);
+      }
       try {
         // while the name of the method is declaringType(), it actually returns the class where the
         // field is declared
@@ -546,6 +549,34 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Given a FieldAccessExpr, this method updates the sets of used classes and members if this field
+   * is actually an enum constant.
+   *
+   * @param fieldAccessExpr a potential enum constant.
+   * @return true if the updating process was successful, false otherwise.
+   */
+  private boolean updateUsedClassAndMemberForEnumConstant(FieldAccessExpr fieldAccessExpr) {
+    ResolvedValueDeclaration resolved;
+    try {
+      resolved = fieldAccessExpr.resolve();
+    }
+    // if the a field is accessed in the form of a fully-qualified path, such as
+    // org.example.A.b, then other components in the path apart from the class name and field
+    // name, such as org and org.example, will also be considered as FieldAccessExpr.
+    catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return false;
+    }
+    if (!resolved.isEnumConstant()) {
+      return false;
+    }
+    String classFullName = resolved.asEnumConstant().getType().describe();
+    updateUsedClassWithQualifiedClassName(
+        classFullName, usedClass, nonPrimaryClassesToPrimaryClass);
+    usedMembers.add(classFullName + "." + fieldAccessExpr.getNameAsString());
+    return true;
+  }
+
+  /**
    * Given a NameExpr instance, this method will update the used elements, classes and members if
    * that NameExpr is a field.
    *
@@ -559,6 +590,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // if expr is the name of a class in a static call, we can't resolve its value.
       return;
     }
+    System.out.println(exprDecl);
     if (exprDecl instanceof ResolvedFieldDeclaration) {
       // while the name of the method is declaringType(), it actually returns the class where the
       // field is declared
@@ -567,6 +599,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           classFullName, usedClass, nonPrimaryClassesToPrimaryClass);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
       updateUsedClassBasedOnType(exprDecl.getType());
+    } else {
+      System.out.println(exprDecl.getClass());
     }
   }
 
