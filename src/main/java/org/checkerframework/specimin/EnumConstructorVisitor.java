@@ -4,7 +4,6 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
-import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Set;
 
@@ -18,7 +17,7 @@ public class EnumConstructorVisitor extends VoidVisitorAdapter<Void> {
   private Set<String> usedClass;
 
   /** Check whether the visitor is inside an enum used by target methods. */
-  private ArrayDeque<Boolean> insideUsedEnum;
+  private boolean insideUsedEnum = false;
 
   /**
    * Constructs an EnumConstructorVisitor with the provided set of used members.
@@ -27,7 +26,6 @@ public class EnumConstructorVisitor extends VoidVisitorAdapter<Void> {
    */
   public EnumConstructorVisitor(Set<String> usedClass) {
     this.usedClass = usedClass;
-    this.insideUsedEnum = new ArrayDeque<>();
   }
 
   /**
@@ -41,21 +39,21 @@ public class EnumConstructorVisitor extends VoidVisitorAdapter<Void> {
 
   @Override
   public void visit(EnumDeclaration enumDeclaration, Void arg) {
+    boolean oldInsideUsedEnum = insideUsedEnum;
     if (enumDeclaration.getFullyQualifiedName().isPresent()) {
       if (usedClass.contains(enumDeclaration.getFullyQualifiedName().get())) {
-        insideUsedEnum.addFirst(true);
+        insideUsedEnum = true;
       } else {
-        insideUsedEnum.addFirst(false);
+        insideUsedEnum = false;
       }
       super.visit(enumDeclaration, arg);
-      insideUsedEnum.removeFirst();
+      insideUsedEnum = oldInsideUsedEnum;
     }
   }
 
   @Override
   public void visit(ConstructorDeclaration constructorDeclaration, Void p) {
-    boolean currentStatus = insideUsedEnum.getLast();
-    if (currentStatus) {
+    if (insideUsedEnum) {
       // as long as the parameter are resolved, the constructor will be preserved.
       for (Parameter parameter : constructorDeclaration.getParameters()) {
         TargetMethodFinderVisitor.updateUsedClassBasedOnType(
