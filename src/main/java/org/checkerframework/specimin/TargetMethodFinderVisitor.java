@@ -11,6 +11,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
@@ -234,6 +235,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
+    boolean oldInsideTargetMethod = insideTargetMethod;
     if (this.targetMethodNames.contains(methodName)) {
       insideTargetMethod = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
@@ -245,7 +247,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           nonPrimaryClassesToPrimaryClass);
     }
     Visitable result = super.visit(method, p);
-    insideTargetMethod = false;
+    insideTargetMethod = oldInsideTargetMethod;
     return result;
   }
 
@@ -257,6 +259,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
+    boolean oldInsideTargetMethod = insideTargetMethod;
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
     String methodName =
@@ -308,7 +311,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     Visitable result = super.visit(method, p);
-    insideTargetMethod = false;
+    insideTargetMethod = oldInsideTargetMethod;
     return result;
   }
 
@@ -352,6 +355,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(para, p);
+  }
+
+  @Override
+  public Visitable visit(MethodReferenceExpr ref, Void p) {
+    if (insideTargetMethod) {
+      ResolvedMethodDeclaration decl = ref.resolve();
+      preserveMethodDecl(decl);
+    }
+    return super.visit(ref, p);
   }
 
   @Override
