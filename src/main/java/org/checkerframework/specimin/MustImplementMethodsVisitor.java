@@ -135,9 +135,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
    * @return true iff the input is non-null and abstract
    */
   private boolean isPreservedAndAbstract(@Nullable ResolvedMethodDeclaration method) {
-    return method != null
-        && method.isAbstract()
-        && usedMembers.contains(method.getQualifiedSignature());
+    return method != null && method.isAbstract();
   }
 
   /**
