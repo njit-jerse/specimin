@@ -234,12 +234,18 @@ public class SpeciminRunner {
       cu.accept(annoRemover, null);
     }
 
+    EnumVisitor enumVisitor = new EnumVisitor();
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(enumVisitor, null);
+    }
+
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
 
     TargetMethodFinderVisitor finder =
-        new TargetMethodFinderVisitor(targetMethodNames, nonPrimaryClassesToPrimaryClass);
+        new TargetMethodFinderVisitor(
+            targetMethodNames, nonPrimaryClassesToPrimaryClass, enumVisitor.getUsedClass());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
@@ -251,16 +257,9 @@ public class SpeciminRunner {
           "Specimin could not locate the following target methods in the target files: "
               + String.join(", ", unfoundMethods));
     }
-    EnumConstructorVisitor enumConstructorVisitor =
-        new EnumConstructorVisitor(finder.getUsedClass());
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(enumConstructorVisitor, null);
-    }
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
         new SolveMethodOverridingVisitor(
-            finder.getTargetMethods(),
-            finder.getUsedMembers(),
-            enumConstructorVisitor.getUsedClass());
+            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }

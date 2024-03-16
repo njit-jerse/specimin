@@ -4,7 +4,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -74,7 +74,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * Classes of the methods that were actually used by the targets. These classes will be included
    * in the input.
    */
-  private Set<String> usedClass = new HashSet<>();
+  private Set<String> usedClass;
 
   /** Set of variables declared in this current class */
   private final Set<String> declaredNames = new HashSet<>();
@@ -120,7 +120,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *     corresponding primary classes
    */
   public TargetMethodFinderVisitor(
-      List<String> methodNames, Map<String, String> nonPrimaryClassesToPrimaryClass) {
+      List<String> methodNames,
+      Map<String, String> nonPrimaryClassesToPrimaryClass,
+      Set<String> usedClass) {
     targetMethodNames = new HashSet<>();
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
@@ -128,6 +130,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     unfoundMethods = new ArrayList<>(methodNames);
     importedClassToPackage = new HashMap<>();
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
+    this.usedClass = usedClass;
   }
 
   /**
@@ -248,6 +251,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = oldInsideTargetMethod;
+
+    if (method.getParentNode().isPresent()) {
+      return result;
+    }
+    if (method.getParentNode().get() instanceof EnumDeclaration) {
+      EnumDeclaration parentNode = (EnumDeclaration) method.getParentNode().get();
+      if (parentNode.getFullyQualifiedName().isEmpty()) {
+        return result;
+      }
+      if (usedClass.contains(parentNode.getFullyQualifiedName().get())) {
+        for (Parameter parameter : method.getParameters()) {
+          updateUsedClassBasedOnType(
+              parameter.getType().resolve(), usedClass, nonPrimaryClassesToPrimaryClass);
+        }
+      }
+    }
     return result;
   }
 
@@ -445,18 +464,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(expr, p);
-  }
-
-  @Override
-  public Visitable visit(EnumConstantDeclaration expr, Void p) {
-    // this is a bit hacky, but we don't remove any enum constant declarations if they
-    // are ever used, so it's safer to just preserve anything that they use by pretending
-    // that we're inside a target method.
-    boolean oldInsideTargetMethod = insideTargetMethod;
-    insideTargetMethod = true;
-    Visitable result = super.visit(expr, p);
-    insideTargetMethod = oldInsideTargetMethod;
-    return result;
   }
 
   @Override

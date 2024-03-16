@@ -893,6 +893,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       updateClassSetWithStaticMethodCall(method);
+    } else if (unsolvedAndCalledByASimpleClassName(method)) {
+      updateClassSetWithStaticMethodCall(method);
     } else if (calledByAnIncompleteClass(method)) {
       String qualifiedNameOfIncompleteClass = getIncompleteClass(method);
       if (classfileIsInOriginalCodebase(qualifiedNameOfIncompleteClass)) {
@@ -901,8 +903,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
         updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
       }
-    } else if (unsolvedAndCalledByASimpleClassName(method)) {
-      updateClassSetWithStaticMethodCall(method);
     } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
       String methodName = method.getNameAsString();
       @FullyQualifiedName String className = staticImportedMembersMap.get(methodName);
@@ -1903,11 +1903,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public List<String> getArgumentTypesFromMethodCall(
       MethodCallExpr method, @Nullable String pkgName) {
-    System.out.println(method);
     List<String> parametersList = new ArrayList<>();
     NodeList<Expression> paraList = method.getArguments();
     for (Expression parameter : paraList) {
-      System.out.print(parameter + " ");
       // Special case for lambdas: don't try to resolve their type,
       // and instead compute their arity and provide an appropriate
       // functional interface from java.util.function.
@@ -1921,7 +1919,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
 
       ResolvedType type = parameter.calculateResolvedType();
-      System.out.println(type);
       // for reference type, we need the fully-qualified name to avoid having to add additional
       // import statements.
       if (type.isReferenceType()) {
@@ -1937,8 +1934,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-    System.out.println(parametersList);
-    System.out.println();
     return parametersList;
   }
 

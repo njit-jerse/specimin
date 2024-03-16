@@ -55,10 +55,7 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
     }
     if (fileAndAssociatedTypes.containsKey(fileDirectory)) {
       fileAndAssociatedTypes.get(fileDirectory).add(typeFullName);
-      return super.visit(type, p);
-    } else {
-      throw new RuntimeException(
-          "Unexpected files and types: " + fileDirectory + ", " + typeFullName);
     }
+    return super.visit(type, p);
   }
 }
