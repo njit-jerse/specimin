@@ -1903,9 +1903,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public List<String> getArgumentTypesFromMethodCall(
       MethodCallExpr method, @Nullable String pkgName) {
+    System.out.println(method);
     List<String> parametersList = new ArrayList<>();
     NodeList<Expression> paraList = method.getArguments();
     for (Expression parameter : paraList) {
+      System.out.print(parameter + " ");
       // Special case for lambdas: don't try to resolve their type,
       // and instead compute their arity and provide an appropriate
       // functional interface from java.util.function.
@@ -1919,14 +1921,24 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
 
       ResolvedType type = parameter.calculateResolvedType();
+      System.out.println(type);
       // for reference type, we need the fully-qualified name to avoid having to add additional
       // import statements.
       if (type.isReferenceType()) {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
+      } else if (type.isArray()) {
+        ResolvedType elementType = type.asArrayType().getComponentType();
+        if (elementType.isReferenceType()) {
+          parametersList.add(elementType.asReferenceType().getQualifiedName() + "[]");
+        } else {
+          parametersList.add(elementType.describe() + "[]");
+        }
       }
     }
+    System.out.println(parametersList);
+    System.out.println();
     return parametersList;
   }
 
