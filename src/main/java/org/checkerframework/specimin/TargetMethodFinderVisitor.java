@@ -415,7 +415,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param decl a resolved method declaration to be preserved
    */
   private void preserveMethodDecl(ResolvedMethodDeclaration decl) {
-    System.out.println(decl);
     usedMembers.add(decl.getQualifiedSignature());
     updateUsedClassWithQualifiedClassName(
         decl.getPackageName() + "." + decl.getClassName(),
