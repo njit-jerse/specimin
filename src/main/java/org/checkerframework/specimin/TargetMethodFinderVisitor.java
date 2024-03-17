@@ -166,10 +166,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @return the used classes and enums.
    */
   public Set<String> getUsedClassAndEnums() {
-    Set<String> result = new HashSet<>();
-    result.addAll(usedClass);
-    result.addAll(usedEnum);
-    return result;
+    Set<String> usedClassAndEnums = usedClass;
+    usedClassAndEnums.addAll(usedEnum);
+    return usedClassAndEnums;
   }
 
   /**
@@ -268,7 +267,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (parentNode.getFullyQualifiedName().isEmpty()) {
         return result;
       }
-      if (usedClass.contains(parentNode.getFullyQualifiedName().get())) {
+      if (usedEnum.contains(parentNode.getFullyQualifiedName().get())) {
         for (Parameter parameter : method.getParameters()) {
           updateUsedClassBasedOnType(parameter.getType().resolve());
         }
