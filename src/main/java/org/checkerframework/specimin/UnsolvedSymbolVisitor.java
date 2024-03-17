@@ -1925,13 +1925,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
-      } else if (type.isArray()) {
-        ResolvedType elementType = type.asArrayType().getComponentType();
-        if (elementType.isReferenceType()) {
-          parametersList.add(elementType.asReferenceType().getQualifiedName() + "[]");
-        } else {
-          parametersList.add(elementType.describe() + "[]");
-        }
       }
     }
     return parametersList;
