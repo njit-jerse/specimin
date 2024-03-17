@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.google.common.base.Ascii;
 import java.util.List;
 import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -131,7 +132,14 @@ public class UnsolvedMethod {
     }
     String returnTypeInString = "";
     if (!returnType.equals("")) {
-      returnTypeInString = returnType + " ";
+      // This is hard-coding. We believe that a single capital character is a generic type. And
+      // since synthetic classes created by Specimin uses "T," we need to change the return type to
+      // "T" accordingly.
+      if (returnType.length() == 1 && returnType.equals(Ascii.toUpperCase(returnType))) {
+        returnTypeInString = "T ";
+      } else {
+        returnTypeInString = returnType + " ";
+      }
     }
     String staticField = "";
     if (isStatic) {
