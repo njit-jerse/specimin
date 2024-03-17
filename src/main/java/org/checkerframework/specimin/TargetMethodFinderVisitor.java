@@ -254,7 +254,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(method, p);
     insideTargetMethod = oldInsideTargetMethod;
 
-    if (method.getParentNode().isPresent()) {
+    if (method.getParentNode().isEmpty()) {
       return result;
     }
     if (method.getParentNode().get() instanceof EnumDeclaration) {
