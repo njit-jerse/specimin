@@ -94,6 +94,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    *     methods for specimin)
    * @param membersToEmpty the set of members that this pruner will empty
    * @param classesUsedByTargetMethods the classes used by target methods
+   * @param resolvedYetStuckMethodCall set of methods that are resolved yet can not be solved by
+   *     JavaParser
    */
   public PrunerVisitor(
       Set<String> methodsToKeep,
