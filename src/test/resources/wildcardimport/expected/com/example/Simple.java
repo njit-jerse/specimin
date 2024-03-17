@@ -1,7 +1,6 @@
 package com.example;
 
-import org.example.Foo;
-import org.example.FooMethodReturnType;
+import org.example.*;
 
 class Simple {
     void bar() {
