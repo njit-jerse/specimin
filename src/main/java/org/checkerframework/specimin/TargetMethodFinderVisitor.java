@@ -75,7 +75,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * Classes of the methods that were actually used by the targets. These classes will be included
    * in the input.
    */
-  private Set<String> usedClass;
+  private Set<String> usedClass = new HashSet<>();
+
+  /** Enums that were actually used by the targets. These classes will be included in the input. */
+  private Set<String> usedEnum = new HashSet<>();
 
   /** Set of variables declared in this current class */
   private final Set<String> declaredNames = new HashSet<>();
@@ -119,12 +122,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
-   * @param usedClass set of classes used by target methods.
+   * @param usedEnum set of enums used by target methods.
    */
   public TargetMethodFinderVisitor(
       List<String> methodNames,
       Map<String, String> nonPrimaryClassesToPrimaryClass,
-      Set<String> usedClass) {
+      Set<String> usedEnum) {
     targetMethodNames = new HashSet<>();
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
@@ -132,7 +135,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     unfoundMethods = new ArrayList<>(methodNames);
     importedClassToPackage = new HashMap<>();
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
-    this.usedClass = usedClass;
+    this.usedEnum = usedEnum;
   }
 
   /**
@@ -157,13 +160,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get the classes of the methods that the target method uses. The Strings in the set are the
-   * fully-qualified names.
+   * Get the classes of the methods and enums that the target method uses. The Strings in the set
+   * are the fully-qualified names.
    *
-   * @return the used classes
+   * @return the used classes and enums.
    */
-  public Set<String> getUsedClass() {
-    return usedClass;
+  public Set<String> getUsedClassAndEnums() {
+    Set<String> result = new HashSet<>();
+    result.addAll(usedClass);
+    result.addAll(usedEnum);
+    return result;
   }
 
   /**
@@ -472,7 +478,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
     Node parentNode = enumConstantDeclaration.getParentNode().get();
     if (parentNode instanceof EnumDeclaration) {
-      if (usedClass.contains(
+      if (usedEnum.contains(
           ((EnumDeclaration) parentNode).asEnumDeclaration().getFullyQualifiedName().get())) {
         boolean oldInsideTargetMethod = insideTargetMethod;
         // used enum constant are not strictly target methods, but we need to make sure the symbols
