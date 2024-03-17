@@ -20,6 +20,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -31,7 +32,6 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
-import java.util.ArrayList;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
