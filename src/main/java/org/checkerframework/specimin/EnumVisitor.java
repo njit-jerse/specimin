@@ -22,16 +22,17 @@ public class EnumVisitor extends VoidVisitorAdapter<Void> {
   /** Set of classes used by the target method. */
   private Set<String> usedClass;
 
-  /** Chech whether the visitor is inside the target method. */
-  private boolean insideTargetMethod = false;
-
   /** The current qualified name of this class. */
   private String classFQName = "";
 
   /** The set of signatures of target methods. */
   private Set<String> targetMethods = new HashSet<>();
 
-  /** Constructs an EnumConstructorVisitor with the provided set of used members. */
+  /**
+   * Constructs an EnumConstructorVisitor with the provided set of used methods.
+   *
+   * @param targetMethods the set of used methods.
+   */
   public EnumVisitor(List<String> targetMethods) {
     this.usedClass = new HashSet<>();
     this.targetMethods.addAll(targetMethods);
@@ -77,31 +78,29 @@ public class EnumVisitor extends VoidVisitorAdapter<Void> {
             + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 methodDeclaration.getDeclarationAsString(false, false, false));
     if (targetMethods.contains(methodQualifiedSignature)) {
-      boolean oldInsideTargetMethod = insideTargetMethod;
-      insideTargetMethod = true;
-      super.visit(methodDeclaration, arg);
-      insideTargetMethod = oldInsideTargetMethod;
-    } else {
       super.visit(methodDeclaration, arg);
     }
+    // no need to visit non-target methods.
   }
 
   @Override
   public void visit(FieldAccessExpr fieldAccessExpr, Void arg) {
-    if (insideTargetMethod) {
-      updateUsedClassForPotentialEnum(fieldAccessExpr);
-    }
+    updateUsedClassForPotentialEnum(fieldAccessExpr);
     super.visit(fieldAccessExpr, arg);
   }
 
   @Override
   public void visit(NameExpr nameExpr, Void arg) {
-    if (insideTargetMethod) {
-      updateUsedClassForPotentialEnum(nameExpr);
-    }
+    updateUsedClassForPotentialEnum(nameExpr);
     super.visit(nameExpr, arg);
   }
 
+  /**
+   * Given an expression that could be an enum, this method updates the list of used classes
+   * accordingly.
+   *
+   * @param expression an expression that could be an enum.
+   */
   public void updateUsedClassForPotentialEnum(Expression expression) {
     ResolvedValueDeclaration resolvedField;
     // JavaParser sometimes consider an enum usage a field access expression, sometimes a name
