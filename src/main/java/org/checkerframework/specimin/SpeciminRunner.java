@@ -234,7 +234,7 @@ public class SpeciminRunner {
       cu.accept(annoRemover, null);
     }
 
-    EnumVisitor enumVisitor = new EnumVisitor();
+    EnumVisitor enumVisitor = new EnumVisitor(targetMethodNames);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(enumVisitor, null);
     }

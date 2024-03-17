@@ -2,12 +2,15 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -29,8 +32,9 @@ public class EnumVisitor extends VoidVisitorAdapter<Void> {
   private Set<String> targetMethods = new HashSet<>();
 
   /** Constructs an EnumConstructorVisitor with the provided set of used members. */
-  public EnumVisitor() {
+  public EnumVisitor(List<String> targetMethods) {
     this.usedClass = new HashSet<>();
+    this.targetMethods.addAll(targetMethods);
   }
 
   /**
@@ -77,18 +81,48 @@ public class EnumVisitor extends VoidVisitorAdapter<Void> {
       insideTargetMethod = true;
       super.visit(methodDeclaration, arg);
       insideTargetMethod = oldInsideTargetMethod;
+    } else {
+      super.visit(methodDeclaration, arg);
     }
   }
 
   @Override
   public void visit(FieldAccessExpr fieldAccessExpr, Void arg) {
-    ResolvedValueDeclaration resolvedField;
-    try {
-      resolvedField = fieldAccessExpr.resolve();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      super.visit(fieldAccessExpr, arg);
-      return;
+    if (insideTargetMethod) {
+      updateUsedClassForPotentialEnum(fieldAccessExpr);
     }
+    super.visit(fieldAccessExpr, arg);
+  }
+
+  @Override
+  public void visit(NameExpr nameExpr, Void arg) {
+    if (insideTargetMethod) {
+      updateUsedClassForPotentialEnum(nameExpr);
+    }
+    super.visit(nameExpr, arg);
+  }
+
+  public void updateUsedClassForPotentialEnum(Expression expression) {
+    ResolvedValueDeclaration resolvedField;
+    // JavaParser sometimes consider an enum usage a field access expression, sometimes a name
+    // expression.
+    if (expression.isFieldAccessExpr()) {
+      try {
+        resolvedField = expression.asFieldAccessExpr().resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        return;
+      }
+    } else if (expression.isNameExpr()) {
+      try {
+        resolvedField = expression.asNameExpr().resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        return;
+      }
+    } else {
+      throw new RuntimeException(
+          "Unexpected parameter for updateUsedClassForPotentialEnum: " + expression);
+    }
+
     if (resolvedField.isEnumConstant()) {
       ResolvedType correspondingEnumDeclaration = resolvedField.asEnumConstant().getType();
       usedClass.add(correspondingEnumDeclaration.describe());

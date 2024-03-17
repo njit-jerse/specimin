@@ -4,6 +4,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -118,6 +119,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
+   * @param usedClass set of classes used by target methods.
    */
   public TargetMethodFinderVisitor(
       List<String> methodNames,
@@ -464,6 +466,24 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
+    Node parentNode = enumConstantDeclaration.getParentNode().get();
+    if (parentNode instanceof EnumDeclaration) {
+      if (usedClass.contains(
+          ((EnumDeclaration) parentNode).asEnumDeclaration().getFullyQualifiedName().get())) {
+        boolean oldInsideTargetMethod = insideTargetMethod;
+        // used enum constant are not strictly target methods, but we need to make sure the symbols
+        // inside them are preserved.
+        insideTargetMethod = true;
+        Visitable result = super.visit(enumConstantDeclaration, p);
+        insideTargetMethod = oldInsideTargetMethod;
+        return result;
+      }
+    }
+    return super.visit(enumConstantDeclaration, p);
   }
 
   @Override
