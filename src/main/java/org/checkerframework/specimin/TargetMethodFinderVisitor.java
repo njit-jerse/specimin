@@ -267,6 +267,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       if (parentNode.getFullyQualifiedName().isEmpty()) {
         return result;
       }
+      // used enums needs to have compilable constructors.
       if (usedEnum.contains(parentNode.getFullyQualifiedName().get())) {
         for (Parameter parameter : method.getParameters()) {
           updateUsedClassBasedOnType(parameter.getType().resolve());
