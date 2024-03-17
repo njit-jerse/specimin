@@ -78,6 +78,12 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   private boolean insideFunctionalInterface = false;
 
   /**
+   * JavaParser is not perfect. Sometimes it can't solve resolved method calls if they have
+   * complicated type variables. We keep track of these stuck method calls and preserve them anyway.
+   */
+  private final Set<String> resolvedYetStuckMethodCall;
+
+  /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
    * be removed entirely. For methods in both arguments, the Strings should be in the format
    * produced by ResolvedMethodDeclaration#getQualifiedSignature. For fields in {@link
@@ -92,7 +98,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   public PrunerVisitor(
       Set<String> methodsToKeep,
       Set<String> membersToEmpty,
-      Set<String> classesUsedByTargetMethods) {
+      Set<String> classesUsedByTargetMethods,
+      Set<String> resolvedYetStuckMethodCall) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
@@ -107,6 +114,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       String withoutAngleBrackets = s.substring(0, s.indexOf("<"));
       classesUsedByTargetMethods.add(withoutAngleBrackets);
     }
+    this.resolvedYetStuckMethodCall = resolvedYetStuckMethodCall;
   }
 
   @Override
@@ -236,7 +244,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       Visitable result = super.visit(methodDecl, p);
       insideTargetMethod = oldInsideTargetMethod;
       return result;
-    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
+    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())
+        || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
       if (methodDecl.getBody().isPresent() || isMethodInsideInterface) {
@@ -317,6 +326,23 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
 
     return super.visit(fieldDecl, p);
+  }
+
+  /**
+   * Check if this method is one of the method calls used by target methods that are resolved yet
+   * can not be solved by JavaParser.
+   *
+   * @param method a method
+   * @return true if the above statement is true.
+   */
+  private boolean isAResolvedYetStuckMethod(MethodDeclaration method) {
+    String methodQualifiedName = method.resolve().getQualifiedSignature();
+    for (String stuckMethodCall : resolvedYetStuckMethodCall) {
+      if (methodQualifiedName.startsWith(stuckMethodCall)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

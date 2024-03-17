@@ -112,6 +112,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   Map<String, String> nonPrimaryClassesToPrimaryClass;
 
   /**
+   * JavaParser is not perfect. Sometimes it can't solve resolved method calls if they have
+   * complicated type variables. We keep track of these stuck method calls and preserve them anyway.
+   */
+  private final Set<String> resolvedYetStuckMethodCall = new HashSet<>();
+
+  /**
    * Create a new target method finding visitor.
    *
    * @param methodNames the names of the target methods, the format
@@ -169,6 +175,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getTargetMethods() {
     return targetMethods;
+  }
+
+  /**
+   * Get the set of resolved yet stuck method calls.
+   *
+   * @return the value of stuck methods.
+   */
+  public Set<String> getResolvedYetStuckMethodCall() {
+    return resolvedYetStuckMethodCall;
   }
 
   /**
@@ -369,7 +384,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
-      ResolvedMethodDeclaration decl = call.resolve();
+      ResolvedMethodDeclaration decl;
+      try {
+        decl = call.resolve();
+      } catch (RuntimeException e) {
+        // Handle cases where a method call is resolved but its signature confuses JavaParser,
+        // leading to a RuntimeException.
+        // Note: this preservation is safe because we are not having an UnsolvedSymbolException.
+        // Only unsolved symbols can make the output failed to compile.
+        resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+        return super.visit(call, p);
+      }
       preserveMethodDecl(decl);
       // Special case for lambdas to preserve artificial functional
       // interfaces.
@@ -390,6 +415,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param decl a resolved method declaration to be preserved
    */
   private void preserveMethodDecl(ResolvedMethodDeclaration decl) {
+    System.out.println(decl);
     usedMembers.add(decl.getQualifiedSignature());
     updateUsedClassWithQualifiedClassName(
         decl.getPackageName() + "." + decl.getClassName(),
