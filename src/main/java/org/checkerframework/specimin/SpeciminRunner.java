@@ -318,7 +318,8 @@ public class SpeciminRunner {
         new PrunerVisitor(
             finder.getTargetMethods(),
             mustImplementMethodsVisitor.getUsedMembers(),
-            mustImplementMethodsVisitor.getUsedClass());
+            mustImplementMethodsVisitor.getUsedClass(),
+            finder.getResolvedYetStuckMethodCall());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
