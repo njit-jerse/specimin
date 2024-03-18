@@ -6,10 +6,8 @@ import com.example.util.Util;
 import com.example.util.Cast.castNonNull;
 
 class Simple {
-    // Target method.
-    private static Iterable<SqlParserPos> toPos(
-            Iterable<? extends SqlNode> nodes) {
-        return Util.transform(nodes,
-                node -> node == null ? castNonNull(null) : node.getParserPosition());
+
+    private static Iterable<SqlParserPos> toPos(Iterable<? extends SqlNode> nodes) {
+        return Util.transform(nodes, node -> node == null ? castNonNull(null) : node.getParserPosition());
     }
 }
