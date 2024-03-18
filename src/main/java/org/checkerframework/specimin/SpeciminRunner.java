@@ -259,7 +259,7 @@ public class SpeciminRunner {
     }
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
         new SolveMethodOverridingVisitor(
-            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClassAndEnums());
+            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedTypeElement());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }
@@ -356,7 +356,7 @@ public class SpeciminRunner {
         if (typesToChange.containsKey(simpleName)) {
           continue;
         }
-        if (!finder.getUsedClassAndEnums().contains(classFullyQualfiedName)) {
+        if (!finder.getUsedTypeElement().contains(classFullyQualfiedName)) {
           continue;
         }
       }
