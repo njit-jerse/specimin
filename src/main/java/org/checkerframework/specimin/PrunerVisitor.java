@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
@@ -26,6 +27,7 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
@@ -214,6 +216,22 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   public Visitable visit(InitializerDeclaration decl, Void p) {
     decl.remove();
     return decl;
+  }
+
+  @Override
+  public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
+    ResolvedEnumConstantDeclaration resolved;
+    try {
+      resolved = enumConstantDeclaration.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      JavaParserUtil.removeNode(enumConstantDeclaration);
+      return enumConstantDeclaration;
+    }
+    if (!membersToEmpty.contains(
+        resolved.getType().describe() + "." + enumConstantDeclaration.getNameAsString())) {
+      JavaParserUtil.removeNode(enumConstantDeclaration);
+    }
+    return enumConstantDeclaration;
   }
 
   @Override
