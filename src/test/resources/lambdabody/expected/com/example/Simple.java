@@ -3,7 +3,7 @@ package com.example;
 import com.example.sql.SqlNode;
 import com.example.sql.SqlParserPos;
 import com.example.util.Util;
-import com.example.util.Cast.castNonNull;
+import static com.example.util.Cast.castNonNull;
 
 class Simple {
 

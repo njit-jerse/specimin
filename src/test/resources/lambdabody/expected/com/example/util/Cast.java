@@ -2,7 +2,7 @@ package com.example.util;
 
 public class Cast {
 
-    public static <T extends Object> T castToNonNull(T t) {
+    public static <T extends Object> T castNonNull(T t) {
         throw new Error();
     }
 }
