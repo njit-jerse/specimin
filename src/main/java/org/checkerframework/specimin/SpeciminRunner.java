@@ -321,8 +321,24 @@ public class SpeciminRunner {
             mustImplementMethodsVisitor.getUsedClass(),
             finder.getResolvedYetStuckMethodCall());
 
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(methodPruner, null);
+    Set<String> additionalClassToPreserve = new HashSet<>();
+    while (true) {
+      for (CompilationUnit cu : parsedTargetFiles.values()) {
+        cu.accept(methodPruner, null);
+      }
+      if (additionalClassToPreserve.equals(methodPruner.getClassesToPreserveForStuckMethod())) {
+        break;
+      }
+      additionalClassToPreserve = methodPruner.getClassesToPreserveForStuckMethod();
+      for (String additionalClass : additionalClassToPreserve) {
+        String directoryOfFile = additionalClass.replace(".", "/") + ".java";
+        File thisFile = new File(root + directoryOfFile);
+        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
+        // create synthetic files for them
+        if (thisFile.exists()) {
+          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+        }
+      }
     }
 
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
@@ -348,7 +364,8 @@ public class SpeciminRunner {
           continue;
         }
         if (!finder.getUsedClass().contains(classFullyQualfiedName)) {
-          continue;
+          if (!methodPruner.getClassesToPreserveForStuckMethod().contains(classFullyQualfiedName))
+            continue;
         }
       }
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());

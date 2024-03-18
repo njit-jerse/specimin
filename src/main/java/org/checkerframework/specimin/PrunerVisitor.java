@@ -11,6 +11,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.BooleanLiteralExpr;
@@ -19,6 +20,7 @@ import com.github.javaparser.ast.expr.DoubleLiteralExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
@@ -81,7 +83,13 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * JavaParser is not perfect. Sometimes it can't solve resolved method calls if they have
    * complicated type variables. We keep track of these stuck method calls and preserve them anyway.
    */
-  private final Set<String> resolvedYetStuckMethodCall;
+  private final Set<MethodCallExpr> resolvedYetStuckMethodCall;
+
+  /**
+   * The set of classes that need to be preserved for the return types and parameters of a resolved
+   * yet stuck method call to compile.
+   */
+  private final Set<String> classesToPreserveForStuckMethod = new HashSet<>();
 
   /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
@@ -101,7 +109,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       Set<String> methodsToKeep,
       Set<String> membersToEmpty,
       Set<String> classesUsedByTargetMethods,
-      Set<String> resolvedYetStuckMethodCall) {
+      Set<MethodCallExpr> resolvedYetStuckMethodCall) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
@@ -117,6 +125,15 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       classesUsedByTargetMethods.add(withoutAngleBrackets);
     }
     this.resolvedYetStuckMethodCall = resolvedYetStuckMethodCall;
+  }
+
+  /**
+   * Get the names of classes that need to be preserved for special stuck method call to compile.
+   *
+   * @return classesToPreserveForStuckMethod.
+   */
+  public Set<String> getClassesToPreserveForStuckMethod() {
+    return classesToPreserveForStuckMethod;
   }
 
   @Override
@@ -256,6 +273,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
           methodDecl.setDefault(true);
         }
       }
+      if (isAResolvedYetStuckMethod(methodDecl)) {
+        updateClassesToPreserveForStuckMethod(methodDecl);
+      }
       return methodDecl;
     } else {
       // if insideTargetMethod is true, this current method declaration belongs to an anonnymous
@@ -274,9 +294,11 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
       qualifiedSignature = constructorDecl.resolve().getQualifiedSignature();
-    } catch (UnsolvedSymbolException e) {
+    } catch (RuntimeException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
+      // If this constructor is from the parent of the current class, and it is not resolved, we
+      // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
       constructorDecl.remove();
       return constructorDecl;
     }
@@ -331,20 +353,50 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Check if this method is one of the method calls used by target methods that are resolved yet
-   * can not be solved by JavaParser.
+   * Check if this method could be one of the method calls used by target methods that are resolved
+   * yet can not be solved by JavaParser.
+   *
+   * <p>Note: only call this method for resolved method declaration. Introducing unresolved symbols
+   * in the final output will lead to an error.
    *
    * @param method a method
    * @return true if the above statement is true.
    */
   private boolean isAResolvedYetStuckMethod(MethodDeclaration method) {
-    String methodQualifiedName = method.resolve().getQualifiedSignature();
-    for (String stuckMethodCall : resolvedYetStuckMethodCall) {
-      if (methodQualifiedName.startsWith(stuckMethodCall)) {
-        return true;
+    for (MethodCallExpr stuckMethodCall : resolvedYetStuckMethodCall) {
+      if (method.getNameAsString().equals(stuckMethodCall.getNameAsString())) {
+        if ((method.getParameters().size() == stuckMethodCall.getArguments().size())) {
+          return true;
+        }
       }
     }
     return false;
+  }
+
+  /**
+   * Update the value of classesToPreserveForStuckMethod.
+   *
+   * @param method a MethodDeclaration as input.
+   */
+  private void updateClassesToPreserveForStuckMethod(MethodDeclaration method) {
+    // since this method is stuck, either its return type or parameters or both are purely generic
+    // types, thus we need to catch the broad RuntimeException instead of just
+    // UnsolvedSymbolException or UnsupportedOperationException.
+    try {
+      classesToPreserveForStuckMethod.add(method.getType().resolve().describe());
+    } catch (RuntimeException e) {
+      // this line simply prevents Specimin from being crashed due to ignore catch block.
+      method.getName();
+    }
+    for (Parameter parameter : method.getParameters()) {
+      Type parameterType = parameter.getType();
+      try {
+        classesToPreserveForStuckMethod.add(parameterType.resolve().describe());
+      } catch (RuntimeException e) {
+        continue;
+      }
+    }
+    classesUsedByTargetMethods.addAll(classesToPreserveForStuckMethod);
   }
 
   /**

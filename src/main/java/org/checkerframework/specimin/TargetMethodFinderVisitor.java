@@ -115,7 +115,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * JavaParser is not perfect. Sometimes it can't solve resolved method calls if they have
    * complicated type variables. We keep track of these stuck method calls and preserve them anyway.
    */
-  private final Set<String> resolvedYetStuckMethodCall = new HashSet<>();
+  private final Set<MethodCallExpr> resolvedYetStuckMethodCall = new HashSet<>();
 
   /**
    * Create a new target method finding visitor.
@@ -182,7 +182,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *
    * @return the value of stuck methods.
    */
-  public Set<String> getResolvedYetStuckMethodCall() {
+  public Set<MethodCallExpr> getResolvedYetStuckMethodCall() {
     return resolvedYetStuckMethodCall;
   }
 
@@ -390,9 +390,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       } catch (RuntimeException e) {
         // Handle cases where a method call is resolved but its signature confuses JavaParser,
         // leading to a RuntimeException.
-        // Note: this preservation is safe because we are not having an UnsolvedSymbolException.
-        // Only unsolved symbols can make the output failed to compile.
-        resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+        resolvedYetStuckMethodCall.add(call);
+        preserveClassesForMethodReturnType(call);
         return super.visit(call, p);
       }
       preserveMethodDecl(decl);
@@ -430,6 +429,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // 1) The return type is a completely generic type.
     // 2) UnsolvedSymbolVisitor has missed some unsolved symbols.
     catch (UnsolvedSymbolException e) {
+      return;
+    }
+  }
+
+  /**
+   * This method updates the list of used classes so that the return type of a method call can be
+   * compiled.
+   *
+   * @param method a method call
+   */
+  private void preserveClassesForMethodReturnType(MethodCallExpr method) {
+    try {
+      ResolvedType returnType = method.calculateResolvedType();
+      updateUsedClassBasedOnType(returnType);
+    } catch (RuntimeException e) {
       return;
     }
   }

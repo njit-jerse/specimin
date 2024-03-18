@@ -860,7 +860,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     try {
       node.resolve();
-    } catch (UnsolvedSymbolException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       // for a qualified name field access such as org.sample.MyClass.field, org.sample will also be
       // considered FieldAccessExpr.
       if (isAClassPath(node.getScope().toString())) {
@@ -1897,6 +1897,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
+      } else if (type.isTypeVariable()) {
+        parametersList.add("T");
       }
     }
     return parametersList;
@@ -2367,7 +2369,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       field.resolve();
       return false;
-    } catch (UnsolvedSymbolException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       // this check is not very comprehensive, since a class can be in lowercase, and a method or
       // field can be in uppercase. But since this is without the jar paths, this is the best we can
       // do.
