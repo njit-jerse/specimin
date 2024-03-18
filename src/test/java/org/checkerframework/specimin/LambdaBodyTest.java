@@ -10,6 +10,6 @@ public class LambdaBodyTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "lambdafunction",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar(LambdaUser)"});
+        new String[] {"com.example.Simple#toPos(Iterable<? extends SqlNode>)"});
   }
 }
