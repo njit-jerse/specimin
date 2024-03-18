@@ -266,9 +266,11 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
       qualifiedSignature = constructorDecl.resolve().getQualifiedSignature();
-    } catch (UnsolvedSymbolException e) {
+    } catch (RuntimeException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
+      // If this constructor is from the parent of the current class, and it is not resolved, we
+      // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
       constructorDecl.remove();
       return constructorDecl;
     }

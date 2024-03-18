@@ -420,9 +420,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         decl.getPackageName() + "." + decl.getClassName(),
         usedClass,
         nonPrimaryClassesToPrimaryClass);
-    ResolvedType methodReturnType = decl.getReturnType();
-    if (methodReturnType instanceof ResolvedReferenceType) {
-      updateUsedClassBasedOnType(methodReturnType);
+    try {
+      ResolvedType methodReturnType = decl.getReturnType();
+      if (methodReturnType instanceof ResolvedReferenceType) {
+        updateUsedClassBasedOnType(methodReturnType);
+      }
+    }
+    // There could be two cases here:
+    // 1) The return type is a completely generic type.
+    // 2) UnsolvedSymbolVisitor has missed some unsolved symbols.
+    catch (UnsolvedSymbolException e) {
+      return;
     }
   }
 
