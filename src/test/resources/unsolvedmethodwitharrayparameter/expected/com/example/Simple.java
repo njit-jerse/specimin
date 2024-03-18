@@ -4,7 +4,7 @@ import org.testing.UnsolvedType;
 
 class Simple {
 
-    void bar(int[] intArray) {
+    void bar(int[][][] intArray) {
         UnsolvedType.processArray(intArray);
     }
 }
