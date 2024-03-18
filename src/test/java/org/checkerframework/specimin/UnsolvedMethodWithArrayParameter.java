@@ -10,6 +10,6 @@ public class UnsolvedMethodWithArrayParameter {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "unsolvedmethodwitharrayparameter",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar(int[])"});
+        new String[] {"com.example.Simple#bar(int[][][])"});
   }
 }
