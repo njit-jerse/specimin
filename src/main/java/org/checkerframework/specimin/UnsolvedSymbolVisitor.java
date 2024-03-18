@@ -1896,13 +1896,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
       } else if (type.isArray()) {
-        // the type without the [].
-        ResolvedType componentType = type.asArrayType().getComponentType();
-        if (componentType.isReferenceType()) {
-          parametersList.add(((ResolvedReferenceType) componentType).getQualifiedName() + "[]");
-        } else if (componentType.isPrimitive()) {
-          parametersList.add(componentType.describe() + "[]");
-        }
+        parametersList.add(type.asArrayType().describe());
       }
     }
     return parametersList;
