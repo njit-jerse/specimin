@@ -1897,6 +1897,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
+      } else if (type.isArray()) {
+        parametersList.add(type.asArrayType().describe());
       }
     }
     return parametersList;
