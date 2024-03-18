@@ -1,7 +1,6 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -127,21 +126,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // the result of getNameAsString is actually the package name. This renaming is just to
       // make the code less confusing.
       String importedPackage = classFullName;
-      // the parent of an import is always the corresponding compilation unit, thanks to the
-      // JLS' requirements about the placement of import statements (JLS 7.3)
-      CompilationUnit parent = (CompilationUnit) decl.getParentNode().orElseThrow();
-      decl.remove();
+      boolean isUsedAtLeastOnce = false;
       for (String usedClassFQN : classesUsedByTargetMethods) {
         if (usedClassFQN.startsWith(importedPackage)) {
-          try {
-            parent.addImport(usedClassFQN);
-          } catch (com.github.javaparser.ParseProblemException e) {
-            // ParseProblemException is not very helpful for figuring out what the problem is
-            // if we make a bug that causes it to be thrown (it only prints out the part of
-            // the type that is the problem, not the whole type).
-            throw new RuntimeException("failed trying to parse this import: " + usedClassFQN, e);
-          }
+          isUsedAtLeastOnce = true;
         }
+      }
+      if (!isUsedAtLeastOnce) {
+        decl.remove();
       }
       return decl;
     }
