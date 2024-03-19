@@ -351,7 +351,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         // list because we couldn't determine its qualified signature from the context
         // in which it was called (e.g., a method called on a lambda parameter).
         // The format is the name of the method followed by an @ followed by the
-        // number of parameters. Preserve anything that matches.
+        // number of arguments at the call site. Preserve anything that matches.
         String stuckMethodName = stuckMethodCall.substring(0, stuckMethodCall.indexOf('@'));
         int stuckMethodNumberOfParams =
             Integer.parseInt(stuckMethodCall.substring(stuckMethodCall.indexOf('@') + 1));
