@@ -1897,7 +1897,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
+      } else if (type.isNull()) {
+        // No way to know what the type should be, so use top.
+        parametersList.add("Object");
       }
+      // TODO: should we raise an exception here if there is some other kind of type? Could
+      // any other type (e.g., a type variable) possibly flow here? I think it's possible.
     }
     return parametersList;
   }
