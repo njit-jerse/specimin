@@ -387,6 +387,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedMethodDeclaration decl;
       try {
         decl = call.resolve();
+      } catch (UnsupportedOperationException e) {
+        // This case only occurs when a method is called on a lambda parameter.
+        // JavaParser has a type variable for the lambda parameter, but it won't
+        // have any constraints (JavaParser isn't very good at solving lambda parameter
+        // types). // TODO: decide how to handle this
+        return super.visit(call, p);
       } catch (RuntimeException e) {
         // Handle cases where a method call is resolved but its signature confuses JavaParser,
         // leading to a RuntimeException.

@@ -9,7 +9,13 @@ public class LambdaBodyTest {
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "lambdabody",
-        new String[] {"com/example/Simple.java"},
+        new String[] {
+          "com/example/Simple.java",
+          "com/example/sql/SqlNode.java",
+          "com/example/sql/SqlParserPos.java",
+          "com/example/util/Util.java",
+          "com/example/util/Cast.java"
+        },
         new String[] {"com.example.Simple#toPos(Iterable<? extends SqlNode>)"});
   }
 }
