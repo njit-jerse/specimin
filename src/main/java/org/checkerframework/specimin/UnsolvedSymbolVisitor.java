@@ -1927,6 +1927,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(type.describe());
       } else if (type.isArray()) {
         parametersList.add(type.asArrayType().describe());
+      } else if (type.isTypeVariable()) {
+        parametersList.add("T");
       }
     }
     return parametersList;
