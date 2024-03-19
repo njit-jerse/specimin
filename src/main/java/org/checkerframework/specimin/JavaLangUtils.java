@@ -7,13 +7,25 @@ import java.util.Set;
 public final class JavaLangUtils {
 
   /**
-   * Checks if the given simple name is a member of the java.lang package.
+   * Checks if the given simple name is a member of the java.lang package. This method returns false
+   * for primitive names (e.g., "int").
    *
    * @param simpleName a simple name
    * @return true if this name is defined by java.lang
    */
   public static boolean isJavaLangName(String simpleName) {
     return javaLangClassesAndInterfaces.contains(simpleName);
+  }
+
+  /**
+   * Checks if the given simple name is a member of the java.lang package. This method also returns
+   * true for primitive types (like "int").
+   *
+   * @param simpleName a simple name
+   * @return true if the name is defined by java.lang or is a primitive
+   */
+  public static boolean isJavaLangOrPrimitiveName(String simpleName) {
+    return primitives.contains(simpleName) || javaLangClassesAndInterfaces.contains(simpleName);
   }
 
   /** Don't call this. */
@@ -28,7 +40,19 @@ public final class JavaLangUtils {
    */
   private static final Set<String> javaLangClassesAndInterfaces = new HashSet<>();
 
+  /** Internal set for the names of the primitive types. */
+  private static final Set<String> primitives = new HashSet<>(8);
+
   static {
+    primitives.add("int");
+    primitives.add("short");
+    primitives.add("byte");
+    primitives.add("long");
+    primitives.add("boolean");
+    primitives.add("float");
+    primitives.add("double");
+    primitives.add("char");
+
     javaLangClassesAndInterfaces.add("AbstractMethodError");
     javaLangClassesAndInterfaces.add("Appendable");
     javaLangClassesAndInterfaces.add("ArithmeticException");
