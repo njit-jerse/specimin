@@ -1,8 +1,8 @@
 package org.testing;
 
-public class SimpleParent<T> {
+public class SimpleParent<E, V> {
 
-    public T get(T parameter0) {
+    public V get(E parameter0) {
         throw new Error();
     }
 }
