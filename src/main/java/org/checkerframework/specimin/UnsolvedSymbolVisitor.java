@@ -43,6 +43,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -838,6 +839,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     boolean canBeSolved = canBeSolved(node);
     if (isASuperCall(node) && !canBeSolved) {
       updateSyntheticClassForSuperCall(node);
+    } else if (updatedAddedTargetFilesForPotentialEnum(node)) {
+      return super.visit(node, p);
     } else if (canBeSolved) {
       return super.visit(node, p);
     } else if (isAQualifiedFieldSignature(node.toString())) {
@@ -943,9 +946,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(EnumConstantDeclaration expr, Void p) {
-    // this is a bit hacky, but we don't remove any enum constant declarations if they
-    // are ever used, so it's safer to just preserve anything that they use by pretending
-    // that we're inside a target method.
+    // this is a bit hacky, but we don't remove any enum constant declarations if they are ever
+    // used, so it's safer to just preserve anything that they use by pretending that we're inside a
+    // target method.
     boolean oldInsideTargetMethod = insideTargetMethod;
     insideTargetMethod = true;
     Visitable result = super.visit(expr, p);
@@ -1093,6 +1096,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // theoretically rootDirectory should already be absolute as stated in README.
     Path absoluteRootDirectory = Paths.get(rootDirectory).toAbsolutePath();
     return absoluteRootDirectory.relativize(absoluteFilePath).toString();
+  }
+
+  /**
+   * Updates the list of added target files based on a FieldAccessExpr if it represents an enum
+   * constant.
+   *
+   * @param expr the FieldAccessExpr potentially representing an Enum constant.
+   * @return true if the update was successful, false otherwise.
+   */
+  public boolean updatedAddedTargetFilesForPotentialEnum(FieldAccessExpr expr) {
+    ResolvedValueDeclaration resolved;
+    try {
+      resolved = expr.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return false;
+    }
+    if (resolved.isEnumConstant()) {
+      String filePathName = qualifiedNameToFilePath(resolved.getType().describe());
+      if (!addedTargetFiles.contains(filePathName)) {
+        gotException();
+        addedTargetFiles.add(filePathName);
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -1897,6 +1925,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
+      } else if (type.isArray()) {
+        parametersList.add(type.asArrayType().describe());
       } else if (type.isNull()) {
         // No way to know what the type should be, so use top.
         parametersList.add("Object");

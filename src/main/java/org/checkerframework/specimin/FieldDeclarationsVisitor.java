@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -45,6 +46,9 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
     } else if (parent instanceof EnumDeclaration) {
       EnumDeclaration enumNode = (EnumDeclaration) parent;
       classNodeSimpleName = enumNode.getName();
+    } else if (parent instanceof EnumConstantDeclaration) {
+      EnumConstantDeclaration enumConstant = (EnumConstantDeclaration) parent;
+      classNodeSimpleName = enumConstant.getName();
     } else {
       throw new RuntimeException("unexpected node type: " + parent.getClass());
     }

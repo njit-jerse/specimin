@@ -5,6 +5,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -71,10 +72,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final Set<String> usedMembers = new HashSet<>();
 
   /**
-   * Classes of the methods that were actually used by the targets. These classes will be included
-   * in the input.
+   * Type elements (classes, interfaces, and enums) related to the methods used by the targets.
+   * These classes will be included in the input.
    */
-  private Set<String> usedClass = new HashSet<>();
+  private Set<String> usedTypeElement = new HashSet<>();
 
   /** Set of variables declared in this current class */
   private final Set<String> declaredNames = new HashSet<>();
@@ -128,9 +129,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
+   * @param usedTypeElement set of type elements used by target methods.
    */
   public TargetMethodFinderVisitor(
-      List<String> methodNames, Map<String, String> nonPrimaryClassesToPrimaryClass) {
+      List<String> methodNames,
+      Map<String, String> nonPrimaryClassesToPrimaryClass,
+      Set<String> usedTypeElement) {
     targetMethodNames = new HashSet<>();
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
@@ -138,6 +142,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     unfoundMethods = new ArrayList<>(methodNames);
     importedClassToPackage = new HashMap<>();
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
+    this.usedTypeElement = usedTypeElement;
   }
 
   /**
@@ -162,13 +167,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get the classes of the methods that the target method uses. The Strings in the set are the
-   * fully-qualified names.
+   * Get the classes of the methods and enums that the target method uses. The Strings in the set
+   * are the fully-qualified names.
    *
-   * @return the used classes
+   * @return the used type elements.
    */
-  public Set<String> getUsedClass() {
-    return usedClass;
+  public Set<String> getUsedTypeElement() {
+    return usedTypeElement;
   }
 
   /**
@@ -262,11 +267,27 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       unfoundMethods.remove(methodName);
       updateUsedClassWithQualifiedClassName(
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
-          usedClass,
+          usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = oldInsideTargetMethod;
+
+    if (method.getParentNode().isEmpty()) {
+      return result;
+    }
+    if (method.getParentNode().get() instanceof EnumDeclaration) {
+      EnumDeclaration parentNode = (EnumDeclaration) method.getParentNode().get();
+      if (parentNode.getFullyQualifiedName().isEmpty()) {
+        return result;
+      }
+      // used enums needs to have compilable constructors.
+      if (usedTypeElement.contains(parentNode.getFullyQualifiedName().get())) {
+        for (Parameter parameter : method.getParameters()) {
+          updateUsedClassBasedOnType(parameter.getType().resolve());
+        }
+      }
+    }
     return result;
   }
 
@@ -294,7 +315,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         String methodClass = resolved.getClassName();
         usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
         updateUsedClassWithQualifiedClassName(
-            methodPackage + "." + methodClass, usedClass, nonPrimaryClassesToPrimaryClass);
+            methodPackage + "." + methodClass, usedTypeElement, nonPrimaryClassesToPrimaryClass);
       }
     }
     String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
@@ -303,7 +324,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
-          usedClass,
+          usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
@@ -358,7 +379,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           String paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
           updateUsedClassWithQualifiedClassName(
-              paraTypeFullName, usedClass, nonPrimaryClassesToPrimaryClass);
+              paraTypeFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
           for (ResolvedType typeParameterValue :
               paramType.asReferenceType().typeParametersValues()) {
             String typeParameterValueName = typeParameterValue.describe();
@@ -368,7 +389,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
                   typeParameterValueName.substring(0, typeParameterValueName.indexOf("<"));
             }
             updateUsedClassWithQualifiedClassName(
-                typeParameterValueName, usedClass, nonPrimaryClassesToPrimaryClass);
+                typeParameterValueName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
           }
         }
       }
@@ -435,7 +456,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     usedMembers.add(decl.getQualifiedSignature());
     updateUsedClassWithQualifiedClassName(
         decl.getPackageName() + "." + decl.getClassName(),
-        usedClass,
+        usedTypeElement,
         nonPrimaryClassesToPrimaryClass);
     try {
       ResolvedType methodReturnType = decl.getReturnType();
@@ -477,7 +498,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
           resolved.getPackageName() + "." + resolved.getClassName(),
-          usedClass,
+          usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(newExpr, p);
@@ -490,35 +511,44 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
           resolved.getPackageName() + "." + resolved.getClassName(),
-          usedClass,
+          usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(expr, p);
   }
 
   @Override
-  public Visitable visit(EnumConstantDeclaration expr, Void p) {
-    // this is a bit hacky, but we don't remove any enum constant declarations if they
-    // are ever used, so it's safer to just preserve anything that they use by pretending
-    // that we're inside a target method.
-    boolean oldInsideTargetMethod = insideTargetMethod;
-    insideTargetMethod = true;
-    Visitable result = super.visit(expr, p);
-    insideTargetMethod = oldInsideTargetMethod;
-    return result;
+  public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
+    Node parentNode = enumConstantDeclaration.getParentNode().get();
+    if (parentNode instanceof EnumDeclaration) {
+      if (usedTypeElement.contains(
+          ((EnumDeclaration) parentNode).asEnumDeclaration().getFullyQualifiedName().get())) {
+        boolean oldInsideTargetMethod = insideTargetMethod;
+        // used enum constant are not strictly target methods, but we need to make sure the symbols
+        // inside them are preserved.
+        insideTargetMethod = true;
+        Visitable result = super.visit(enumConstantDeclaration, p);
+        insideTargetMethod = oldInsideTargetMethod;
+        return result;
+      }
+    }
+    return super.visit(enumConstantDeclaration, p);
   }
 
   @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
     if (insideTargetMethod) {
       String fullNameOfClass;
+      if (updateUsedClassAndMemberForEnumConstant(expr)) {
+        return super.visit(expr, p);
+      }
       try {
         // while the name of the method is declaringType(), it actually returns the class where the
         // field is declared
         fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         updateUsedClassWithQualifiedClassName(
-            fullNameOfClass, usedClass, nonPrimaryClassesToPrimaryClass);
+            fullNameOfClass, usedTypeElement, nonPrimaryClassesToPrimaryClass);
         ResolvedType exprResolvedType = expr.resolve().getType();
         updateUsedClassBasedOnType(exprResolvedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
@@ -572,7 +602,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
                       .get(interfaceMethod)
                       .resolve()
                       .getQualifiedName(),
-                  usedClass,
+                  usedTypeElement,
                   nonPrimaryClassesToPrimaryClass);
               usedMembers.add(interfaceMethod.getQualifiedSignature());
             }
@@ -618,6 +648,34 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Given a FieldAccessExpr, this method updates the sets of used classes and members if this field
+   * is actually an enum constant.
+   *
+   * @param fieldAccessExpr a potential enum constant.
+   * @return true if the updating process was successful, false otherwise.
+   */
+  private boolean updateUsedClassAndMemberForEnumConstant(FieldAccessExpr fieldAccessExpr) {
+    ResolvedValueDeclaration resolved;
+    try {
+      resolved = fieldAccessExpr.resolve();
+    }
+    // if the a field is accessed in the form of a fully-qualified path, such as
+    // org.example.A.b, then other components in the path apart from the class name and field
+    // name, such as org and org.example, will also be considered as FieldAccessExpr.
+    catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return false;
+    }
+    if (!resolved.isEnumConstant()) {
+      return false;
+    }
+    String classFullName = resolved.asEnumConstant().getType().describe();
+    updateUsedClassWithQualifiedClassName(
+        classFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+    usedMembers.add(classFullName + "." + fieldAccessExpr.getNameAsString());
+    return true;
+  }
+
+  /**
    * Given a NameExpr instance, this method will update the used elements, classes and members if
    * that NameExpr is a field.
    *
@@ -636,25 +694,26 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // field is declared
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
       updateUsedClassWithQualifiedClassName(
-          classFullName, usedClass, nonPrimaryClassesToPrimaryClass);
+          classFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
       updateUsedClassBasedOnType(exprDecl.getType());
     }
   }
 
   /**
-   * Updates the list of used classes with the given qualified class name and its corresponding
-   * primary classes and enclosing classes. This includes cases such as classes not sharing the same
-   * name as their Java files or nested classes.
+   * Updates the list of used type elements with the given qualified type name and its corresponding
+   * primary type and enclosing type. This includes cases such as classes not sharing the same name
+   * as their Java files or nested classes.
    *
-   * @param qualifiedClassName The qualified class name to be included in the list of used classes.
-   * @param usedClass The set of used classes to be updated.
+   * @param qualifiedClassName The qualified class name to be included in the list of used type
+   *     elements.
+   * @param usedTypeElement The set of used type elements to be updated.
    * @param nonPrimaryClassesToPrimaryClass Map connecting non-primary classes to their
    *     corresponding primary classes.
    */
   public static void updateUsedClassWithQualifiedClassName(
       String qualifiedClassName,
-      Set<String> usedClass,
+      Set<String> usedTypeElement,
       Map<String, String> nonPrimaryClassesToPrimaryClass) {
     // in case of type variables
     if (!qualifiedClassName.contains(".")) {
@@ -664,13 +723,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (qualifiedClassName.contains("<")) {
       qualifiedClassName = qualifiedClassName.substring(0, qualifiedClassName.indexOf("<"));
     }
-    usedClass.add(qualifiedClassName);
+    usedTypeElement.add(qualifiedClassName);
 
     // in case this class is not a primary class.
     if (nonPrimaryClassesToPrimaryClass.containsKey(qualifiedClassName)) {
       updateUsedClassWithQualifiedClassName(
           nonPrimaryClassesToPrimaryClass.get(qualifiedClassName),
-          usedClass,
+          usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
     }
 
@@ -678,7 +737,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
     if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
       updateUsedClassWithQualifiedClassName(
-          potentialOuterClass, usedClass, nonPrimaryClassesToPrimaryClass);
+          potentialOuterClass, usedTypeElement, nonPrimaryClassesToPrimaryClass);
     }
   }
 
@@ -695,12 +754,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedTypeParameterDeclaration asTypeParameter = type.asTypeParameter();
       for (ResolvedTypeParameterDeclaration.Bound bound : asTypeParameter.getBounds()) {
         updateUsedClassWithQualifiedClassName(
-            bound.getType().describe(), usedClass, nonPrimaryClassesToPrimaryClass);
+            bound.getType().describe(), usedTypeElement, nonPrimaryClassesToPrimaryClass);
       }
       return;
     }
     updateUsedClassWithQualifiedClassName(
-        type.describe(), usedClass, nonPrimaryClassesToPrimaryClass);
+        type.describe(), usedTypeElement, nonPrimaryClassesToPrimaryClass);
     if (!type.isReferenceType()) {
       return;
     }
@@ -712,7 +771,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
       updateUsedClassWithQualifiedClassName(
           typePara.asReferenceType().getQualifiedName(),
-          usedClass,
+          usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
     }
   }

@@ -1,9 +1,9 @@
 {
   "cf-1291": "PASS",
   "cf-6282": "PASS",
-  "cf-6077": "FAIL",
+  "cf-6077": "PASS",
   "cf-6060": "FAIL",
-  "cf-6030": "FAIL",
+  "cf-6030": "PASS",
   "cf-6030b": "PASS",
   "cf-6019": "PASS",
   "cf-4614": "PASS",
