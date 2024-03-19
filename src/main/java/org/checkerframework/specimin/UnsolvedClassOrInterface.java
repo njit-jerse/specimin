@@ -39,6 +39,9 @@ public class UnsolvedClassOrInterface {
   /** This field records the number of type variables for this class */
   private int numberOfTypeVariables = 0;
 
+  /** This field records the name of type variables for this class as it is used */
+  private Set<String> preferedTypeVariables = new HashSet<>();
+
   /** The field records the extends/implements clauses, if one exists. */
   private @Nullable String extendsClause;
 
@@ -175,6 +178,15 @@ public class UnsolvedClassOrInterface {
    */
   public void setNumberOfTypeVariables(int numberOfTypeVariables) {
     this.numberOfTypeVariables = numberOfTypeVariables;
+  }
+
+  /**
+   * Set the value for preferedTypeVariables.
+   *
+   * @param preferedTypeVariables desired value for preferedTypeVariables.
+   */
+  public void setPreferedTypeVariables(Set<String> preferedTypeVariables) {
+    this.preferedTypeVariables = preferedTypeVariables;
   }
 
   /**
@@ -354,9 +366,15 @@ public class UnsolvedClassOrInterface {
    * @param result a string builder. Will be side-effected.
    */
   private void getTypeVariablesImpl(StringBuilder result) {
-    for (int i = 0; i < numberOfTypeVariables; i++) {
-      String typeExpression = "T" + ((i > 0) ? i : "");
-      result.append(typeExpression).append(", ");
+    if (preferedTypeVariables.size() == 0) {
+      for (int i = 0; i < numberOfTypeVariables; i++) {
+        String typeExpression = "T" + ((i > 0) ? i : "");
+        result.append(typeExpression).append(", ");
+      }
+    } else {
+      for (String preferedTypeVar : preferedTypeVariables) {
+        result.append(preferedTypeVar).append(", ");
+      }
     }
     result.delete(result.length() - 2, result.length());
   }

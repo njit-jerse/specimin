@@ -436,6 +436,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       classAndItsParent.put(className, superClassSimpleName.asString());
     }
 
+    addTypeVariableScope(node.getTypeParameters());
+
     NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
     // Not sure why getExtendedTypes return a list, since a class can only extends at most one class
     // in Java.
@@ -483,7 +485,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
-    addTypeVariableScope(node.getTypeParameters());
     declaredMethod.addFirst(new HashSet<>(node.getMethods()));
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
@@ -1196,12 +1197,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private void solveSymbolsForClassOrInterfaceType(
       ClassOrInterfaceType typeExpr, boolean isAnInterface) {
+    System.out.println("Solving for type: " + typeExpr);
     Optional<NodeList<Type>> typeArguments = typeExpr.getTypeArguments();
     UnsolvedClassOrInterface classToUpdate;
     int numberOfArguments = 0;
     String typeRawName = typeExpr.getElementType().asString();
+    Set<String> preferedTypeVariables = new HashSet<>();
     if (typeArguments.isPresent()) {
       numberOfArguments = typeArguments.get().size();
+      for (Type typeArgument : typeArguments.get()) {
+        System.out.println(typeVariables);
+        System.out.println(isTypeVar(typeArgument.asString()));
+        if (isTypeVar(typeArgument.toString())) {
+          System.out.println("Got type var!");
+          preferedTypeVariables.add(typeArgument.toString());
+        }
+      }
       // without any type argument
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
     }
@@ -1217,6 +1228,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
+    classToUpdate.setPreferedTypeVariables(preferedTypeVariables);
     updateMissingClass(classToUpdate);
   }
 
@@ -1928,7 +1940,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else if (type.isArray()) {
         parametersList.add(type.asArrayType().describe());
       } else if (type.isTypeVariable()) {
-        parametersList.add("T");
+        parametersList.add(type.toString());
       }
     }
     return parametersList;
