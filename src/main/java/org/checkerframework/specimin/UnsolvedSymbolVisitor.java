@@ -2735,6 +2735,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       boolean updateAField,
       String incorrectTypeName,
       String correctTypeName) {
+    // make sure that correctTypeName is fully qualified, so that we don't need to
+    // add an import to the synthetic class
+    if (!isAClassPath(correctTypeName)) {
+      correctTypeName = getPackageFromClassName(correctTypeName) + "." + correctTypeName;
+    }
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
