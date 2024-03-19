@@ -114,7 +114,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * JavaParser is not perfect. Sometimes it can't solve resolved method calls if they have
-   * complicated type variables. We keep track of these stuck method calls and preserve them anyway.
+   * complicated type variables or if the receiver is the parameter of a lambda expression. We keep
+   * track of these stuck method calls and preserve them anyway. There are two possible formats for
+   * the strings in this set: fully-qualified method names (which will be directly preserved) and
+   * unqualified method names with a {@literal @} symbol and the number of parameters that they take
+   * appended. Anything that matches the latter will later be preserved.
    */
   private final Set<String> resolvedYetStuckMethodCall = new HashSet<>();
 
@@ -408,6 +412,19 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedMethodDeclaration decl;
       try {
         decl = call.resolve();
+      } catch (UnsupportedOperationException e) {
+        // This case only occurs when a method is called on a lambda parameter.
+        // JavaParser has a type variable for the lambda parameter, but it won't
+        // have any constraints (JavaParser isn't very good at solving lambda parameter
+        // types). The approach here preserves any method that might be the callee that's
+        // in the input (based on the simple name of the method and its number of parameters).
+        // TODO: this approach is both unsound and imprecise but works most of the time on
+        // real examples. A better approach would be to either:
+        // * update to a new version of JavaParser that _can_ solve lambda parameters
+        // (we believe that newer JP versions are much improved), or
+        // * add another javac pass after pruning that checks for this kind of error.
+        resolvedYetStuckMethodCall.add(call.getNameAsString() + "@" + call.getArguments().size());
+        return super.visit(call, p);
       } catch (RuntimeException e) {
         // Handle cases where a method call is resolved but its signature confuses JavaParser,
         // leading to a RuntimeException.

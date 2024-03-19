@@ -350,9 +350,27 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @return true if the above statement is true.
    */
   private boolean isAResolvedYetStuckMethod(MethodDeclaration method) {
-    String methodQualifiedName = method.resolve().getQualifiedSignature();
+    ResolvedMethodDeclaration decl = method.resolve();
+    String methodQualifiedName = decl.getQualifiedSignature();
+    String methodSimpleName = method.getNameAsString();
+    int numberOfParams = decl.getNumberOfParams();
+    boolean isVarArgs = numberOfParams == 0 ? false : decl.getLastParam().isVariadic();
     for (String stuckMethodCall : resolvedYetStuckMethodCall) {
-      if (methodQualifiedName.startsWith(stuckMethodCall)) {
+      if (stuckMethodCall.contains("@")) {
+        // The stuck method call contains an @ iff it is in the stuck method call
+        // list because we couldn't determine its qualified signature from the context
+        // in which it was called (e.g., a method called on a lambda parameter).
+        // The format is the name of the method followed by an @ followed by the
+        // number of arguments at the call site. Preserve anything that matches.
+        String stuckMethodName = stuckMethodCall.substring(0, stuckMethodCall.indexOf('@'));
+        int stuckMethodNumberOfParams =
+            Integer.parseInt(stuckMethodCall.substring(stuckMethodCall.indexOf('@') + 1));
+        if (methodSimpleName.equals(stuckMethodName)
+            && ((!isVarArgs && numberOfParams == stuckMethodNumberOfParams)
+                || (isVarArgs && numberOfParams <= stuckMethodNumberOfParams))) {
+          return true;
+        }
+      } else if (methodQualifiedName.startsWith(stuckMethodCall)) {
         return true;
       }
     }
