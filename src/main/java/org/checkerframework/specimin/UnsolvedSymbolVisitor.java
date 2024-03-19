@@ -1209,6 +1209,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           preferredTypeVariables.add(typeArgument.toString());
         }
       }
+      if (!preferredTypeVariables.isEmpty() && preferredTypeVariables.size() != numberOfArguments) {
+        throw new RuntimeException("Numbers of type variables are not matching!");
+      }
       // without any type argument
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
     }
