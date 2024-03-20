@@ -21,12 +21,15 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -49,7 +52,7 @@ public class SpeciminRunner {
     // for symbol resolution from source code and to organize the output directory.
     OptionSpec<String> rootOption = optionParser.accepts("root").withRequiredArg();
 
-    OptionSpec<String> jarPath = optionParser.accepts("jarPath").withOptionalArg();
+    var jar = optionParser.accepts("jarPath").withOptionalArg().ofType(String.class);
 
     // This option is the relative paths to the target file(s) - the .java file(s) containing
     // target method(s) - from the root.
@@ -64,10 +67,17 @@ public class SpeciminRunner {
         optionParser.accepts("outputDirectory").withRequiredArg();
 
     OptionSet options = optionParser.parse(args);
+
+    String jarDirectory = options.valueOf(jar);
+    List<String> jarFiles = new ArrayList<>();
+    if (jarDirectory != null) {
+      jarFiles = getJarFiles(jarDirectory);
+    }
+
     performMinimization(
         options.valueOf(rootOption),
         options.valuesOf(targetFilesOption),
-        options.valuesOf(jarPath),
+        jarFiles,
         options.valuesOf(targetMethodsOption),
         options.valueOf(outputDirectoryOption));
   }
@@ -512,6 +522,23 @@ public class SpeciminRunner {
       if (fileContained != null && fileContained.length == 0) {
         deleteFileFamily(parentDir);
       }
+    }
+  }
+
+  /**
+   * Given a directory, this method will return all the .jar files stored in the directory.
+   *
+   * @param directoryPath the directory of the jar files
+   */
+  private static List<String> getJarFiles(String directoryPath) throws IOException {
+    Path jarPath = Path.of(directoryPath);
+    try (Stream<Path> stream = Files.walk(jarPath)) {
+      return stream
+          .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar"))
+          .map(path -> path.toString())
+          .collect(Collectors.toList());
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
   }
 }
