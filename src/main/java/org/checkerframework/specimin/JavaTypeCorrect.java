@@ -151,6 +151,10 @@ class JavaTypeCorrect {
           updateTypeToChange(line, filePath);
           continue lines;
         }
+        if (line.contains("is not compatible with")) {
+          updateTypeToChange(line, filePath);
+          continue lines;
+        }
         // these type error with constraint types will be in a pair of lines
         for (String firstConstraint : firstConstraints) {
           if (line.contains(firstConstraint)) {
@@ -209,9 +213,8 @@ class JavaTypeCorrect {
     if (splitErrorMessage.size() < 7) {
       throw new RuntimeException("Unexpected type error messages: " + errorMessage);
     }
-    /* There are two possible forms of error messages here:
+    /* There are three possible forms of error messages in total:
      * 1. error: incompatible types: <type1> cannot be converted to <type2>
-     * 2. error: incompatible types: found <type1> required <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
       String rhs = splitErrorMessage.get(4);
@@ -231,9 +234,19 @@ class JavaTypeCorrect {
         // in the target), so make the rhs a subtype of the lhs
         extendedTypes.put(rhs, lhs);
       }
-    } else {
+    }
+    /*
+     * 2. return type <type1> is not compatible with <type2> (triggered when there is type mismatching in inheritance)
+     * 3. error: incompatible types: found <type1> required <type2> (unknown triggers)
+     */
+    else {
       // TODO: what error message triggers this code? Do we have test cases for it?
-      String rhs = splitErrorMessage.get(5);
+      String rhs;
+      if (errorMessage.contains("is not compatible with")) {
+        rhs = splitErrorMessage.get(3);
+      } else {
+        rhs = splitErrorMessage.get(5);
+      }
       String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (isSynthetic(lhs)) {
         changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
