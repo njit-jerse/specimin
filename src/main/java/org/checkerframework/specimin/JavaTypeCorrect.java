@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -164,17 +165,33 @@ class JavaTypeCorrect {
         for (String secondConstraint : secondConstraints) {
           if (line.contains(secondConstraint)) {
             String secondConstraintType = line.replace(secondConstraint, "").trim();
-            if (isSynthetic(firstConstraintType)) {
-              changeType(firstConstraintType, secondConstraintType);
-            } else if (isSynthetic(secondConstraintType)) {
-              changeType(secondConstraintType, firstConstraintType);
+            // These "constraint types" may include more than one type, especially if
+            // they are equality constraints. The strategy for solving them below is
+            // quite coarse, but it works on most examples. TODO: do this properly by
+            // reasoning about what the constraints mean.
+            Set<String> constraints = new HashSet<>(2);
+            constraints.addAll(List.of(firstConstraintType.split(",")));
+            constraints.addAll(List.of(secondConstraintType.split(",")));
+            if (constraints.size() == 2) {
+              String[] constraintsArray = constraints.toArray(new String[0]);
+              firstConstraintType = constraintsArray[0];
+              secondConstraintType = constraintsArray[1];
+              if (isSynthetic(firstConstraintType)) {
+                changeType(firstConstraintType, secondConstraintType);
+              } else if (isSynthetic(secondConstraintType)) {
+                changeType(secondConstraintType, firstConstraintType);
+              } else {
+                // We used to throw an exception here. However, sometimes
+                // this case does happen while reducing large projects - we saw
+                // it while reducing e.g. Apache Cassandra. It may still indicate
+                // a problem when we encounter it, but I'm not sure that it is:
+                // this may happen sometimes during intermediate stages of Specimin.
+              }
             } else {
-              // We used to throw an exception here. However, sometimes
-              // this case does happen while reducing large projects - we saw
-              // it while reducing e.g. Apache Cassandra. It may still indicate
-              // a problem when we encounter it, but I'm not sure that it is:
-              // this may happen sometimes during intermediate stages of Specimin.
+              // do nothing - we can't solve this case.
+              // TODO: properly solve sets of three or more constraints
             }
+
             firstConstraintType = "";
             continue lines;
           }
@@ -255,17 +272,28 @@ class JavaTypeCorrect {
     if (typeToChange.containsKey(incorrectType)) {
       String otherCorrectType = typeToChange.get(incorrectType);
       if (!otherCorrectType.equals(correctType)) {
-        // we require a LUB: don't do a direct conversion between the types, but
-        // instead retain the "incorrect" synthetic type as a mutual top type
-        // for the two other "correct" types.
-        typeToChange.remove(incorrectType);
-        // TODO: what if one of these "correct" types is non-synthetic?
-        // Is that possible? What would the consequences be if so?
-        extendedTypes.put(correctType, incorrectType);
-        extendedTypes.put(otherCorrectType, incorrectType);
-        // once we've made this lub correction, we don't want to
-        // continue with our main fix strategy
-        return;
+        boolean isSyntheticReturnType = incorrectType.endsWith("ReturnType");
+        if (!isSyntheticReturnType) {
+          // we require a LUB: don't do a direct conversion between the types, but
+          // instead retain the "incorrect" synthetic type as a mutual top type
+          // for the two other "correct" types.
+          typeToChange.remove(incorrectType);
+          // TODO: what if one of these "correct" types is non-synthetic?
+          // Is that possible? What would the consequences be if so?
+          extendedTypes.put(correctType, incorrectType);
+          extendedTypes.put(otherCorrectType, incorrectType);
+          // once we've made this lub correction, we don't want to
+          // continue with our main fix strategy
+          return;
+        } else {
+          // we require a GLB: that is, this synthetic return type needs to _used_ in
+          // two different contexts: one where correctType is required, and another
+          // where otherCorrectType is required. Instead of worrying about making a correct GLB,
+          // instead just use an unconstrained type variable.
+          typeToChange.put(
+              incorrectType, "<SyntheticUnconstrainedType> SyntheticUnconstrainedType");
+          return;
+        }
       }
     }
 

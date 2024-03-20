@@ -1956,10 +1956,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       } else if (type.isArray()) {
         parametersList.add(type.asArrayType().describe());
       } else if (type.isNull()) {
+        // No way to know what the type should be, so use top.
         parametersList.add("java.lang.Object");
       } else if (type.isTypeVariable()) {
         parametersList.add(type.asTypeVariable().describe());
       }
+      // TODO: should we raise an exception here if there is some other kind of type? Could
+      // any other type (e.g., a type variable) possibly flow here? I think it's possible.
     }
     return parametersList;
   }
@@ -2741,6 +2744,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       boolean updateAField,
       String incorrectTypeName,
       String correctTypeName) {
+    // Make sure that correctTypeName is fully qualified, so that we don't need to
+    // add an import to the synthetic class.
+    if (!isAClassPath(correctTypeName)
+        && !JavaLangUtils.isJavaLangOrPrimitiveName(correctTypeName)) {
+      // Cannot call getPackageFromClassName here, because correctTypeName
+      // might be a type variable, and this method is called after the visitor finishes
+      // running.
+      String pkgName = classAndPackageMap.get(correctTypeName);
+      if (pkgName != null) {
+        correctTypeName = pkgName + "." + correctTypeName;
+      }
+    }
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
