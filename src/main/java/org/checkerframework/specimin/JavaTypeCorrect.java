@@ -272,17 +272,28 @@ class JavaTypeCorrect {
     if (typeToChange.containsKey(incorrectType)) {
       String otherCorrectType = typeToChange.get(incorrectType);
       if (!otherCorrectType.equals(correctType)) {
-        // we require a LUB: don't do a direct conversion between the types, but
-        // instead retain the "incorrect" synthetic type as a mutual top type
-        // for the two other "correct" types.
-        typeToChange.remove(incorrectType);
-        // TODO: what if one of these "correct" types is non-synthetic?
-        // Is that possible? What would the consequences be if so?
-        extendedTypes.put(correctType, incorrectType);
-        extendedTypes.put(otherCorrectType, incorrectType);
-        // once we've made this lub correction, we don't want to
-        // continue with our main fix strategy
-        return;
+        boolean isSyntheticReturnType = incorrectType.endsWith("ReturnType");
+        if (!isSyntheticReturnType) {
+          // we require a LUB: don't do a direct conversion between the types, but
+          // instead retain the "incorrect" synthetic type as a mutual top type
+          // for the two other "correct" types.
+          typeToChange.remove(incorrectType);
+          // TODO: what if one of these "correct" types is non-synthetic?
+          // Is that possible? What would the consequences be if so?
+          extendedTypes.put(correctType, incorrectType);
+          extendedTypes.put(otherCorrectType, incorrectType);
+          // once we've made this lub correction, we don't want to
+          // continue with our main fix strategy
+          return;
+        } else {
+          // we require a GLB: that is, this synthetic return type needs to _used_ in
+          // two different contexts: one where correctType is required, and another
+          // where otherCorrectType is required. Instead of worrying about making a correct GLB,
+          // instead just use an unconstrained type variable.
+          typeToChange.put(
+              incorrectType, "<SyntheticUnconstrainedType> SyntheticUnconstrainedType");
+          return;
+        }
       }
     }
 
