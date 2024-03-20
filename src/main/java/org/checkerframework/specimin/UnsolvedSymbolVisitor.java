@@ -32,7 +32,6 @@ import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
@@ -48,7 +47,6 @@ import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedTypeVariable;
-import com.github.javaparser.symbolsolver.model.typesystem.NullType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
@@ -517,8 +515,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       NodeList<Expression> arguments = node.getArguments();
       String pkgName = getPackageFromClassName(getParentClass(className));
       List<String> argList = getArgumentTypesImpl(arguments, pkgName);
-      UnsolvedMethod constructorMethod =
-          new UnsolvedMethod(getParentClass(className), "", argList);
+      UnsolvedMethod constructorMethod = new UnsolvedMethod(getParentClass(className), "", argList);
       // if the parent class can not be found in the import statements, Specimin assumes it is in
       // the same package as the child class.
       UnsolvedClassOrInterface superClass =
