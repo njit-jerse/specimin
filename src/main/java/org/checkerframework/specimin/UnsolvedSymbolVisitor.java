@@ -515,27 +515,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(node, arg);
     } catch (Exception e) {
       NodeList<Expression> arguments = node.getArguments();
-      List<String> parametersList = new ArrayList<>();
-      for (Expression parameter : arguments) {
-        if (!canBeSolved(parameter)) {
-          return super.visit(node, arg);
-        }
-        ResolvedType type = parameter.calculateResolvedType();
-        if (type instanceof PrimitiveType) {
-          parametersList.add(type.asPrimitive().name());
-        } else if (type instanceof ReferenceType) {
-          parametersList.add(type.asReferenceType().getQualifiedName());
-        } else if (type instanceof NullType) {
-          parametersList.add("java.lang.Object");
-        }
-      }
+      String pkgName = getPackageFromClassName(getParentClass(className));
+      List<String> argList = getArgumentTypesImpl(arguments, pkgName);
       UnsolvedMethod constructorMethod =
-          new UnsolvedMethod(getParentClass(className), "", parametersList);
+          new UnsolvedMethod(getParentClass(className), "", argList);
       // if the parent class can not be found in the import statements, Specimin assumes it is in
       // the same package as the child class.
       UnsolvedClassOrInterface superClass =
-          new UnsolvedClassOrInterface(
-              getParentClass(className), getPackageFromClassName(getParentClass(className)));
+          new UnsolvedClassOrInterface(getParentClass(className), pkgName);
       superClass.addMethod(constructorMethod);
       updateMissingClass(superClass);
       return super.visit(node, arg);
