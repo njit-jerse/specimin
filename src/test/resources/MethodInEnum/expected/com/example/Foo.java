@@ -7,13 +7,7 @@ class Foo {
         ON {
 
             public void testing() {
-                throw new Error();
-            }
-        }
-        , OFF {
-
-            public void testing() {
-                throw new Error();
+                throw new RuntimeException();
             }
         }
         ;

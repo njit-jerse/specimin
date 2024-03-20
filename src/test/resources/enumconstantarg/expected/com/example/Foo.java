@@ -6,7 +6,7 @@ class Foo {
 
     public enum Mode {
 
-        PREFIX(Op.EQ), CONTAINS(Op.CONTAINS), SPARSE(Op.NOT_EQ);
+        PREFIX(Op.EQ);
 
         Mode(Op op) {
             throw new Error();

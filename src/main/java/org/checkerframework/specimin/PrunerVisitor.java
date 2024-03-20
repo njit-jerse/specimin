@@ -1,12 +1,12 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
@@ -27,6 +27,7 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
@@ -78,6 +79,12 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   private boolean insideFunctionalInterface = false;
 
   /**
+   * JavaParser is not perfect. Sometimes it can't solve resolved method calls if they have
+   * complicated type variables. We keep track of these stuck method calls and preserve them anyway.
+   */
+  private final Set<String> resolvedYetStuckMethodCall;
+
+  /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
    * be removed entirely. For methods in both arguments, the Strings should be in the format
    * produced by ResolvedMethodDeclaration#getQualifiedSignature. For fields in {@link
@@ -88,11 +95,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    *     methods for specimin)
    * @param membersToEmpty the set of members that this pruner will empty
    * @param classesUsedByTargetMethods the classes used by target methods
+   * @param resolvedYetStuckMethodCall set of methods that are resolved yet can not be solved by
+   *     JavaParser
    */
   public PrunerVisitor(
       Set<String> methodsToKeep,
       Set<String> membersToEmpty,
-      Set<String> classesUsedByTargetMethods) {
+      Set<String> classesUsedByTargetMethods,
+      Set<String> resolvedYetStuckMethodCall) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
@@ -107,6 +117,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       String withoutAngleBrackets = s.substring(0, s.indexOf("<"));
       classesUsedByTargetMethods.add(withoutAngleBrackets);
     }
+    this.resolvedYetStuckMethodCall = resolvedYetStuckMethodCall;
   }
 
   @Override
@@ -117,21 +128,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // the result of getNameAsString is actually the package name. This renaming is just to
       // make the code less confusing.
       String importedPackage = classFullName;
-      // the parent of an import is always the corresponding compilation unit, thanks to the
-      // JLS' requirements about the placement of import statements (JLS 7.3)
-      CompilationUnit parent = (CompilationUnit) decl.getParentNode().orElseThrow();
-      decl.remove();
+      boolean isUsedAtLeastOnce = false;
       for (String usedClassFQN : classesUsedByTargetMethods) {
         if (usedClassFQN.startsWith(importedPackage)) {
-          try {
-            parent.addImport(usedClassFQN);
-          } catch (com.github.javaparser.ParseProblemException e) {
-            // ParseProblemException is not very helpful for figuring out what the problem is
-            // if we make a bug that causes it to be thrown (it only prints out the part of
-            // the type that is the problem, not the whole type).
-            throw new RuntimeException("failed trying to parse this import: " + usedClassFQN, e);
-          }
+          isUsedAtLeastOnce = true;
         }
+      }
+      if (!isUsedAtLeastOnce) {
+        decl.remove();
       }
       return decl;
     }
@@ -215,6 +219,22 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
+    ResolvedEnumConstantDeclaration resolved;
+    try {
+      resolved = enumConstantDeclaration.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      JavaParserUtil.removeNode(enumConstantDeclaration);
+      return enumConstantDeclaration;
+    }
+    if (!membersToEmpty.contains(
+        resolved.getType().describe() + "." + enumConstantDeclaration.getNameAsString())) {
+      JavaParserUtil.removeNode(enumConstantDeclaration);
+    }
+    return enumConstantDeclaration;
+  }
+
+  @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
     if (insideFunctionalInterface) {
       return methodDecl;
@@ -236,7 +256,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       Visitable result = super.visit(methodDecl, p);
       insideTargetMethod = oldInsideTargetMethod;
       return result;
-    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
+    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())
+        || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
       if (methodDecl.getBody().isPresent() || isMethodInsideInterface) {
@@ -263,9 +284,11 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
       qualifiedSignature = constructorDecl.resolve().getQualifiedSignature();
-    } catch (UnsolvedSymbolException e) {
+    } catch (RuntimeException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
+      // If this constructor is from the parent of the current class, and it is not resolved, we
+      // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
       constructorDecl.remove();
       return constructorDecl;
     }
@@ -317,6 +340,41 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
 
     return super.visit(fieldDecl, p);
+  }
+
+  /**
+   * Check if this method is one of the method calls used by target methods that are resolved yet
+   * can not be solved by JavaParser.
+   *
+   * @param method a method
+   * @return true if the above statement is true.
+   */
+  private boolean isAResolvedYetStuckMethod(MethodDeclaration method) {
+    ResolvedMethodDeclaration decl = method.resolve();
+    String methodQualifiedName = decl.getQualifiedSignature();
+    String methodSimpleName = method.getNameAsString();
+    int numberOfParams = decl.getNumberOfParams();
+    boolean isVarArgs = numberOfParams == 0 ? false : decl.getLastParam().isVariadic();
+    for (String stuckMethodCall : resolvedYetStuckMethodCall) {
+      if (stuckMethodCall.contains("@")) {
+        // The stuck method call contains an @ iff it is in the stuck method call
+        // list because we couldn't determine its qualified signature from the context
+        // in which it was called (e.g., a method called on a lambda parameter).
+        // The format is the name of the method followed by an @ followed by the
+        // number of arguments at the call site. Preserve anything that matches.
+        String stuckMethodName = stuckMethodCall.substring(0, stuckMethodCall.indexOf('@'));
+        int stuckMethodNumberOfParams =
+            Integer.parseInt(stuckMethodCall.substring(stuckMethodCall.indexOf('@') + 1));
+        if (methodSimpleName.equals(stuckMethodName)
+            && ((!isVarArgs && numberOfParams == stuckMethodNumberOfParams)
+                || (isVarArgs && numberOfParams <= stuckMethodNumberOfParams))) {
+          return true;
+        }
+      } else if (methodQualifiedName.startsWith(stuckMethodCall)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

@@ -6,6 +6,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
@@ -146,6 +147,10 @@ public class SpeciminRunner {
           }
         }
       }
+      for (EnumDeclaration enumDeclaration : compilationUnit.findAll(EnumDeclaration.class)) {
+        existingClassesToFilePath.put(
+            enumDeclaration.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
+      }
     }
     UnsolvedSymbolVisitor addMissingClass =
         new UnsolvedSymbolVisitor(root, existingClassesToFilePath, targetMethodNames);
@@ -239,12 +244,18 @@ public class SpeciminRunner {
       cu.accept(annoRemover, null);
     }
 
+    EnumVisitor enumVisitor = new EnumVisitor(targetMethodNames);
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(enumVisitor, null);
+    }
+
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
 
     TargetMethodFinderVisitor finder =
-        new TargetMethodFinderVisitor(targetMethodNames, nonPrimaryClassesToPrimaryClass);
+        new TargetMethodFinderVisitor(
+            targetMethodNames, nonPrimaryClassesToPrimaryClass, enumVisitor.getUsedEnum());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
@@ -256,10 +267,9 @@ public class SpeciminRunner {
           "Specimin could not locate the following target methods in the target files: "
               + String.join(", ", unfoundMethods));
     }
-
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
         new SolveMethodOverridingVisitor(
-            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedClass());
+            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedTypeElement());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }
@@ -328,7 +338,8 @@ public class SpeciminRunner {
         new PrunerVisitor(
             finder.getTargetMethods(),
             mustImplementMethodsVisitor.getUsedMembers(),
-            mustImplementMethodsVisitor.getUsedClass());
+            mustImplementMethodsVisitor.getUsedClass(),
+            finder.getResolvedYetStuckMethodCall());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
@@ -356,7 +367,7 @@ public class SpeciminRunner {
         if (typesToChange.containsKey(simpleName)) {
           continue;
         }
-        if (!finder.getUsedClass().contains(classFullyQualfiedName)) {
+        if (!finder.getUsedTypeElement().contains(classFullyQualfiedName)) {
           continue;
         }
       }

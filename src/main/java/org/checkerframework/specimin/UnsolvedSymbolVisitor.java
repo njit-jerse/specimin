@@ -43,6 +43,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -435,6 +436,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       classAndItsParent.put(className, superClassSimpleName.asString());
     }
 
+    addTypeVariableScope(node.getTypeParameters());
+
     NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
     // Not sure why getExtendedTypes return a list, since a class can only extends at most one class
     // in Java.
@@ -482,7 +485,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
-    addTypeVariableScope(node.getTypeParameters());
     declaredMethod.addFirst(new HashSet<>(node.getMethods()));
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
@@ -838,6 +840,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     boolean canBeSolved = canBeSolved(node);
     if (isASuperCall(node) && !canBeSolved) {
       updateSyntheticClassForSuperCall(node);
+    } else if (updatedAddedTargetFilesForPotentialEnum(node)) {
+      return super.visit(node, p);
     } else if (canBeSolved) {
       return super.visit(node, p);
     } else if (isAQualifiedFieldSignature(node.toString())) {
@@ -860,7 +864,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     try {
       node.resolve();
-    } catch (UnsolvedSymbolException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       // for a qualified name field access such as org.sample.MyClass.field, org.sample will also be
       // considered FieldAccessExpr.
       if (isAClassPath(node.getScope().toString())) {
@@ -943,9 +947,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(EnumConstantDeclaration expr, Void p) {
-    // this is a bit hacky, but we don't remove any enum constant declarations if they
-    // are ever used, so it's safer to just preserve anything that they use by pretending
-    // that we're inside a target method.
+    // this is a bit hacky, but we don't remove any enum constant declarations if they are ever
+    // used, so it's safer to just preserve anything that they use by pretending that we're inside a
+    // target method.
     boolean oldInsideTargetMethod = insideTargetMethod;
     insideTargetMethod = true;
     Visitable result = super.visit(expr, p);
@@ -1096,6 +1100,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Updates the list of added target files based on a FieldAccessExpr if it represents an enum
+   * constant.
+   *
+   * @param expr the FieldAccessExpr potentially representing an Enum constant.
+   * @return true if the update was successful, false otherwise.
+   */
+  public boolean updatedAddedTargetFilesForPotentialEnum(FieldAccessExpr expr) {
+    ResolvedValueDeclaration resolved;
+    try {
+      resolved = expr.resolve();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      return false;
+    }
+    if (resolved.isEnumConstant()) {
+      String filePathName = qualifiedNameToFilePath(resolved.getType().describe());
+      if (!addedTargetFiles.contains(filePathName)) {
+        gotException();
+        addedTargetFiles.add(filePathName);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Given a ResolvedReferenceType, this method checks if all of the type parameters of that type
    * are resolved.
    *
@@ -1172,8 +1201,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClassOrInterface classToUpdate;
     int numberOfArguments = 0;
     String typeRawName = typeExpr.getElementType().asString();
+    Set<String> preferredTypeVariables = new HashSet<>();
     if (typeArguments.isPresent()) {
       numberOfArguments = typeArguments.get().size();
+      for (Type typeArgument : typeArguments.get()) {
+        if (isTypeVar(typeArgument.toString())) {
+          preferredTypeVariables.add(typeArgument.toString());
+        }
+      }
+      if (!preferredTypeVariables.isEmpty() && preferredTypeVariables.size() != numberOfArguments) {
+        throw new RuntimeException("Numbers of type variables are not matching!");
+      }
       // without any type argument
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
     }
@@ -1189,6 +1227,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
+    classToUpdate.setPreferedTypeVariables(preferredTypeVariables);
     updateMissingClass(classToUpdate);
   }
 
@@ -1897,6 +1936,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
+      } else if (type.isArray()) {
+        parametersList.add(type.asArrayType().describe());
+      } else if (type.isTypeVariable()) {
+        parametersList.add(type.asTypeVariable().describe());
       }
     }
     return parametersList;
@@ -2367,7 +2410,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     try {
       field.resolve();
       return false;
-    } catch (UnsolvedSymbolException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       // this check is not very comprehensive, since a class can be in lowercase, and a method or
       // field can be in uppercase. But since this is without the jar paths, this is the best we can
       // do.
