@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -64,10 +66,12 @@ public class SpeciminRunner {
         optionParser.accepts("outputDirectory").withRequiredArg();
 
     OptionSet options = optionParser.parse(args);
-    String jarDirectory = options.valueOf(jar);
-    System.out.println("jar directory " + jarDirectory);
 
-    List<String> jarFiles = getJarFiles(jarDirectory);
+    String jarDirectory = options.valueOf(jar);
+    List<String> jarFiles = new ArrayList<>();
+    if (jarDirectory != null) {
+      jarFiles = getJarFiles(jarDirectory);
+    }
 
     performMinimization(
         options.valueOf(rootOption),
@@ -515,20 +519,15 @@ public class SpeciminRunner {
    *
    * @param directoryPath the directory of the jar files
    */
-  private static List<String> getJarFiles(String directoryPath) {
-    List<String> jarFiles = new ArrayList<>();
-
-    File directory = new File(directoryPath);
-    if (directory.isDirectory()) {
-      File[] files = directory.listFiles();
-      if (files != null) {
-        for (File file : files) {
-          if (file.isFile() && file.getName().endsWith(".jar")) {
-            jarFiles.add(file.getAbsolutePath());
-          }
-        }
-      }
+  private static List<String> getJarFiles(String directoryPath) throws IOException {
+    Path jarPath = Path.of(directoryPath);
+    try (Stream<Path> stream = Files.walk(jarPath)) {
+      return stream
+          .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar"))
+          .map(path -> path.toString())
+          .collect(Collectors.toList());
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
-    return jarFiles;
   }
 }
