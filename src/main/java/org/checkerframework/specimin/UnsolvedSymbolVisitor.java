@@ -437,6 +437,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       classAndItsParent.put(className, superClassSimpleName.asString());
     }
 
+    addTypeVariableScope(node.getTypeParameters());
+
     NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
     // Not sure why getExtendedTypes return a list, since a class can only extends at most one class
     // in Java.
@@ -484,7 +486,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
-    addTypeVariableScope(node.getTypeParameters());
     declaredMethod.addFirst(new HashSet<>(node.getMethods()));
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
@@ -1203,8 +1204,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClassOrInterface classToUpdate;
     int numberOfArguments = 0;
     String typeRawName = typeExpr.getElementType().asString();
+    Set<String> preferredTypeVariables = new HashSet<>();
     if (typeArguments.isPresent()) {
       numberOfArguments = typeArguments.get().size();
+      for (Type typeArgument : typeArguments.get()) {
+        if (isTypeVar(typeArgument.toString())) {
+          preferredTypeVariables.add(typeArgument.toString());
+        }
+      }
+      if (!preferredTypeVariables.isEmpty() && preferredTypeVariables.size() != numberOfArguments) {
+        throw new RuntimeException("Numbers of type variables are not matching!");
+      }
       // without any type argument
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
     }
@@ -1220,6 +1230,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
+    classToUpdate.setPreferedTypeVariables(preferredTypeVariables);
     updateMissingClass(classToUpdate);
   }
 
@@ -1962,6 +1973,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(type.asArrayType().describe());
       } else if (type.isNull()) {
         parametersList.add("java.lang.Object");
+      } else if (type.isTypeVariable()) {
+        parametersList.add(type.asTypeVariable().describe());
       }
     }
     return parametersList;
