@@ -220,8 +220,9 @@ class JavaTypeCorrect {
       String rhs = splitErrorMessage.get(4);
       String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (lhs.equals("Throwable")) {
-        // while it is not technically precise, an Error is safe in all cases. While just extending
-        // Throwable could lead to compilation error in case there is no corresponding catch.
+        // Although not technically precise, using "Error" is safe in all cases. Extending Throwable
+        // alone might result in compilation errors if there's no corresponding catch in the source
+        // codes.
         extendedTypes.put(rhs, "Error");
       } else if (isSynthetic(lhs)) {
         // This situation occurs if we have created a synthetic field
