@@ -48,6 +48,7 @@ import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedTypeVariable;
+import com.github.javaparser.symbolsolver.model.typesystem.NullType;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
@@ -505,7 +506,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(node, arg);
     }
     if (!insideTargetMethod) {
-
       return super.visit(node, arg);
     }
     try {
@@ -524,6 +524,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           parametersList.add(type.asPrimitive().name());
         } else if (type instanceof ReferenceType) {
           parametersList.add(type.asReferenceType().getQualifiedName());
+        } else if (type instanceof NullType) {
+          parametersList.add("java.lang.Object");
         }
       }
       UnsolvedMethod constructorMethod =
@@ -1071,7 +1073,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     gotException();
     try {
-      List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
+      List<String> argumentsCreation =
+          getArgumentTypesFromObjectCreation(newExpr, getPackageFromClassName(type));
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
       updateUnsolvedClassWithClassName(type, false, false, creationMethod);
     } catch (Exception q) {
@@ -1666,7 +1669,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // favorable, since we don't have to write any additional import statements.
     @ClassGetSimpleName String className = objectSolved.getClassName();
     String packageName = objectSolved.getPackageName();
-    List<String> argumentsList = getArgumentsFromObjectCreation(expr);
+    List<String> argumentsList = getArgumentTypesFromObjectCreation(expr, packageName);
     UnsolvedClassOrInterface missingClass = new UnsolvedClassOrInterface(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(objectName, "", argumentsList);
     missingClass.addMethod(thisMethod);
@@ -1903,22 +1906,52 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public List<String> getArgumentTypesFromMethodCall(
       MethodCallExpr method, @Nullable String pkgName) {
+    NodeList<Expression> argList = method.getArguments();
+    return getArgumentTypesImpl(argList, pkgName);
+  }
+
+  /**
+   * Given a new object creation, this method returns the list of types of the parameters of that
+   * call
+   *
+   * @param creationExpr the object creation call
+   * @param pkgName the name of the package of the class that contains the constructor being called.
+   *     This is only used when creating a functional interface if one of the parameters is a
+   *     lambda. If this argument is null, then this method throws if it encounters a lambda.
+   * @return the types of parameters of the object creation method
+   */
+  public List<String> getArgumentTypesFromObjectCreation(
+      ObjectCreationExpr creationExpr, @Nullable String pkgName) {
+    NodeList<Expression> argList = creationExpr.getArguments();
+    return getArgumentTypesImpl(argList, null);
+  }
+
+  /**
+   * Shared implementation for getting argument types from method calls or calls to constructors.
+   *
+   * @param argList list of arguments
+   * @param pkgName the name of the package of the class that contains the method being called. This
+   *     is only used when creating a functional interface if one of the parameters is a lambda. If
+   *     this argument is null, then this method throws if it encounters a lambda
+   * @return the list of argument types
+   */
+  private List<String> getArgumentTypesImpl(
+      NodeList<Expression> argList, @Nullable String pkgName) {
     List<String> parametersList = new ArrayList<>();
-    NodeList<Expression> paraList = method.getArguments();
-    for (Expression parameter : paraList) {
+    for (Expression arg : argList) {
       // Special case for lambdas: don't try to resolve their type,
       // and instead compute their arity and provide an appropriate
       // functional interface from java.util.function.
-      if (parameter.isLambdaExpr()) {
+      if (arg.isLambdaExpr()) {
         if (pkgName == null) {
           throw new RuntimeException("encountered a lambda when the package name was unknown");
         }
-        LambdaExpr lambda = parameter.asLambdaExpr();
+        LambdaExpr lambda = arg.asLambdaExpr();
         parametersList.add(resolveLambdaType(lambda, pkgName));
         continue;
       }
 
-      ResolvedType type = parameter.calculateResolvedType();
+      ResolvedType type = arg.calculateResolvedType();
       // for reference type, we need the fully-qualified name to avoid having to add additional
       // import statements.
       if (type.isReferenceType()) {
@@ -1927,6 +1960,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         parametersList.add(type.describe());
       } else if (type.isArray()) {
         parametersList.add(type.asArrayType().describe());
+      } else if (type.isNull()) {
+        parametersList.add("java.lang.Object");
       }
     }
     return parametersList;
@@ -2041,27 +2076,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String wildcardPkg = wildcardImports.get(0);
       return wildcardPkg;
     }
-  }
-
-  /**
-   * Given a new object creation, this method returns the list of types of the parameters of that
-   * call
-   *
-   * @param creationExpr the object creation call
-   * @return the types of parameters of the object creation method
-   */
-  public static List<String> getArgumentsFromObjectCreation(ObjectCreationExpr creationExpr) {
-    List<String> parametersList = new ArrayList<>();
-    NodeList<Expression> paraList = creationExpr.getArguments();
-    for (Expression parameter : paraList) {
-      ResolvedType type = parameter.calculateResolvedType();
-      if (type.isReferenceType()) {
-        parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
-      } else if (type.isPrimitive()) {
-        parametersList.add(type.describe());
-      }
-    }
-    return parametersList;
   }
 
   /**
