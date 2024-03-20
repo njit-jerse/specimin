@@ -1462,7 +1462,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     else {
       methodName = ((MethodDeclaration) method).getNameAsString();
       for (Parameter para : ((MethodDeclaration) method).getParameters()) {
-        listOfParameters.add(para.getNameAsString());
+        Type paraType = para.getType();
+        String paraTypeAsString = paraType.asString();
+        try {
+          // if possible, opt for fully-qualified names.
+          paraTypeAsString = paraType.resolve().describe();
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          // avoiding ignored catch blocks errors.
+          listOfParameters.add(paraTypeAsString);
+          continue;
+        }
+        listOfParameters.add(paraTypeAsString);
       }
     }
     String returnType = "";
