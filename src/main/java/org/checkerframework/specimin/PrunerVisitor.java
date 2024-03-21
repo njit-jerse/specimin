@@ -209,7 +209,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
           if (!classesUsedByTargetMethods.contains(typeFullName)) {
             iterator.remove();
           }
-          // all unresolvable interfaces that need to be remove belong to the Java package.
+          // all unresolvable interfaces that need to be removed belong to the Java package.
           if (!typeFullName.startsWith("java.")) {
             continue;
           }

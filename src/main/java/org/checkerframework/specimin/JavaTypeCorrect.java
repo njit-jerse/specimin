@@ -53,7 +53,7 @@ class JavaTypeCorrect {
   private Map<String, String> extendedTypes = new HashMap<>();
 
   /**
-   * /** This map associates the name of a class with the name of the unresolved interface due to
+   * This map associates the name of a class with the name of the unresolved interface due to
    * missing method implementations.
    */
   private Map<String, String> classAndUnresolvedInterface = new HashMap<>();
@@ -166,7 +166,7 @@ class JavaTypeCorrect {
         // source codes to begin with. This usually happens when a file is isolated from its
         // package, and its parent is supposed to override some of the methods in the given
         // interface. For these cases, if the interface is not from Java language, we will modify
-        // the codes of the interface. Otherwise, we will remove that interface completely..
+        // the codes of the interface. Otherwise, we will remove that interface completely.
         if (line.contains("not abstract and does not override abstract method")) {
           updateClassAndUnresolvedInterface(line);
         }
