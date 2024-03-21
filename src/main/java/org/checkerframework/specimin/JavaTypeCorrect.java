@@ -53,6 +53,12 @@ class JavaTypeCorrect {
   private Map<String, String> extendedTypes = new HashMap<>();
 
   /**
+   * The map connects the name of a class to the name of the interface that should be removed from
+   * the declaration of that class.
+   */
+  private Map<String, String> classAndInterfacesToBeRemoved = new HashMap<>();
+
+  /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
    * rootDirectory, and rootDirectory is an absolute path
    *
@@ -76,6 +82,15 @@ class JavaTypeCorrect {
    */
   public Map<String, String> getTypeToChange() {
     return typeToChange;
+  }
+
+  /**
+   * Get the value of classAndInterfacesToBeRemoved.
+   *
+   * @return the value of classAndInterfacesToBeRemoved.
+   */
+  public Map<String, String> getClassAndInterfacesToBeRemoved() {
+    return classAndInterfacesToBeRemoved;
   }
 
   /**
@@ -147,6 +162,14 @@ class JavaTypeCorrect {
       lines:
       while ((line = reader.readLine()) != null) {
         lines.append(line);
+        // Note: this is before PrunerVisitor's phase, meaning that these methods are never in the
+        // source codes to begin with. This usually happens when a file is isolated from its
+        // package, and its parent is supposed to override some of the methods in the given
+        // interface. For these cases, if the interface is not from Java language, we will modify
+        // the codes of the interface. Otherwise, we will remove that interface completely..
+        if (line.contains("not abstract and does not override abstract method")) {
+          updateInterfacesToRemove(line);
+        }
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
           continue lines;
@@ -298,6 +321,26 @@ class JavaTypeCorrect {
     }
 
     typeToChange.put(incorrectType, correctType);
+  }
+
+  /**
+   * This method updates the map of classes and their to-be-removed interfaces based on an error
+   * message from javac.
+   *
+   * @param line an error message from javac.
+   */
+  private void updateInterfacesToRemove(String line) {
+    List<String> splitErrorMessage = Splitter.onPattern("\\s+").splitToList(line);
+    // such an error message will have this format:
+    // <Location> error: <Class> is not abstract and does not override abstract method <Method> in
+    // <Interface>
+    if (splitErrorMessage.size() < 3) {
+      // technically it is more than 3, but this is all we need to avoid false warnings.
+      throw new RuntimeException("Unexpected type error messages: " + line);
+    }
+    String className = splitErrorMessage.get(2);
+    String interfaceName = splitErrorMessage.get(splitErrorMessage.size() - 1);
+    classAndInterfacesToBeRemoved.put(className, interfaceName);
   }
 
   /**
