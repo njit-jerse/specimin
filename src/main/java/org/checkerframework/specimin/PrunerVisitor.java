@@ -85,8 +85,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    */
   private final Set<String> resolvedYetStuckMethodCall;
 
-  /** This map connects a class and its unresolvable interface. */
-  private Map<String, String> classAndInterfaceToRemoved;
+  /** This map connects a class and its unresolved interface. */
+  private Map<String, String> classAndUnresolvedInterface;
 
   /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
@@ -101,17 +101,18 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @param classesUsedByTargetMethods the classes used by target methods
    * @param resolvedYetStuckMethodCall set of methods that are resolved yet can not be solved by
    *     JavaParser
+   * @param classAndUnresolvedInterface connects a class to its corresponding unresolved interface
    */
   public PrunerVisitor(
       Set<String> methodsToKeep,
       Set<String> membersToEmpty,
       Set<String> classesUsedByTargetMethods,
       Set<String> resolvedYetStuckMethodCall,
-      Map<String, String> classAndInterfaceToRemoved) {
+      Map<String, String> classAndUnresolvedInterface) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
-    this.classAndInterfaceToRemoved = classAndInterfaceToRemoved;
+    this.classAndUnresolvedInterface = classAndUnresolvedInterface;
     Set<String> toRemove = new HashSet<>();
     for (String classUsedByTargetMethods : classesUsedByTargetMethods) {
       if (classUsedByTargetMethods.contains("<")) {
@@ -208,14 +209,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
           if (!classesUsedByTargetMethods.contains(typeFullName)) {
             iterator.remove();
           }
-          // all unresolvable interfaces belong the Java package.
+          // all unresolvable interfaces that need to be remove belong to the Java package.
           if (!typeFullName.startsWith("java.")) {
             continue;
           }
-          for (String classNeedInterfaceRemoved : classAndInterfaceToRemoved.keySet()) {
+          for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
             // since classNeedInterfaceRemoved can be in the form of a simple name
             if (classQualifiedName.endsWith(classNeedInterfaceRemoved)) {
-              if (classAndInterfaceToRemoved
+              if (classAndUnresolvedInterface
                   .get(classNeedInterfaceRemoved)
                   .equals(interfaceType.getNameAsString())) {
                 // This code assumes that the likelihood of two different classes with the same

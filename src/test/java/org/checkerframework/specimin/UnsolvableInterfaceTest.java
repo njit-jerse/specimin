@@ -5,7 +5,7 @@ import org.junit.Test;
 
 /**
  * This test checks if Specimin can handle unsolvable interfaces that happens due to the an input
- * file is isolated from its codebase. 
+ * file is isolated from its codebase.
  */
 public class UnsolvableInterfaceTest {
   @Test
