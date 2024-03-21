@@ -160,7 +160,7 @@ public class SpeciminRunner {
     // files in the end.
     Set<Path> createdClass = new HashSet<>();
     Map<String, String> typesToChange = new HashMap<>();
-    Map<String, String> classAndInterfacesToBeRemoved = new HashMap<>();
+    Map<String, String> classAndUnresolvedInterface = new HashMap<>();
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
       UnsolvedSymbolVisitorProgress workDoneBeforeIteration =
@@ -217,7 +217,7 @@ public class SpeciminRunner {
             new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
         typeCorrecter.correctTypesForAllFiles();
         typesToChange = typeCorrecter.getTypeToChange();
-        classAndInterfacesToBeRemoved = typeCorrecter.getClassAndInterfacesToBeRemoved();
+        classAndUnresolvedInterface = typeCorrecter.getClassAndUnresolvedInterface();
         boolean changeAtLeastOneType = addMissingClass.updateTypes(typesToChange);
         boolean extendAtLeastOneType =
             addMissingClass.updateTypesWithExtends(typeCorrecter.getExtendedTypes());
@@ -342,7 +342,7 @@ public class SpeciminRunner {
             mustImplementMethodsVisitor.getUsedMembers(),
             mustImplementMethodsVisitor.getUsedClass(),
             finder.getResolvedYetStuckMethodCall(),
-            classAndInterfacesToBeRemoved);
+            classAndUnresolvedInterface);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
