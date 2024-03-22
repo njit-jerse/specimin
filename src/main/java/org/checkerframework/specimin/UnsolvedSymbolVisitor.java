@@ -1558,6 +1558,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
+    // These are two places where a checked exception can appear, in a catch phrase or in the
+    // declaration of a method. This part handles the second case.
     for (ReferenceType throwType : node.getThrownExceptions()) {
       try {
         throwType.resolve();
