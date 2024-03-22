@@ -151,11 +151,6 @@ class JavaTypeCorrect {
           updateTypeToChange(line, filePath);
           continue lines;
         }
-        if (line.contains("error: unreported exception")) {
-          updateRuntimeExceptionExtension(line);
-          continue lines;
-        }
-
         if (line.contains("is not compatible with")) {
           updateTypeToChange(line, filePath);
           continue lines;
@@ -205,25 +200,6 @@ class JavaTypeCorrect {
     } catch (IOException e) {
       System.out.println(e);
     }
-  }
-
-  /**
-   * This method updates the extension of synthetic types that extend Throwable but are not caught
-   * or declared. To avoid compilation errors, we extend them to RuntimeException.
-   *
-   * @param errorMessage The error message from javac.
-   */
-  private void updateRuntimeExceptionExtension(String errorMessage) {
-    List<String> splitErrorMessage = Splitter.onPattern("\\s+").splitToList(errorMessage);
-    if (splitErrorMessage.size() < 7) {
-      throw new RuntimeException("Unexpected type error messages: " + errorMessage);
-    }
-    // The error message will have this format: (Note the ";" after the type of exception)
-    // <Location>: error: unreported exception <An Exception Type>; must be caught or declared to be
-    // thrown
-    String exceptionToUpdate = splitErrorMessage.get(4);
-    exceptionToUpdate = exceptionToUpdate.replace(";", "");
-    extendedTypes.put(exceptionToUpdate, "RuntimeException");
   }
 
   /**
