@@ -147,7 +147,6 @@ class JavaTypeCorrect {
       lines:
       while ((line = reader.readLine()) != null) {
         lines.append(line);
-        System.out.println(line);
         if (line.contains("error: incompatible types")) {
           updateTypeToChange(line, filePath);
           continue lines;
@@ -245,7 +244,7 @@ class JavaTypeCorrect {
       String rhs = splitErrorMessage.get(4);
       String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (lhs.equals("Throwable")) {
-        extendedTypes.put(rhs, "Throwable");
+        extendedTypes.put(rhs, "RuntimeException");
       } else if (isSynthetic(lhs)) {
         // This situation occurs if we have created a synthetic field
         // (e.g., in a superclass) that has a type that doesn't match the
