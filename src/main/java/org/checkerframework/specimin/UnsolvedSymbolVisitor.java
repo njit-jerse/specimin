@@ -1557,6 +1557,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             node, nameOfClass, toSimpleName(nodeTypeAsString), false);
       }
     }
+
+    // These are two places where a checked exception can appear, in a catch phrase or in the
+    // declaration of a method. This part handles the second case.
+    for (ReferenceType throwType : node.getThrownExceptions()) {
+      try {
+        throwType.resolve();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        String typeName = throwType.asString();
+        UnsolvedClassOrInterface typeOfThrow =
+            new UnsolvedClassOrInterface(typeName, getPackageFromClassName(typeName));
+        typeOfThrow.extend("java.lang.Throwable");
+        updateMissingClass(typeOfThrow);
+      }
+    }
+
     Set<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
     localVariables.addFirst(currentLocalVariables);
     Visitable result = super.visit(node, null);
