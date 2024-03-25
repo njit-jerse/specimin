@@ -243,7 +243,9 @@ class JavaTypeCorrect {
       String rhs = splitErrorMessage.get(4);
       String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (lhs.equals("Throwable")) {
-        extendedTypes.put(rhs, "Throwable");
+        // Since all the checked exceptions have already been handled by UnsolvedSymbolVisitor, we
+        // know that all the remaining uncompiled exceptions are unchecked.
+        extendedTypes.put(rhs, "RuntimeException");
       } else if (isSynthetic(lhs)) {
         // This situation occurs if we have created a synthetic field
         // (e.g., in a superclass) that has a type that doesn't match the
