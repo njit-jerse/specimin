@@ -473,7 +473,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             // this code is correct.
             List<@ClassGetSimpleName String> interfaceName =
                 classToItsUnsolvedInterface.computeIfAbsent(className, k -> new ArrayList<>());
-            interfaceName.add(implementedOrExtended.getNameAsString());
+            interfaceName.add(implementedOrExtended.getName().asString());
           } else {
             solveSymbolsForClassOrInterfaceType(implementedOrExtended, false);
           }
