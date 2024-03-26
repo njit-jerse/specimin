@@ -436,16 +436,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
 
     addTypeVariableScope(node.getTypeParameters());
-
     NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
     // Not sure why getExtendedTypes return a list, since a class can only extends at most one class
     // in Java.
     NodeList<ClassOrInterfaceType> extendedAndImplementedTypes = node.getExtendedTypes();
     extendedAndImplementedTypes.addAll(implementedTypes);
     for (ClassOrInterfaceType implementedOrExtended : extendedAndImplementedTypes) {
-      String typeName = implementedOrExtended.getName().asString();
-      String packageName = getPackageFromClassName(typeName);
-      String qualifiedName = packageName + "." + typeName;
+      String qualifiedName = getQualifiedNameForClassOrInterfaceType(implementedOrExtended);
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         // add the source codes of the interface or the super class to the list of target files so
         // that UnsolvedSymbolVisitor can solve symbols for that class if needed.
@@ -476,7 +473,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             // this code is correct.
             List<@ClassGetSimpleName String> interfaceName =
                 classToItsUnsolvedInterface.computeIfAbsent(className, k -> new ArrayList<>());
-            interfaceName.add(typeName);
+            interfaceName.add(implementedOrExtended.getNameAsString());
           } else {
             solveSymbolsForClassOrInterfaceType(implementedOrExtended, false);
           }
@@ -1913,6 +1910,28 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       MethodCallExpr method, @Nullable String pkgName) {
     NodeList<Expression> argList = method.getArguments();
     return getArgumentTypesImpl(argList, pkgName);
+  }
+
+  /**
+   * Given a ClassOrInterfaceType, this method returns the qualifed name of that type.
+   *
+   * @param type a ClassOrInterfaceType instance.
+   * @return the qualifed name of type
+   */
+  public String getQualifiedNameForClassOrInterfaceType(ClassOrInterfaceType type) {
+    String typeAsString = type.toString();
+    if (typeAsString.contains("<")) {
+      typeAsString = typeAsString.substring(0, typeAsString.indexOf("<"));
+    }
+    String typeSimpleName = type.getName().asString();
+    if (!typeAsString.equals(typeSimpleName)) {
+      // check for inner classes.
+      if (typeAsString.split("\\.").length > 2) {
+        // if the above conditions are met, this type is already in the qualified form.
+        return typeAsString;
+      }
+    }
+    return getPackageFromClassName(typeSimpleName) + "." + typeSimpleName;
   }
 
   /**
