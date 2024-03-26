@@ -2,8 +2,7 @@ package com.example;
 
 class Simple<T> implements Baz<T> {
 
-    void bar() {
+    public void bar() {
         Object obj = new Object();
-        obj = baz(obj);
     }
 }
