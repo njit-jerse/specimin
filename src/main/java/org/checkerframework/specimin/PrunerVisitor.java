@@ -236,9 +236,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
-    if (insideFunctionalInterface) {
-      return methodDecl;
-    }
     try {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
@@ -265,6 +262,12 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         if (isMethodInsideInterface) {
           methodDecl.setDefault(true);
         }
+      }
+      return methodDecl;
+    } else if (insideFunctionalInterface) {
+      if (methodDecl.getBody().isPresent()) {
+        // avoid introducing unsolved symbols into the final output.
+        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       }
       return methodDecl;
     } else {
