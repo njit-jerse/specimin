@@ -85,6 +85,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   /**
    * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
    * by ResolvedMethodDeclaration#getQualifiedSignature.
+   *
+   * <p>Note: some constructors, while not specifically defined as target methods by users, need to
+   * be retained completely in order for the final output to compile. Those constructors will be
+   * added to this set, since we consider them to be target methods, too.
    */
   private final Set<String> targetMethods = new HashSet<>();
 
@@ -265,17 +269,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
     boolean oldInsideTargetMethod = insideTargetMethod;
-    boolean needToPreserveCompletely = false;
+    boolean needToBePreserved = false;
     if (this.targetMethodNames.contains(methodName)) {
-      needToPreserveCompletely = true;
+      needToBePreserved = true;
     } else {
       try {
-        needToPreserveCompletely = targetMethods.contains(method.resolve().getQualifiedSignature());
+        needToBePreserved = targetMethods.contains(method.resolve().getQualifiedSignature());
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        needToPreserveCompletely = false;
+        needToBePreserved = false;
       }
     }
-    if (needToPreserveCompletely) {
+    if (needToBePreserved) {
       insideTargetMethod = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
