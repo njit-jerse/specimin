@@ -20,6 +20,8 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
@@ -27,11 +29,15 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
@@ -303,7 +309,23 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     if (methodsToLeaveUnchanged.contains(qualifiedSignature)) {
       return super.visit(constructorDecl, p);
     } else if (membersToEmpty.contains(qualifiedSignature) || isInEnum(constructorDecl)) {
-      constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      if (!needToPreserveSuperOrThisCall(constructorDecl.resolve())) {
+        constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      } else {
+        NodeList<Statement> bodyStatement = constructorDecl.getBody().getStatements();
+        if (bodyStatement.size() == 0) {
+          return constructorDecl;
+        }
+        Statement firstStatement = bodyStatement.get(0);
+        if (firstStatement.isExplicitConstructorInvocationStmt()) {
+          BlockStmt minmized = new BlockStmt();
+          minmized.addStatement(firstStatement);
+          constructorDecl.setBody(minmized);
+          return constructorDecl;
+        }
+        // not sure if we will ever get to this line. So this line is merely for the peace of mind.
+        constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      }
       return constructorDecl;
     } else {
       constructorDecl.remove();
@@ -528,5 +550,35 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       return ((ClassOrInterfaceDeclaration) parentNode).isInterface();
     }
     return isInsideInterface(parentNode);
+  }
+
+  /**
+   * Checks if a constructor, used by target methods, needs to have its explicit constructor
+   * invocation preserved. If a constructor is from a class that extends another class, and if the
+   * extended class's constructor is also used by target methods, then the current constructor
+   * should have its explicit invocation preserved, instead of being emptied out completely.
+   *
+   * @param constructorDeclaration The constructor used by the target methods.
+   * @return {@code true} if the constructor needs to be have its explicit constructor invocation
+   *     preserved, {@code false} otherwise.
+   */
+  private boolean needToPreserveSuperOrThisCall(
+      ResolvedConstructorDeclaration constructorDeclaration) {
+    ResolvedReferenceTypeDeclaration enclosingClass = constructorDeclaration.declaringType();
+    for (ResolvedReferenceType extendedClass : enclosingClass.getAncestors()) {
+      try {
+        for (ResolvedConstructorDeclaration constructorOfExtendedClass :
+            extendedClass.getTypeDeclaration().get().getConstructors()) {
+          if (membersToEmpty.contains(constructorOfExtendedClass.getQualifiedSignature())) {
+            return true;
+          }
+        }
+      }
+      // NoSuchElementException is for cases where the type declaration is not available.
+      catch (UnsolvedSymbolException | UnsupportedOperationException | NoSuchElementException e) {
+        return false;
+      }
+    }
+    return false;
   }
 }
