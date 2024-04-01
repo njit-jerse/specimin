@@ -28,7 +28,6 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -39,7 +38,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -85,10 +83,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   /**
    * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
    * by ResolvedMethodDeclaration#getQualifiedSignature.
-   *
-   * <p>Note: some constructors, while not specifically defined as target methods by users, need to
-   * be retained completely in order for the final output to compile. Those constructors will be
-   * added to this set, since we consider them to be target methods, too.
    */
   private final Set<String> targetMethods = new HashSet<>();
 
@@ -183,16 +177,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Get a copy of the list of target methods that this visitor has encountered so far. The Strings
-   * in the set are the fully-qualified names, as returned by
-   * ResolvedMethodDeclaration#getQualifiedSignature.
+   * Get the target methods that this visitor has encountered so far. The Strings in the set are the
+   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
    *
    * @return the target methods
    */
   public Set<String> getTargetMethods() {
-    Set<String> copyOfTargetMethods = new HashSet<>();
-    copyOfTargetMethods.addAll(targetMethods);
-    return copyOfTargetMethods;
+    return targetMethods;
   }
 
   /**
@@ -269,17 +260,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
     boolean oldInsideTargetMethod = insideTargetMethod;
-    boolean needToBePreserved = false;
     if (this.targetMethodNames.contains(methodName)) {
-      needToBePreserved = true;
-    } else {
-      try {
-        needToBePreserved = targetMethods.contains(method.resolve().getQualifiedSignature());
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        needToBePreserved = false;
-      }
-    }
-    if (needToBePreserved) {
       insideTargetMethod = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
@@ -519,42 +500,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolved.getPackageName() + "." + resolved.getClassName(),
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
-      if (needToPreserveCompletetly(resolved)) {
-        targetMethods.add(resolved.getQualifiedSignature());
-      }
     }
     return super.visit(newExpr, p);
-  }
-
-  /**
-   * Determines whether a constructor used by the target methods needs to be preserved completely.
-   * If a constructor belongs to a class that extends another class, and if the constructor of the
-   * extended class is also used by the target methods, then the current constructor needs to be
-   * preserved completely, instead of emptying out its body.
-   *
-   * @param constructorDeclaration The constructor used by the target methods.
-   * @return {@code true} if the constructor needs to be retained completely, {@code false}
-   *     otherwise.
-   */
-  private boolean needToPreserveCompletetly(ResolvedConstructorDeclaration constructorDeclaration) {
-    ResolvedReferenceTypeDeclaration enclosingClass = constructorDeclaration.declaringType();
-    for (ResolvedReferenceType extendedClass : enclosingClass.getAncestors()) {
-      try {
-        for (ResolvedConstructorDeclaration constructorOfExtendedClass :
-            extendedClass.getTypeDeclaration().get().getConstructors()) {
-          // The TargetMethodFinderVisitor is made sure to execute at least twice by SpeciminRunner,
-          // thus constructors are handled regardless of their order.
-          if (usedMembers.contains(constructorOfExtendedClass.getQualifiedSignature())) {
-            return true;
-          }
-        }
-      }
-      // NoSuchElementException is for cases where the type declaration is not available.
-      catch (UnsolvedSymbolException | UnsupportedOperationException | NoSuchElementException e) {
-        return false;
-      }
-    }
-    return false;
   }
 
   @Override

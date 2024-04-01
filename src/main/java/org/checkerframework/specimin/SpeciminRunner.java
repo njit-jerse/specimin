@@ -257,15 +257,8 @@ public class SpeciminRunner {
         new TargetMethodFinderVisitor(
             targetMethodNames, nonPrimaryClassesToPrimaryClass, enumVisitor.getUsedEnum());
 
-    while (true) {
-      Set<String> targetMethodSetBefore = finder.getTargetMethods();
-      for (CompilationUnit cu : parsedTargetFiles.values()) {
-        cu.accept(finder, null);
-      }
-      Set<String> targetMethodSetAfter = finder.getTargetMethods();
-      if (targetMethodSetBefore.equals(targetMethodSetAfter)) {
-        break;
-      }
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(finder, null);
     }
 
     List<String> unfoundMethods = finder.getUnfoundMethods();
