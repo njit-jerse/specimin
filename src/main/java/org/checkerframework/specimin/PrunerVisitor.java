@@ -318,9 +318,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         }
         Statement firstStatement = bodyStatement.get(0);
         if (firstStatement.isExplicitConstructorInvocationStmt()) {
-          BlockStmt minmized = new BlockStmt();
-          minmized.addStatement(firstStatement);
-          constructorDecl.setBody(minmized);
+          BlockStmt minimized = new BlockStmt();
+          minimized.addStatement(firstStatement);
+          constructorDecl.setBody(minimized);
           return constructorDecl;
         }
         // not sure if we will ever get to this line. So this line is merely for the peace of mind.
