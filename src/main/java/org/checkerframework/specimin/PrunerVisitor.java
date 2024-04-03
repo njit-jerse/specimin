@@ -40,6 +40,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
@@ -187,10 +188,17 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     boolean oldInsideFunctionalInterface = insideFunctionalInterface;
+    @Nullable AnnotationExpr functionInterfaceAnnotationExpr = null;
     for (AnnotationExpr anno : decl.getAnnotations()) {
       if (anno.getNameAsString().equals("FunctionalInterface")) {
         insideFunctionalInterface = true;
+        functionInterfaceAnnotationExpr = anno;
       }
+    }
+    if (functionInterfaceAnnotationExpr != null) {
+      // @FunctionalInterface is optional, so we will remove it to avoid possible compilation
+      // errors.
+      functionInterfaceAnnotationExpr.remove();
     }
     decl = minimizeTypeParameters(decl);
     if (!classesUsedByTargetMethods.contains(decl.resolve().getQualifiedName())) {

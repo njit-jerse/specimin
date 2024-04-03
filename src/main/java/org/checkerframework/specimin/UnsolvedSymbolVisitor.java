@@ -2272,6 +2272,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (classfileIsInOriginalCodebase(qualifiedName)) {
       return;
     }
+    if (qualifiedName.startsWith("java.")) {
+      return;
+    }
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClassOrInterface e = iterator.next();
