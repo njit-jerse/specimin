@@ -167,6 +167,10 @@ class JavaTypeCorrect {
         // package, and its parent is supposed to override some of the methods in the given
         // interface. For these cases, if the interface is not from Java language, we will modify
         // the codes of the interface. Otherwise, we will remove that interface completely.
+
+        // TODO: Update Specimin to generate a synthetic version for the missing parent class with
+        // synthetic method implementations, particularly if the targeted method invokes a method
+        // from the parent class that implements a method from a Java language interface.
         if (line.contains("not abstract and does not override abstract method")) {
           updateClassAndUnresolvedInterface(line);
         }
