@@ -1586,6 +1586,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *     files.
    */
   public boolean isFromAJarFile(Expression expr) {
+    ResolvedType resolvedType = expr.calculateResolvedType();
+    if (resolvedType.isTypeVariable()) {
+      // This is a limitation of JavaParser. If a method call has a generic return type, there is no
+      // way to resolve it.
+      // The consequence is that we can not get the class where a method is declared if that method
+      // has a generic return type. Hopefully the later version of JavaParser can address this
+      // limitation.
+      return false;
+    }
     String className;
     if (expr instanceof MethodCallExpr) {
       className =
