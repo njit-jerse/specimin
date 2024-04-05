@@ -1,13 +1,12 @@
 package com.example;
 
+import org.example.FunctionalProgramming;
+import org.example.MyList;
+import com.example.myotherpkg.MyOtherObject;
+
 class Simple {
 
     void bar() {
-        Object obj = new Object();
-        obj = baz(obj);
-    }
-
-    Object baz(Object obj) {
-        throw new Error();
+        FunctionalProgramming.map((MyList<MyOtherObject> l) -> l.toArray());
     }
 }
