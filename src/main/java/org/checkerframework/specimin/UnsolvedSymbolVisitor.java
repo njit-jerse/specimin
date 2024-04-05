@@ -859,7 +859,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
-    System.out.println("visiting : " + method);
     if (!insideTargetMethod) {
       return super.visit(method, p);
     }

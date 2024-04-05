@@ -1,7 +1,7 @@
 package org.example;
 
 public class FunctionalProgramming {
-    public static MapReturnType map(java.util.function.Function<?, ?> p0) {
+    public static OrgExampleFunctionalProgrammingMapReturnType map(java.util.function.Function<?, ?> parameter0) {
         throw new Error();
     }
 }
