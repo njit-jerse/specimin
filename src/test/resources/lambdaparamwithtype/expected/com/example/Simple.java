@@ -1,13 +1,9 @@
 package com.example;
 
+import org.example.FunctionalProgramming;
+
 class Simple {
-
     void bar() {
-        Object obj = new Object();
-        obj = baz(obj);
-    }
-
-    Object baz(Object obj) {
-        throw new Error();
+        FunctionalProgramming.map((Integer x) -> x + 3);
     }
 }
