@@ -372,7 +372,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         if (para.getParentNode().isPresent() && para.getParentNode().get() instanceof CatchClause) {
           paramType = para.getType().resolve();
         } else {
-          paramType = para.resolve().getType();
+          try {
+            paramType = para.resolve().getType();
+          } catch (UnsupportedOperationException e) {
+            throw new RuntimeException("cannot solve: " + para, e);
+          }
         }
 
         if (paramType.isReferenceType()) {
