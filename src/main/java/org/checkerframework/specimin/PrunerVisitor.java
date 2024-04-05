@@ -32,7 +32,6 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
@@ -87,7 +86,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   private final Set<String> resolvedYetStuckMethodCall;
 
   /** This map connects a class and its unresolved interface. */
-  private Map<String, String> classAndUnresolvedInterface;
+  private java.util.Map<String, String> classAndUnresolvedInterface;
 
   /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
@@ -109,7 +108,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       Set<String> membersToEmpty,
       Set<String> classesUsedByTargetMethods,
       Set<String> resolvedYetStuckMethodCall,
-      Map<String, String> classAndUnresolvedInterface) {
+      java.util.Map<String, String> classAndUnresolvedInterface) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
