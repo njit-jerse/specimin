@@ -33,6 +33,7 @@ import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
