@@ -1588,10 +1588,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public boolean isFromAJarFile(Expression expr) {
     String className;
     if (expr instanceof MethodCallExpr) {
-      className =
-          ((MethodCallExpr) expr).resolve().getPackageName()
-              + "."
-              + ((MethodCallExpr) expr).resolve().getClassName();
+      try {
+        className =
+            ((MethodCallExpr) expr).resolve().getPackageName()
+                + "."
+                + ((MethodCallExpr) expr).resolve().getClassName();
+      } catch (UnsupportedOperationException e) {
+        // This is a limitation of JavaParser. If a method call has a generic return type, sometimes
+        // JavaParser can not resolve it.
+        // The consequence is that we can not get the class where a method is declared if that
+        // method has a generic return type. Hopefully the later version of JavaParser can address
+        // this limitation.
+        return false;
+      }
     } else if (expr instanceof ObjectCreationExpr) {
       String shortName = ((ObjectCreationExpr) expr).getTypeAsString();
       String packageName = classAndPackageMap.get(shortName);

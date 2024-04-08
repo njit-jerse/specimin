@@ -11,6 +11,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
@@ -359,12 +360,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(Parameter para, Void p) {
     if (insideTargetMethod) {
       Type type = para.getType();
+      // an unknown type plays the role of a null object for lambda parameters that have no explicit
+      // type declared. However, we also want to avoid trying to solve declared lambda params (it
+      // will
+      // fail, despite the fact that the code should be compilable).
+      boolean isLambdaParam = type.isUnknownType() || isLambdaParam(para);
       if (type.isUnionType()) {
         resolveUnionType(type.asUnionType());
-      }
-      // an unknown type plays the role of a null object for lambda parameters that have no explicit
-      // type declared
-      else if (!type.isUnknownType()) {
+      } else if (!isLambdaParam) {
         // Parameter resolution (para.resolve()) does not work in catch clause.
         // However, resolution works on the type of the parameter.
         // Bug report: https://github.com/javaparser/javaparser/issues/4240
@@ -372,7 +375,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         if (para.getParentNode().isPresent() && para.getParentNode().get() instanceof CatchClause) {
           paramType = para.getType().resolve();
         } else {
-          paramType = para.resolve().getType();
+          try {
+            paramType = para.resolve().getType();
+          } catch (UnsupportedOperationException e) {
+            throw new RuntimeException("cannot solve: " + para, e);
+          }
         }
 
         if (paramType.isReferenceType()) {
@@ -395,6 +402,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(para, p);
+  }
+
+  /**
+   * Returns true iff we can prove that the parameter is a lambda parameter. This method should only
+   * be called on parameters that are not of unknown type (which are definitely lambda params).
+   *
+   * @param para a parameter
+   * @return true iff para is a (typed) parameter in a lambda
+   */
+  private boolean isLambdaParam(Parameter para) {
+    return para.getParentNode().orElseThrow() instanceof LambdaExpr;
   }
 
   @Override
