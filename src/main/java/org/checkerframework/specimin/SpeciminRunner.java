@@ -47,7 +47,7 @@ public class SpeciminRunner {
    */
   public static void main(String... args) throws IOException {
     OptionParser optionParser = new OptionParser();
-
+    System.out.println("test");
     // This option is the root of the source directory of the target files. It is used
     // for symbol resolution from source code and to organize the output directory.
     OptionSpec<String> rootOption = optionParser.accepts("root").withRequiredArg();
