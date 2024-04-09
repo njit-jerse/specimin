@@ -17,7 +17,7 @@
   "cf-691": "FAIL",
   "Issue689": "PASS",
   "cf-6388": "PASS",
-  "cf-3025": "PASS",
+  "cf-3025": "FAIL",
   "jdk-8269121": "FAIL",
   "jdk-8319461": "FAIL"
 }
