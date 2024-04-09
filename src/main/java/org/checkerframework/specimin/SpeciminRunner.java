@@ -265,7 +265,7 @@ public class SpeciminRunner {
     Map<String, Set<String>> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
-          "Specimin could not locate the following target methods in the target files: "
+          "Specimin could not locate the following target methods in the target files:\n"
               + unfoundMethodsTable(unfoundMethods));
     }
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
@@ -410,7 +410,7 @@ public class SpeciminRunner {
     for (String unfoundMethod : unfoundMethods.keySet()) {
       sb.append("* ")
           .append(unfoundMethod)
-          .append("\nConsidered these methods from the same class:\n");
+          .append("\n  Considered these methods from the same class:\n");
       for (String consideredMethod : unfoundMethods.get(unfoundMethod)) {
         sb.append("    * ").append(consideredMethod).append("\n");
       }

@@ -143,7 +143,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
     unfoundMethods = new HashMap<>(methodNames.size());
-    methodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
+    targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
     importedClassToPackage = new HashMap<>();
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
     this.usedTypeElement = usedTypeElement;
@@ -227,6 +227,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         targetMethodNames.stream()
             .filter(t -> t.startsWith(this.classFQName))
             .collect(Collectors.toSet());
+
     for (String targetMethodInClass : targetMethodsInClass) {
       // This check is necessary to avoid an NPE if the target method
       // in question has already been removed from unfoundMethods.
@@ -297,7 +298,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
     } else {
-      updateUnfoundMethods(constructorMethodAsString);
+      updateUnfoundMethods(methodName);
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = oldInsideTargetMethod;
@@ -379,7 +380,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // be included in one of the classes that Specimin outputs.
       }
     } else {
-      updateUnfoundMethods(methodWithoutReturnAndAnnos);
+      updateUnfoundMethods(methodName);
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = oldInsideTargetMethod;
