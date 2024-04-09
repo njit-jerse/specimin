@@ -680,8 +680,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String methodWithoutReturnType = methodDeclaration.replace(methodReturnType, "");
     methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
     String filteredMethodDeclaration =
-        methodParts.stream().filter(part -> !part.startsWith("@")).collect(Collectors.joining(" "));
-    return filteredMethodDeclaration;
+        methodParts.stream()
+            .filter(part -> !part.startsWith("@"))
+            .map(part -> part.indexOf('@') == -1 ? part : part.substring(0, part.indexOf('@')))
+            .collect(Collectors.joining(" "));
+    // sometimes an extra space may occur if an annotation right after a < was removed
+    return filteredMethodDeclaration.replace("< ", "<");
   }
 
   /**
