@@ -2032,7 +2032,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // avoid creating methods with raw parameter types
         int ctypevar = rrType.getTypeParametersMap().size();
         String typevars = "";
-        if (ctypevar == 0) {
+        if (ctypevar != 0) {
           typevars =
               "<"
                   + String.join(", ", Collections.nCopies(ctypevar, "?").toArray(new String[0]))
