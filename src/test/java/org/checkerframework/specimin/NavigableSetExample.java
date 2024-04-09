@@ -1,12 +1,11 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
 /**
- * This test checks that extra packages aren't extraneously created, based on a
- * bug I encountered while minimizing java.util.Collections in the JDK.
+ * This test checks that extra packages aren't extraneously created, based on a bug I encountered
+ * while minimizing java.util.Collections in the JDK.
  */
 public class NavigableSetExample {
   @Test
