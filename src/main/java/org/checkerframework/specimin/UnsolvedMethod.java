@@ -33,6 +33,9 @@ public class UnsolvedMethod {
    */
   private final boolean isJustMethodSignature;
 
+  /** Access modifer of the current method. The value is set to "public" by default. */
+  private final String accessModifier;
+
   /**
    * Create an instance of UnsolvedMethod
    *
@@ -55,10 +58,30 @@ public class UnsolvedMethod {
    */
   public UnsolvedMethod(
       String name, String returnType, List<String> parameterList, boolean isJustMethodSignature) {
+    this(name, returnType, parameterList, isJustMethodSignature, "public");
+  }
+
+  /**
+   * Create an instance of UnsolvedMethod for a synthetic interface.
+   *
+   * @param name the name of the method
+   * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
+   * @param isJustMethodSignature indicates whether this method represents just a method signature
+   *     without a body
+   * @param accessModifier the access modifier of the current method
+   */
+  public UnsolvedMethod(
+      String name,
+      String returnType,
+      List<String> parameterList,
+      boolean isJustMethodSignature,
+      String accessModifier) {
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
     this.isJustMethodSignature = isJustMethodSignature;
+    this.accessModifier = accessModifier;
   }
 
   /**
@@ -138,7 +161,7 @@ public class UnsolvedMethod {
       staticField = "static ";
     }
     String methodSignature =
-        "public " + staticField + returnTypeInString + name + "(" + arguments + ")";
+        accessModifier + " " + staticField + returnTypeInString + name + "(" + arguments + ")";
     if (isJustMethodSignature) {
       return methodSignature + ";";
     } else {

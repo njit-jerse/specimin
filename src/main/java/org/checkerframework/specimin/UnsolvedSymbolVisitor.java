@@ -1449,6 +1449,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       boolean updatingInterface) {
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
+    String accessModifer = "public";
     if (method instanceof MethodCallExpr) {
       methodName = ((MethodCallExpr) method).getNameAsString();
       listOfParameters =
@@ -1458,6 +1459,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // method is a MethodDeclaration
     else {
       methodName = ((MethodDeclaration) method).getNameAsString();
+      accessModifer = ((MethodDeclaration) method).getAccessSpecifier().asString();
       for (Parameter para : ((MethodDeclaration) method).getParameters()) {
         Type paraType = para.getType();
         String paraTypeAsString = paraType.asString();
@@ -1478,13 +1480,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    UnsolvedMethod thisMethod;
-    if (updatingInterface) {
-      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters, true);
-    } else {
-      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
-    }
-
+    UnsolvedMethod thisMethod =
+        new UnsolvedMethod(
+            methodName, returnType, listOfParameters, updatingInterface, accessModifer);
     UnsolvedClassOrInterface missingClass =
         updateUnsolvedClassWithClassName(className, false, false, thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
