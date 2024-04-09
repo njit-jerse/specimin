@@ -38,7 +38,16 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getAddedClasses() {
     Set<String> copyOfAddedClasses = new HashSet<>();
-    copyOfAddedClasses.addAll(addedClasses);
+    for (String addedClass : addedClasses) {
+      // An interface might be added to the list of added class infinitely. Consider this example:
+      // public interface Baz extends Comparable<Baz>{}
+      // If we don't have the condition check below, 'Baz' would be repeatedly added to the list of
+      // added classes every time it's visited, leading to an infinite loop.
+      if (usedClass.contains(addedClass)) {
+        continue;
+      }
+      copyOfAddedClasses.add(addedClass);
+    }
     return copyOfAddedClasses;
   }
 
