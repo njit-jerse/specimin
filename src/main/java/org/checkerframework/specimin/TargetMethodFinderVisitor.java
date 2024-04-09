@@ -354,7 +354,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       // make sure that differences in spacing does not interfere with the result
-      for (String unfound : unfoundMethods) {
+      for (String unfound : unfoundMethods.keySet()) {
         if (unfound.replaceAll("\\s", "").equals(methodWithoutAnySpace)) {
           unfoundMethods.remove(unfound);
           break;
