@@ -228,7 +228,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             .filter(t -> t.startsWith(this.classFQName))
             .collect(Collectors.toSet());
     for (String targetMethodInClass : targetMethodsInClass) {
-      unfoundMethods.get(targetMethodInClass).add(methodAsString);
+      // This check is necessary to avoid an NPE if the target method
+      // in question has already been removed from unfoundMethods.
+      if (unfoundMethods.containsKey(targetMethodInClass)) {
+        unfoundMethods.get(targetMethodInClass).add(methodAsString);
+      }
     }
   }
 
