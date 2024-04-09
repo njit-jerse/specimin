@@ -49,6 +49,10 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    // We don't try to preserve the whole inheritance tree for an interface.
+    if (decl.isInterface()) {
+      return super.visit(decl, p);
+    }
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
         try {

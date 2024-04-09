@@ -212,37 +212,45 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       decl.remove();
       return decl;
     }
-    if (!decl.isInterface()) {
-      NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
-      Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
-      while (iterator.hasNext()) {
-        ClassOrInterfaceType interfaceType = iterator.next();
-        try {
-          String typeFullName = interfaceType.resolve().getQualifiedName();
-          if (!classesUsedByTargetMethods.contains(typeFullName)) {
-            iterator.remove();
-          }
-          // all unresolvable interfaces that need to be removed belong to the Java package.
-          if (!typeFullName.startsWith("java.")) {
-            continue;
-          }
-          for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
-            // since classNeedInterfaceRemoved can be in the form of a simple name
-            if (classQualifiedName.endsWith(classNeedInterfaceRemoved)) {
-              if (classAndUnresolvedInterface
-                  .get(classNeedInterfaceRemoved)
-                  .equals(interfaceType.getNameAsString())) {
-                // This code assumes that the likelihood of two different classes with the same
-                // simple name implementing the same interface is low.
-                iterator.remove();
-              }
-            }
-          }
-        } catch (UnsolvedSymbolException e) {
+    boolean isAnInterface = decl.isInterface();
+    NodeList<ClassOrInterfaceType> implementedInterfaces;
+    if (!isAnInterface) {
+      implementedInterfaces = decl.getImplementedTypes();
+    } else {
+      implementedInterfaces = decl.getExtendedTypes();
+    }
+    Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
+    while (iterator.hasNext()) {
+      ClassOrInterfaceType interfaceType = iterator.next();
+      try {
+        String typeFullName = interfaceType.resolve().getQualifiedName();
+        if (!classesUsedByTargetMethods.contains(typeFullName)) {
           iterator.remove();
         }
+        // all unresolvable interfaces that need to be removed belong to the Java package.
+        if (!typeFullName.startsWith("java.")) {
+          continue;
+        }
+        for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
+          // since classNeedInterfaceRemoved can be in the form of a simple name
+          if (classQualifiedName.endsWith(classNeedInterfaceRemoved)) {
+            if (classAndUnresolvedInterface
+                .get(classNeedInterfaceRemoved)
+                .equals(interfaceType.getNameAsString())) {
+              // This code assumes that the likelihood of two different classes with the same
+              // simple name implementing the same interface is low.
+              iterator.remove();
+            }
+          }
+        }
+      } catch (UnsolvedSymbolException e) {
+        iterator.remove();
       }
+    }
+    if (!isAnInterface) {
       decl.setImplementedTypes(implementedInterfaces);
+    } else {
+      decl.setExtendedTypes(implementedInterfaces);
     }
     Visitable result = super.visit(decl, p);
     insideFunctionalInterface = oldInsideFunctionalInterface;
