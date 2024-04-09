@@ -13,6 +13,6 @@ public class AnnoInGenericTargetTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "annoingenerictarget",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#unmodifiable(Collection<? extends T>)"});
+        new String[] {"com.example.Simple#unmodifiableCollection(Collection<? extends T>)"});
   }
 }
