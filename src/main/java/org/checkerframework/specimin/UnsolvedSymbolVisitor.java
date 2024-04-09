@@ -1445,10 +1445,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public void updateUnsolvedClassOrInterfaceWithMethod(
       Node method,
       @ClassGetSimpleName String className,
-      @ClassGetSimpleName String desiredReturnType,
+      String desiredReturnType,
       boolean updatingInterface) {
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
+    String accessModifer = "public";
     if (method instanceof MethodCallExpr) {
       methodName = ((MethodCallExpr) method).getNameAsString();
       listOfParameters =
@@ -1458,6 +1459,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // method is a MethodDeclaration
     else {
       methodName = ((MethodDeclaration) method).getNameAsString();
+      accessModifer = ((MethodDeclaration) method).getAccessSpecifier().asString();
       for (Parameter para : ((MethodDeclaration) method).getParameters()) {
         Type paraType = para.getType();
         String paraTypeAsString = paraType.asString();
@@ -1478,13 +1480,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       returnType = desiredReturnType;
     }
-    UnsolvedMethod thisMethod;
-    if (updatingInterface) {
-      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters, true);
-    } else {
-      thisMethod = new UnsolvedMethod(methodName, returnType, listOfParameters);
-    }
-
+    UnsolvedMethod thisMethod =
+        new UnsolvedMethod(
+            methodName, returnType, listOfParameters, updatingInterface, accessModifer);
     UnsolvedClassOrInterface missingClass =
         updateUnsolvedClassWithClassName(className, false, false, thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
@@ -1566,6 +1564,32 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             new UnsolvedClassOrInterface(typeName, getPackageFromClassName(typeName));
         typeOfThrow.extend("java.lang.Throwable");
         updateMissingClass(typeOfThrow);
+      }
+    }
+
+    // if the second condition is false, then this method belongs to an anonymous class, which
+    // should be handled by the codes above.
+    if (node.isAnnotationPresent("Override") && classAndItsParent.containsKey(className)) {
+      String parentClassName = classAndItsParent.get(className);
+      // A modular program analysis can reason about @Override, hence we need to create a synthetic
+      // version for the overriden method if missing.
+
+      // TODO: Tracing the complete inheritance tree to locate the missing class is more ideal.
+      // However, due to the limitations of JavaParser, we're unable to inspect each ancestor
+      // independently. Instead, we can only obtain the resolved versions of all ancestors of a
+      // resolved type at once. If any ancestor remains unresolved, we end up with a not very useful
+      // exception.
+      if (!classfileIsInOriginalCodebase(parentClassName)) {
+        if (nodeType.isReferenceType()) {
+          updateUnsolvedClassOrInterfaceWithMethod(
+              node,
+              parentClassName,
+              getPackageFromClassName(nodeTypeSimpleForm) + "." + nodeTypeSimpleForm,
+              false);
+        } else {
+          updateUnsolvedClassOrInterfaceWithMethod(
+              node, parentClassName, nodeTypeSimpleForm, false);
+        }
       }
     }
 
