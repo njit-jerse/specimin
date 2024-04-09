@@ -61,6 +61,7 @@ import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -2027,7 +2028,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // for reference type, we need the fully-qualified name to avoid having to add additional
       // import statements.
       if (type.isReferenceType()) {
-        parametersList.add(((ResolvedReferenceType) type).getQualifiedName());
+        ResolvedReferenceType rrType = (ResolvedReferenceType) type;
+        // avoid creating methods with raw parameter types
+        int ctypevar = rrType.getTypeParametersMap().size();
+        String typevars = "";
+        if (ctypevar != 0) {
+          typevars =
+              "<"
+                  + String.join(", ", Collections.nCopies(ctypevar, "?").toArray(new String[0]))
+                  + ">";
+        }
+        parametersList.add(rrType.getQualifiedName() + typevars);
       } else if (type.isPrimitive()) {
         parametersList.add(type.describe());
       } else if (type.isArray()) {
