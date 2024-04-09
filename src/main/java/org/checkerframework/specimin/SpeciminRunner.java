@@ -7,7 +7,6 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -133,7 +132,8 @@ public class SpeciminRunner {
         primaryTypeQualifiedName =
             compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
       }
-      for (TypeDeclaration declaredClass : compilationUnit.getTypes()) {
+      for (ClassOrInterfaceDeclaration declaredClass :
+          compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
           String declaredClassQualifiedName =
               declaredClass.getFullyQualifiedName().get().toString();
