@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -112,7 +113,12 @@ public class SpeciminRunner {
     // Keys are paths to files, values are parsed ASTs
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      try {
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      } catch (ParseProblemException e) {
+        // VineFlower is not perfect at decompiling Java files.
+        continue;
+      }
     }
 
     if (!jarPaths.isEmpty()) {
@@ -191,10 +197,20 @@ public class SpeciminRunner {
       updateStaticSolver(root, jarPaths);
       parsedTargetFiles = new HashMap<>();
       for (String targetFile : targetFiles) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        try {
+          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        } catch (ParseProblemException e) {
+          // VineFlower is not perfect at decompiling Java files.
+          continue;
+        }
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        try {
+          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        } catch (ParseProblemException e) {
+          // VineFlower is not perfect at decompiling Java files.
+          continue;
+        }
       }
       UnsolvedSymbolVisitorProgress workDoneAfterIteration =
           new UnsolvedSymbolVisitorProgress(
@@ -300,7 +316,12 @@ public class SpeciminRunner {
       // directories already in parsedTargetFiles are original files in the root directory, we are
       // not supposed to update them.
       if (!parsedTargetFiles.containsKey(directory)) {
-        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+        try {
+          parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+        } catch (ParseProblemException e) {
+          // VineFlower is not perfect at decompiling Java files.
+          continue;
+        }
       }
     }
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
@@ -317,7 +338,12 @@ public class SpeciminRunner {
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
         // create synthetic files for them
         if (thisFile.exists()) {
-          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          try {
+            parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          } catch (ParseProblemException e) {
+            // VineFlower is not perfect at decompiling Java files.
+            continue;
+          }
         }
       }
       classToFindInheritance = inheritancePreserve.getAddedClasses();
