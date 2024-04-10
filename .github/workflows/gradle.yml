@@ -55,4 +55,18 @@ jobs:
           diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
       - name: Check preservation status
         run: diff -uw src/main/resources/preservation_status.json specimin-evaluation/ISSUES/preservation_status.json
-          
+      - name: Jar mode evaluation script execution
+        run: |
+          cd specimin-evaluation
+          echo "specimin path-> $SPECIMIN"
+          python main.py -j true
+      - name: Jar mode specimin execution status check
+        run: diff -uw src/main/resources/jar_mode_specimin_execution_status.json specimin-evaluation/ISSUES/target_status.json
+      - name: Jar mode targets compile status check
+        run: |
+          cd specimin-evaluation
+          sh check_jar_mode_compilation.sh
+          cd ..
+          diff -uw src/main/resources/jar_mode_min_program_compilation_status.json specimin-evaluation/ISSUES/jar_compile_status.json
+      - name: Jar mode preservation status check
+        run: diff -uw src/main/resources/jar_mode_preservation_status.json specimin-evaluation/ISSUES/preservation_status.json
