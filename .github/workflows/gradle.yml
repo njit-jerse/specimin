@@ -46,11 +46,11 @@ jobs:
       - name: Compile minimized programs
         run: |
           cd specimin-evaluation
-          sh check_compilation.sh
+          sh check_compilation.sh output
       - name: Check targets compile status
         run: |
           cd specimin-evaluation
-          sh check_compilation.sh
+          sh check_compilation.sh output
           cd ..
           diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
       - name: Check preservation status
@@ -65,8 +65,8 @@ jobs:
       - name: Jar mode targets compile status check
         run: |
           cd specimin-evaluation
-          sh check_jar_mode_compilation.sh
+          sh check_jar_mode_compilation.sh jar_output
           cd ..
-          diff -uw src/main/resources/jar_mode_min_program_compilation_status.json specimin-evaluation/ISSUES/jar_compile_status.json
+          diff -uw src/main/resources/jar_mode_min_program_compilation_status.json specimin-evaluation/ISSUES/compile_status.json
       - name: Jar mode preservation status check
         run: diff -uw src/main/resources/jar_mode_preservation_status.json specimin-evaluation/ISSUES/preservation_status.json
