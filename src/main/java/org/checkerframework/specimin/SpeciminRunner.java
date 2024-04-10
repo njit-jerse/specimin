@@ -34,6 +34,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -112,6 +113,14 @@ public class SpeciminRunner {
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+    }
+
+    if (!jarPaths.isEmpty()) {
+      List<String> argsToDecompile = new ArrayList<>();
+      argsToDecompile.add("--silent");
+      argsToDecompile.addAll(jarPaths);
+      argsToDecompile.add(root);
+      ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
     }
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.

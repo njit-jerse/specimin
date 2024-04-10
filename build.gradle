@@ -26,6 +26,8 @@ dependencies {
 
     implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
 
+    implementation "org.vineflower:vineflower:1.10.0"
+
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
 
