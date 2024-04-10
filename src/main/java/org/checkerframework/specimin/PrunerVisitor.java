@@ -296,7 +296,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // do nothing if methodDecl is just a method signature in a class.
       if (methodDecl.getBody().isPresent() || isMethodInsideInterface) {
         methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
-        if (isMethodInsideInterface) {
+        // static and default keywords can not be together.
+        if (isMethodInsideInterface && !methodDecl.isStatic()) {
           methodDecl.setDefault(true);
         }
       }
