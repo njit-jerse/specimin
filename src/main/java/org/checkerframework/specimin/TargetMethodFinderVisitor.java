@@ -34,7 +34,6 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -88,11 +87,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final Set<String> targetMethods = new HashSet<>();
 
   /**
-   * A local copy of the input list of methods. A method is removed from this copy when it is
-   * located. If the visitor has been run on all source files and this list isn't empty, that
-   * usually indicates an error.
+   * The keys of this map are a local copy of the input list of methods. A method is removed from
+   * this copy's key set when it is located. If the visitor has been run on all source files and the
+   * key set isn't empty, that usually indicates an error. The values are other method signatures
+   * that were found in the key's class, but which were not the key. These values are only used for
+   * error reporting: it is useful to the user if they make a typo to know what the correct
+   * name/signature of a method actually is.
    */
-  private final List<String> unfoundMethods;
+  private final Map<String, Set<String>> unfoundMethods;
 
   /**
    * This map has the name of an imported class as key and the package of that class as the value.
@@ -140,7 +142,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
-    unfoundMethods = new ArrayList<>(methodNames);
+    unfoundMethods = new HashMap<>(methodNames.size());
+    targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
     importedClassToPackage = new HashMap<>();
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
     this.usedTypeElement = usedTypeElement;
@@ -148,11 +151,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * Returns the methods that so far this visitor has not located from its target list. Usually,
-   * this should be checked after running the visitor to ensure that it is empty.
+   * this should be checked after running the visitor to ensure that it is empty. The targets are
+   * the keys in the returned maps; the values are methods in the same class that were considered
+   * but were not the target (useful for issuing error messages).
    *
-   * @return the methods that so far this visitor has not located from its target list
+   * @return the methods that so far this visitor has not located from its target list, mapped to
+   *     the candidate methods that were considered
    */
-  public List<String> getUnfoundMethods() {
+  public Map<String, Set<String>> getUnfoundMethods() {
     return unfoundMethods;
   }
 
@@ -207,6 +213,27 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       List<ResolvedMethodDeclaration> methodList, ClassOrInterfaceType interfaceType) {
     for (ResolvedMethodDeclaration method : methodList) {
       this.methodDeclarationToInterfaceType.put(method, interfaceType);
+    }
+  }
+
+  /**
+   * Updates unfoundMethods so that the appropriate elements have their set of considered methods
+   * updated to match a method that was not a target method.
+   *
+   * @param methodAsString the method that wasn't a target method
+   */
+  private void updateUnfoundMethods(String methodAsString) {
+    Set<String> targetMethodsInClass =
+        targetMethodNames.stream()
+            .filter(t -> t.startsWith(this.classFQName))
+            .collect(Collectors.toSet());
+
+    for (String targetMethodInClass : targetMethodsInClass) {
+      // This check is necessary to avoid an NPE if the target method
+      // in question has already been removed from unfoundMethods.
+      if (unfoundMethods.containsKey(targetMethodInClass)) {
+        unfoundMethods.get(targetMethodInClass).add(methodAsString);
+      }
     }
   }
 
@@ -270,6 +297,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
+    } else {
+      updateUnfoundMethods(methodName);
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = oldInsideTargetMethod;
@@ -303,8 +332,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     boolean oldInsideTargetMethod = insideTargetMethod;
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
-    String methodName =
-        this.classFQName + "#" + removeMethodReturnTypeAndAnnotations(methodDeclAsString);
+    String methodWithoutReturnAndAnnos = removeMethodReturnTypeAndAnnotations(methodDeclAsString);
+    String methodName = this.classFQName + "#" + methodWithoutReturnAndAnnos;
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMethod) {
       Node parentNode = method.getParentNode().get();
@@ -330,7 +359,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       insideTargetMethod = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       // make sure that differences in spacing does not interfere with the result
-      for (String unfound : unfoundMethods) {
+      for (String unfound : unfoundMethods.keySet()) {
         if (unfound.replaceAll("\\s", "").equals(methodWithoutAnySpace)) {
           unfoundMethods.remove(unfound);
           break;
@@ -350,6 +379,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // and UnsolvedSymbolVisitor should already guarantee that the variable will
         // be included in one of the classes that Specimin outputs.
       }
+    } else {
+      updateUnfoundMethods(methodName);
     }
     Visitable result = super.visit(method, p);
     insideTargetMethod = oldInsideTargetMethod;
@@ -649,8 +680,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String methodWithoutReturnType = methodDeclaration.replace(methodReturnType, "");
     methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
     String filteredMethodDeclaration =
-        methodParts.stream().filter(part -> !part.startsWith("@")).collect(Collectors.joining(" "));
-    return filteredMethodDeclaration;
+        methodParts.stream()
+            .filter(part -> !part.startsWith("@"))
+            .map(part -> part.indexOf('@') == -1 ? part : part.substring(0, part.indexOf('@')))
+            .collect(Collectors.joining(" "));
+    // sometimes an extra space may occur if an annotation right after a < was removed
+    return filteredMethodDeclaration.replace("< ", "<");
   }
 
   /**

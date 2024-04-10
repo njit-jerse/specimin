@@ -7,7 +7,6 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -133,7 +132,8 @@ public class SpeciminRunner {
         primaryTypeQualifiedName =
             compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
       }
-      for (TypeDeclaration declaredClass : compilationUnit.getTypes()) {
+      for (ClassOrInterfaceDeclaration declaredClass :
+          compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
           String declaredClassQualifiedName =
               declaredClass.getFullyQualifiedName().get().toString();
@@ -262,11 +262,11 @@ public class SpeciminRunner {
       cu.accept(finder, null);
     }
 
-    List<String> unfoundMethods = finder.getUnfoundMethods();
+    Map<String, Set<String>> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
-          "Specimin could not locate the following target methods in the target files: "
-              + String.join(", ", unfoundMethods));
+          "Specimin could not locate the following target methods in the target files:\n"
+              + unfoundMethodsTable(unfoundMethods));
     }
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
         new SolveMethodOverridingVisitor(
@@ -396,6 +396,26 @@ public class SpeciminRunner {
     }
     // delete all the temporary files created by UnsolvedSymbolVisitor
     deleteFiles(createdClass);
+  }
+
+  /**
+   * Helper method to create a human-readable table of the unfound methods and each method in the
+   * same class that was considered.
+   *
+   * @param unfoundMethods the unfound methods and the methods that were considered
+   * @return a human-readable string representation
+   */
+  private static String unfoundMethodsTable(Map<String, Set<String>> unfoundMethods) {
+    StringBuilder sb = new StringBuilder();
+    for (String unfoundMethod : unfoundMethods.keySet()) {
+      sb.append("* ")
+          .append(unfoundMethod)
+          .append("\n  Considered these methods from the same class:\n");
+      for (String consideredMethod : unfoundMethods.get(unfoundMethod)) {
+        sb.append("    * ").append(consideredMethod).append("\n");
+      }
+    }
+    return sb.toString();
   }
 
   /**
