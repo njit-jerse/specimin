@@ -9,7 +9,6 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.expr.LiteralExpr;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
@@ -73,7 +72,7 @@ public class SpeciminRunner {
     if (jarDirectory != null) {
       jarFiles = getJarFiles(jarDirectory);
     }
-    jarFiles.stream().forEach(System.out::println);  //Added this line to trigger CI again
+
     performMinimization(
         options.valueOf(rootOption),
         options.valuesOf(targetFilesOption),
