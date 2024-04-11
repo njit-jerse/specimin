@@ -321,6 +321,9 @@ public class SpeciminRunner {
         cu.accept(inheritancePreserve, null);
       }
       for (String targetFile : inheritancePreserve.getAddedClasses()) {
+        if (targetFile.startsWith("java.")) {
+          continue;
+        }
         String directoryOfFile = targetFile.replace(".", "/") + ".java";
         File thisFile = new File(root + directoryOfFile);
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
