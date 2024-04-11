@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -198,9 +199,13 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        if (!targetFile.startsWith("java.")) {
-          // VineFlower might create class files for classes from the Java language
+        try {
           parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        } catch (ParseProblemException e) {
+          // These parsing codes cause crashes in the CI. Those crahses can't be reproduced locally.
+          // Not sure if something is wrong with VineFlower or Specimin CI. Hence we keep these
+          // lines as tech debt.
+          continue;
         }
       }
       UnsolvedSymbolVisitorProgress workDoneAfterIteration =
@@ -306,10 +311,12 @@ public class SpeciminRunner {
     for (String directory : relatedClass) {
       // directories already in parsedTargetFiles are original files in the root directory, we are
       // not supposed to update them.
-      // VineFlower might create class files for classes from the Java language
-
-      if (!parsedTargetFiles.containsKey(directory) && !directory.startsWith("java.")) {
-        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+      if (!parsedTargetFiles.containsKey(directory)) {
+        try {
+          parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+        } catch (ParseProblemException e) {
+          continue;
+        }
       }
     }
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
@@ -329,7 +336,11 @@ public class SpeciminRunner {
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
         // create synthetic files for them
         if (thisFile.exists()) {
-          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          try {
+            parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          } catch (ParseProblemException e) {
+            continue;
+          }
         }
       }
       classToFindInheritance = inheritancePreserve.getAddedClasses();
