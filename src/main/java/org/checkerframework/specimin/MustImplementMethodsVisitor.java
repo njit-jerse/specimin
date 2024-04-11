@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -218,8 +219,11 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
       ResolvedTypeParametersMap typeParametersMap = resolvedInterface.typeParametersMap();
       String targetSignature = signature;
       for (String name : typeParametersMap.getNames()) {
-        String interfaceViewpointName = name.substring(name.lastIndexOf('.') + 1);
-        String localViewpointName = typeParametersMap.getValueBySignature(name).get().describe();
+        // The Pattern.quote calls are necessary in case there is a ? in one of these (because it's
+        // a wildcard).
+        String interfaceViewpointName = Pattern.quote(name.substring(name.lastIndexOf('.') + 1));
+        String localViewpointName =
+            Pattern.quote(typeParametersMap.getValueBySignature(name).get().describe());
         targetSignature = targetSignature.replaceAll(localViewpointName, interfaceViewpointName);
       }
       // Type parameters in the types are erased (as they would be by javac when doing method
