@@ -205,6 +205,7 @@ public class SpeciminRunner {
           // These parsing codes cause crashes in the CI. Those crashes can't be reproduced locally.
           // Not sure if something is wrong with VineFlower or Specimin CI. Hence we keep these
           // lines as tech debt.
+          // TODO: Figure out why the CI is crashing.
           continue;
         }
       }
@@ -315,6 +316,7 @@ public class SpeciminRunner {
         try {
           parsedTargetFiles.put(directory, parseJavaFile(root, directory));
         } catch (ParseProblemException e) {
+          // TODO: Figure out why the CI is crashing.
           continue;
         }
       }
@@ -336,6 +338,7 @@ public class SpeciminRunner {
           try {
             parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
           } catch (ParseProblemException e) {
+            // TODO: Figure out why the CI is crashing.
             continue;
           }
         }
