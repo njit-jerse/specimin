@@ -2,11 +2,11 @@ package an.old.library;
 
 public class Book {
 
-    public Book(int parameter0) {
+    public Book(int var1) {
         throw new Error();
     }
 
-    public java.lang.String getRates() {
+    public String getRates() {
         throw new Error();
     }
 }
