@@ -1531,6 +1531,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        // Note that this could also be an interface (if it is used in an implements clause elsewhere).
+        // updateMissingClass is responsible for fixing this up later after we encounter the
+        // relevant implements clause.
         updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false, false);
       }
     }
@@ -1689,11 +1692,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // class is in the same directory as the current class
     String packageName = getPackageFromClassName(nameOfClass);
     UnsolvedClassOrInterface result;
-    if (isUpdatingInterface) {
-      result = new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType, true);
-    } else {
-      result = new UnsolvedClassOrInterface(nameOfClass, packageName, isExceptionType);
-    }
+    result =
+        new UnsolvedClassOrInterface(
+            nameOfClass, packageName, isExceptionType, isUpdatingInterface);
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
       result.addMethod(unsolvedMethod);
     }
@@ -2337,6 +2338,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         if (missedClass.getNumberOfTypeVariables() > 0) {
           e.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
         }
+
+        // if a "class" is found to be an interface even once (because it appears
+        // in an implements clause), then it must be an interface and not a class.
+        if (missedClass.isAnInterface()) {
+          e.setIsAnInterfaceToTrue();
+        }
+
         return;
       }
     }
