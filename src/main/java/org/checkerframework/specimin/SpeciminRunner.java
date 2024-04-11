@@ -21,6 +21,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -113,15 +114,12 @@ public class SpeciminRunner {
     // Keys are paths to files, values are parsed ASTs
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
-      try {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-      } catch (ParseProblemException e) {
-        // VineFlower is not perfect at decompiling Java files.
-        continue;
-      }
+      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    // Set<Path> additionalClassesCreatedFromJar = new HashSet<>();
     if (!jarPaths.isEmpty()) {
+
       List<String> argsToDecompile = new ArrayList<>();
       argsToDecompile.add("--silent");
       argsToDecompile.addAll(jarPaths);
@@ -205,12 +203,7 @@ public class SpeciminRunner {
         }
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        try {
-          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-        } catch (ParseProblemException e) {
-          // VineFlower is not perfect at decompiling Java files.
-          continue;
-        }
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
       UnsolvedSymbolVisitorProgress workDoneAfterIteration =
           new UnsolvedSymbolVisitorProgress(
@@ -316,12 +309,7 @@ public class SpeciminRunner {
       // directories already in parsedTargetFiles are original files in the root directory, we are
       // not supposed to update them.
       if (!parsedTargetFiles.containsKey(directory)) {
-        try {
-          parsedTargetFiles.put(directory, parseJavaFile(root, directory));
-        } catch (ParseProblemException e) {
-          // VineFlower is not perfect at decompiling Java files.
-          continue;
-        }
+        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
       }
     }
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
@@ -338,12 +326,7 @@ public class SpeciminRunner {
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
         // create synthetic files for them
         if (thisFile.exists()) {
-          try {
-            parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
-          } catch (ParseProblemException e) {
-            // VineFlower is not perfect at decompiling Java files.
-            continue;
-          }
+          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
         }
       }
       classToFindInheritance = inheritancePreserve.getAddedClasses();
@@ -429,7 +412,8 @@ public class SpeciminRunner {
         System.out.println("with error: " + e);
       }
     }
-    // delete all the temporary files created by UnsolvedSymbolVisitor
+    createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
+    // delete all the temporary files created by UnsolvedSymbolVisitor and VineFlower.
     deleteFiles(createdClass);
   }
 
@@ -527,7 +511,36 @@ public class SpeciminRunner {
    *     error
    */
   private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
-    return StaticJavaParser.parse(Path.of(root, path));
+    try {
+      return StaticJavaParser.parse(Path.of(root, path));
+    } catch (ParseProblemException e) {
+      throw new Error(root + "." + path + " can not be parsed!");
+    }
+  }
+
+  /**
+   * Retrieves the paths of Java files that should be created from the list of JAR files.
+   *
+   * @param outPutDirectory The directory where the Java files will be created.
+   * @param jarPaths The set of paths to JAR files.
+   * @return A set containing the paths of the Java files to be created.
+   * @throws IOException If an I/O error occurs.
+   */
+  private static Set<Path> getPathsFromJarPaths(String outPutDirectory, List<String> jarPaths)
+      throws IOException {
+    Set<Path> pathsOfFile = new HashSet<>();
+    for (String path : jarPaths) {
+      JarTypeSolver jarSolver = new JarTypeSolver(path);
+      for (String qualifedClassName : jarSolver.getKnownClasses()) {
+        String relativePath = qualifedClassName.replace(".", "/") + ".java";
+        String absolutePath = outPutDirectory + relativePath;
+        Path filePath = Paths.get(absolutePath);
+        if (Files.exists(filePath)) {
+          pathsOfFile.add(filePath);
+        }
+      }
+    }
+    return pathsOfFile;
   }
 
   /**
