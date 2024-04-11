@@ -7,8 +7,8 @@ public enum Simple {
 
     // target. Goal of this test is to avoid crashing.
     void bar() {
-        Simple.A;
-        Simple.B;
-        Simple.CHAR;
+        Simple s1 = Simple.A;
+        Simple s2 = Simple.B;
+        String s3 = Simple.CHAR;
     }
 }

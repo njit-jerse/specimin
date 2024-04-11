@@ -6,8 +6,8 @@ public enum Simple {
     private static final String CHAR = null;
 
     void bar() {
-        Simple.A;
-        Simple.B;
-        Simple.CHAR;
+        Simple s1 = Simple.A;
+        Simple s2 = Simple.B;
+        String s3 = Simple.CHAR;
     }
 }
