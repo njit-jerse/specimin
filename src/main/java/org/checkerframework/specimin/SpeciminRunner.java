@@ -195,15 +195,13 @@ public class SpeciminRunner {
       updateStaticSolver(root, jarPaths);
       parsedTargetFiles = new HashMap<>();
       for (String targetFile : targetFiles) {
-        try {
-          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-        } catch (ParseProblemException e) {
-          // VineFlower is not perfect at decompiling Java files.
-          continue;
-        }
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        // VineFlower creates additional files from the Java language, which should be ignored.
+        if (!targetFile.startsWith("java.")) {
+          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        }
       }
       UnsolvedSymbolVisitorProgress workDoneAfterIteration =
           new UnsolvedSymbolVisitorProgress(
