@@ -224,7 +224,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * Check whether the visitor is inside the declaration of a target method or field. Symbols inside
-   * the declarations of target methods will be solved if they have one of the following types:
+   * the declarations of target members will be solved if they have one of the following types:
    * ClassOrInterfaceType, Parameters, VariableDeclarator, MethodCallExpr, FieldAccessExpr,
    * ExplicitConstructorInvocationStmt, NameExpr, MethodDeclaration, and ObjectCreationExpr.
    */

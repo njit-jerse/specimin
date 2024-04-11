@@ -344,15 +344,9 @@ public class SpeciminRunner {
             existingClassesToFilePath);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
-      System.out.println(cu);
-    }
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(mustImplementMethodsVisitor, null);
     }
 
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      System.out.println(cu);
-    }
     PrunerVisitor methodPruner =
         new PrunerVisitor(
             finder.getTargetMethods(),

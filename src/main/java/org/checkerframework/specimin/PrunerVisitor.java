@@ -218,8 +218,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
     decl = minimizeTypeParameters(decl);
     String classQualifiedName = decl.resolve().getQualifiedName();
-    System.out.println(classQualifiedName);
-    System.out.println(classesUsedByTargetMethods);
     if (!classesUsedByTargetMethods.contains(classQualifiedName)) {
       decl.remove();
       return decl;
