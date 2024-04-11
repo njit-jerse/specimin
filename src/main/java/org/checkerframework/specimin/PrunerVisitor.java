@@ -37,6 +37,7 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
@@ -56,6 +57,12 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * those returned by ResolvedMethodDeclaration#getQualifiedSignature.
    */
   private Set<String> methodsToLeaveUnchanged;
+
+  /**
+   * The fields that should NOT be touched by this pruner. The strings representing the field are
+   * obtained by combining the qualified name of the current class and the name of the field.
+   */
+  private Set<String> fieldsToLeaveUnchanged;
 
   /**
    * The members, fields and methods, to be pruned. For methods, the bodies are removed. For fields,
@@ -111,6 +118,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    */
   public PrunerVisitor(
       Set<String> methodsToKeep,
+      List<String> fieldsToKeep,
       Set<String> membersToEmpty,
       Set<String> classesUsedByTargetMethods,
       Set<String> resolvedYetStuckMethodCall,
@@ -119,6 +127,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
     this.classAndUnresolvedInterface = classAndUnresolvedInterface;
+    this.fieldsToLeaveUnchanged = new HashSet<>();
+    fieldsToLeaveUnchanged.addAll(fieldsToKeep);
     Set<String> toRemove = new HashSet<>();
     for (String classUsedByTargetMethods : classesUsedByTargetMethods) {
       if (classUsedByTargetMethods.contains("<")) {
@@ -208,6 +218,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
     decl = minimizeTypeParameters(decl);
     String classQualifiedName = decl.resolve().getQualifiedName();
+    System.out.println(classQualifiedName);
+    System.out.println(classesUsedByTargetMethods);
     if (!classesUsedByTargetMethods.contains(classQualifiedName)) {
       decl.remove();
       return decl;
@@ -386,7 +398,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
       String varFullName = classFullName + "#" + declarator.getNameAsString();
 
-      if (membersToEmpty.contains(varFullName)) {
+      if (fieldsToLeaveUnchanged.contains(varFullName)) {
+        continue;
+      } else if (membersToEmpty.contains(varFullName)) {
         declarator.removeInitializer();
         if (isFinal) {
           declarator.setInitializer(getBasicInitializer(declarator.getType()));

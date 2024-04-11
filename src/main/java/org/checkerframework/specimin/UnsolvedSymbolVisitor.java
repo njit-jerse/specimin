@@ -213,6 +213,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private final Set<String> targetMethodsSignatures;
 
+  /** List of signatures of target fields as specified by users. */
+  private final Set<String> targetFieldsSignatures;
+
   /**
    * Fields and methods that could be called inside the target methods. We call them potential-used
    * because the usage check is simply based on the simple names of those members.
@@ -220,12 +223,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private final Set<String> potentialUsedMembers = new HashSet<>();
 
   /**
-   * Check whether the visitor is inside the declaration of a target method. Symbols inside the
-   * declarations of target methods will be solved if they have one of the following types:
+   * Check whether the visitor is inside the declaration of a target method or field. Symbols inside
+   * the declarations of target methods will be solved if they have one of the following types:
    * ClassOrInterfaceType, Parameters, VariableDeclarator, MethodCallExpr, FieldAccessExpr,
    * ExplicitConstructorInvocationStmt, NameExpr, MethodDeclaration, and ObjectCreationExpr.
    */
-  private boolean insideTargetMethod = false;
+  private boolean insideTargetMember = false;
 
   /**
    * Check whether the visitor is inside the declaration of a member that could be used by the
@@ -249,7 +252,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public UnsolvedSymbolVisitor(
       String rootDirectory,
       Map<String, Path> existingClassesToFilePath,
-      List<String> targetMethodsSignatures) {
+      List<String> targetMethodsSignatures,
+      List<String> targetFieldsSignature) {
     this.rootDirectory = rootDirectory;
     this.gotException = true;
     this.existingClassesToFilePath = existingClassesToFilePath;
@@ -257,6 +261,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     for (String methodSignature : targetMethodsSignatures) {
       this.targetMethodsSignatures.add(methodSignature.replaceAll("\\s", ""));
     }
+    this.targetFieldsSignatures = new HashSet<>();
+    this.targetFieldsSignatures.addAll(targetFieldsSignature);
   }
 
   /**
@@ -502,7 +508,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (node.isThis()) {
       return super.visit(node, arg);
     }
-    if (!insideTargetMethod) {
+    if (!insideTargetMember) {
       return super.visit(node, arg);
     }
     try {
@@ -652,7 +658,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (potentialUsedMembers.contains(decl.getName().asString())) {
       insidePotentialUsedMember = true;
     }
-    if (!insideTargetMethod && !insidePotentialUsedMember) {
+    if (!insideTargetMember && !insidePotentialUsedMember) {
       return super.visit(decl, p);
     }
 
@@ -698,7 +704,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr node, Void arg) {
-    if (!insideTargetMethod) {
+    if (!insideTargetMember) {
       return super.visit(node, arg);
     }
     String name = node.getNameAsString();
@@ -764,6 +770,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             this.setInitialValueForVariableDeclaration(variableType, variableDeclaration);
       }
       variablesAndDeclaration.put(variableName, variableDeclaration);
+
+      if (targetFieldsSignatures.contains(
+          currentClassQualifiedName + "#" + var.getNameAsString())) {
+        insideTargetMember = true;
+      }
     }
     return super.visit(node, arg);
   }
@@ -777,14 +788,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + "#"
             + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
-    boolean oldInsideTargetMethod = insideTargetMethod;
+    boolean oldInsideTargetMember = insideTargetMember;
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replace("\\s", ""))) {
-      insideTargetMethod = true;
+      insideTargetMember = true;
     }
     addTypeVariableScope(node.getTypeParameters());
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
-    insideTargetMethod = oldInsideTargetMethod;
+    insideTargetMember = oldInsideTargetMember;
     return result;
   }
 
@@ -797,10 +808,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
-      boolean oldInsideTargetMethod = insideTargetMethod;
-      insideTargetMethod = true;
+      boolean oldInsideTargetMember = insideTargetMember;
+      insideTargetMember = true;
       Visitable result = processMethodDeclaration(node);
-      insideTargetMethod = oldInsideTargetMethod;
+      insideTargetMember = oldInsideTargetMember;
       return result;
     } else if (potentialUsedMembers.contains(methodSimpleName)) {
       boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
@@ -808,7 +819,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       Visitable result = processMethodDeclaration(node);
       insidePotentialUsedMember = oldInsidePotentialUsedMember;
       return result;
-    } else if (insideTargetMethod) {
+    } else if (insideTargetMember) {
       return processMethodDeclaration(node);
     } else {
       return super.visit(node, arg);
@@ -817,7 +828,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldAccessExpr node, Void p) {
-    if (!insideTargetMethod) {
+    if (!insideTargetMember) {
       return super.visit(node, p);
     }
     potentialUsedMembers.add(node.getNameAsString());
@@ -860,7 +871,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
-    if (!insideTargetMethod) {
+    if (!insideTargetMember) {
       return super.visit(method, p);
     }
     potentialUsedMembers.add(method.getName().asString());
@@ -934,10 +945,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // this is a bit hacky, but we don't remove any enum constant declarations if they are ever
     // used, so it's safer to just preserve anything that they use by pretending that we're inside a
     // target method.
-    boolean oldInsideTargetMethod = insideTargetMethod;
-    insideTargetMethod = true;
+    boolean oldInsideTargetMember = insideTargetMember;
+    insideTargetMember = true;
     Visitable result = super.visit(expr, p);
-    insideTargetMethod = oldInsideTargetMethod;
+    insideTargetMember = oldInsideTargetMember;
     return result;
   }
 
@@ -959,7 +970,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
       return super.visit(typeExpr, p);
     }
-    if (!insideTargetMethod && !insidePotentialUsedMember) {
+    if (!insideTargetMember && !insidePotentialUsedMember) {
       return super.visit(typeExpr, p);
     }
     if (isTypeVar(typeExpr.getName().asString())) {
@@ -1014,7 +1025,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(Parameter parameter, Void p) {
-    if (!insidePotentialUsedMember && !insideTargetMethod) {
+    if (!insidePotentialUsedMember && !insideTargetMember) {
       return super.visit(parameter, p);
     }
     try {
@@ -1043,7 +1054,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
-    if (!insideTargetMethod) {
+    if (!insideTargetMember) {
       return super.visit(newExpr, p);
     }
     SimpleName typeName = newExpr.getType().getName();

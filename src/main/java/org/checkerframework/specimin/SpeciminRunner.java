@@ -60,6 +60,10 @@ public class SpeciminRunner {
     // class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
     OptionSpec<String> targetMethodsOption = optionParser.accepts("targetMethod").withRequiredArg();
 
+    // This option is the target fields, specified in the format
+    // class.fully.qualified.Name#fieldName
+    OptionSpec<String> targetFieldsOptions = optionParser.accepts("targetField").withRequiredArg();
+
     // The directory in which to output the results.
     OptionSpec<String> outputDirectoryOption =
         optionParser.accepts("outputDirectory").withRequiredArg();
@@ -77,6 +81,7 @@ public class SpeciminRunner {
         options.valuesOf(targetFilesOption),
         jarFiles,
         options.valuesOf(targetMethodsOption),
+        options.valuesOf(targetFieldsOptions),
         options.valueOf(outputDirectoryOption));
   }
 
@@ -89,6 +94,7 @@ public class SpeciminRunner {
    * @param targetFiles A list of files that contain the target methods.
    * @param jarPaths Paths to relevant JAR files.
    * @param targetMethodNames A set of target method names to be preserved.
+   * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
    * @throws IOException if there is an exception
    */
@@ -97,6 +103,7 @@ public class SpeciminRunner {
       List<String> targetFiles,
       List<String> jarPaths,
       List<String> targetMethodNames,
+      List<String> targetFieldNames,
       String outputDirectory)
       throws IOException {
 
@@ -152,7 +159,8 @@ public class SpeciminRunner {
       }
     }
     UnsolvedSymbolVisitor addMissingClass =
-        new UnsolvedSymbolVisitor(root, existingClassesToFilePath, targetMethodNames);
+        new UnsolvedSymbolVisitor(
+            root, existingClassesToFilePath, targetMethodNames, targetFieldNames);
     addMissingClass.setClassesFromJar(jarPaths);
 
     // The set of path of files that have been created by addMissingClass. We will delete all those
@@ -256,7 +264,10 @@ public class SpeciminRunner {
 
     TargetMethodFinderVisitor finder =
         new TargetMethodFinderVisitor(
-            targetMethodNames, nonPrimaryClassesToPrimaryClass, enumVisitor.getUsedEnum());
+            targetMethodNames,
+            targetFieldNames,
+            nonPrimaryClassesToPrimaryClass,
+            enumVisitor.getUsedEnum());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
@@ -331,13 +342,21 @@ public class SpeciminRunner {
             solveMethodOverridingVisitor.getUsedMembers(),
             updatedUsedClass,
             existingClassesToFilePath);
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      System.out.println(cu);
+    }
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(mustImplementMethodsVisitor, null);
     }
 
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      System.out.println(cu);
+    }
     PrunerVisitor methodPruner =
         new PrunerVisitor(
             finder.getTargetMethods(),
+            targetFieldNames,
             mustImplementMethodsVisitor.getUsedMembers(),
             mustImplementMethodsVisitor.getUsedClass(),
             finder.getResolvedYetStuckMethodCall(),

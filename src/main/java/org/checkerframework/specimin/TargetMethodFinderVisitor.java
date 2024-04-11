@@ -6,6 +6,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -54,11 +55,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   private Set<String> targetMethodNames;
 
+  /** The names of the target fields. The format is class.fully.qualified.Name#fieldName. */
+  private Set<String> targetFieldNames;
+
   /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
    * is set by {@link #visit(MethodDeclaration, Void)}.
    */
-  private boolean insideTargetMethod = false;
+  private boolean insideTargetMember = false;
 
   /** The fully-qualified name of the class currently being visited. */
   private String classFQName = "";
@@ -130,18 +134,23 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *
    * @param methodNames the names of the target methods, the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * @param fieldNames the names of the target fields, the format is
+   *     class.fully.qualified.Name#fieldName
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
    * @param usedTypeElement set of type elements used by target methods.
    */
   public TargetMethodFinderVisitor(
       List<String> methodNames,
+      List<String> fieldNames,
       Map<String, String> nonPrimaryClassesToPrimaryClass,
       Set<String> usedTypeElement) {
     targetMethodNames = new HashSet<>();
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
+    targetFieldNames = new HashSet<>();
+    targetFieldNames.addAll(fieldNames);
     unfoundMethods = new HashMap<>(methodNames.size());
     targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
     importedClassToPackage = new HashMap<>();
@@ -287,9 +296,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
-    boolean oldInsideTargetMethod = insideTargetMethod;
+    boolean oldInsideTargetMember = insideTargetMember;
     if (this.targetMethodNames.contains(methodName)) {
-      insideTargetMethod = true;
+      insideTargetMember = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
@@ -301,7 +310,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       updateUnfoundMethods(methodName);
     }
     Visitable result = super.visit(method, p);
-    insideTargetMethod = oldInsideTargetMethod;
+    insideTargetMember = oldInsideTargetMember;
 
     if (method.getParentNode().isEmpty()) {
       return result;
@@ -324,18 +333,30 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(VariableDeclarator node, Void arg) {
     declaredNames.add(node.getNameAsString());
+
+    if (node.getParentNode().isPresent()
+        && node.getParentNode().get() instanceof FieldDeclaration) {
+      if (targetFieldNames.contains(this.classFQName + "#" + node.getNameAsString())) {
+        boolean oldInsideTargetMember = insideTargetMember;
+        insideTargetMember = true;
+        Visitable result = super.visit(node, arg);
+        usedTypeElement.add(this.classFQName);
+        insideTargetMember = oldInsideTargetMember;
+        return result;
+      }
+    }
     return super.visit(node, arg);
   }
 
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
-    boolean oldInsideTargetMethod = insideTargetMethod;
+    boolean oldInsideTargetMember = insideTargetMember;
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
     String methodWithoutReturnAndAnnos = removeMethodReturnTypeAndAnnotations(methodDeclAsString);
     String methodName = this.classFQName + "#" + methodWithoutReturnAndAnnos;
     // this method belongs to an anonymous class inside the target method
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       Node parentNode = method.getParentNode().get();
       // it could also be an enum declaration, but those are handled separately
       if (parentNode instanceof ObjectCreationExpr) {
@@ -356,7 +377,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
-      insideTargetMethod = true;
+      insideTargetMember = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       // make sure that differences in spacing does not interfere with the result
       for (String unfound : unfoundMethods.keySet()) {
@@ -383,13 +404,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       updateUnfoundMethods(methodName);
     }
     Visitable result = super.visit(method, p);
-    insideTargetMethod = oldInsideTargetMethod;
+    insideTargetMember = oldInsideTargetMember;
     return result;
   }
 
   @Override
   public Visitable visit(Parameter para, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       Type type = para.getType();
       // an unknown type plays the role of a null object for lambda parameters that have no explicit
       // type declared. However, we also want to avoid trying to solve declared lambda params (it
@@ -448,7 +469,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodReferenceExpr ref, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       ResolvedMethodDeclaration decl = ref.resolve();
       preserveMethodDecl(decl);
     }
@@ -457,7 +478,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr call, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       ResolvedMethodDeclaration decl;
       try {
         decl = call.resolve();
@@ -523,7 +544,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceType type, Void p) {
-    if (!insideTargetMethod) {
+    if (!insideTargetMember) {
       return super.visit(type, p);
     }
     try {
@@ -542,7 +563,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       ResolvedConstructorDeclaration resolved = newExpr.resolve();
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
@@ -555,7 +576,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt expr, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       ResolvedConstructorDeclaration resolved = expr.resolve();
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
@@ -572,12 +593,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (parentNode instanceof EnumDeclaration) {
       if (usedTypeElement.contains(
           ((EnumDeclaration) parentNode).asEnumDeclaration().getFullyQualifiedName().get())) {
-        boolean oldInsideTargetMethod = insideTargetMethod;
+        boolean oldInsideTargetMember = insideTargetMember;
         // used enum constant are not strictly target methods, but we need to make sure the symbols
         // inside them are preserved.
-        insideTargetMethod = true;
+        insideTargetMember = true;
         Visitable result = super.visit(enumConstantDeclaration, p);
-        insideTargetMethod = oldInsideTargetMethod;
+        insideTargetMember = oldInsideTargetMember;
         return result;
       }
     }
@@ -586,7 +607,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldAccessExpr expr, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       String fullNameOfClass;
       if (updateUsedClassAndMemberForEnumConstant(expr)) {
         return super.visit(expr, p);
@@ -620,7 +641,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr expr, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       Optional<Node> parentNode = expr.getParentNode();
       if (parentNode.isEmpty() || !(parentNode.get() instanceof FieldAccessExpr)) {
         updateUsedElementWithPotentialFieldNameExpr(expr);
