@@ -33,6 +33,7 @@ import java.util.stream.Stream;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
@@ -113,17 +114,21 @@ public class SpeciminRunner {
     // Keys are paths to files, values are parsed ASTs
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      try {
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      } catch (Exception e) {
+        throw new Error("Crash here!");
+      }
     }
 
-    // Set<Path> additionalClassesCreatedFromJar = new HashSet<>();
     if (!jarPaths.isEmpty()) {
-
       List<String> argsToDecompile = new ArrayList<>();
       argsToDecompile.add("--silent");
       argsToDecompile.addAll(jarPaths);
       argsToDecompile.add(root);
       ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
+      // delete unneccessary legal files
+      FileUtils.deleteDirectory(new File(root + "META-INF"));
     }
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
@@ -194,12 +199,17 @@ public class SpeciminRunner {
       updateStaticSolver(root, jarPaths);
       parsedTargetFiles = new HashMap<>();
       for (String targetFile : targetFiles) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        try {
+          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        } catch (Exception e) {
+          throw new Error("Crash here1!");
+        }
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        // VineFlower creates additional files from the Java language, which should be ignored.
-        if (!targetFile.startsWith("java.")) {
+        try {
           parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        } catch (Exception e) {
+          throw new Error("Crash here2!");
         }
       }
       UnsolvedSymbolVisitorProgress workDoneAfterIteration =
@@ -306,7 +316,11 @@ public class SpeciminRunner {
       // directories already in parsedTargetFiles are original files in the root directory, we are
       // not supposed to update them.
       if (!parsedTargetFiles.containsKey(directory)) {
-        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+        try {
+          parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+        } catch (Exception e) {
+          throw new Error("Crash here4!");
+        }
       }
     }
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
@@ -323,7 +337,11 @@ public class SpeciminRunner {
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
         // create synthetic files for them
         if (thisFile.exists()) {
-          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          try {
+            parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          } catch (Exception e) {
+            throw new Error("Crash here222!");
+          }
         }
       }
       classToFindInheritance = inheritancePreserve.getAddedClasses();
