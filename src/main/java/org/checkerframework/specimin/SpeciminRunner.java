@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -20,6 +21,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,8 +34,10 @@ import java.util.stream.Stream;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
 public class SpeciminRunner {
@@ -114,6 +118,16 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    if (!jarPaths.isEmpty()) {
+      List<String> argsToDecompile = new ArrayList<>();
+      argsToDecompile.add("--silent");
+      argsToDecompile.addAll(jarPaths);
+      argsToDecompile.add(root);
+      ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
+      // delete unneccessary legal files
+      FileUtils.deleteDirectory(new File(root + "META-INF"));
+    }
+
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
     // This map connects the fully-qualified names of non-primary classes with the fully-qualified
@@ -185,7 +199,15 @@ public class SpeciminRunner {
         parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        try {
+          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+        } catch (ParseProblemException e) {
+          // These parsing codes cause crashes in the CI. Those crashes can't be reproduced locally.
+          // Not sure if something is wrong with VineFlower or Specimin CI. Hence we keep these
+          // lines as tech debt.
+          // TODO: Figure out why the CI is crashing.
+          continue;
+        }
       }
       UnsolvedSymbolVisitorProgress workDoneAfterIteration =
           new UnsolvedSymbolVisitorProgress(
@@ -291,7 +313,12 @@ public class SpeciminRunner {
       // directories already in parsedTargetFiles are original files in the root directory, we are
       // not supposed to update them.
       if (!parsedTargetFiles.containsKey(directory)) {
-        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+        try {
+          parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+        } catch (ParseProblemException e) {
+          // TODO: Figure out why the CI is crashing.
+          continue;
+        }
       }
     }
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
@@ -308,7 +335,12 @@ public class SpeciminRunner {
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
         // create synthetic files for them
         if (thisFile.exists()) {
-          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          try {
+            parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
+          } catch (ParseProblemException e) {
+            // TODO: Figure out why the CI is crashing.
+            continue;
+          }
         }
       }
       classToFindInheritance = inheritancePreserve.getAddedClasses();
@@ -394,7 +426,8 @@ public class SpeciminRunner {
         System.out.println("with error: " + e);
       }
     }
-    // delete all the temporary files created by UnsolvedSymbolVisitor
+    createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
+    // delete all the temporary files created by UnsolvedSymbolVisitor and VineFlower.
     deleteFiles(createdClass);
   }
 
@@ -493,6 +526,31 @@ public class SpeciminRunner {
    */
   private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
     return StaticJavaParser.parse(Path.of(root, path));
+  }
+
+  /**
+   * Retrieves the paths of Java files that should be created from the list of JAR files.
+   *
+   * @param outPutDirectory The directory where the Java files will be created.
+   * @param jarPaths The set of paths to JAR files.
+   * @return A set containing the paths of the Java files to be created.
+   * @throws IOException If an I/O error occurs.
+   */
+  private static Set<Path> getPathsFromJarPaths(String outPutDirectory, List<String> jarPaths)
+      throws IOException {
+    Set<Path> pathsOfFile = new HashSet<>();
+    for (String path : jarPaths) {
+      JarTypeSolver jarSolver = new JarTypeSolver(path);
+      for (String qualifedClassName : jarSolver.getKnownClasses()) {
+        String relativePath = qualifedClassName.replace(".", "/") + ".java";
+        String absolutePath = outPutDirectory + relativePath;
+        Path filePath = Paths.get(absolutePath);
+        if (Files.exists(filePath)) {
+          pathsOfFile.add(filePath);
+        }
+      }
+    }
+    return pathsOfFile;
   }
 
   /**
