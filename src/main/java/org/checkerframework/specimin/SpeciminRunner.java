@@ -114,11 +114,7 @@ public class SpeciminRunner {
     // Keys are paths to files, values are parsed ASTs
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
-      try {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-      } catch (Exception e) {
-        throw new Error("Crash here!");
-      }
+      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
     if (!jarPaths.isEmpty()) {
@@ -199,17 +195,12 @@ public class SpeciminRunner {
       updateStaticSolver(root, jarPaths);
       parsedTargetFiles = new HashMap<>();
       for (String targetFile : targetFiles) {
-        try {
-          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-        } catch (Exception e) {
-          throw new Error("Crash here1!");
-        }
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
       }
       for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        try {
+        if (!targetFile.startsWith("java.")) {
+          // VineFlower might create class files for classes from the Java language
           parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-        } catch (Exception e) {
-          throw new Error("Crash here2!");
         }
       }
       UnsolvedSymbolVisitorProgress workDoneAfterIteration =
@@ -315,12 +306,10 @@ public class SpeciminRunner {
     for (String directory : relatedClass) {
       // directories already in parsedTargetFiles are original files in the root directory, we are
       // not supposed to update them.
-      if (!parsedTargetFiles.containsKey(directory)) {
-        try {
-          parsedTargetFiles.put(directory, parseJavaFile(root, directory));
-        } catch (Exception e) {
-          throw new Error("Crash here4!");
-        }
+      // VineFlower might create class files for classes from the Java language
+
+      if (!parsedTargetFiles.containsKey(directory) && !directory.startsWith("java.")) {
+        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
       }
     }
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
@@ -337,11 +326,7 @@ public class SpeciminRunner {
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
         // create synthetic files for them
         if (thisFile.exists()) {
-          try {
-            parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
-          } catch (Exception e) {
-            throw new Error("Crash here222!");
-          }
+          parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
         }
       }
       classToFindInheritance = inheritancePreserve.getAddedClasses();
