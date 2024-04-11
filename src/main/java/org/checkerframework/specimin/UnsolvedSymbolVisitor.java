@@ -1532,7 +1532,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // Note that this could also be an interface (if it is used in an implements clause elsewhere).
-        // updateMissingClass is responsible for fixing this upper later after we encounter the
+        // updateMissingClass is responsible for fixing this up later after we encounter the
         // relevant implements clause.
         updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false, false);
       }
