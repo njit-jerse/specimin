@@ -1,6 +1,5 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -509,11 +508,7 @@ public class SpeciminRunner {
    *     error
    */
   private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
-    try {
-      return StaticJavaParser.parse(Path.of(root, path));
-    } catch (ParseProblemException e) {
-      throw new Error(root + "." + path + " can not be parsed!");
-    }
+    return StaticJavaParser.parse(Path.of(root, path));
   }
 
   /**
