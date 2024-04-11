@@ -46,7 +46,7 @@ public class UnsolvedClassOrInterface {
   private @Nullable String extendsClause;
 
   /** This field records if the class is an interface */
-  private final boolean isAnInterface;
+  private boolean isAnInterface;
 
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
@@ -105,6 +105,14 @@ public class UnsolvedClassOrInterface {
    */
   public boolean isAnInterface() {
     return isAnInterface;
+  }
+
+  /**
+   * Sets isAnInterface to true. isAnInterface is monotonic: it can start as false and become true
+   * (because we encounter an implements clause), but it can never go from true to false.
+   */
+  public void setIsAnInterfaceToTrue() {
+    this.isAnInterface = true;
   }
 
   /**

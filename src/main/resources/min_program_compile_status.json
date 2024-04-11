@@ -4,7 +4,6 @@
   "cf-6077": "PASS",
   "cf-6060": "PASS",
   "cf-6030": "PASS",
-  "cf-6030b": "PASS",
   "cf-6019": "PASS",
   "cf-4614": "PASS",
   "cf-3850": "PASS",
@@ -16,5 +15,8 @@
   "cf-3022": "PASS",
   "cf-691": "PASS",
   "Issue689": "PASS",
-  "cf-6388": "PASS"
+  "cf-6388": "PASS",
+  "cf-3025": "FAIL",
+  "jdk-8319461": "PASS",
+  "jdk-8288590": "FAIL"
 }
