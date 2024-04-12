@@ -75,6 +75,7 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
           }
         }
       }
+
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
         try {
           // Including a non-primary to primary map in this context may lead to an infinite loop,
@@ -89,9 +90,30 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
                   typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
             }
           }
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          continue;
         }
-        // since Specimin does not create synthetic inheritance for interfaces.
-        catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      }
+
+      for (ClassOrInterfaceType implementedType : decl.getImplementedTypes()) {
+        try {
+          String interfacename = implementedType.resolve().describe();
+          if (interfacename.startsWith("java.")) {
+            // Avoid keeping implementations of java.* classes, because those
+            // would require us to actually implement them (we can't remove things
+            // from their definitions). This might technically break our guarantees, but it works
+            // in practice. TODO: fix this up
+            continue;
+          }
+          TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+              interfacename, addedClasses, new HashMap<>());
+          if (implementedType.getTypeArguments().isPresent()) {
+            for (Type typeAgrument : implementedType.getTypeArguments().get()) {
+              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+                  typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
+            }
+          }
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
           continue;
         }
       }
