@@ -59,11 +59,10 @@ public class UnsolvedClassOrInterface {
    */
   public static class UnsolvedInnerClass extends UnsolvedClassOrInterface {
     /**
-     * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name
-     * and any generics attached to it.
+     * Create an instance of UnsolvedInnerClass.
      *
-     * @param className the name of the class, possibly followed by a set of type arguments
-     * @param packageName the name of the package
+     * @param className the name of the inner class, possibly followed by a set of type arguments
+     * @param packageName the name of the package containing the outer class
      */
     public UnsolvedInnerClass(String className, String packageName) {
       super(className, packageName);
