@@ -791,11 +791,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         ResolvedType nameExprType = node.resolve().getType();
         if (nameExprType.isReferenceType()) {
           ResolvedReferenceType nameExprReferenceType = nameExprType.asReferenceType();
-          try {
-            nameExprReferenceType.getAllAncestors();
-          } catch (UnsolvedSymbolException e) {
-            return super.visit(node, arg);
-          }
+          nameExprReferenceType.getAllAncestors();
           if (!hasResolvedTypeParameters(nameExprReferenceType)) {
             gotException();
           }
@@ -1511,6 +1507,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parent instanceof EnumDeclaration) {
         return false;
       }
+      node = parent;
     }
     throw new RuntimeException("Got a node with no containing class!");
   }
