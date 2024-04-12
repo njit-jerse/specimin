@@ -2371,7 +2371,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         UnsolvedClassOrInterface e = iterator.next();
         if (e.getClassName().equals(outerClassName)) {
 
-          UnsolvedClassOrInterface innerClass = new UnsolvedClassOrInterface(innerClassName, null);
+          UnsolvedClassOrInterface innerClass =
+              new UnsolvedClassOrInterface.UnsolvedInnerClass(innerClassName, e.getPackageName());
 
           // TODO: this code is intentionally duplicated from what's just below. After the ISSTA
           // deadline, clean up this technical debt.

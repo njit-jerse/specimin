@@ -33,9 +33,9 @@ public class UnsolvedClassOrInterface {
 
   /**
    * The name of the package of the class. We rely on the import statements from the source codes to
-   * guess the package name. Null if this is an inner class.
+   * guess the package name.
    */
-  private final @Nullable String packageName;
+  private final String packageName;
 
   /** This field records the number of type variables for this class */
   private int numberOfTypeVariables = 0;
@@ -51,6 +51,24 @@ public class UnsolvedClassOrInterface {
 
   /** This class' inner classes. */
   private @MonotonicNonNull Set<UnsolvedClassOrInterface> innerClasses = null;
+
+  /**
+   * This class' constructor should be used for creating inner classes. Frankly, this design is a
+   * mess (sorry) - controlling whether this is an inner class via inheritance is probably bad.
+   * TODO: clean this up after ISSTA.
+   */
+  public static class UnsolvedInnerClass extends UnsolvedClassOrInterface {
+    /**
+     * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name
+     * and any generics attached to it.
+     *
+     * @param className the name of the class, possibly followed by a set of type arguments
+     * @param packageName the name of the package
+     */
+    public UnsolvedInnerClass(String className, String packageName) {
+      super(className, packageName);
+    }
+  }
 
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
@@ -321,7 +339,9 @@ public class UnsolvedClassOrInterface {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    if (packageName != null) {
+    // TODO: this test is very, very bad practice and makes this class
+    // not reusable. Find a better way to do this after ISSTA.
+    if (this.getClass() != UnsolvedInnerClass.class) {
       sb.append("package ").append(packageName).append(";\n");
     }
     if (isAnInterface) {
