@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
@@ -47,6 +48,26 @@ public class UnsolvedClassOrInterface {
 
   /** This field records if the class is an interface */
   private boolean isAnInterface;
+
+  /** This class' inner classes. */
+  private @MonotonicNonNull Set<UnsolvedClassOrInterface> innerClasses = null;
+
+  /**
+   * This class' constructor should be used for creating inner classes. Frankly, this design is a
+   * mess (sorry) - controlling whether this is an inner class via inheritance is probably bad.
+   * TODO: clean this up after ISSTA.
+   */
+  public static class UnsolvedInnerClass extends UnsolvedClassOrInterface {
+    /**
+     * Create an instance of UnsolvedInnerClass.
+     *
+     * @param className the name of the inner class, possibly followed by a set of type arguments
+     * @param packageName the name of the package containing the outer class
+     */
+    public UnsolvedInnerClass(String className, String packageName) {
+      super(className, packageName);
+    }
+  }
 
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
@@ -283,6 +304,19 @@ public class UnsolvedClassOrInterface {
     return successfullyUpdated;
   }
 
+  /**
+   * Add the given class as an inner class to this class.
+   *
+   * @param innerClass the inner class to add
+   */
+  public void addInnerClass(UnsolvedClassOrInterface innerClass) {
+    if (this.innerClasses == null) {
+      // LinkedHashSet to make the iteration order deterministic.
+      this.innerClasses = new LinkedHashSet<>(1);
+    }
+    this.innerClasses.add(innerClass);
+  }
+
   @Override
   public boolean equals(@Nullable Object other) {
     if (!(other instanceof UnsolvedClassOrInterface)) {
@@ -309,7 +343,11 @@ public class UnsolvedClassOrInterface {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("package ").append(packageName).append(";\n");
+    // TODO: this test is very, very bad practice and makes this class
+    // not reusable. Find a better way to do this after ISSTA.
+    if (this.getClass() != UnsolvedInnerClass.class) {
+      sb.append("package ").append(packageName).append(";\n");
+    }
     if (isAnInterface) {
       // For synthetic interfaces created for lambdas only.
       if (methods.size() == 1
@@ -325,6 +363,11 @@ public class UnsolvedClassOrInterface {
       sb.append(" " + extendsClause);
     }
     sb.append(" {\n");
+    if (innerClasses != null) {
+      for (UnsolvedClassOrInterface innerClass : innerClasses) {
+        sb.append(innerClass.toString());
+      }
+    }
     for (String variableDeclarations : classFields) {
       sb.append("    " + "public " + variableDeclarations + ";\n");
     }

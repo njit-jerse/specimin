@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -69,6 +70,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -733,9 +735,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // class name.
       // This is the fully-qualified case.
       if (elements.size() > 1) {
-        @SuppressWarnings("signature") // since this type is in a fully-qualfied form
-        @FullyQualifiedName String qualifiedTypeName = typeAsString;
-        updateMissingClass(getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName));
+        int typeParamIndex = typeAsString.indexOf('<');
+        int typeParamCount = -1;
+        if (typeParamIndex != -1) {
+          ClassOrInterfaceType asType = StaticJavaParser.parseClassOrInterfaceType(typeAsString);
+          typeParamCount = asType.getTypeArguments().get().size();
+          typeAsString = typeAsString.substring(0, typeParamIndex);
+        }
+
+        @SuppressWarnings(
+            "signature") // since this type is in a fully-qualified form, or we make it
+        // fully-qualified
+        @FullyQualifiedName String qualifiedTypeName =
+            typeAsString.contains(".")
+                ? typeAsString
+                : getPackageFromClassName(typeAsString) + "." + typeAsString;
+        UnsolvedClassOrInterface unsolved =
+            getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+        if (typeParamCount != -1) {
+          unsolved.setNumberOfTypeVariables(typeParamCount);
+        }
+        updateMissingClass(unsolved);
       } else if (isTypeVar(typeAsString)) {
         // Nothing to do in this case, but we need to skip creating an unsolved class.
       }
@@ -827,7 +847,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
       if (targetFieldsSignatures.contains(
           currentClassQualifiedName + "#" + var.getNameAsString())) {
+        boolean oldInsideTargetMember = insideTargetMember;
         insideTargetMember = true;
+        Visitable result = super.visit(node, arg);
+        insideTargetMember = oldInsideTargetMember;
+        return result;
       }
     }
     return super.visit(node, arg);
@@ -1108,8 +1132,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
+    String oldClassName = className;
     if (!insideTargetMember) {
-      return super.visit(newExpr, p);
+      if (newExpr.getAnonymousClassBody().isPresent()) {
+        // Need to do data structure maintenance
+        className = newExpr.getType().getName().asString();
+      }
+      Visitable result = super.visit(newExpr, p);
+      className = oldClassName;
+      return result;
     }
     SimpleName typeName = newExpr.getType().getName();
     String type = typeName.asString();
@@ -1117,7 +1148,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isFromAJarFile(newExpr)) {
         updateClassesFromJarSourcesForObjectCreation(newExpr);
       }
-      return super.visit(newExpr, p);
+      if (newExpr.getAnonymousClassBody().isPresent()) {
+        // Need to do data structure maintenance
+        className = newExpr.getType().getName().asString();
+      }
+      Visitable result = super.visit(newExpr, p);
+      className = oldClassName;
+      return result;
     }
     gotException();
     try {
@@ -1128,7 +1165,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
-    return super.visit(newExpr, p);
+    if (newExpr.getAnonymousClassBody().isPresent()) {
+      // Need to do data structure maintenance
+      className = newExpr.getType().getName().asString();
+    }
+    Visitable result = super.visit(newExpr, p);
+    className = oldClassName;
+    return result;
   }
 
   /**
@@ -1255,12 +1298,33 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (typeArguments.isPresent()) {
       numberOfArguments = typeArguments.get().size();
       for (Type typeArgument : typeArguments.get()) {
-        if (isTypeVar(typeArgument.toString())) {
-          preferredTypeVariables.add(typeArgument.toString());
+        String typeArgStandardForm = typeArgument.toString();
+        if (typeArgStandardForm.contains("@")) {
+          // Remove annotations
+          List<String> split = List.of(typeArgStandardForm.split("\\s"));
+          typeArgStandardForm =
+              split.stream().filter(s -> !s.startsWith("@")).collect(Collectors.joining(" "));
+        }
+        if (typeArgStandardForm.startsWith("? extends ")) {
+          // there are 10 characters in "? extends ". The idea here is that users sometimes need
+          // to add a wildcard to annotate a typevar - so "V" might be expressed as "@X ? extends
+          // V".
+          typeArgStandardForm = typeArgStandardForm.substring(10);
+        }
+        if (isTypeVar(typeArgStandardForm)) {
+          preferredTypeVariables.add(typeArgStandardForm);
         }
       }
       if (!preferredTypeVariables.isEmpty() && preferredTypeVariables.size() != numberOfArguments) {
-        throw new RuntimeException("Numbers of type variables are not matching!");
+        throw new RuntimeException(
+            "Numbers of type variables are not matching! "
+                + preferredTypeVariables
+                + " but expected "
+                + numberOfArguments
+                + " because the type arguments are: "
+                + typeArguments.get()
+                + " and the in-scope type variables are: "
+                + typeVariables);
       }
       // without any type argument
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
@@ -1422,15 +1486,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a MethodDeclaration instance, this method checks if that MethodDeclaration is inside an
-   * object creation expression.
+   * Given a node, this method checks if that node is inside an object creation expression (meaning
+   * that it belongs to an anonymous class).
    *
-   * @param decl a MethodDeclaration instance
-   * @return true if decl is inside an object creation expression
+   * @param node a node
+   * @return true if node is inside an object creation expression
    */
-  private boolean insideAnObjectCreation(MethodDeclaration decl) {
-    while (decl.getParentNode().isPresent()) {
-      Node parent = decl.getParentNode().get();
+  private boolean insideAnObjectCreation(Node node) {
+    while (node.getParentNode().isPresent()) {
+      Node parent = node.getParentNode().get();
       if (parent instanceof ObjectCreationExpr) {
         return true;
       }
@@ -1443,8 +1507,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (parent instanceof EnumDeclaration) {
         return false;
       }
+      node = parent;
     }
-    throw new RuntimeException("Got a method declaration with no class!");
+    throw new RuntimeException("Got a node with no containing class!");
   }
 
   /**
@@ -1863,24 +1928,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       throw new RuntimeException(
           "Check if isASuperCall returns true before calling updateSyntheticClassForSuperCall");
     }
+    // If we're inside an object creation, this is an anonymous class. Locate any super things
+    // in the class that's being extended.
+    String parentClassName = insideAnObjectCreation(expr) ? className : getParentClass(className);
     if (expr instanceof MethodCallExpr) {
       updateUnsolvedClassOrInterfaceWithMethod(
           expr.asMethodCallExpr(),
-          getParentClass(className),
+          parentClassName,
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""),
           false);
     } else if (expr instanceof FieldAccessExpr) {
       String nameAsString = expr.asFieldAccessExpr().getNameAsString();
       updateUnsolvedSuperClassWithFields(
-          nameAsString,
-          getParentClass(className),
-          getPackageFromClassName(getParentClass(className)));
+          nameAsString, parentClassName, getPackageFromClassName(parentClassName));
     } else if (expr instanceof NameExpr) {
       String nameAsString = expr.asNameExpr().getNameAsString();
       updateUnsolvedSuperClassWithFields(
-          nameAsString,
-          getParentClass(className),
-          getPackageFromClassName(getParentClass(className)));
+          nameAsString, parentClassName, getPackageFromClassName(parentClassName));
     } else {
       throw new RuntimeException("Unexpected expression: " + expr);
     }
@@ -2385,6 +2449,51 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (qualifiedName.startsWith("java.")) {
       return;
     }
+
+    // If the input contains something simple like Map.Entry,
+    // try to avoid creating a synthetic class Entry in package Map if there is
+    // also a synthetic class for a Map elsewhere (make it an inner class instead).
+    if (isCapital(qualifiedName)
+        &&
+        // This test checks that it has only one .
+        qualifiedName.indexOf('.') == qualifiedName.lastIndexOf('.')) {
+      String outerClassName = qualifiedName.substring(0, qualifiedName.indexOf('.'));
+      String innerClassName = qualifiedName.substring(qualifiedName.indexOf('.') + 1);
+      Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
+      while (iterator.hasNext()) {
+        UnsolvedClassOrInterface e = iterator.next();
+        if (e.getClassName().equals(outerClassName)) {
+
+          UnsolvedClassOrInterface innerClass =
+              new UnsolvedClassOrInterface.UnsolvedInnerClass(innerClassName, e.getPackageName());
+
+          // TODO: this code is intentionally duplicated from what's just below. After the ISSTA
+          // deadline, clean up this technical debt.
+          for (UnsolvedMethod method : missedClass.getMethods()) {
+            // No need to check for containment, since the methods are stored
+            // as a set (which does not permit duplicates).
+            innerClass.addMethod(method);
+          }
+
+          // add new fields
+          for (String variablesDescription : missedClass.getClassFields()) {
+            innerClass.addFields(variablesDescription);
+          }
+          if (missedClass.getNumberOfTypeVariables() > 0) {
+            innerClass.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
+          }
+
+          // if a "class" is found to be an interface even once (because it appears
+          // in an implements clause), then it must be an interface and not a class.
+          if (missedClass.isAnInterface()) {
+            innerClass.setIsAnInterfaceToTrue();
+          }
+          e.addInnerClass(innerClass);
+          return;
+        }
+      }
+    }
+
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClassOrInterface e = iterator.next();
@@ -2539,7 +2648,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!isAClassPath(fullyName)) {
       throw new RuntimeException(
           "Check with isAClassPath first before using"
-              + " getSimpleSyntheticClassFromFullyQualifiedName");
+              + " getSimpleSyntheticClassFromFullyQualifiedName. Non-classpath-like name: "
+              + fullyName);
     }
     String className = fullyQualifiedToSimple(fullyName);
     String packageName = fullyName.replace("." + className, "");
