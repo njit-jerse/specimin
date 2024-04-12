@@ -512,6 +512,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!insideTargetMember) {
       return super.visit(node, arg);
     }
+    if (!canSolveArguments(node.getArguments())) {
+      // wait for the next run of UnsolvedSymbolVisitor
+      return super.visit(node, arg);
+    }
+
     try {
       // check if the symbol is solvable. If it is, then there's no need to create a synthetic file.
       node.resolve().getQualifiedSignature();
@@ -881,7 +886,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(method, p);
     }
     // we will wait for the next run to solve this method call
-    if (!canSolveParameters(method)) {
+    if (!canSolveArguments(method.getArguments())) {
       return super.visit(method, p);
     }
     if (isASuperCall(method) && !canBeSolved(method)) {
@@ -1937,23 +1942,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This method checks if the current run of UnsolvedSymbolVisitor can solve the parameters' types
-   * of a method call
+   * This method checks if the current run of UnsolvedSymbolVisitor can solve the types of the
+   * arguments of a method call or similar structure (e.g., constructor invocation)
    *
-   * @param method the method call to be checked
-   * @return true if UnsolvedSymbolVisitor can solve the types of parameters of method
+   * @param argList the arguments to check
+   * @return true if UnsolvedSymbolVisitor can solve the types of parameters of method-like
    */
-  public static boolean canSolveParameters(MethodCallExpr method) {
-    NodeList<Expression> paraList = method.getArguments();
-    if (paraList.isEmpty()) {
+  public static boolean canSolveArguments(NodeList<Expression> argList) {
+    if (argList.isEmpty()) {
       return true;
     }
-    for (Expression parameter : paraList) {
-      if (parameter.isLambdaExpr()) {
+    for (Expression arg : argList) {
+      if (arg.isLambdaExpr()) {
         // Skip lambdas here and treat them specially later.
         continue;
       }
-      if (!canBeSolved(parameter)) {
+      if (!canBeSolved(arg)) {
         return false;
       }
     }
