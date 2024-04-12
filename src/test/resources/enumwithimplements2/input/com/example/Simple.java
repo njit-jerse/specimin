@@ -7,7 +7,7 @@ public class Simple {
         A, B
     }
 
-    // target. Goal of this test is to make sure that Function, above, is created/preserved.
+    // target. Goal of this test is to make sure that Function, above, is not created/preserved.
     void bar() {
         MyEnum a = MyEnum.A;
         MyEnum b = MyEnum.B;
