@@ -37,13 +37,14 @@ public class SpeciminTestExecutor {
    *
    * @param testName the name of the test folder
    * @param targetFiles the targeted files
-   * @param targetMethods the targeted methods, each in the format
-   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * @param targetMembers the targeted methods or fields, each in the format
+   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
+   *     class.fully.qualified.Name#fieldName for field.
    * @param jarPaths the path of jar files for Specimin to solve symbols
    * @throws IOException if some operation fails
    */
   public static void runTest(
-      String testName, String[] targetFiles, String[] targetMethods, String[] jarPaths)
+      String testName, String[] targetFiles, String[] targetMembers, String[] jarPaths)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -69,9 +70,14 @@ public class SpeciminTestExecutor {
       speciminArgs.add("--targetFile");
       speciminArgs.add(targetFile);
     }
-    for (String targetMethod : targetMethods) {
-      speciminArgs.add("--targetMethod");
-      speciminArgs.add(targetMethod);
+    for (String targetMember : targetMembers) {
+      if (targetMember.contains("(")) {
+        speciminArgs.add("--targetMethod");
+        speciminArgs.add(targetMember);
+      } else {
+        speciminArgs.add("--targetField");
+        speciminArgs.add(targetMember);
+      }
     }
     for (String jarPath : jarPaths) {
       speciminArgs.add("--jarPath");
@@ -136,13 +142,14 @@ public class SpeciminTestExecutor {
    *
    * @param testName the name of the test folder
    * @param targetFiles the targeted files
-   * @param targetMethods the targeted methods, each in the format
-   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
+   * @param targetMembers the targeted methods or fields, each in the format
+   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
+   *     class.fully.qualified.Name#fieldName for field.
    * @throws IOException if some operation fails
    */
   public static void runTestWithoutJarPaths(
-      String testName, String[] targetFiles, String[] targetMethods) throws IOException {
-    runTest(testName, targetFiles, targetMethods, new String[] {});
+      String testName, String[] targetFiles, String[] targetMembers) throws IOException {
+    runTest(testName, targetFiles, targetMembers, new String[] {});
   }
 
   /** Code borrowed from https://www.baeldung.com/run-shell-command-in-java. */
