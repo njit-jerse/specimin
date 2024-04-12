@@ -414,7 +414,37 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(EnumDeclaration node, Void arg) {
+    // Does the same things we do for classes/interfaces to maintain
+    // our data structures. TODO: combine the code here with the code for classes
+    // to reduce duplication. This technical debt is intentionally taken on to make the ISSTA
+    // deadline in April 2024, and should be fixed ASAP after that.
+    SimpleName nodeName = node.getName();
+    className = nodeName.asString();
+    if (node.isNestedType()) {
+      this.currentClassQualifiedName += "." + node.getName().asString();
+    }
+    NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
+    updateForExtendedAndImplementedTypes(implementedTypes, implementedTypes, false);
+    declaredMethod.addFirst(new HashSet<>(node.getMethods()));
+    Visitable result = super.visit(node, arg);
+    declaredMethod.removeFirst();
+    if (node.isNestedType()) {
+      this.currentClassQualifiedName =
+          this.currentClassQualifiedName.substring(
+              0, this.currentClassQualifiedName.lastIndexOf('.'));
+    } else {
+      this.currentClassQualifiedName = "";
+    }
+    return result;
+  }
+
+  @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
+    // NOTE: if you update the data structure maintenance done by this method,
+    // also update the maintenance in the visit method for EnumDeclarations
+    // just above.
+
     // This is a special case, since the symbols of a ClassOrInterfaceDeclarations will be solved
     // regardless of being inside target methods or potentially-used members.
     SimpleName nodeName = node.getName();
@@ -442,6 +472,38 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // in Java.
     NodeList<ClassOrInterfaceType> extendedAndImplementedTypes = node.getExtendedTypes();
     extendedAndImplementedTypes.addAll(implementedTypes);
+    updateForExtendedAndImplementedTypes(
+        extendedAndImplementedTypes, implementedTypes, node.isInterface());
+
+    declaredMethod.addFirst(new HashSet<>(node.getMethods()));
+    Visitable result = super.visit(node, arg);
+    typeVariables.removeFirst();
+    declaredMethod.removeFirst();
+
+    if (node.isNestedType()) {
+      this.currentClassQualifiedName =
+          this.currentClassQualifiedName.substring(
+              0, this.currentClassQualifiedName.lastIndexOf('.'));
+    } else if (!isLocalDeclaration) {
+      this.currentClassQualifiedName = "";
+    }
+    return result;
+  }
+
+  /**
+   * Updates the list of classes/interfaces to keep based on the extends/implements clauses of a
+   * class, interface, or enum. Does not side effect its arguments, so it's safe to pass the same
+   * value for the first two arguments (e.g., if this is an enum, which cannot extend anything).
+   *
+   * @param extendedAndImplementedTypes the list of extended and implemented classes/interfaces
+   * @param implementedTypes the list of implemented interfaces
+   * @param isAnInterface is the node whose extends/implements clauses are being considered an
+   *     interface
+   */
+  private void updateForExtendedAndImplementedTypes(
+      NodeList<ClassOrInterfaceType> extendedAndImplementedTypes,
+      NodeList<ClassOrInterfaceType> implementedTypes,
+      boolean isAnInterface) {
     for (ClassOrInterfaceType implementedOrExtended : extendedAndImplementedTypes) {
       String qualifiedName = getQualifiedNameForClassOrInterfaceType(implementedOrExtended);
       if (classfileIsInOriginalCodebase(qualifiedName)) {
@@ -465,7 +527,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           // this extended/implemented type is an interface if it is in the declaration of an
           // interface, or if it is used with the "implements" keyword.
           boolean typeIsAnInterface =
-              node.isInterface() || implementedTypes.contains(implementedOrExtended);
+              isAnInterface || implementedTypes.contains(implementedOrExtended);
           if (typeIsAnInterface) {
             solveSymbolsForClassOrInterfaceType(implementedOrExtended, true);
             @SuppressWarnings(
@@ -481,20 +543,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-
-    declaredMethod.addFirst(new HashSet<>(node.getMethods()));
-    Visitable result = super.visit(node, arg);
-    typeVariables.removeFirst();
-    declaredMethod.removeFirst();
-
-    if (node.isNestedType()) {
-      this.currentClassQualifiedName =
-          this.currentClassQualifiedName.substring(
-              0, this.currentClassQualifiedName.lastIndexOf('.'));
-    } else if (!isLocalDeclaration) {
-      this.currentClassQualifiedName = "";
-    }
-    return result;
   }
 
   @Override
@@ -1531,7 +1579,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       try {
         nodeType.resolve();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        // Note that this could also be an interface (if it is used in an implements clause elsewhere).
+        // Note that this could also be an interface (if it is used in an implements clause
+        // elsewhere).
         // updateMissingClass is responsible for fixing this up later after we encounter the
         // relevant implements clause.
         updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false, false);
