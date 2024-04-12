@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -685,9 +686,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // class name.
       // This is the fully-qualified case.
       if (elements.size() > 1) {
-        @SuppressWarnings("signature") // since this type is in a fully-qualfied form
-        @FullyQualifiedName String qualifiedTypeName = typeAsString;
-        updateMissingClass(getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName));
+        int typeParamIndex = typeAsString.indexOf('<');
+        int typeParamCount = -1;
+        if (typeParamIndex != -1) {
+          ClassOrInterfaceType asType = StaticJavaParser.parseClassOrInterfaceType(typeAsString);
+          typeParamCount = asType.getTypeArguments().get().size();
+          typeAsString = typeAsString.substring(0, typeParamIndex);
+        }
+
+        @SuppressWarnings(
+            "signature") // since this type is in a fully-qualified form, or we make it
+        // fully-qualified
+        @FullyQualifiedName String qualifiedTypeName =
+            typeAsString.contains(".")
+                ? typeAsString
+                : getPackageFromClassName(typeAsString) + "." + typeAsString;
+        UnsolvedClassOrInterface unsolved =
+            getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+        if (typeParamCount != -1) {
+          unsolved.setNumberOfTypeVariables(typeParamCount);
+        }
+        updateMissingClass(unsolved);
       } else if (isTypeVar(typeAsString)) {
         // Nothing to do in this case, but we need to skip creating an unsolved class.
       }
