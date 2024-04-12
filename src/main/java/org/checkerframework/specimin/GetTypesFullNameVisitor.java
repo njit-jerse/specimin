@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
@@ -39,6 +40,16 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     // Nested type and local classes don't have a separate class file.
     if (!decl.isNestedType() && !decl.isLocalClassDeclaration()) {
+      fileDirectory = decl.getFullyQualifiedName().get().replace(".", "/") + ".java";
+      fileAndAssociatedTypes.put(fileDirectory, new HashSet<>());
+    }
+    return super.visit(decl, p);
+  }
+
+  @Override
+  public Visitable visit(EnumDeclaration decl, Void p) {
+    // Nested type and local classes don't have a separate class file.
+    if (!decl.isNestedType()) {
       fileDirectory = decl.getFullyQualifiedName().get().replace(".", "/") + ".java";
       fileAndAssociatedTypes.put(fileDirectory, new HashSet<>());
     }

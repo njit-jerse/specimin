@@ -292,6 +292,32 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(EnumDeclaration decl, Void p) {
+    // TODO there's some duplication between this code and the code for classes
+    // I'm intentionally leaving it as tech debt for after ISSTA 24.
+    if (decl.isNestedType()) {
+      this.classFQName += "." + decl.getName().toString();
+    } else {
+      if (!this.classFQName.equals("")) {
+        throw new UnsupportedOperationException(
+            "Attempted to enter an unexpected kind of enum: "
+                + decl.getFullyQualifiedName()
+                + " but already had a set classFQName: "
+                + classFQName);
+      }
+      // Should always be present.
+      this.classFQName = decl.getFullyQualifiedName().orElseThrow();
+    }
+    Visitable result = super.visit(decl, p);
+    if (decl.isNestedType()) {
+      this.classFQName = this.classFQName.substring(0, this.classFQName.lastIndexOf('.'));
+    } else {
+      this.classFQName = "";
+    }
+    return result;
+  }
+
+  @Override
   public Visitable visit(ConstructorDeclaration method, Void p) {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
