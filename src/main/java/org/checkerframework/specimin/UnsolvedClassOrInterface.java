@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
@@ -32,9 +33,9 @@ public class UnsolvedClassOrInterface {
 
   /**
    * The name of the package of the class. We rely on the import statements from the source codes to
-   * guess the package name.
+   * guess the package name. Null if this is an inner class.
    */
-  private final String packageName;
+  private final @Nullable String packageName;
 
   /** This field records the number of type variables for this class */
   private int numberOfTypeVariables = 0;
@@ -47,6 +48,9 @@ public class UnsolvedClassOrInterface {
 
   /** This field records if the class is an interface */
   private boolean isAnInterface;
+
+  /** This class' inner classes. */
+  private @MonotonicNonNull Set<UnsolvedClassOrInterface> innerClasses = null;
 
   /**
    * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
@@ -283,6 +287,14 @@ public class UnsolvedClassOrInterface {
     return successfullyUpdated;
   }
 
+  public void addInnerClass(UnsolvedClassOrInterface innerClass) {
+    if (this.innerClasses == null) {
+      // LinkedHashSet to make the iteration order deterministic.
+      this.innerClasses = new LinkedHashSet<>(1);
+    }
+    this.innerClasses.add(innerClass);
+  }
+
   @Override
   public boolean equals(@Nullable Object other) {
     if (!(other instanceof UnsolvedClassOrInterface)) {
@@ -293,7 +305,7 @@ public class UnsolvedClassOrInterface {
     // (each UnsovledClass corresponds to a source file), so this
     // check is sufficient for equality (it is checking the canonical name).
     return otherClass.className.equals(this.className)
-        && otherClass.packageName.equals(this.packageName);
+        && Objects.equals(otherClass.packageName, this.packageName);
   }
 
   @Override
@@ -309,7 +321,9 @@ public class UnsolvedClassOrInterface {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("package ").append(packageName).append(";\n");
+    if (packageName != null) {
+      sb.append("package ").append(packageName).append(";\n");
+    }
     if (isAnInterface) {
       // For synthetic interfaces created for lambdas only.
       if (methods.size() == 1
@@ -325,6 +339,11 @@ public class UnsolvedClassOrInterface {
       sb.append(" " + extendsClause);
     }
     sb.append(" {\n");
+    if (innerClasses != null) {
+      for (UnsolvedClassOrInterface innerClass : innerClasses) {
+        sb.append(innerClass.toString());
+      }
+    }
     for (String variableDeclarations : classFields) {
       sb.append("    " + "public " + variableDeclarations + ";\n");
     }

@@ -2356,6 +2356,50 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (qualifiedName.startsWith("java.")) {
       return;
     }
+
+    // If the input contains something simple like Map.Entry,
+    // try to avoid creating a synthetic class Entry in package Map if there is
+    // also a synthetic class for a Map elsewhere (make it an inner class instead).
+    if (isCapital(qualifiedName)
+        &&
+        // This test checks that it has only one .
+        qualifiedName.indexOf('.') == qualifiedName.lastIndexOf('.')) {
+      String outerClassName = qualifiedName.substring(0, qualifiedName.indexOf('.'));
+      String innerClassName = qualifiedName.substring(qualifiedName.indexOf('.') + 1);
+      Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
+      while (iterator.hasNext()) {
+        UnsolvedClassOrInterface e = iterator.next();
+        if (e.getClassName().equals(outerClassName)) {
+
+          UnsolvedClassOrInterface innerClass = new UnsolvedClassOrInterface(innerClassName, null);
+
+          // TODO: this code is intentionally duplicated from what's just below. After the ISSTA
+          // deadline, clean up this technical debt.
+          for (UnsolvedMethod method : missedClass.getMethods()) {
+            // No need to check for containment, since the methods are stored
+            // as a set (which does not permit duplicates).
+            innerClass.addMethod(method);
+          }
+
+          // add new fields
+          for (String variablesDescription : missedClass.getClassFields()) {
+            innerClass.addFields(variablesDescription);
+          }
+          if (missedClass.getNumberOfTypeVariables() > 0) {
+            innerClass.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
+          }
+
+          // if a "class" is found to be an interface even once (because it appears
+          // in an implements clause), then it must be an interface and not a class.
+          if (missedClass.isAnInterface()) {
+            innerClass.setIsAnInterfaceToTrue();
+          }
+          e.addInnerClass(innerClass);
+          return;
+        }
+      }
+    }
+
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClassOrInterface e = iterator.next();
