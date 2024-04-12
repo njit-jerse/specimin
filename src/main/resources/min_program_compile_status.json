@@ -17,6 +17,5 @@
   "Issue689": "PASS",
   "cf-6388": "PASS",
   "cf-3025": "PASS",
-  "jdk-8319461": "PASS",
   "jdk-8288590": "PASS"
 }
