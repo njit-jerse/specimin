@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -59,6 +60,15 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
+      if (decl.getTypeParameters().size() > 0) {
+        // preserve the bounds of the type parameters, too
+        for (TypeParameter tp : decl.getTypeParameters()) {
+          for (Type bound : tp.getTypeBound()) {
+            TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+                bound.resolve().describe(), addedClasses, new HashMap<>());
+          }
+        }
+      }
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
         try {
           // Including a non-primary to primary map in this context may lead to an infinite loop,
