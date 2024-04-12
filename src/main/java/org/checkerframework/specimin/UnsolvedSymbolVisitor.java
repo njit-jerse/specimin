@@ -2491,7 +2491,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!isAClassPath(fullyName)) {
       throw new RuntimeException(
           "Check with isAClassPath first before using"
-              + " getSimpleSyntheticClassFromFullyQualifiedName");
+              + " getSimpleSyntheticClassFromFullyQualifiedName. Non-classpath-like name: "
+              + fullyName);
     }
     String className = fullyQualifiedToSimple(fullyName);
     String packageName = fullyName.replace("." + className, "");
