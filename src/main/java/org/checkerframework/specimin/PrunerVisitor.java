@@ -110,6 +110,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    *
    * @param methodsToKeep the set of methods whose bodies should be kept intact (usually the target
    *     methods for specimin)
+   * @param fieldsToKeep the set of fields whose initializers should be kept intact
    * @param membersToEmpty the set of members that this pruner will empty
    * @param classesUsedByTargetMethods the classes used by target methods
    * @param resolvedYetStuckMethodCall set of methods that are resolved yet can not be solved by

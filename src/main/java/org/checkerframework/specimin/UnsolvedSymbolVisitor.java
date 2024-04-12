@@ -248,6 +248,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *     codebase mapped to the corresponding Java file.
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
+   * @param targetFieldsSignature the list of signatures of target fields as specified by the user.
    */
   public UnsolvedSymbolVisitor(
       String rootDirectory,
