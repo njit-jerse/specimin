@@ -57,6 +57,9 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
     addedClasses = new HashSet<>();
   }
 
+  /** Cheap and dirty trick to avoid an infinite loop TODO: clean this up after the deadline */
+  private static HashSet<String> visitedBounds = new HashSet();
+
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
@@ -64,8 +67,11 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
         // preserve the bounds of the type parameters, too
         for (TypeParameter tp : decl.getTypeParameters()) {
           for (Type bound : tp.getTypeBound()) {
-            TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
-                bound.resolve().describe(), addedClasses, new HashMap<>());
+            String boundDesc = bound.resolve().describe();
+            if (visitedBounds.add(boundDesc)) {
+              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+                  boundDesc, addedClasses, new HashMap<>());
+            }
           }
         }
       }
