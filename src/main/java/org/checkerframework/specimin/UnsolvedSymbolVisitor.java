@@ -70,6 +70,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -742,7 +743,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         ResolvedType nameExprType = node.resolve().getType();
         if (nameExprType.isReferenceType()) {
           ResolvedReferenceType nameExprReferenceType = nameExprType.asReferenceType();
-          nameExprReferenceType.getAllAncestors();
+          try {
+            nameExprReferenceType.getAllAncestors();
+          } catch (UnsolvedSymbolException e) {
+            throw new RuntimeException(
+                "why wasn't this solved? "
+                    + node
+                    + "\nnode's parent: "
+                    + node.getParentNode().get()
+                    + "\nthat's parent: "
+                    + node.getParentNode().get().getParentNode().get()
+                    + "\n type: "
+                    + nameExprType,
+                e);
+          }
           if (!hasResolvedTypeParameters(nameExprReferenceType)) {
             gotException();
           }
@@ -1079,8 +1093,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
+    String oldClassName = className;
     if (!insideTargetMember) {
-      return super.visit(newExpr, p);
+      if (newExpr.getAnonymousClassBody().isPresent()) {
+        // Need to do data structure maintenance
+        className = newExpr.getType().getName().asString();
+      }
+      Visitable result = super.visit(newExpr, p);
+      className = oldClassName;
+      return result;
     }
     SimpleName typeName = newExpr.getType().getName();
     String type = typeName.asString();
@@ -1088,7 +1109,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isFromAJarFile(newExpr)) {
         updateClassesFromJarSourcesForObjectCreation(newExpr);
       }
-      return super.visit(newExpr, p);
+      if (newExpr.getAnonymousClassBody().isPresent()) {
+        // Need to do data structure maintenance
+        className = newExpr.getType().getName().asString();
+      }
+      Visitable result = super.visit(newExpr, p);
+      className = oldClassName;
+      return result;
     }
     gotException();
     try {
@@ -1099,7 +1126,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
     }
-    return super.visit(newExpr, p);
+    if (newExpr.getAnonymousClassBody().isPresent()) {
+      // Need to do data structure maintenance
+      className = newExpr.getType().getName().asString();
+    }
+    Visitable result = super.visit(newExpr, p);
+    className = oldClassName;
+    return result;
   }
 
   /**
@@ -1226,12 +1259,33 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (typeArguments.isPresent()) {
       numberOfArguments = typeArguments.get().size();
       for (Type typeArgument : typeArguments.get()) {
-        if (isTypeVar(typeArgument.toString())) {
-          preferredTypeVariables.add(typeArgument.toString());
+        String typeArgStandardForm = typeArgument.toString();
+        if (typeArgStandardForm.contains("@")) {
+          // Remove annotations
+          List<String> split = List.of(typeArgStandardForm.split("\\s"));
+          typeArgStandardForm =
+              split.stream().filter(s -> !s.startsWith("@")).collect(Collectors.joining(" "));
+        }
+        if (typeArgStandardForm.startsWith("? extends ")) {
+          // there are 10 characters in "? extends ". The idea here is that users sometimes need
+          // to add a wildcard to annotate a typevar - so "V" might be expressed as "@X ? extends
+          // V".
+          typeArgStandardForm = typeArgStandardForm.substring(10);
+        }
+        if (isTypeVar(typeArgStandardForm)) {
+          preferredTypeVariables.add(typeArgStandardForm);
         }
       }
       if (!preferredTypeVariables.isEmpty() && preferredTypeVariables.size() != numberOfArguments) {
-        throw new RuntimeException("Numbers of type variables are not matching!");
+        throw new RuntimeException(
+            "Numbers of type variables are not matching! "
+                + preferredTypeVariables
+                + " but expected "
+                + numberOfArguments
+                + " because the type arguments are: "
+                + typeArguments.get()
+                + " and the in-scope type variables are: "
+                + typeVariables);
       }
       // without any type argument
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
@@ -1393,15 +1447,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a MethodDeclaration instance, this method checks if that MethodDeclaration is inside an
-   * object creation expression.
+   * Given a node, this method checks if that node is inside an object creation expression (meaning
+   * that it belongs to an anonymous class).
    *
-   * @param decl a MethodDeclaration instance
-   * @return true if decl is inside an object creation expression
+   * @param node a node
+   * @return true if node is inside an object creation expression
    */
-  private boolean insideAnObjectCreation(MethodDeclaration decl) {
-    while (decl.getParentNode().isPresent()) {
-      Node parent = decl.getParentNode().get();
+  private boolean insideAnObjectCreation(Node node) {
+    while (node.getParentNode().isPresent()) {
+      Node parent = node.getParentNode().get();
       if (parent instanceof ObjectCreationExpr) {
         return true;
       }
@@ -1415,7 +1469,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         return false;
       }
     }
-    throw new RuntimeException("Got a method declaration with no class!");
+    throw new RuntimeException("Got a node with no containing class!");
   }
 
   /**
@@ -1834,24 +1888,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       throw new RuntimeException(
           "Check if isASuperCall returns true before calling updateSyntheticClassForSuperCall");
     }
+    // If we're inside an object creation, this is an anonymous class. Locate any super things
+    // in the class that's being extended.
+    String parentClassName = insideAnObjectCreation(expr) ? className : getParentClass(className);
     if (expr instanceof MethodCallExpr) {
       updateUnsolvedClassOrInterfaceWithMethod(
           expr.asMethodCallExpr(),
-          getParentClass(className),
+          parentClassName,
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""),
           false);
     } else if (expr instanceof FieldAccessExpr) {
       String nameAsString = expr.asFieldAccessExpr().getNameAsString();
       updateUnsolvedSuperClassWithFields(
-          nameAsString,
-          getParentClass(className),
-          getPackageFromClassName(getParentClass(className)));
+          nameAsString, parentClassName, getPackageFromClassName(parentClassName));
     } else if (expr instanceof NameExpr) {
       String nameAsString = expr.asNameExpr().getNameAsString();
       updateUnsolvedSuperClassWithFields(
-          nameAsString,
-          getParentClass(className),
-          getPackageFromClassName(getParentClass(className)));
+          nameAsString, parentClassName, getPackageFromClassName(parentClassName));
     } else {
       throw new RuntimeException("Unexpected expression: " + expr);
     }
