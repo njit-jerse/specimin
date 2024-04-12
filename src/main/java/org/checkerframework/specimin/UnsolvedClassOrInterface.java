@@ -304,6 +304,11 @@ public class UnsolvedClassOrInterface {
     return successfullyUpdated;
   }
 
+  /**
+   * Add the given class as an inner class to this class.
+   *
+   * @param innerClass the inner class to add
+   */
   public void addInnerClass(UnsolvedClassOrInterface innerClass) {
     if (this.innerClasses == null) {
       // LinkedHashSet to make the iteration order deterministic.
