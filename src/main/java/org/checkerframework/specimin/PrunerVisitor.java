@@ -192,6 +192,50 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(EnumDeclaration decl, Void p) {
+    // TODO: this code is copied from the visit method
+    // for classes/interfaces, below. Combine as much as possible.
+    // This is intentional debt to make the ISSTA deadline in April 2024.
+    String classQualifiedName = decl.resolve().getQualifiedName();
+    if (!classesUsedByTargetMethods.contains(classQualifiedName)) {
+      decl.remove();
+      return decl;
+    }
+    NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
+    Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
+    while (iterator.hasNext()) {
+      ClassOrInterfaceType interfaceType = iterator.next();
+      try {
+        String typeFullName = interfaceType.resolve().getQualifiedName();
+        if (!classesUsedByTargetMethods.contains(typeFullName)) {
+          iterator.remove();
+        }
+        // all unresolvable interfaces that need to be removed belong to the Java package.
+        if (!typeFullName.startsWith("java.")) {
+          continue;
+        }
+        for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
+          // since classNeedInterfaceRemoved can be in the form of a simple name
+          if (classQualifiedName.endsWith(classNeedInterfaceRemoved)) {
+            if (classAndUnresolvedInterface
+                .get(classNeedInterfaceRemoved)
+                .equals(interfaceType.getNameAsString())) {
+              // This code assumes that the likelihood of two different classes with the same
+              // simple name implementing the same interface is low.
+              iterator.remove();
+            }
+          }
+        }
+      } catch (UnsolvedSymbolException e) {
+        iterator.remove();
+      }
+    }
+    decl.setImplementedTypes(implementedInterfaces);
+
+    return super.visit(decl, p);
+  }
+
+  @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     boolean oldInsideFunctionalInterface = insideFunctionalInterface;
     @Nullable AnnotationExpr functionInterfaceAnnotationExpr = null;
