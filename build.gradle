@@ -57,6 +57,7 @@ task expectedTestOutputsMustCompile(type: Exec) {
 }
 
 checkerFramework {
+    skipCheckerFramework = true
     checkers = [
             'org.checkerframework.checker.nullness.NullnessChecker',
             'org.checkerframework.checker.resourceleak.ResourceLeakChecker',

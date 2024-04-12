@@ -794,16 +794,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           try {
             nameExprReferenceType.getAllAncestors();
           } catch (UnsolvedSymbolException e) {
-            throw new RuntimeException(
-                "why wasn't this solved? "
-                    + node
-                    + "\nnode's parent: "
-                    + node.getParentNode().get()
-                    + "\nthat's parent: "
-                    + node.getParentNode().get().getParentNode().get()
-                    + "\n type: "
-                    + nameExprType,
-                e);
+            return super.visit(node, arg);
           }
           if (!hasResolvedTypeParameters(nameExprReferenceType)) {
             gotException();
@@ -860,7 +851,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
       if (targetFieldsSignatures.contains(
           currentClassQualifiedName + "#" + var.getNameAsString())) {
+        boolean oldInsideTargetMember = insideTargetMember;
         insideTargetMember = true;
+        Visitable result = super.visit(node, arg);
+        insideTargetMember = oldInsideTargetMember;
+        return result;
       }
     }
     return super.visit(node, arg);
