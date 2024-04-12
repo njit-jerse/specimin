@@ -46,11 +46,11 @@ jobs:
       - name: Compile minimized programs
         run: |
           cd specimin-evaluation
-          sh check_compilation.sh
+          sh check_compilation.sh 1
       - name: Check targets compile status
         run: |
           cd specimin-evaluation
-          sh check_compilation.sh
+          sh check_compilation.sh 1
           cd ..
           diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
       - name: Check preservation status
