@@ -2,11 +2,14 @@ package com.example;
 
 import com.example.Function;
 
-public enum Simple implements Function<?, ?> {
-    A, B;
+public class Simple {
+    private enum MyEnum implements Function<?, ?> {
+
+        A, B;
+    }
 
     void bar() {
-        Simple s1 = Simple.A;
-        Simple s2 = Simple.B;
+        MyEnum a = MyEnum.A;
+        MyEnum b = MyEnum.B;
     }
 }
