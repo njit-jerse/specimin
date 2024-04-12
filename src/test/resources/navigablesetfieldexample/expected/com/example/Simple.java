@@ -16,12 +16,14 @@ public class Simple {
 
     static class UnmodifiableNavigableSet<E> extends UnmodifiableSortedSet<E> implements NavigableSet<E> {
 
-        @SuppressWarnings("rawtypes")
-        private static final NavigableSet<?> EMPTY_NAVIGABLE_SET = null;
-    }
+        private static class EmptyNavigableSet<E> extends UnmodifiableNavigableSet<E> {
 
-    @SuppressWarnings("unchecked")
-    public static <E> NavigableSet<E> emptyNavigableSet() {
-        return (NavigableSet<E>) UnmodifiableNavigableSet.EMPTY_NAVIGABLE_SET;
+            public EmptyNavigableSet() {
+                throw new Error();
+            }
+        }
+
+        @SuppressWarnings("rawtypes")
+        private static final NavigableSet<?> EMPTY_NAVIGABLE_SET = new EmptyNavigableSet<>();
     }
 }

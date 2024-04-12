@@ -4,7 +4,6 @@
 package com.example;
 
 import java.io.Serializable;
-import java.util.TreeSet;
 
 public class Simple {
 
@@ -14,7 +13,7 @@ public class Simple {
     }
 
     static class UnmodifiableSet<E> extends UnmodifiableCollection<E> {
-        UnmodifiableSet(Set<? extends E> s)     {super(s);}
+        UnmodifiableSet(Set<? extends E> s1)     {super(s1);}
     }
 
     static class UnmodifiableSortedSet<E> extends UnmodifiableSet<E> {
