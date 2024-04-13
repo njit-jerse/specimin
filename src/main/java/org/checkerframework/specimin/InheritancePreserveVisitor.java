@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -56,9 +57,25 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
     addedClasses = new HashSet<>();
   }
 
+  /** Cheap and dirty trick to avoid an infinite loop TODO: clean this up after the deadline */
+  private static HashSet<String> visitedBounds = new HashSet();
+
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
+      if (decl.getTypeParameters().size() > 0) {
+        // preserve the bounds of the type parameters, too
+        for (TypeParameter tp : decl.getTypeParameters()) {
+          for (Type bound : tp.getTypeBound()) {
+            String boundDesc = bound.resolve().describe();
+            if (visitedBounds.add(boundDesc)) {
+              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+                  boundDesc, addedClasses, new HashMap<>());
+            }
+          }
+        }
+      }
+
       for (ClassOrInterfaceType extendedType : decl.getExtendedTypes()) {
         try {
           // Including a non-primary to primary map in this context may lead to an infinite loop,
@@ -73,9 +90,30 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
                   typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
             }
           }
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          continue;
         }
-        // since Specimin does not create synthetic inheritance for interfaces.
-        catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      }
+
+      for (ClassOrInterfaceType implementedType : decl.getImplementedTypes()) {
+        try {
+          String interfacename = implementedType.resolve().describe();
+          if (interfacename.startsWith("java.")) {
+            // Avoid keeping implementations of java.* classes, because those
+            // would require us to actually implement them (we can't remove things
+            // from their definitions). This might technically break our guarantees, but it works
+            // in practice. TODO: fix this up
+            continue;
+          }
+          TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+              interfacename, addedClasses, new HashMap<>());
+          if (implementedType.getTypeArguments().isPresent()) {
+            for (Type typeAgrument : implementedType.getTypeArguments().get()) {
+              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+                  typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
+            }
+          }
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
           continue;
         }
       }
