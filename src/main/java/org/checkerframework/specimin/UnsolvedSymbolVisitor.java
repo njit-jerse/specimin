@@ -446,9 +446,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     if (decl.isEnumDeclaration()) {
       // Enums cannot extend other classes (they always extend Enum) and cannot have type
-      // parameters,
-      // so it's not necessary to do any maintenance on the data structures that track superclasses
-      // or type parameters in the enum case (only implemented interfaces).
+      // parameters, o it's not necessary to do any maintenance on the data structures that
+      // track superclasses or type parameters in the enum case (only implemented interfaces).
       NodeList<ClassOrInterfaceType> implementedTypes =
           decl.asEnumDeclaration().getImplementedTypes();
       updateForExtendedAndImplementedTypes(implementedTypes, implementedTypes, false);
@@ -468,8 +467,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
       NodeList<ClassOrInterfaceType> implementedTypes = asClassOrInterface.getImplementedTypes();
       // Not sure why getExtendedTypes return a list, since a class can only extends at most one
-      // class
-      // in Java.
+      // class in Java.
       NodeList<ClassOrInterfaceType> extendedAndImplementedTypes =
           asClassOrInterface.getExtendedTypes();
       extendedAndImplementedTypes.addAll(implementedTypes);
