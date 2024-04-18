@@ -202,17 +202,19 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     return false;
   }
 
-  @Override
-  public Visitable visit(EnumDeclaration decl, Void p) {
-    // TODO: this code is copied from the visit method
-    // for classes/interfaces, below. Combine as much as possible.
-    // This is intentional debt to make the ISSTA deadline in April 2024.
-    String classQualifiedName = decl.resolve().getQualifiedName();
-    if (!classesUsedByTargetMethods.contains(classQualifiedName)) {
-      decl.remove();
-      return decl;
-    }
-    NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
+  /**
+   * This method removes any implemented interfaces that are not used and therefore shouldn't be
+   * preserved from the declaration of a class, interface, or enum. The argument should be produced
+   * by calling the appropriate {@code getImplementedTypes()} method on the declaration, and after
+   * calling this method there should be a call to {@code setImplementedTypes} on the declaration
+   * so that its changes take effect. Side-effects its argument.
+   *
+   * @param qualifiedName the fully-qualified name of the class/interface/enum whose interfaces might be removed
+   * @param implementedInterfaces the list of implemented interfaces to consider. After this method
+   *                              terminates, this list will have been side-effected to remove
+   *                              any interfaces that should not be preserved.
+   */
+  private void removeUnusedInterfacesHelper(String qualifiedName, NodeList<ClassOrInterfaceType> implementedInterfaces) {
     Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
     while (iterator.hasNext()) {
       ClassOrInterfaceType interfaceType = iterator.next();
@@ -227,10 +229,10 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         }
         for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
           // since classNeedInterfaceRemoved can be in the form of a simple name
-          if (classQualifiedName.endsWith(classNeedInterfaceRemoved)) {
+          if (qualifiedName.endsWith(classNeedInterfaceRemoved)) {
             if (classAndUnresolvedInterface
-                .get(classNeedInterfaceRemoved)
-                .equals(interfaceType.getNameAsString())) {
+                    .get(classNeedInterfaceRemoved)
+                    .equals(interfaceType.getNameAsString())) {
               // This code assumes that the likelihood of two different classes with the same
               // simple name implementing the same interface is low.
               iterator.remove();
@@ -241,6 +243,17 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         iterator.remove();
       }
     }
+  }
+
+  @Override
+  public Visitable visit(EnumDeclaration decl, Void p) {
+    String qualifiedName = decl.resolve().getQualifiedName();
+    if (!classesUsedByTargetMethods.contains(qualifiedName)) {
+      decl.remove();
+      return decl;
+    }
+    NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
+    removeUnusedInterfacesHelper(qualifiedName, implementedInterfaces);
     decl.setImplementedTypes(implementedInterfaces);
 
     return super.visit(decl, p);
@@ -269,34 +282,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
     if (!decl.isInterface()) {
       NodeList<ClassOrInterfaceType> implementedInterfaces = decl.getImplementedTypes();
-      Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
-      while (iterator.hasNext()) {
-        ClassOrInterfaceType interfaceType = iterator.next();
-        try {
-          String typeFullName = interfaceType.resolve().getQualifiedName();
-          if (!classesUsedByTargetMethods.contains(typeFullName)) {
-            iterator.remove();
-          }
-          // all unresolvable interfaces that need to be removed belong to the Java package.
-          if (!typeFullName.startsWith("java.")) {
-            continue;
-          }
-          for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
-            // since classNeedInterfaceRemoved can be in the form of a simple name
-            if (classQualifiedName.endsWith(classNeedInterfaceRemoved)) {
-              if (classAndUnresolvedInterface
-                  .get(classNeedInterfaceRemoved)
-                  .equals(interfaceType.getNameAsString())) {
-                // This code assumes that the likelihood of two different classes with the same
-                // simple name implementing the same interface is low.
-                iterator.remove();
-              }
-            }
-          }
-        } catch (UnsolvedSymbolException e) {
-          iterator.remove();
-        }
-      }
+      removeUnusedInterfacesHelper(classQualifiedName, implementedInterfaces);
       decl.setImplementedTypes(implementedInterfaces);
     }
     Visitable result = super.visit(decl, p);
