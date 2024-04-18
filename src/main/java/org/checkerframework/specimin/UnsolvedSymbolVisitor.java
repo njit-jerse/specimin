@@ -12,6 +12,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -422,80 +423,104 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return super.visit(node, arg);
   }
 
-  @Override
-  public Visitable visit(EnumDeclaration node, Void arg) {
-    // Does the same things we do for classes/interfaces to maintain
-    // our data structures. TODO: combine the code here with the code for classes
-    // to reduce duplication. This technical debt is intentionally taken on to make the ISSTA
-    // deadline in April 2024, and should be fixed ASAP after that.
-    SimpleName nodeName = node.getName();
+  /**
+   * Maintains the data structures of this class (like the {@link #className}, {@link
+   * #currentClassQualifiedName}, {@link #addedTargetFiles}, etc.) based on a class, interface, or
+   * enum declaration. Call this method before calling super.visit().
+   *
+   * @param decl the class, interface, or enum declaration
+   */
+  private void maintainDataStructuresPreSuper(TypeDeclaration<?> decl) {
+    SimpleName nodeName = decl.getName();
     className = nodeName.asString();
-    if (node.isNestedType()) {
-      this.currentClassQualifiedName += "." + node.getName().asString();
+    boolean isLocalClassDecl =
+        decl.isClassOrInterfaceDeclaration()
+            && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
+    if (decl.isNestedType()) {
+      this.currentClassQualifiedName += "." + decl.getName().asString();
+    } else if (!isLocalClassDecl) {
+      // the purpose of keeping track of class name is to recognize the signatures of target
+      // methods. Since we don't take methods inside local classes as target methods, we don't need
+      // to keep track of class name in this case.
+      this.currentClassQualifiedName = decl.getFullyQualifiedName().orElseThrow();
     }
-    NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
-    updateForExtendedAndImplementedTypes(implementedTypes, implementedTypes, false);
-    declaredMethod.addFirst(new HashSet<>(node.getMethods()));
-    Visitable result = super.visit(node, arg);
+    if (decl.isEnumDeclaration()) {
+      // Enums cannot extend other classes (they always extend Enum) and cannot have type
+      // parameters, o it's not necessary to do any maintenance on the data structures that
+      // track superclasses or type parameters in the enum case (only implemented interfaces).
+      NodeList<ClassOrInterfaceType> implementedTypes =
+          decl.asEnumDeclaration().getImplementedTypes();
+      updateForExtendedAndImplementedTypes(implementedTypes, implementedTypes, false);
+    } else if (decl.isClassOrInterfaceDeclaration()) {
+      ClassOrInterfaceDeclaration asClassOrInterface = decl.asClassOrInterfaceDeclaration();
+
+      // Maintenance of type parameters
+      addTypeVariableScope(asClassOrInterface.getTypeParameters());
+
+      // Maintenance of superclasses and implemented/extended classes.
+      if (asClassOrInterface.getExtendedTypes().isNonEmpty()) {
+        // note that since Specimin does not have access to the classpaths of the project, all the
+        // unsolved methods related to inheritance will be placed in the parent class, even if there
+        // is a grandparent class and so forth.
+        SimpleName superClassSimpleName = asClassOrInterface.getExtendedTypes().get(0).getName();
+        classAndItsParent.put(className, superClassSimpleName.asString());
+      }
+      NodeList<ClassOrInterfaceType> implementedTypes = asClassOrInterface.getImplementedTypes();
+      // Not sure why getExtendedTypes return a list, since a class can only extends at most one
+      // class in Java.
+      NodeList<ClassOrInterfaceType> extendedAndImplementedTypes =
+          asClassOrInterface.getExtendedTypes();
+      extendedAndImplementedTypes.addAll(implementedTypes);
+      updateForExtendedAndImplementedTypes(
+          extendedAndImplementedTypes, implementedTypes, asClassOrInterface.isInterface());
+    } else {
+      throw new RuntimeException(
+          "unexpected type of declaration; expected a class, interface, or enum: " + decl);
+    }
+    declaredMethod.addFirst(new HashSet<>(decl.getMethods()));
+  }
+
+  /**
+   * Maintains the data structures of this class (like the {@link #className}, {@link
+   * #currentClassQualifiedName}, {@link #addedTargetFiles}, etc.) based on a class, interface, or
+   * enum declaration. Call this method after calling super.visit().
+   *
+   * @param decl the class, interface, or enum declaration
+   */
+  private void maintainDataStructuresPostSuper(TypeDeclaration<?> decl) {
+    boolean isLocalClassDecl =
+        decl.isClassOrInterfaceDeclaration()
+            && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
+
+    if (decl.isClassOrInterfaceDeclaration()) {
+      // Enums don't have type variables, so no scope for them is created
+      // when entering an enum.
+      typeVariables.removeFirst();
+    }
+
     declaredMethod.removeFirst();
-    if (node.isNestedType()) {
+    if (decl.isNestedType()) {
       this.currentClassQualifiedName =
           this.currentClassQualifiedName.substring(
               0, this.currentClassQualifiedName.lastIndexOf('.'));
-    } else {
+    } else if (!isLocalClassDecl) {
       this.currentClassQualifiedName = "";
     }
+  }
+
+  @Override
+  public Visitable visit(EnumDeclaration node, Void arg) {
+    maintainDataStructuresPreSuper(node);
+    Visitable result = super.visit(node, arg);
+    maintainDataStructuresPostSuper(node);
     return result;
   }
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
-    // NOTE: if you update the data structure maintenance done by this method,
-    // also update the maintenance in the visit method for EnumDeclarations
-    // just above.
-
-    // This is a special case, since the symbols of a ClassOrInterfaceDeclarations will be solved
-    // regardless of being inside target methods or potentially-used members.
-    SimpleName nodeName = node.getName();
-    className = nodeName.asString();
-    boolean isLocalDeclaration = node.isLocalClassDeclaration();
-    if (node.isNestedType()) {
-      this.currentClassQualifiedName += "." + node.getName().asString();
-    } else if (!isLocalDeclaration) {
-      // the purpose of keeping track of class name is to recognize the signatures of target
-      // methods. Since we don't take methods inside local classes as target methods, we don't need
-      // to keep track of class name in this case.
-      this.currentClassQualifiedName = node.getFullyQualifiedName().orElseThrow();
-    }
-    if (node.getExtendedTypes().isNonEmpty()) {
-      // note that since Specimin does not have access to the classpaths of the project, all the
-      // unsolved methods related to inheritance will be placed in the parent class, even if there
-      // is a grandparent class and so forth.
-      SimpleName superClassSimpleName = node.getExtendedTypes().get(0).getName();
-      classAndItsParent.put(className, superClassSimpleName.asString());
-    }
-
-    addTypeVariableScope(node.getTypeParameters());
-    NodeList<ClassOrInterfaceType> implementedTypes = node.getImplementedTypes();
-    // Not sure why getExtendedTypes return a list, since a class can only extends at most one class
-    // in Java.
-    NodeList<ClassOrInterfaceType> extendedAndImplementedTypes = node.getExtendedTypes();
-    extendedAndImplementedTypes.addAll(implementedTypes);
-    updateForExtendedAndImplementedTypes(
-        extendedAndImplementedTypes, implementedTypes, node.isInterface());
-
-    declaredMethod.addFirst(new HashSet<>(node.getMethods()));
+    maintainDataStructuresPreSuper(node);
     Visitable result = super.visit(node, arg);
-    typeVariables.removeFirst();
-    declaredMethod.removeFirst();
-
-    if (node.isNestedType()) {
-      this.currentClassQualifiedName =
-          this.currentClassQualifiedName.substring(
-              0, this.currentClassQualifiedName.lastIndexOf('.'));
-    } else if (!isLocalDeclaration) {
-      this.currentClassQualifiedName = "";
-    }
+    maintainDataStructuresPostSuper(node);
     return result;
   }
 
