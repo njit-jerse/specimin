@@ -206,15 +206,17 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * This method removes any implemented interfaces that are not used and therefore shouldn't be
    * preserved from the declaration of a class, interface, or enum. The argument should be produced
    * by calling the appropriate {@code getImplementedTypes()} method on the declaration, and after
-   * calling this method there should be a call to {@code setImplementedTypes} on the declaration
-   * so that its changes take effect. Side-effects its argument.
+   * calling this method there should be a call to {@code setImplementedTypes} on the declaration so
+   * that its changes take effect. Side-effects its argument.
    *
-   * @param qualifiedName the fully-qualified name of the class/interface/enum whose interfaces might be removed
+   * @param qualifiedName the fully-qualified name of the class/interface/enum whose interfaces
+   *     might be removed
    * @param implementedInterfaces the list of implemented interfaces to consider. After this method
-   *                              terminates, this list will have been side-effected to remove
-   *                              any interfaces that should not be preserved.
+   *     terminates, this list will have been side-effected to remove any interfaces that should not
+   *     be preserved.
    */
-  private void removeUnusedInterfacesHelper(String qualifiedName, NodeList<ClassOrInterfaceType> implementedInterfaces) {
+  private void removeUnusedInterfacesHelper(
+      String qualifiedName, NodeList<ClassOrInterfaceType> implementedInterfaces) {
     Iterator<ClassOrInterfaceType> iterator = implementedInterfaces.iterator();
     while (iterator.hasNext()) {
       ClassOrInterfaceType interfaceType = iterator.next();
@@ -231,8 +233,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
           // since classNeedInterfaceRemoved can be in the form of a simple name
           if (qualifiedName.endsWith(classNeedInterfaceRemoved)) {
             if (classAndUnresolvedInterface
-                    .get(classNeedInterfaceRemoved)
-                    .equals(interfaceType.getNameAsString())) {
+                .get(classNeedInterfaceRemoved)
+                .equals(interfaceType.getNameAsString())) {
               // This code assumes that the likelihood of two different classes with the same
               // simple name implementing the same interface is low.
               iterator.remove();
