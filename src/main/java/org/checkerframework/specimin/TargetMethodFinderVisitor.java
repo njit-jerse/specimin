@@ -9,6 +9,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -268,53 +269,63 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         continue;
       }
     }
-
-    if (decl.isNestedType()) {
-      this.classFQName += "." + decl.getName().toString();
-    } else if (!decl.isLocalClassDeclaration()) {
-      if (!this.classFQName.equals("")) {
-        throw new UnsupportedOperationException(
-            "Attempted to enter an unexpected kind of class: "
-                + decl.getFullyQualifiedName()
-                + " but already had a set classFQName: "
-                + classFQName);
-      }
-      // Should always be present.
-      this.classFQName = decl.getFullyQualifiedName().orElseThrow();
-    }
+    manageClassFQNamePreSuper(decl);
     Visitable result = super.visit(decl, p);
-    if (decl.isNestedType()) {
-      this.classFQName = this.classFQName.substring(0, this.classFQName.lastIndexOf('.'));
-    } else if (!decl.isLocalClassDeclaration()) {
-      this.classFQName = "";
-    }
+    manageClassFQNamePostSuper(decl);
     return result;
   }
 
   @Override
   public Visitable visit(EnumDeclaration decl, Void p) {
-    // TODO there's some duplication between this code and the code for classes
-    // I'm intentionally leaving it as tech debt for after ISSTA 24.
+    manageClassFQNamePreSuper(decl);
+    Visitable result = super.visit(decl, p);
+    manageClassFQNamePostSuper(decl);
+    return result;
+  }
+
+  /**
+   * Helper method to share code for managing the {@link #classFQName} field between
+   * classes/interfaces and enums. Call this method before calling super.visit().
+   *
+   * @see #classFQName
+   * @see #manageClassFQNamePostSuper(TypeDeclaration)
+   * @param decl a class, interface, or enum declaration
+   */
+  private void manageClassFQNamePreSuper(TypeDeclaration<?> decl) {
     if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
-      if (!this.classFQName.equals("")) {
-        throw new UnsupportedOperationException(
-            "Attempted to enter an unexpected kind of enum: "
-                + decl.getFullyQualifiedName()
-                + " but already had a set classFQName: "
-                + classFQName);
+      boolean isLocalClass =
+          decl.isClassOrInterfaceDeclaration()
+              && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
+      if (!isLocalClass) {
+        if (!this.classFQName.equals("")) {
+          throw new UnsupportedOperationException(
+              "Attempted to enter an unexpected kind of class: "
+                  + decl.getFullyQualifiedName()
+                  + " but already had a set classFQName: "
+                  + classFQName);
+        }
+        // Should always be present.
+        this.classFQName = decl.getFullyQualifiedName().orElseThrow();
       }
-      // Should always be present.
-      this.classFQName = decl.getFullyQualifiedName().orElseThrow();
     }
-    Visitable result = super.visit(decl, p);
+  }
+
+  /**
+   * Helper method to share code for managing the {@link #classFQName} field between
+   * classes/interfaces and enums. Call this method after calling super.visit().
+   *
+   * @see #classFQName
+   * @see #manageClassFQNamePreSuper(TypeDeclaration)
+   * @param decl a class, interface, or enum declaration
+   */
+  private void manageClassFQNamePostSuper(TypeDeclaration<?> decl) {
     if (decl.isNestedType()) {
       this.classFQName = this.classFQName.substring(0, this.classFQName.lastIndexOf('.'));
     } else {
       this.classFQName = "";
     }
-    return result;
   }
 
   @Override
