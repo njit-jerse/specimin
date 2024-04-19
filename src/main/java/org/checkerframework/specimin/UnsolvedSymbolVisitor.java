@@ -2856,7 +2856,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName.append(".").append(methodParts.get(i));
     }
     // At this point, returnTypeClassName will be ComExampleMyClassProcessReturnType
-    returnTypeClassName.append(toCapital(className)).append(toCapital(methodName)).append("ReturnType");
+    returnTypeClassName
+        .append(toCapital(className))
+        .append(toCapital(methodName))
+        .append("ReturnType");
     // since returnTypeClassName is just a single long string without any dot in the middle, it will
     // be a simple name.
     @SuppressWarnings("signature")
@@ -2914,12 +2917,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName.append(".").append(fieldParts.get(i));
     }
     // At this point, fieldTypeClassName will be ComExampleMyClassMyFieldType
-    fieldTypeClassName.append(toCapital(className)).append(toCapital(fieldName)).append("SyntheticType");
+    fieldTypeClassName
+        .append(toCapital(className))
+        .append(toCapital(fieldName))
+        .append("SyntheticType");
     // since fieldTypeClassName is just a single long string without any dot in the middle, it will
     // be a simple name.
     @SuppressWarnings("signature")
     @ClassGetSimpleName String thisFieldType = fieldTypeClassName.toString();
-    UnsolvedClassOrInterface typeClass = new UnsolvedClassOrInterface(thisFieldType, packageName.toString());
+    UnsolvedClassOrInterface typeClass =
+        new UnsolvedClassOrInterface(thisFieldType, packageName.toString());
     UnsolvedClassOrInterface classThatContainField =
         new UnsolvedClassOrInterface(className, packageName.toString());
     // at this point, fieldDeclaration will become "ComExampleMyClassMyFieldType myField"
@@ -2931,7 +2938,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // fieldDeclaration will become "static ComExampleMyClassMyFieldType myField = null;"
       fieldDeclaration = "static " + fieldDeclaration;
     }
-    fieldDeclaration = setInitialValueForVariableDeclaration(fieldTypeClassName.toString(), fieldDeclaration);
+    fieldDeclaration =
+        setInitialValueForVariableDeclaration(fieldTypeClassName.toString(), fieldDeclaration);
     classThatContainField.addFields(fieldDeclaration);
     classAndPackageMap.put(thisFieldType, packageName.toString());
     classAndPackageMap.put(className, packageName.toString());
