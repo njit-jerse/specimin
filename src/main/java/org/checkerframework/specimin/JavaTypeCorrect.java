@@ -225,6 +225,7 @@ class JavaTypeCorrect {
         }
       }
     } catch (IOException e) {
+      // TODO: Handle this properly
       System.out.println(e);
     }
   }

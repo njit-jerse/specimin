@@ -34,7 +34,8 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
 
   @Override
   public void visit(FieldDeclaration decl, Void p) {
-    Node parent = decl.getParentNode().get();
+    // Fields must be contained in an AST node in Java.
+    Node parent = decl.getParentNode().orElseThrow();
 
     if (parent instanceof ObjectCreationExpr) {
       return;
