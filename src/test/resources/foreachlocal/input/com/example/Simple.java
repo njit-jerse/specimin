@@ -8,9 +8,11 @@ final class Simple {
 
     // Target method. The goal of this test is to check that f is added to the local variable
     // scope, and not considered a field of the (non-existent) superclass.
-    void bar() {
+    public static void bar() {
         for (Foo f : foos) {
-            f.doSomething();
+            if (f instanceof Bar) {
+                f.doSomething();
+            }
         }
     }
 }

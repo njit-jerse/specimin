@@ -1,12 +1,9 @@
 package org.checkerframework.specimin;
 
+import java.io.IOException;
 import org.junit.Test;
 
-import java.io.IOException;
-
-/**
- * Test for <a href="https://github.com/kelloggm/specimin/issues/165">#165</a>.
- */
+/** Test for <a href="https://github.com/kelloggm/specimin/issues/165">#165</a>. */
 public class ForEachLocalTest {
   @Test
   public void runTest() throws IOException {
