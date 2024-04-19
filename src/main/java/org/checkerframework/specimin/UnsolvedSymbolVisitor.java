@@ -2842,8 +2842,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // Suppose this is our method call: com.example.MyClass.process()
     // At this point, our method call become: com.example.MyClass.process
     int lengthMethodParts = methodParts.size();
-    String returnTypeClassName = toCapital(methodParts.get(0));
-    String packageName = methodParts.get(0);
+    StringBuilder returnTypeClassName = new StringBuilder(toCapital(methodParts.get(0)));
+    StringBuilder packageName = new StringBuilder(methodParts.get(0));
     // According to the above example, methodName will be process
     String methodName = methodParts.get(lengthMethodParts - 1);
     @SuppressWarnings(
@@ -2852,21 +2852,20 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @ClassGetSimpleName String className = methodParts.get(lengthMethodParts - 2);
     // After this loop: returnTypeClassName will be ComExample, and packageName will be com.example
     for (int i = 1; i < lengthMethodParts - 2; i++) {
-      returnTypeClassName = returnTypeClassName + toCapital(methodParts.get(i));
-      packageName = packageName + "." + methodParts.get(i);
+      returnTypeClassName.append(toCapital(methodParts.get(i)));
+      packageName.append(".").append(methodParts.get(i));
     }
     // At this point, returnTypeClassName will be ComExampleMyClassProcessReturnType
-    returnTypeClassName =
-        returnTypeClassName + toCapital(className) + toCapital(methodName) + "ReturnType";
+    returnTypeClassName.append(toCapital(className)).append(toCapital(methodName)).append("ReturnType");
     // since returnTypeClassName is just a single long string without any dot in the middle, it will
     // be a simple name.
     @SuppressWarnings("signature")
-    @ClassGetSimpleName String thisReturnType = returnTypeClassName;
+    @ClassGetSimpleName String thisReturnType = returnTypeClassName.toString();
     UnsolvedClassOrInterface returnClass =
-        new UnsolvedClassOrInterface(thisReturnType, packageName);
+        new UnsolvedClassOrInterface(thisReturnType, packageName.toString());
     UnsolvedMethod newMethod = new UnsolvedMethod(methodName, thisReturnType, methodArgTypes);
     UnsolvedClassOrInterface classThatContainMethod =
-        new UnsolvedClassOrInterface(className, packageName);
+        new UnsolvedClassOrInterface(className, packageName.toString());
     newMethod.setStatic();
     classThatContainMethod.addMethod(newMethod);
     syntheticMethodReturnTypeAndClass.put(thisReturnType, classThatContainMethod);
@@ -2891,8 +2890,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public void updateClassSetWithQualifiedFieldSignature(
       String fieldExpr, boolean isStatic, boolean isFinal) {
     // As this code involves complex string operations, we'll use a field access expression as an
-    // example,
-    // following its progression through the code.
+    // example, following its progression through the code.
     // Suppose this is our field access expression: com.example.MyClass.myField
     List<String> fieldParts = Splitter.onPattern("[.]").splitToList(fieldExpr);
     int numOfFieldParts = fieldParts.size();
@@ -2902,8 +2900,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               + " isAnUnsolvedStaticFieldCalledByAQualifiedClassName before using this method");
     }
     // this is the synthetic type of the field
-    String fieldTypeClassName = toCapital(fieldParts.get(0));
-    String packageName = fieldParts.get(0);
+    StringBuilder fieldTypeClassName = new StringBuilder(toCapital(fieldParts.get(0)));
+    StringBuilder packageName = new StringBuilder(fieldParts.get(0));
     // According to the above example, fieldName will be myField
     String fieldName = fieldParts.get(numOfFieldParts - 1);
     @SuppressWarnings(
@@ -2912,19 +2910,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     @ClassGetSimpleName String className = fieldParts.get(numOfFieldParts - 2);
     // After this loop: fieldTypeClassName will be ComExample, and packageName will be com.example
     for (int i = 1; i < numOfFieldParts - 2; i++) {
-      fieldTypeClassName = fieldTypeClassName + toCapital(fieldParts.get(i));
-      packageName = packageName + "." + fieldParts.get(i);
+      fieldTypeClassName.append(toCapital(fieldParts.get(i)));
+      packageName.append(".").append(fieldParts.get(i));
     }
     // At this point, fieldTypeClassName will be ComExampleMyClassMyFieldType
-    fieldTypeClassName =
-        fieldTypeClassName + toCapital(className) + toCapital(fieldName) + "SyntheticType";
+    fieldTypeClassName.append(toCapital(className)).append(toCapital(fieldName)).append("SyntheticType");
     // since fieldTypeClassName is just a single long string without any dot in the middle, it will
     // be a simple name.
     @SuppressWarnings("signature")
-    @ClassGetSimpleName String thisFieldType = fieldTypeClassName;
-    UnsolvedClassOrInterface typeClass = new UnsolvedClassOrInterface(thisFieldType, packageName);
+    @ClassGetSimpleName String thisFieldType = fieldTypeClassName.toString();
+    UnsolvedClassOrInterface typeClass = new UnsolvedClassOrInterface(thisFieldType, packageName.toString());
     UnsolvedClassOrInterface classThatContainField =
-        new UnsolvedClassOrInterface(className, packageName);
+        new UnsolvedClassOrInterface(className, packageName.toString());
     // at this point, fieldDeclaration will become "ComExampleMyClassMyFieldType myField"
     String fieldDeclaration = fieldTypeClassName + " " + fieldName;
     if (isFinal) {
@@ -2934,10 +2931,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // fieldDeclaration will become "static ComExampleMyClassMyFieldType myField = null;"
       fieldDeclaration = "static " + fieldDeclaration;
     }
-    fieldDeclaration = setInitialValueForVariableDeclaration(fieldTypeClassName, fieldDeclaration);
+    fieldDeclaration = setInitialValueForVariableDeclaration(fieldTypeClassName.toString(), fieldDeclaration);
     classThatContainField.addFields(fieldDeclaration);
-    classAndPackageMap.put(thisFieldType, packageName);
-    classAndPackageMap.put(className, packageName);
+    classAndPackageMap.put(thisFieldType, packageName.toString());
+    classAndPackageMap.put(className, packageName.toString());
     syntheticTypeAndClass.put(thisFieldType, classThatContainField);
     this.updateMissingClass(typeClass);
     this.updateMissingClass(classThatContainField);
