@@ -112,6 +112,16 @@ public class UnsolvedMethod {
     return name;
   }
 
+  /**
+   * Getter for the parameter list. Caution: this method returns an actual pointer to the parameter
+   * list, so updates to this list will be reflected in the method.
+   *
+   * @return the parameter list
+   */
+  public List<String> getParameterList() {
+    return parameterList;
+  }
+
   /** Set isStatic to true */
   public void setStatic() {
     isStatic = true;
