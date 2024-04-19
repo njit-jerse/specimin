@@ -739,6 +739,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
       Set<String> currentListOfLocals = localVariables.peek();
+      if (currentListOfLocals == null) {
+        throw new RuntimeException("tried to add a variable without a scope available: " + decl);
+      }
       currentListOfLocals.add(decl.getNameAsString());
     }
     if (potentialUsedMembers.contains(decl.getName().asString())) {
