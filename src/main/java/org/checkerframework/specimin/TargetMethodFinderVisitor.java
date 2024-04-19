@@ -295,10 +295,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
-      boolean isLocalClass =
-          decl.isClassOrInterfaceDeclaration()
-              && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
-      if (!isLocalClass) {
+      if (!JavaParserUtil.isLocalClassDecl(decl)) {
         if (!this.classFQName.equals("")) {
           throw new UnsupportedOperationException(
               "Attempted to enter an unexpected kind of class: "
@@ -323,7 +320,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private void manageClassFQNamePostSuper(TypeDeclaration<?> decl) {
     if (decl.isNestedType()) {
       this.classFQName = this.classFQName.substring(0, this.classFQName.lastIndexOf('.'));
-    } else {
+    } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
       this.classFQName = "";
     }
   }
