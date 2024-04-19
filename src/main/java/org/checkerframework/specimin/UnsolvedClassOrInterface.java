@@ -187,78 +187,51 @@ public class UnsolvedClassOrInterface {
    * @param method the method to be added
    */
   public void addMethod(UnsolvedMethod method) {
-    // Ensure that the method's parameters are all fully-qualified by
-    // marking anything that isn't fully-qualified and isn't a primitive or
-    // in java.lang with the package name of this class.
-    List<String> parameterList = method.getParameterList();
-    for (int i = 0; i < parameterList.size(); i++) {
-      String oldParameterType = parameterList.get(i);
-      String newParameterType = makeParameterTypeFullyQualified(oldParameterType);
-      if (!oldParameterType.equals(newParameterType)) {
-        // This doesn't shift the indices of anything else,
-        // so it won't throw a concurrent modification exception.
-        parameterList.remove(i);
-        parameterList.add(i, newParameterType);
+    // Check for another method with the same parameter list, but with differences in
+    // whether the parameter names are fully-qualified or simple names.
+    List<String> paramList = method.getParameterList();
+    UnsolvedMethod matchingMethod = null;
+    boolean preferOther = true;
+    methods:
+    for (UnsolvedMethod otherMethod : this.methods) {
+      // Skip methods that are definitely different.
+      if (!method.getName().equals(otherMethod.getName())
+          || otherMethod.getParameterList().size() != paramList.size()) {
+        continue;
+      }
+
+      for (int i = 0; i < paramList.size(); ++i) {
+        String paramType = paramList.get(i);
+        String otherParamType = otherMethod.getParameterList().get(i);
+        if ((this.packageName + "." + otherParamType).equals(paramType)) {
+          // In this case, the current method has the FQNs.
+          preferOther = false;
+        } else if (otherParamType.equals(this.packageName + "." + paramType)) {
+          // The other method already has the FQNs, so do nothing here.
+        } else {
+          // if there is ever a difference, skip to the next method; there is
+          // no need to check for exact equality, because methods is a set
+          // so any duplicates won't be added.
+          continue methods;
+        }
+      }
+      matchingMethod = otherMethod;
+    }
+
+    if (matchingMethod != null) {
+      if (preferOther) {
+        // Nothing more to do: the correct method is already present,
+        // and this one is a duplicate with simple names.
+        return;
+      } else {
+        // We need to replace the current variant of the method with this one.
+        // So, remove the current one (the add call below will take care of
+        // adding this method, just as if this was a totally new method).
+        this.methods.remove(matchingMethod);
       }
     }
 
     this.methods.add(method);
-  }
-
-  /**
-   * Converts any non-fully-qualified type names in the parameter type name into fully-qualified
-   * names using the current class' package name.
-   *
-   * @param parameterType the type of the parameter (possibly including type parameters)
-   * @return the same type, but with non-FQNs (besides those in java.lang) converted to FQNs
-   */
-  private String makeParameterTypeFullyQualified(String parameterType) {
-    int typeParamIndex = parameterType.indexOf('<');
-    if (typeParamIndex != -1) {
-      // exclude the <>
-      String typeParams = parameterType.substring(typeParamIndex + 1, parameterType.length() - 1);
-      String baseType = parameterType.substring(0, typeParamIndex);
-      return makeParameterTypeFullyQualified(baseType)
-          + "<"
-          + makeParameterTypeFullyQualified(typeParams)
-          + ">";
-    }
-    // at this point, we're guaranteed to either have a type or a type parameter clause
-    if ("?".equals(parameterType)) {
-      return "?";
-    }
-
-    // handle type parameter bounds
-    String[] extendsAndSuper = {" extends ", " super "};
-    for (String boundType : extendsAndSuper) {
-      if (parameterType.contains(boundType)) {
-        @SuppressWarnings("StringSplitter") // We want the java.lang.String behavior here:
-        // the strings on either side of each " extends " or " super" are guaranteed to be
-        // non-empty.
-        String[] extended = parameterType.split(boundType);
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < extended.length; ++i) {
-          result.append(makeParameterTypeFullyQualified(extended[i]));
-          if (i != extended.length - 1) {
-            result.append(boundType);
-          }
-          return result.toString();
-        }
-      }
-    }
-
-    // At this point we know that this is a type name, either simple or fully-qualified.
-    // If the parameter's type is fully-qualified, we're good to go.
-    if (parameterType.indexOf('.') != -1) {
-      return parameterType;
-    }
-    // Otherwise, check if it's a primitive or java.lang class.
-    if (JavaLangUtils.isJavaLangOrPrimitiveName(parameterType)) {
-      return parameterType;
-    }
-    // Finally, if none of the above apply, then add the current class' package name
-    // to make this an FQN.
-    return this.packageName + "." + parameterType;
   }
 
   /**
