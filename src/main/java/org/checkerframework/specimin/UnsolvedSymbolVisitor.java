@@ -1960,7 +1960,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     // If we're inside an object creation, this is an anonymous class. Locate any super things
     // in the class that's being extended.
-    String parentClassName = insideAnObjectCreation(expr) ? className : getParentClass(className);
+    String parentClassName;
+    try {
+      parentClassName = insideAnObjectCreation(expr) ? className : getParentClass(className);
+    } catch (RuntimeException e) {
+      throw new RuntimeException("crashed while trying to get the parent for " + expr, e);
+    }
     if (expr instanceof MethodCallExpr) {
       updateUnsolvedClassOrInterfaceWithMethod(
           expr.asMethodCallExpr(),
