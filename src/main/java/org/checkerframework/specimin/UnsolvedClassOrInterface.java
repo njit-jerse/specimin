@@ -187,6 +187,50 @@ public class UnsolvedClassOrInterface {
    * @param method the method to be added
    */
   public void addMethod(UnsolvedMethod method) {
+    // Check for another method with the same parameter list, but with differences in
+    // whether the parameter names are fully-qualified or simple names.
+    List<String> paramList = method.getParameterList();
+    UnsolvedMethod matchingMethod = null;
+    boolean preferOther = true;
+    methods:
+    for (UnsolvedMethod otherMethod : this.methods) {
+      // Skip methods that are definitely different.
+      if (!method.getName().equals(otherMethod.getName())
+          || otherMethod.getParameterList().size() != paramList.size()) {
+        continue;
+      }
+
+      for (int i = 0; i < paramList.size(); ++i) {
+        String paramType = paramList.get(i);
+        String otherParamType = otherMethod.getParameterList().get(i);
+        if ((this.packageName + "." + otherParamType).equals(paramType)) {
+          // In this case, the current method has the FQNs.
+          preferOther = false;
+        } else if (otherParamType.equals(this.packageName + "." + paramType)) {
+          // The other method already has the FQNs, so do nothing here.
+        } else {
+          // if there is ever a difference, skip to the next method; there is
+          // no need to check for exact equality, because methods is a set
+          // so any duplicates won't be added.
+          continue methods;
+        }
+      }
+      matchingMethod = otherMethod;
+    }
+
+    if (matchingMethod != null) {
+      if (preferOther) {
+        // Nothing more to do: the correct method is already present,
+        // and this one is a duplicate with simple names.
+        return;
+      } else {
+        // We need to replace the current variant of the method with this one.
+        // So, remove the current one (the add call below will take care of
+        // adding this method, just as if this was a totally new method).
+        this.methods.remove(matchingMethod);
+      }
+    }
+
     this.methods.add(method);
   }
 

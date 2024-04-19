@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -22,7 +23,7 @@ public class UnsolvedMethod {
    * The list of the types of the parameters of the method. (Right now we won't touch it until the
    * new variant of SymbolSolver is available)
    */
-  private List<String> parameterList;
+  private final List<String> parameterList;
 
   /** This field is set to true if this method is a static method */
   private boolean isStatic = false;
@@ -110,6 +111,15 @@ public class UnsolvedMethod {
    */
   public String getName() {
     return name;
+  }
+
+  /**
+   * Getter for the parameter list. Note that the list is read-only.
+   *
+   * @return the parameter list
+   */
+  public List<String> getParameterList() {
+    return Collections.unmodifiableList(parameterList);
   }
 
   /** Set isStatic to true */
