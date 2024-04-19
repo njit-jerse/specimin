@@ -52,10 +52,8 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
     // Nested types don't have a separate class file.
     if (!decl.isNestedType()) {
       // getFullyQualifiedName is always present for non-local classes, but enum declarations can't
-      // be local
-      // before Java 16. We only currently technically only support up to Java 11 (due to JavaParser
-      // version
-      // restrictions). Until we upgrade JavaParser, this is safe.
+      // be local before Java 16. We only currently technically only support up to Java 11
+      // (due to JavaParser version restrictions). Until we upgrade JavaParser, this is safe.
       fileDirectory = decl.getFullyQualifiedName().orElseThrow().replace(".", "/") + ".java";
       fileAndAssociatedTypes.put(fileDirectory, new HashSet<>());
     }
