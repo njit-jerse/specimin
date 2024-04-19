@@ -26,6 +26,7 @@ import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -647,6 +648,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(ForEachStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.addFirst(currentLocalVariables);
+    String loopVarName = node.getVariableDeclarator().getNameAsString();
+    currentLocalVariables.add(loopVarName);
+    Visitable result = super.visit(node, p);
+    localVariables.removeFirst();
+    return result;
+  }
+
+  @Override
   public Visitable visit(SwitchExpr node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
@@ -726,9 +738,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         decl.getParentNode().isPresent()
             && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
-      Set<String> currentListOfLocals = localVariables.removeFirst();
+      Set<String> currentListOfLocals = localVariables.peek();
       currentListOfLocals.add(decl.getNameAsString());
-      localVariables.addFirst(currentListOfLocals);
     }
     if (potentialUsedMembers.contains(decl.getName().asString())) {
       insidePotentialUsedMember = true;
