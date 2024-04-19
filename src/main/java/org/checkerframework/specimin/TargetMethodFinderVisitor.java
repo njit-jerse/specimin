@@ -347,7 +347,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         return result;
       }
       // used enums needs to have compilable constructors.
-      if (usedTypeElement.contains(parentNode.getFullyQualifiedName().get())) {
+      if (usedTypeElement.contains(parentNode.getFullyQualifiedName().orElseThrow())) {
         for (Parameter parameter : method.getParameters()) {
           updateUsedClassBasedOnType(parameter.getType().resolve());
         }
@@ -462,7 +462,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
         if (paramType.isReferenceType()) {
           String paraTypeFullName =
-              paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
+              paramType.asReferenceType().getTypeDeclaration().orElseThrow().getQualifiedName();
           updateUsedClassWithQualifiedClassName(
               paraTypeFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
           for (ResolvedType typeParameterValue :
@@ -615,10 +615,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
-    Node parentNode = enumConstantDeclaration.getParentNode().get();
+    Node parentNode = enumConstantDeclaration.getParentNode().orElseThrow();
     if (parentNode instanceof EnumDeclaration) {
       if (usedTypeElement.contains(
-          ((EnumDeclaration) parentNode).asEnumDeclaration().getFullyQualifiedName().get())) {
+          ((EnumDeclaration) parentNode)
+              .asEnumDeclaration()
+              .getFullyQualifiedName()
+              .orElseThrow())) {
         boolean oldInsideTargetMember = insideTargetMember;
         // used enum constant are not strictly target methods, but we need to make sure the symbols
         // inside them are preserved.

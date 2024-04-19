@@ -298,9 +298,7 @@ public class UnsolvedClassOrInterface {
       }
     }
 
-    for (String field : newFields) {
-      classFields.add(field);
-    }
+    classFields.addAll(newFields);
     return successfullyUpdated;
   }
 
@@ -360,7 +358,7 @@ public class UnsolvedClassOrInterface {
       sb.append("public class ").append(className).append(getTypeVariablesAsString());
     }
     if (extendsClause != null) {
-      sb.append(" " + extendsClause);
+      sb.append(" ").append(extendsClause);
     }
     sb.append(" {\n");
     if (innerClasses != null) {
@@ -369,7 +367,7 @@ public class UnsolvedClassOrInterface {
       }
     }
     for (String variableDeclarations : classFields) {
-      sb.append("    " + "public " + variableDeclarations + ";\n");
+      sb.append("    " + "public ").append(variableDeclarations).append(";\n");
     }
     for (UnsolvedMethod method : methods) {
       sb.append(method.toString());
