@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.TypeDeclaration;
 
 /**
  * A class containing useful static functions using JavaParser.
@@ -33,5 +34,16 @@ public class JavaParserUtil {
     while (!node.remove()) {
       node = node.getParentNode().get();
     }
+  }
+
+  /**
+   * Utility method to check if the given declaration is a local class declaration.
+   *
+   * @param decl a class, interface, or enum declaration
+   * @return true iff the given declaration is of a local class
+   */
+  public static boolean isLocalClassDecl(TypeDeclaration<?> decl) {
+    return decl.isClassOrInterfaceDeclaration()
+        && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
   }
 }

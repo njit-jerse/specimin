@@ -433,12 +433,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private void maintainDataStructuresPreSuper(TypeDeclaration<?> decl) {
     SimpleName nodeName = decl.getName();
     className = nodeName.asString();
-    boolean isLocalClassDecl =
-        decl.isClassOrInterfaceDeclaration()
-            && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
     if (decl.isNestedType()) {
       this.currentClassQualifiedName += "." + decl.getName().asString();
-    } else if (!isLocalClassDecl) {
+    } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
       // the purpose of keeping track of class name is to recognize the signatures of target
       // methods. Since we don't take methods inside local classes as target methods, we don't need
       // to keep track of class name in this case.
@@ -488,10 +485,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param decl the class, interface, or enum declaration
    */
   private void maintainDataStructuresPostSuper(TypeDeclaration<?> decl) {
-    boolean isLocalClassDecl =
-        decl.isClassOrInterfaceDeclaration()
-            && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
-
     if (decl.isClassOrInterfaceDeclaration()) {
       // Enums don't have type variables, so no scope for them is created
       // when entering an enum.
@@ -503,7 +496,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       this.currentClassQualifiedName =
           this.currentClassQualifiedName.substring(
               0, this.currentClassQualifiedName.lastIndexOf('.'));
-    } else if (!isLocalClassDecl) {
+    } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
       this.currentClassQualifiedName = "";
     }
   }
