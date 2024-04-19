@@ -267,7 +267,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     boolean oldInsideFunctionalInterface = insideFunctionalInterface;
     @Nullable AnnotationExpr functionInterfaceAnnotationExpr = null;
     for (AnnotationExpr anno : decl.getAnnotations()) {
-      if (anno.getNameAsString().equals("FunctionalInterface")) {
+      if ("FunctionalInterface".equals(anno.getNameAsString())) {
         insideFunctionalInterface = true;
         functionInterfaceAnnotationExpr = anno;
       }

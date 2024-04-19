@@ -55,7 +55,7 @@ public class EnumVisitor extends VoidVisitorAdapter<Void> {
     if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
     } else if (!decl.isLocalClassDeclaration()) {
-      if (!this.classFQName.equals("")) {
+      if (!"".equals(this.classFQName)) {
         throw new UnsupportedOperationException(
             "Attempted to enter an unexpected kind of class: "
                 + decl.getFullyQualifiedName()

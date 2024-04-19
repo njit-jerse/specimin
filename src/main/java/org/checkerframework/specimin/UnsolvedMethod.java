@@ -153,7 +153,7 @@ public class UnsolvedMethod {
       }
     }
     String returnTypeInString = "";
-    if (!returnType.equals("")) {
+    if (!"".equals(returnType)) {
       returnTypeInString = returnType + " ";
     }
     String staticField = "";

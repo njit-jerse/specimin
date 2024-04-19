@@ -310,7 +310,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (importParts.size() > 0) {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
-        if (!className.equals("*")) {
+        if (!"*".equals(className)) {
           this.classAndPackageMap.put(className, packageName);
         }
       }
