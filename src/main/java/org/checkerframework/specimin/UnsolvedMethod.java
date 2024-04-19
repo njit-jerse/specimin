@@ -143,29 +143,29 @@ public class UnsolvedMethod {
    */
   @Override
   public String toString() {
-    String arguments = "";
+    StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
       String parameter = parameterList.get(i);
-      String parameterName = "parameter" + i;
-      arguments = arguments + parameter + " " + parameterName;
+      arguments.append(parameter).append(" ").append("parameter").append(i);
       if (i < parameterList.size() - 1) {
-        arguments = arguments + ", ";
+        arguments.append(", ");
       }
     }
-    String returnTypeInString = "";
-    if (!returnType.equals("")) {
-      returnTypeInString = returnType + " ";
-    }
-    String staticField = "";
+    StringBuilder signature = new StringBuilder();
+    signature.append(accessModifier).append(" ");
     if (isStatic) {
-      staticField = "static ";
+      signature.append("static ");
     }
-    String methodSignature =
-        accessModifier + " " + staticField + returnTypeInString + name + "(" + arguments + ")";
+    if (!"".equals(returnType)) {
+      signature.append(returnType).append(" ");
+    }
+    signature.append(name).append("(");
+    signature.append(arguments);
+    signature.append(")");
     if (isJustMethodSignature) {
-      return methodSignature + ";";
+      return signature.append(";").toString();
     } else {
-      return "\n    " + methodSignature + " {\n        throw new Error();\n    }\n";
+      return "\n    " + signature + " {\n        throw new Error();\n    }\n";
     }
   }
 }

@@ -163,14 +163,15 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
       return decl;
     }
-    if (decl.isStatic()) {
+
+    if (decl.isStatic() && isUsedMethod(classFullName)) {
       // if it's a static import, classFullName will actually be a method name
-      if (isUsedMethod(classFullName)) {
-        return super.visit(decl, p);
-      }
-    } else if (classesUsedByTargetMethods.contains(classFullName)) {
       return super.visit(decl, p);
     }
+    if (classesUsedByTargetMethods.contains(classFullName)) {
+      return super.visit(decl, p);
+    }
+
     decl.remove();
     return decl;
   }
@@ -266,7 +267,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     boolean oldInsideFunctionalInterface = insideFunctionalInterface;
     @Nullable AnnotationExpr functionInterfaceAnnotationExpr = null;
     for (AnnotationExpr anno : decl.getAnnotations()) {
-      if (anno.getNameAsString().equals("FunctionalInterface")) {
+      if ("FunctionalInterface".equals(anno.getNameAsString())) {
         insideFunctionalInterface = true;
         functionInterfaceAnnotationExpr = anno;
       }
@@ -326,6 +327,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       methodDecl.remove();
       return methodDecl;
     }
+
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       boolean oldInsideTargetMethod = insideTargetMethod;
@@ -333,7 +335,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       Visitable result = super.visit(methodDecl, p);
       insideTargetMethod = oldInsideTargetMethod;
       return result;
-    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())
+    }
+
+    if (membersToEmpty.contains(resolved.getQualifiedSignature())
         || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
@@ -345,20 +349,22 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         }
       }
       return methodDecl;
-    } else if (insideFunctionalInterface) {
+    }
+
+    if (insideFunctionalInterface) {
       if (methodDecl.getBody().isPresent()) {
         // avoid introducing unsolved symbols into the final output.
         methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       }
       return methodDecl;
-    } else {
-      // if insideTargetMethod is true, this current method declaration belongs to an anonnymous
-      // class inside the target method.
-      if (!insideTargetMethod) {
-        methodDecl.remove();
-      }
-      return methodDecl;
     }
+
+    // if insideTargetMethod is true, this current method declaration belongs to an anonnymous
+    // class inside the target method.
+    if (!insideTargetMethod) {
+      methodDecl.remove();
+    }
+    return methodDecl;
   }
 
   @Override
@@ -377,35 +383,38 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       return constructorDecl;
     }
 
+    if (methodsToLeaveUnchanged.contains(qualifiedSignature)) {
+      return super.visit(constructorDecl, p);
+    }
+
     // TODO: we should be cleverer about whether to preserve the constructors of
     // enums, but right now we don't remove any enum constants in related classes, so
     // we need to preserve all constructors to retain compilability.
-
-    if (methodsToLeaveUnchanged.contains(qualifiedSignature)) {
-      return super.visit(constructorDecl, p);
-    } else if (membersToEmpty.contains(qualifiedSignature) || isInEnum(constructorDecl)) {
+    if (membersToEmpty.contains(qualifiedSignature) || isInEnum(constructorDecl)) {
       if (!needToPreserveSuperOrThisCall(constructorDecl.resolve())) {
         constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
-      } else {
-        NodeList<Statement> bodyStatement = constructorDecl.getBody().getStatements();
-        if (bodyStatement.size() == 0) {
-          return constructorDecl;
-        }
-        Statement firstStatement = bodyStatement.get(0);
-        if (firstStatement.isExplicitConstructorInvocationStmt()) {
-          BlockStmt minimized = new BlockStmt();
-          minimized.addStatement(firstStatement);
-          constructorDecl.setBody(minimized);
-          return constructorDecl;
-        }
-        // not sure if we will ever get to this line. So this line is merely for the peace of mind.
-        constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+        return constructorDecl;
       }
-      return constructorDecl;
-    } else {
-      constructorDecl.remove();
+
+      NodeList<Statement> bodyStatement = constructorDecl.getBody().getStatements();
+      if (bodyStatement.size() == 0) {
+        return constructorDecl;
+      }
+      Statement firstStatement = bodyStatement.get(0);
+      if (firstStatement.isExplicitConstructorInvocationStmt()) {
+        BlockStmt minimized = new BlockStmt();
+        minimized.addStatement(firstStatement);
+        constructorDecl.setBody(minimized);
+        return constructorDecl;
+      }
+
+      // not sure if we will ever get to this line. So this line is merely for the peace of mind.
+      constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return constructorDecl;
     }
+
+    constructorDecl.remove();
+    return constructorDecl;
   }
 
   @Override
@@ -488,30 +497,30 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @return An Expression representing the basic initializer for the given field type.
    */
   private Expression getBasicInitializer(Type fieldType) {
-    if (fieldType.isPrimitiveType()) {
-      PrimitiveType.Primitive primitiveType = ((PrimitiveType) fieldType).getType();
-      switch (primitiveType) {
-        case BOOLEAN:
-          return new BooleanLiteralExpr(false);
-        case INT:
-          return new IntegerLiteralExpr("0");
-        case LONG:
-          return new LongLiteralExpr("0L");
-        case FLOAT:
-          return new DoubleLiteralExpr("0.0f");
-        case DOUBLE:
-          return new DoubleLiteralExpr("0.0");
-        case BYTE:
-          return new IntegerLiteralExpr("0");
-        case SHORT:
-          return new IntegerLiteralExpr("0");
-        case CHAR:
-          return new CharLiteralExpr("'\u0000'");
-        default:
-          throw new RuntimeException("Unexpected primitive type: " + fieldType);
-      }
-    } else {
+    if (!fieldType.isPrimitiveType()) {
       return new NullLiteralExpr();
+    }
+
+    PrimitiveType.Primitive primitiveType = ((PrimitiveType) fieldType).getType();
+    switch (primitiveType) {
+      case BOOLEAN:
+        return new BooleanLiteralExpr(false);
+      case INT:
+        return new IntegerLiteralExpr("0");
+      case LONG:
+        return new LongLiteralExpr("0L");
+      case FLOAT:
+        return new DoubleLiteralExpr("0.0f");
+      case DOUBLE:
+        return new DoubleLiteralExpr("0.0");
+      case BYTE:
+        return new IntegerLiteralExpr("0");
+      case SHORT:
+        return new IntegerLiteralExpr("0");
+      case CHAR:
+        return new CharLiteralExpr("'\u0000'");
+      default:
+        throw new RuntimeException("Unexpected primitive type: " + fieldType);
     }
   }
 
@@ -568,13 +577,16 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
   public static @FullyQualifiedName String getEnclosingClassName(Node node) {
     Node parent = getEnclosingClassLike(node);
+
     if (parent instanceof ClassOrInterfaceDeclaration) {
       return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    } else if (parent instanceof EnumDeclaration) {
-      return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    } else {
-      throw new RuntimeException("unexpected kind of node: " + parent.getClass());
     }
+
+    if (parent instanceof EnumDeclaration) {
+      return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    }
+
+    throw new RuntimeException("unexpected kind of node: " + parent.getClass());
   }
 
   /**

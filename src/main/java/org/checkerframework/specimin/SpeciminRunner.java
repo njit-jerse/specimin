@@ -160,7 +160,7 @@ public class SpeciminRunner {
               declaredClass.getFullyQualifiedName().get().toString();
           existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
           // which means this class is not a primary class, and there is a primary class.
-          if (!primaryTypeQualifiedName.equals("")
+          if (!"".equals(primaryTypeQualifiedName)
               && !declaredClassQualifiedName.equals(primaryTypeQualifiedName)) {
             nonPrimaryClassesToPrimaryClass.put(
                 declaredClassQualifiedName, primaryTypeQualifiedName);

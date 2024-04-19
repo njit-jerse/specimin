@@ -225,6 +225,7 @@ class JavaTypeCorrect {
         }
       }
     } catch (IOException e) {
+      // TODO: Handle this properly
       System.out.println(e);
     }
   }
@@ -246,7 +247,7 @@ class JavaTypeCorrect {
     if (errorMessage.contains("cannot be converted to")) {
       String rhs = splitErrorMessage.get(4);
       String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
-      if (lhs.equals("Throwable")) {
+      if ("Throwable".equals(lhs)) {
         // Since all the checked exceptions have already been handled by UnsolvedSymbolVisitor, we
         // know that all the remaining uncompiled exceptions are unchecked.
         extendedTypes.put(rhs, "RuntimeException");
