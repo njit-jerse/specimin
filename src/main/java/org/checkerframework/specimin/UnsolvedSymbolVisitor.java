@@ -723,7 +723,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
     // This part is to update the symbol table.
     boolean isAField =
-        !decl.getParentNode().isEmpty() && (decl.getParentNode().get() instanceof FieldDeclaration);
+        decl.getParentNode().isPresent()
+            && (decl.getParentNode().get() instanceof FieldDeclaration);
     if (!isAField) {
       Set<String> currentListOfLocals = localVariables.removeFirst();
       currentListOfLocals.add(decl.getNameAsString());
@@ -1432,24 +1433,35 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public static String setInitialValueForVariableDeclaration(
       String variableType, String variableDeclaration) {
-    if (variableType.equals("byte")) {
-      return variableDeclaration + " = (byte)0";
-    } else if (variableType.equals("short")) {
-      return variableDeclaration + " = (short)0";
-    } else if (variableType.equals("int")) {
-      return variableDeclaration + " = 0";
-    } else if (variableType.equals("long")) {
-      return variableDeclaration + " = 0L";
-    } else if (variableType.equals("float")) {
-      return variableDeclaration + " = 0.0f";
-    } else if (variableType.equals("double")) {
-      return variableDeclaration + " = 0.0d";
-    } else if (variableType.equals("char")) {
-      return variableDeclaration + " = '\\u0000'";
-    } else if (variableType.equals("boolean")) {
-      return variableDeclaration + " = false";
-    } else {
-      return variableDeclaration + " = null";
+    return variableDeclaration + " = " + getInitializerRHS(variableType);
+  }
+
+  /**
+   * Returns a type-compatible initializer for a field of the given type.
+   *
+   * @param variableType the type of the field
+   * @return a type-compatible initializer
+   */
+  private static String getInitializerRHS(String variableType) {
+    switch (variableType) {
+      case "byte":
+        return "(byte)0";
+      case "short":
+        return "(short)0";
+      case "int":
+        return "0";
+      case "long":
+        return "0L";
+      case "float":
+        return "0.0f";
+      case "double":
+        return "0.0d";
+      case "char":
+        return "'\\u0000'";
+      case "boolean":
+        return "false";
+      default:
+        return "null";
     }
   }
 
