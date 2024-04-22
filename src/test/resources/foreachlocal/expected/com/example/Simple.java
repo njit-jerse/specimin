@@ -4,7 +4,7 @@ import java.util.List;
 
 final class Simple {
 
-    List<Foo> foos;
+    private static List<Foo> foos;
 
     public static void bar() {
         for (Foo f : foos) {
