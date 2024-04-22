@@ -1151,10 +1151,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
-    System.out.println("visiting this object creation expr: " + newExpr);
     String oldClassName = className;
     if (!insideTargetMember) {
-      System.out.println("not inside target method, returning");
       if (newExpr.getAnonymousClassBody().isPresent()) {
         // Need to do data structure maintenance
         className = newExpr.getType().getName().asString();
@@ -1183,10 +1181,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           getArgumentTypesFromObjectCreation(newExpr, getPackageFromClassName(type));
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
       updateUnsolvedClassWithClassName(type, false, false, creationMethod);
-      System.out.println("updated with new ctor");
     } catch (Exception q) {
       // can not solve the parameters for this object creation in this current run
-      System.out.println("skipping in this run: " + q);
     }
     if (newExpr.getAnonymousClassBody().isPresent()) {
       // Need to do data structure maintenance
