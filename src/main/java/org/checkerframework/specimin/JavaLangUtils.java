@@ -179,4 +179,81 @@ public final class JavaLangUtils {
     javaLangClassesAndInterfaces.add("Void");
     javaLangClassesAndInterfaces.add("WrongThreadException");
   }
+
+
+  /** The integral primitives. */
+  private static final String[] INTEGRAL_PRIMITIVES =
+          new String[] {"int", "Integer", "long", "Long", "byte", "Byte", "short", "Short"};
+
+  /** The numeric primitives. */
+  private static final String[] NUMERIC_PRIMITIVES =
+          new String[] {
+                  "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
+                  "double", "Double"
+          };
+
+  /**
+   * Same as {@link #NUMERIC_PRIMITIVES}, but also with "String". TODO: it would be nice to
+   * construct this from NUMERIC_PRIMITIVES, but I don't know how to do that in Java :(
+   */
+  private static final String[] NUMERIC_PRIMITIVES_AND_STRING =
+          new String[] {
+                  "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
+                  "double", "Double", "String"
+          };
+
+  /** The booleans. */
+  private static final String[] BOOLEANS = new String[] {"boolean", "Boolean"};
+
+  /** The numeric primitives and booleans. */
+  private static final String[] NUMERIC_PRIMITIVES_AND_BOOLEANS =
+          new String[] {
+                  "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
+                  "double", "Double", "boolean", "Boolean"
+          };
+
+  /**
+   * Given the string representation of a binary operator, what are the possible input types? The
+   * first element of the result is assumed to be the default if no other information is available.
+   *
+   * @param binOp a string representation of a binary operator, such as "||"
+   * @return the set of compatible types, such as ["boolean", "Boolean"]
+   */
+  public static String[] getTypesForOp(String binOp) {
+    switch (binOp) {
+      case "*":
+      case "/":
+      case "%":
+        // JLS 15.17
+        return NUMERIC_PRIMITIVES;
+      case "-":
+        // JLS 15.18
+        return NUMERIC_PRIMITIVES;
+      case "+":
+        // JLS 15.18 (see note about "+", which can also mean string concatenation!)
+        return NUMERIC_PRIMITIVES_AND_STRING;
+      case ">>":
+      case ">>>":
+      case "<<":
+        // JSL 15.19
+        return INTEGRAL_PRIMITIVES;
+      case "<":
+      case "<=":
+      case ">":
+      case ">=":
+        // JLS 15.20.1
+        return NUMERIC_PRIMITIVES;
+      case "^":
+      case "&":
+      case "|":
+        // JLS 15.22
+        return NUMERIC_PRIMITIVES_AND_BOOLEANS;
+      case "||":
+      case "&&":
+        // JLS 15.23 and 15.24
+        return BOOLEANS;
+      default:
+        throw new IllegalArgumentException("unexpected binary operator: " + binOp);
+    }
+  }
 }

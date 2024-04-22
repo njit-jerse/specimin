@@ -8,6 +8,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -149,13 +150,20 @@ class JavaTypeCorrect {
           new BufferedReader(
               new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
       String line;
-      // incorrect constraint type will be updated here. Other types will be updated by
-      // updateTypeToChange. The following pairs of two-line errors are recognized:
-      // incompatible constraint types: "equality constraints", "lower bounds"
-      // bad operand types for binary operator: "first type", "second type"
-      String[] firstConstraints = {"equality constraints: ", "first type: "};
-      String[] secondConstraints = {"lower bounds: ", "second type: "};
+
+      // These temporaries are necessary to handle various mutli-line error messages.
+      // We support multiline error messages of the following kinds:
+      // * incompatible equality constraints
+      // * bad operand types for binary operators
+
+      // These are temporaries for the equality constraints case.
+      String[] firstConstraints = {"equality constraints: "};
+      String[] secondConstraints = {"lower bounds: "};
       String firstConstraintType = "";
+
+      // These are temporaries for the binary operator case.
+      String binOp = null;
+      String firstBinOpType = null;
 
       StringBuilder lines = new StringBuilder("\n");
 
@@ -180,6 +188,28 @@ class JavaTypeCorrect {
         }
         if (line.contains("is not compatible with")) {
           updateTypeToChange(line, filePath);
+          continue lines;
+        }
+        if (line.contains("bad operand types for binary operator")) {
+          if (binOp != null || firstBinOpType != null) {
+            throw new RuntimeException("failed to complete a binary operator correction: " + lines);
+          }
+          // the form of the error is "bad operand types for binary operator '||'"
+          binOp = line.substring(line.indexOf('\'') + 1, line.lastIndexOf('\''));
+          continue lines;
+        }
+        if (binOp != null && line.contains("first type: ")) {
+          if (firstBinOpType != null) {
+            throw new RuntimeException("failed to complete a binary operator correction: " + lines);
+          }
+          firstBinOpType = line.replace("first type:", "").trim();
+          continue lines;
+        }
+        if (binOp != null && firstBinOpType != null && line.contains("second type: ")) {
+          String secondBinOpType = line.replace("second type:", "").trim();
+          updateTypesForBinaryOperator(binOp, firstBinOpType, secondBinOpType);
+          binOp = null;
+          firstBinOpType = null;
           continue lines;
         }
         // these type error with constraint types will be in a pair of lines
@@ -227,6 +257,28 @@ class JavaTypeCorrect {
     } catch (IOException e) {
       // TODO: Handle this properly
       System.out.println(e);
+    }
+  }
+
+  /**
+   * Updates the two input types (if they are synthetic) to match the requirements of the given
+   * binary operator.
+   *
+   * @param binOp a string representation of a binary operator, such as "||"
+   * @param firstBinOpType the first possibly-not-matching type
+   * @param secondBinOpType the second possibly-not-matching type
+   */
+  private void updateTypesForBinaryOperator(
+      String binOp, String firstBinOpType, String secondBinOpType) {
+    // TODO: special case for == and != based on JSL 15.21? Or is it okay to ignore them?
+    List<String> requiredTypes = Arrays.asList(JavaLangUtils.getTypesForOp(binOp));
+    if (requiredTypes.contains(firstBinOpType)) {
+      changeType(secondBinOpType, firstBinOpType);
+    } else if (requiredTypes.contains(secondBinOpType)) {
+      changeType(firstBinOpType, secondBinOpType);
+    } else {
+      changeType(firstBinOpType, requiredTypes.get(0));
+      changeType(secondBinOpType, requiredTypes.get(0));
     }
   }
 
