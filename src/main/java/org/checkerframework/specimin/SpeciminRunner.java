@@ -196,7 +196,6 @@ public class SpeciminRunner {
         FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
         cu.accept(getDeclarations, null);
         addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
-        System.out.println("running unsolved symbol solver on " + cu.getPrimaryTypeName());
         cu.accept(addMissingClass, null);
       }
       addMissingClass.updateSyntheticSourceCode();
