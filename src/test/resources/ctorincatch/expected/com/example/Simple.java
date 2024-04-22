@@ -1,13 +1,22 @@
 package com.example;
 
-class Simple {
+import org.example.MethodGen;
+import org.example.VerifierConstraintViolatedException;
+import org.example.VerificationResult;
 
-    void bar() {
-        Object obj = new Object();
-        obj = baz(obj);
+public class Simple {
+
+    public VerificationResult bar(MethodGen mg) {
+        try {
+            baz();
+        } catch (final VerifierConstraintViolatedException ce) {
+            ce.extendMessage("Constraint violated in method '" + mg + "':\n", "");
+            return new VerificationResult(VerificationResult.VERIFIED_REJECTED, ce.getMessage());
+        }
+        return VerificationResult.OK;
     }
 
-    Object baz(Object obj) {
+    public void baz() throws VerifierConstraintViolatedException {
         throw new Error();
     }
 }
