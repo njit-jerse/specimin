@@ -3,8 +3,10 @@ package org.checkerframework.specimin;
 import java.io.IOException;
 import org.junit.Test;
 
-/** This test checks that UnsolvedSymbolVisitor doesn't skip unsolved symbols in
- * the arguments to constructors. */
+/**
+ * This test checks that UnsolvedSymbolVisitor doesn't skip unsolved symbols in the arguments to
+ * constructors.
+ */
 public class CtorArgumentTest {
   @Test
   public void runTest() throws IOException {
