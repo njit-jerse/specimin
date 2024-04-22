@@ -151,7 +151,7 @@ class JavaTypeCorrect {
               new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
       String line;
 
-      // These temporaries are necessary to handle various mutli-line error messages.
+      // These temporaries are necessary to handle various multi-line error messages.
       // We support multiline error messages of the following kinds:
       // * incompatible equality constraints
       // * bad operand types for binary operators
