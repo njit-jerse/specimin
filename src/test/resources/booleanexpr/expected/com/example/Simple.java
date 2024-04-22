@@ -6,6 +6,11 @@ class Simple {
         if (f.isBar() || f.isBaz) {
             return 0;
         }
-        return 1;
+
+        if (f.qux() == 5) {
+            return 1;
+        }
+
+        return 2;
     }
 }

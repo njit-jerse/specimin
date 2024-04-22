@@ -270,13 +270,13 @@ class JavaTypeCorrect {
    */
   private void updateTypesForBinaryOperator(
       String binOp, String firstBinOpType, String secondBinOpType) {
-    // TODO: special case for == and != based on JSL 15.21? Or is it okay to ignore them?
     List<String> requiredTypes = Arrays.asList(JavaLangUtils.getTypesForOp(binOp));
     if (requiredTypes.contains(firstBinOpType)) {
       changeType(secondBinOpType, firstBinOpType);
     } else if (requiredTypes.contains(secondBinOpType)) {
       changeType(firstBinOpType, secondBinOpType);
     } else {
+      assert !"==".equals(binOp) && !"!=".equals(binOp);
       changeType(firstBinOpType, requiredTypes.get(0));
       changeType(secondBinOpType, requiredTypes.get(0));
     }

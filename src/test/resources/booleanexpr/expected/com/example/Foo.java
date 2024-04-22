@@ -7,4 +7,8 @@ public class Foo {
     public boolean isBar() {
         throw new Error();
     }
+
+    public int qux() {
+        throw new Error();
+    }
 }
