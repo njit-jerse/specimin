@@ -2356,9 +2356,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public static boolean canBeSolved(Expression expr) {
     if (expr.isObjectCreationExpr()) {
-      // ObjectCreationExprs need to be treated separately because Java Parser by default only checks
-      // that the type itself is solvable, not that the arguments to the constructor call are solvable
-      // (as it does for a MethodCallExpr).
+      // ObjectCreationExprs need to be treated separately because Java Parser by default only
+      // checks that the type itself is solvable, not that the arguments to the constructor call
+      // are solvable (as it does for a MethodCallExpr).
       try {
         expr.asObjectCreationExpr().resolve();
       } catch (Exception e) {
