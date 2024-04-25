@@ -1,8 +1,5 @@
 package com.example;
 
-/*
- * Based on an example from java.util.Collections.
- */
 public class Simple {
 
     static class UnmodifiableCollection<E> {
