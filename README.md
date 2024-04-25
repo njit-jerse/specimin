@@ -1,23 +1,31 @@
-# Specimin: the specification slicer
-
-**Note: Specimin is a work in progress, and is not yet fully functional. Please check
-back later or contact the authors if you want to use the tool.**
+# Specimin: a specification slicer
 
 This document describes **Specimin** (SPECIfication MINimizer).
 Specimin's goal is, given a Java Program *P*
-and a set of methods in that program *M*, produce a compilable, dependency-free
-version of *P* that contains (1) the body of each method in *M*
+and a set of methods or fields in that program *M*, produce an independently-compilable
+version of *P* that contains (1) the body of each method or initializer of each field in *M*
 and (2) as little else as possible while preserving the specifications
 (i.e., the signatures of methods, the structure of classes, etc.) used
-in the methods in *M*.
+by anything in *M*.
 
-Specimin’s goal is to “stub out” everything that’s used by
-the target method(s), for the purpose of static analysis of the methods
-in the target set.
+Specimin is useful as a static program reduction tool when debugging a compiler or type
+system that does *modular* program analysis, such as a [Checker Framework](checkerframework.org)
+checker or the type system of Java itself. Specimin's output should preserve the output
+of a type-system-like analysis (such a crash, false positive, or false negative).
+
+Specimin supports two *modes*: exact and approximate specification slicing. Exact mode
+is automatically used if all relevant source or class files are provided to Specimin. If
+a relevant source or class file is used but missing, Specimin will enter approximate mode
+and create synthetic Java code based on the context in which that missing source or class
+file is used. In approximate mode, ambiguity in the context may cause Specimin to fail
+to preserve the behavior of an analysis tool. However, approximate mode is very useful
+for analysis debugging (when it works), because the user need not supply the classpath
+of the target program. When debugging crashes or false positives reported by users, this
+avoids the need to interact with the user's build system at all.
 
 # Usage instructions
 
-Download the project and the project directory in your shell.
+Clone the project and `cd` the project directory in your shell.
 
 To run the tool, use `./gradlew run --args='[OPTIONS]'`.
 
@@ -30,7 +38,6 @@ The available options are (required options in **bold**, repeatable options in *
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
 * **--jarPath**: a directory path that contains all the jar files for Specimin to take as input.
 
-
 Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
 
 Here is a sample command to run the tool: `./gradlew run --args='--outputDirectory "tempDir" --root "src/test/resources/twofilesimple/input/" --targetFile "com/example/Foo.java" --targetFile "com/example/Baz.java" --targetMethod "com.example.Foo#bar()" --jarpath "path/to/jar/directory"'`
@@ -38,7 +45,8 @@ Here is a sample command to run the tool: `./gradlew run --args='--outputDirecto
 # Input/output examples
 
 The following examples illustrate the kinds of programs that Specimin
-produces.
+produces. You can find (many) more such examples in Specimin's 
+[test suite](https://github.com/kelloggm/specimin/tree/main/src/test/resources).
 
 ## A very simple example
 
@@ -219,9 +227,9 @@ class Foo {
  }
  ```
 
-Given that our specification for Specimin says that the produced
-program should have no dependencies, should the generated program
-include a (fake) implementation for `java.util.List`? This question is
+Specimin usually produces programs that have no dependencies.
+In a case like this one, though, should the generated program
+include a (synthetic) implementation for `java.util.List`? This question is
 tricky to answer. On the one hand, doing so is (1) more consistent
 with Specimin’s treatment of other libraries, and (2) will make the
 resulting programs self-contained, which will make them easier to
@@ -232,8 +240,9 @@ into the JVM (`Object`, `String`, a few others?  Definitely not that many,
 though.), and (2) it will require the resulting program to be compiled
 with unusual options, (i.e. `-Xbootclasspath=` the empty set or some
 such nonsense), which would limit its suitability for generating test
-cases. For now, I think this specification should permit Specimin to
-do either.
+cases.
 
-TODO: decide which of these modes to support, or add support for both
-and a switch.
+In cases like these, Specimin chooses the latter: it assumes that the JDK
+is available. If you want to target part of the JDK itself with Specimin,
+this means that it's necessary to *relocate* JDK classes (into a non `java.*`
+package); see the CF-577 test in the integration tests for an example.
