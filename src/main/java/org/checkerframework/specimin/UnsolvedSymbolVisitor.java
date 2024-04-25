@@ -1092,9 +1092,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(typeExpr, p);
     }
     try {
+      // since typeExpr is a ClassOrInterfaceType, it is safe to cast the resolved result to
+      // ReferenceType.
       // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
       // extends or implements a resolved class/interface.
-      typeExpr.resolve().getAllAncestors();
+      typeExpr.resolve().asReferenceType().getAllAncestors();
       return super.visit(typeExpr, p);
     }
     /*
@@ -1499,7 +1501,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     ResolvedReferenceType resolvedClass;
     try {
-      resolvedClass = classOrInterfaceType.resolve();
+      // since resolvedClass is a ClassOrInterfaceType instance, it is safe to cast it to a
+      // ReferenceType.
+      resolvedClass = classOrInterfaceType.resolve().asReferenceType();
       if (!resolvedClass.getAllAncestors().isEmpty()) {
         String pathOfThisCurrentType = qualifiedNameToFilePath(fullyQualifiedName);
         if (!addedTargetFiles.contains(pathOfThisCurrentType)) {
@@ -2207,7 +2211,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // for reference type, we need the fully-qualified name to avoid having to add additional
       // import statements.
       if (type.isReferenceType()) {
-        ResolvedReferenceType rrType = (ResolvedReferenceType) type;
+        ResolvedReferenceType rrType = type.asReferenceType();
         // avoid creating methods with raw parameter types
         int ctypevar = rrType.getTypeParametersMap().size();
         String typevars = "";
@@ -2370,6 +2374,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the expression can be solved
    */
   public static boolean canBeSolved(Expression expr) {
+
+    // The method calculateResolvedType() gets lazy and lacks precision when it comes to handling
+    // ObjectCreationExpr instances, thus requiring separate treatment for ObjectCreationExpr.
+
+    // Note: JavaParser's lazy approach to ObjectCreationExpr when it comes to
+    // calculateResolvedType() is reasonable, as the return type typically corresponds to the class
+    // itself. Consequently, JavaParser does not actively search for constructor declarations within
+    // the class. While this approach suffices for compilable input, it is inadequate for handling
+    // incomplete synthetic classes, such as in our case.
+    if (expr instanceof ObjectCreationExpr) {
+      try {
+        expr.asObjectCreationExpr().resolve();
+        return true;
+      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        return false;
+      }
+    }
     try {
       ResolvedType resolvedType = expr.calculateResolvedType();
       if (resolvedType.isTypeVariable()) {
@@ -2444,9 +2465,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String typeSimpleName = callerExpression.asTypeVariable().describe();
       for (Map<String, NodeList<ClassOrInterfaceType>> typeScope : typeVariables) {
         if (typeScope.containsKey(typeSimpleName)) {
+          // since typeScope.get(typeSimpleName).get(0) is a ClassOrInterfaceType instance, it is
+          // safe to cast it to a ReferenceType.
           // a type parameter can extend a class and many interfaces. However, the class will always
           // be listed first.
-          return typeScope.get(typeSimpleName).get(0).resolve().getQualifiedName();
+          return typeScope
+              .get(typeSimpleName)
+              .get(0)
+              .resolve()
+              .asReferenceType()
+              .getQualifiedName();
         }
       }
     }

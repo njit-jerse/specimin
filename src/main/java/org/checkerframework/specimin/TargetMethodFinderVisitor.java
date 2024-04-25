@@ -263,8 +263,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     for (ClassOrInterfaceType interfaceType : decl.getImplementedTypes()) {
       try {
+        // since interfaceType is a ClassOrInterfaceType instance, it is safe to cast it to a
+        // ReferenceType.
         updateMethodDeclarationToInterfaceType(
-            interfaceType.resolve().getAllMethods(), interfaceType);
+            interfaceType.resolve().asReferenceType().getAllMethods(), interfaceType);
       } catch (UnsolvedSymbolException e) {
         continue;
       }
@@ -583,7 +585,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       return super.visit(type, p);
     }
     try {
-      ResolvedReferenceType typeResolved = type.resolve();
+      // since type is a ClassOrInterfaceType instance, it is safe to cast it to a ReferenceType.
+      ResolvedReferenceType typeResolved = type.resolve().asReferenceType();
       updateUsedClassBasedOnType(typeResolved);
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
@@ -705,10 +708,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
               .describe()
               .equals(interfaceMethod.getReturnType().describe())) {
             if (method.getNumberOfParams() == interfaceMethod.getNumberOfParams()) {
+              // since methodDeclarationToInterfaceType.get(interfaceMethod) is a
+              // ClassOrInterfaceType instance, it is safe to cast it to a ReferenceType.
               updateUsedClassWithQualifiedClassName(
                   methodDeclarationToInterfaceType
                       .get(interfaceMethod)
                       .resolve()
+                      .asReferenceType()
                       .getQualifiedName(),
                   usedTypeElement,
                   nonPrimaryClassesToPrimaryClass);

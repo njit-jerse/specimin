@@ -192,7 +192,9 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
     for (ClassOrInterfaceType implementedType : implementedTypes) {
       ResolvedReferenceType resolvedInterface;
       try {
-        resolvedInterface = implementedType.resolve();
+        // since implementedType is a ClassOrInterfaceType instance, it is safe to cast it to a
+        // ReferenceType.
+        resolvedInterface = implementedType.resolve().asReferenceType();
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // In this case, we're implementing an interface that we don't control
         // or that will not be preserved.
