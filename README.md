@@ -25,6 +25,7 @@ The available options are (required options in **bold**, repeatable options in *
 * **--root**: specifies the root directory of the target project.
 * ***--targetFile***: a source file in which to search for target methods
 * ***--targetMethod***: a target method that must be preserved, and whose dependencies should be stubbed out. Use the format `class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)`. Note: If a target method has a receiver parameter, i.e., (.. this), exclude that parameter from the signature. Check this [documentation](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-ReceiverParameter) for more info.
+* ***--targetField***: a target field that must be preserved (including its initializer). Uses the same format as `--targetMethod`, but without the parameter list. At least one of `--targetMethod` or `--targetField` is required, but they can otherwise be freely combined.
 
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
 * **--jarPath**: a directory path that contains all the jar files for Specimin to take as input.
