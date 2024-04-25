@@ -69,6 +69,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -2748,8 +2749,28 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (callerExpression.isEmpty()) {
         return false;
       }
-      return classAndPackageMap.containsKey(callerExpression.get().toString());
+      String callerExpressionString = callerExpression.get().toString();
+      return classAndPackageMap.containsKey(callerExpressionString)
+          || looksLikeSimpleClassName(callerExpressionString);
     }
+  }
+
+  /**
+   * Checks if the given string looks like it could be a simple class name. This is a coarse
+   * approximation that should be avoided if possible, because it relies on Java convention instead
+   * of semantics.
+   *
+   * @param name the purported name
+   * @return true if it looks like a simple class name: it starts with an uppercase letter, has no
+   *     dots, and is not all uppercase
+   */
+  private boolean looksLikeSimpleClassName(String name) {
+    // this check is not very comprehensive, since a class can be in lowercase, and a method or
+    // field can be in uppercase. But since this is without the jar paths, this is the best we can
+    // do.
+    return Character.isUpperCase(name.charAt(0))
+        && name.indexOf('.') == -1
+        && !name.toUpperCase(Locale.getDefault()).equals(name);
   }
 
   /**
@@ -2763,10 +2784,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       field.resolve();
       return false;
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      // this check is not very comprehensive, since a class can be in lowercase, and a method or
-      // field can be in uppercase. But since this is without the jar paths, this is the best we can
-      // do.
-      return Character.isUpperCase(field.getScope().toString().charAt(0));
+      String scopeAsString = field.getScope().toString();
+      return classAndPackageMap.containsKey(scopeAsString)
+          || looksLikeSimpleClassName(scopeAsString);
     }
   }
 
