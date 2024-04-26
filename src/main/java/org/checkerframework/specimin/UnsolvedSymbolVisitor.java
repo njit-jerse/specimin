@@ -1007,7 +1007,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedNameOfIncompleteClass));
       } else {
         @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
-        updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
+        Optional<Expression> receiver = method.getScope();
+        boolean isStatic = false;
+        if (receiver.isPresent()) {
+          // Check if the method call is to a static method of the class (in which case
+          // the "receiver" is the class name.
+          if (receiver.get().toString().equals(incompleteClassName)) {
+            isStatic = true;
+          }
+        }
+        updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false, isStatic);
       }
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
       updateClassSetWithStaticMethodCall(method);
@@ -1029,10 +1038,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           // Since these are unsolved interfaces, we have no ideas which one of them contains the
           // signature for the current method, thus we will put the signature in the last interface.
           String unsolvedInterface = relevantInterfaces.get(relevantInterfaces.size() - 1);
-          updateUnsolvedClassOrInterfaceWithMethod(method, unsolvedInterface, "", true);
+          updateUnsolvedClassOrInterfaceWithMethod(method, unsolvedInterface, "", true, false);
         } else if (classAndItsParent.containsKey(className)) {
           String parentName = classAndItsParent.get(className);
-          updateUnsolvedClassOrInterfaceWithMethod(method, parentName, "", false);
+          updateUnsolvedClassOrInterfaceWithMethod(method, parentName, "", false, false);
         }
       }
     }
@@ -1617,12 +1626,14 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param desiredReturnType the desired return type for this method
    * @param updatingInterface true if this method is being used to update an interface, false for
    *     updating classes
+   * @param isStatic is the method to add static?
    */
   public void updateUnsolvedClassOrInterfaceWithMethod(
       Node method,
       @ClassGetSimpleName String className,
       String desiredReturnType,
-      boolean updatingInterface) {
+      boolean updatingInterface,
+      boolean isStatic) {
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
     String accessModifer = "public";
@@ -1659,6 +1670,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedMethod thisMethod =
         new UnsolvedMethod(
             methodName, returnType, listOfParameters, updatingInterface, accessModifer);
+    if (isStatic) {
+      thisMethod.setStatic();
+    }
     UnsolvedClassOrInterface missingClass =
         updateUnsolvedClassWithClassName(className, false, false, thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
@@ -1729,7 +1743,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         SimpleName classNodeSimpleName = ((ObjectCreationExpr) parentNode).getType().getName();
         String nameOfClass = classNodeSimpleName.asString();
         updateUnsolvedClassOrInterfaceWithMethod(
-            node, nameOfClass, toSimpleName(nodeTypeAsString), false);
+            node, nameOfClass, toSimpleName(nodeTypeAsString), false, node.isStatic());
       }
     }
 
@@ -1765,10 +1779,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
               node,
               parentClassName,
               getPackageFromClassName(nodeTypeSimpleForm) + "." + nodeTypeSimpleForm,
+              false,
               false);
         } else {
           updateUnsolvedClassOrInterfaceWithMethod(
-              node, parentClassName, nodeTypeSimpleForm, false);
+              node, parentClassName, nodeTypeSimpleForm, false, false);
         }
       }
     }
@@ -1986,6 +2001,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           expr.asMethodCallExpr(),
           parentClassName,
           methodAndReturnType.getOrDefault(expr.asMethodCallExpr().getNameAsString(), ""),
+          false,
           false);
     } else if (expr instanceof FieldAccessExpr) {
       String nameAsString = expr.asFieldAccessExpr().getNameAsString();
