@@ -2,5 +2,5 @@ package org.example;
 
 public class Type {
 
-    public Type INT;
+    public static org.example.Type INT;
 }
