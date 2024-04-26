@@ -192,6 +192,13 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
     for (ClassOrInterfaceType implementedType : implementedTypes) {
       ResolvedReferenceType resolvedInterface;
       try {
+        /*
+         * In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType
+         * (check an example here: https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
+         * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a specific ResolvedReferenceType.
+         * This appears to be an inaccuracy within JavaParser's type hierarchy.
+         */
+
         // since implementedType is a ClassOrInterfaceType instance, it is safe to cast it to a
         // ReferenceType.
         resolvedInterface = implementedType.resolve().asReferenceType();

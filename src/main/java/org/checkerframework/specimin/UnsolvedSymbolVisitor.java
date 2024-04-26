@@ -1502,6 +1502,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     ResolvedReferenceType resolvedClass;
     try {
+      /*
+       * In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType
+       * (check an example here: https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
+       * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a specific ResolvedReferenceType.
+       * This appears to be an inaccuracy within JavaParser's type hierarchy.
+       */
+
       // since resolvedClass is a ClassOrInterfaceType instance, it is safe to cast it to a
       // ReferenceType.
       resolvedClass = classOrInterfaceType.resolve().asReferenceType();
@@ -2466,6 +2473,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String typeSimpleName = callerExpression.asTypeVariable().describe();
       for (Map<String, NodeList<ClassOrInterfaceType>> typeScope : typeVariables) {
         if (typeScope.containsKey(typeSimpleName)) {
+          /*
+           * In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType
+           * (check an example here: https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
+           * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a specific ResolvedReferenceType.
+           * This appears to be an inaccuracy within JavaParser's type hierarchy.
+           */
+
           // since typeScope.get(typeSimpleName).get(0) is a ClassOrInterfaceType instance, it is
           // safe to cast it to a ReferenceType.
           // a type parameter can extend a class and many interfaces. However, the class will always
