@@ -143,7 +143,7 @@ public class UnsolvedMethod {
 
   @Override
   public int hashCode() {
-    return Objects.hash(returnType, name, parameterList);
+    return Objects.hash(name, parameterList);
   }
 
   /**
