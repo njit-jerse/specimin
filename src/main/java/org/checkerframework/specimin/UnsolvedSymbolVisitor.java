@@ -2523,31 +2523,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       while (iterator.hasNext()) {
         UnsolvedClassOrInterface e = iterator.next();
         if (e.getClassName().equals(outerClassName)) {
-
           UnsolvedClassOrInterface innerClass =
               new UnsolvedClassOrInterface.UnsolvedInnerClass(innerClassName, e.getPackageName());
-
-          // TODO: this code is intentionally duplicated from what's just below. After the ISSTA
-          // deadline, clean up this technical debt.
-          for (UnsolvedMethod method : missedClass.getMethods()) {
-            // No need to check for containment, since the methods are stored
-            // as a set (which does not permit duplicates).
-            innerClass.addMethod(method);
-          }
-
-          // add new fields
-          for (String variablesDescription : missedClass.getClassFields()) {
-            innerClass.addFields(variablesDescription);
-          }
-          if (missedClass.getNumberOfTypeVariables() > 0) {
-            innerClass.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
-          }
-
-          // if a "class" is found to be an interface even once (because it appears
-          // in an implements clause), then it must be an interface and not a class.
-          if (missedClass.isAnInterface()) {
-            innerClass.setIsAnInterfaceToTrue();
-          }
+          updateMissingClassHelper(missedClass, innerClass);
           e.addInnerClass(innerClass);
           return;
         }
@@ -2558,31 +2536,42 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     while (iterator.hasNext()) {
       UnsolvedClassOrInterface e = iterator.next();
       if (e.equals(missedClass)) {
-        // add new methods
-        for (UnsolvedMethod method : missedClass.getMethods()) {
-          // No need to check for containment, since the methods are stored
-          // as a set (which does not permit duplicates).
-          e.addMethod(method);
-        }
-
-        // add new fields
-        for (String variablesDescription : missedClass.getClassFields()) {
-          e.addFields(variablesDescription);
-        }
-        if (missedClass.getNumberOfTypeVariables() > 0) {
-          e.setNumberOfTypeVariables(missedClass.getNumberOfTypeVariables());
-        }
-
-        // if a "class" is found to be an interface even once (because it appears
-        // in an implements clause), then it must be an interface and not a class.
-        if (missedClass.isAnInterface()) {
-          e.setIsAnInterfaceToTrue();
-        }
-
+        updateMissingClassHelper(missedClass, e);
         return;
       }
     }
     missingClass.add(missedClass);
+  }
+
+  /**
+   * This helper method updates the missing class to with anything in from. The missing classes must
+   * both represent the same class semantically for it to be sensible to call this method.
+   *
+   * @param from the class or interface to use as a source
+   * @param to the class or interface to be updated
+   */
+  private void updateMissingClassHelper(
+      UnsolvedClassOrInterface from, UnsolvedClassOrInterface to) {
+    // add new methods
+    for (UnsolvedMethod method : from.getMethods()) {
+      // No need to check for containment, since the methods are stored
+      // as a set (which does not permit duplicates).
+      to.addMethod(method);
+    }
+
+    // add new fields
+    for (String variablesDescription : from.getClassFields()) {
+      to.addFields(variablesDescription);
+    }
+    if (from.getNumberOfTypeVariables() > 0) {
+      to.setNumberOfTypeVariables(from.getNumberOfTypeVariables());
+    }
+
+    // if a "class" is found to be an interface even once (because it appears
+    // in an implements clause), then it must be an interface and not a class.
+    if (from.isAnInterface()) {
+      to.setIsAnInterfaceToTrue();
+    }
   }
 
   /**
@@ -3114,6 +3103,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         correctTypeName = pkgName + "." + correctTypeName;
       }
     }
+
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
@@ -3131,10 +3121,55 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         missingClass.add(missedClass); // Add the modified missedClass back to the list
         this.deleteOldSyntheticClass(missedClass);
         this.createMissingClass(missedClass);
+        // incorrectTypeName has to be synthetic, so it will be in the same package as the use
+        String fullyQualifiedIncorrectTypeName =
+            missedClass.getPackageName() + "." + incorrectTypeName;
+        this.migrateType(fullyQualifiedIncorrectTypeName, correctTypeName);
         return updatedSuccessfully;
       }
     }
     throw new RuntimeException("Could not find the corresponding missing class!");
+  }
+
+  /**
+   * If and only if synthetic classes exist for both input type names, this method migrates all the
+   * content of the sythetic class for the incorrect type name to the synthetic class for the
+   * correct type name. This avoid losing information gained about the incorrect type when we
+   * correct types, which can otherwise lead to non-compilable outputs.
+   *
+   * @param incorrectTypeName the fully-qualified incorrect synthetic type
+   * @param correctTypeName the fully-qualified correct name of the type
+   */
+  private void migrateType(String incorrectTypeName, String correctTypeName) {
+    // This one may or may not be present. If it is not, exit early and do nothing.
+    UnsolvedClassOrInterface correctType = getMissingClassWithQualifiedName(correctTypeName);
+    if (correctType == null) {
+      return;
+    }
+
+    // This one is guaranteed to be present.
+    UnsolvedClassOrInterface incorrectType = getMissingClassWithQualifiedName(incorrectTypeName);
+    if (incorrectType == null) {
+      throw new RuntimeException("could not find a synthetic class matching " + incorrectTypeName);
+    }
+
+    updateMissingClassHelper(incorrectType, correctType);
+  }
+
+  /**
+   * Finds the missing/unsolved class with the given fully-qualified name, if one exists. If there
+   * isn't one, returns null.
+   *
+   * @param fqn a fully-qualified name
+   * @return the unsolved class with that name, or null
+   */
+  private @Nullable UnsolvedClassOrInterface getMissingClassWithQualifiedName(String fqn) {
+    for (UnsolvedClassOrInterface candidate : missingClass) {
+      if (candidate.getQualifiedClassName().equals(fqn)) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   /**
