@@ -10,8 +10,8 @@ public class Simple {
         if (b) {
             Foo.setThis(new Bar());
         } else {
-            Bar b = null;
-            Foo.setThis(b);
+            Bar b1 = null;
+            Foo.setThis(b1);
         }
     }
 }

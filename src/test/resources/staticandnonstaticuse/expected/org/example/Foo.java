@@ -6,7 +6,7 @@ public class Foo {
         throw new Error();
     }
 
-    public static SetThisReturnType setThis(org.example.Bar parameter0) {
+    public static OrgExampleFooSetThisReturnType setThis(org.example.Bar parameter0) {
         throw new Error();
     }
 }
