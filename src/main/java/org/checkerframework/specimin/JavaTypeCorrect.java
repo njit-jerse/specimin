@@ -182,7 +182,8 @@ class JavaTypeCorrect {
         if (line.contains("not abstract and does not override abstract method")) {
           updateClassAndUnresolvedInterface(line);
         }
-        if (line.contains("error: incompatible types")) {
+        if (line.contains("error: incompatible types")
+            || line.contains("error: incomparable types")) {
           updateTypeToChange(line, filePath);
           continue lines;
         }
@@ -293,7 +294,7 @@ class JavaTypeCorrect {
     if (splitErrorMessage.size() < 7) {
       throw new RuntimeException("Unexpected type error messages: " + errorMessage);
     }
-    /* There are three possible forms of error messages in total:
+    /* There are four possible forms of error messages in total:
      * 1. error: incompatible types: <type1> cannot be converted to <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
@@ -318,15 +319,20 @@ class JavaTypeCorrect {
       }
     }
     /*
-     * 2. return type <type1> is not compatible with <type2> (triggered when there is type mismatching in inheritance)
-     * 3. error: incompatible types: found <type1> required <type2> (unknown triggers)
+     * 2. error: incomparable types: Type1 and Type2
+     * 3. return type <type1> is not compatible with <type2> (triggered when there is type mismatching in inheritance)
+     * 4. error: incompatible types: found <type1> required <type2> (unknown triggers)
      */
     else {
-      // TODO: what error message triggers this code? Do we have test cases for it?
       String rhs;
-      if (errorMessage.contains("is not compatible with")) {
+      if (errorMessage.contains("incomparable types")) {
+        // Case 2
+        rhs = splitErrorMessage.get(4);
+      } else if (errorMessage.contains("is not compatible with")) {
+        // Case 3
         rhs = splitErrorMessage.get(3);
       } else {
+        // Case 4
         rhs = splitErrorMessage.get(5);
       }
       String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);

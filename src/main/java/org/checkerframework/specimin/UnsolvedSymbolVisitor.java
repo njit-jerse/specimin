@@ -1001,6 +1001,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       updateClassSetWithStaticMethodCall(method);
+    } else if (unsolvedAndCalledByASimpleClassName(method)) {
+      updateClassSetWithStaticMethodCall(method);
     } else if (calledByAnIncompleteClass(method)) {
       String qualifiedNameOfIncompleteClass = getIncompleteClass(method);
       if (classfileIsInOriginalCodebase(qualifiedNameOfIncompleteClass)) {
@@ -1009,8 +1011,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
         updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
       }
-    } else if (unsolvedAndCalledByASimpleClassName(method)) {
-      updateClassSetWithStaticMethodCall(method);
     } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
       String methodName = method.getNameAsString();
       @FullyQualifiedName String className = staticImportedMembersMap.get(methodName);
