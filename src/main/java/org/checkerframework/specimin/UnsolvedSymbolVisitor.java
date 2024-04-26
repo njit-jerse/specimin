@@ -1093,6 +1093,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(typeExpr, p);
     }
     try {
+      /*
+       * In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType
+       * (check an example here: https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
+       * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a specific ResolvedReferenceType.
+       * This appears to be an inaccuracy within JavaParser's type hierarchy.
+       */
+
       // since typeExpr is a ClassOrInterfaceType, it is safe to cast the resolved result to
       // ReferenceType.
       // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
