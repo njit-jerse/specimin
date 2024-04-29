@@ -222,7 +222,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     while (iterator.hasNext()) {
       ClassOrInterfaceType interfaceType = iterator.next();
       try {
-        String typeFullName = interfaceType.resolve().getQualifiedName();
+        String typeFullName =
+            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(interfaceType)
+                .getQualifiedName();
         if (!classesUsedByTargetMethods.contains(typeFullName)) {
           iterator.remove();
         }

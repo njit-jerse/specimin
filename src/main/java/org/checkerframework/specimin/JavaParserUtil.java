@@ -2,6 +2,8 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
 
 /**
  * A class containing useful static functions using JavaParser.
@@ -45,5 +47,25 @@ public class JavaParserUtil {
   public static boolean isLocalClassDecl(TypeDeclaration<?> decl) {
     return decl.isClassOrInterfaceDeclaration()
         && decl.asClassOrInterfaceDeclaration().isLocalClassDeclaration();
+  }
+
+  /**
+   * Given a ClassOrInterfaceType instance, this method returns a corresponding
+   * ResolvedReferenceType. This method might throw an exception if the given instance is
+   * unresolved.
+   *
+   * <p>Note: In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType (check an example
+   * here:
+   * https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
+   * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a
+   * specific ResolvedReferenceType. This appears to be an inaccuracy within JavaParser's type
+   * hierarchy.
+   *
+   * @param type the ClassOrInterfaceType instance
+   * @return the corresponding ResolvedReferenceType instance
+   */
+  public static ResolvedReferenceType classOrInterfaceTypeToResolvedReferenceType(
+      ClassOrInterfaceType type) {
+    return type.resolve().asReferenceType();
   }
 }

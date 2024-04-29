@@ -1,6 +1,3 @@
-/*
- * Based on an example from java.util.Collections.
- */
 package com.example;
 
 public class Simple {
