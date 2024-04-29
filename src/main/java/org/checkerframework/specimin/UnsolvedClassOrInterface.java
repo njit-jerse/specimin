@@ -52,6 +52,9 @@ public class UnsolvedClassOrInterface {
   /** This class' inner classes. */
   private @MonotonicNonNull Set<UnsolvedClassOrInterface> innerClasses = null;
 
+  /** Is this class an annotation? */
+  private boolean isAnAnnotation = false;
+
   /**
    * This class' constructor should be used for creating inner classes. Frankly, this design is a
    * mess (sorry) - controlling whether this is an inner class via inheritance is probably bad.
@@ -134,6 +137,15 @@ public class UnsolvedClassOrInterface {
    */
   public void setIsAnInterfaceToTrue() {
     this.isAnInterface = true;
+  }
+
+  /**
+   * Sets isAnAnnotation to true. isAnAnnotation is monotonic: it can start as false and become true
+   * (because we encounter evidence that this is an annotation), but it can never go from true to
+   * false.
+   */
+  public void setIsAnAnnotationToTrue() {
+    this.isAnAnnotation = true;
   }
 
   /**
@@ -397,10 +409,13 @@ public class UnsolvedClassOrInterface {
               || className.startsWith("SyntheticConsumer"))) {
         sb.append("@FunctionalInterface\n");
       }
-      sb.append("public interface ").append(className).append(getTypeVariablesAsString());
+      sb.append("public interface ");
+    } else if (isAnAnnotation) {
+      sb.append("public @interface ");
     } else {
-      sb.append("public class ").append(className).append(getTypeVariablesAsString());
+      sb.append("public class ");
     }
+    sb.append(className).append(getTypeVariablesAsString());
     if (extendsClause != null) {
       sb.append(" ").append(extendsClause);
     }
