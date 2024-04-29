@@ -263,17 +263,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     for (ClassOrInterfaceType interfaceType : decl.getImplementedTypes()) {
       try {
-        /*
-         * In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType
-         * (check an example here: https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
-         * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a specific ResolvedReferenceType.
-         * This appears to be an inaccuracy within JavaParser's type hierarchy.
-         */
-
-        // since interfaceType is a ClassOrInterfaceType instance, it is safe to cast it to a
-        // ReferenceType.
         updateMethodDeclarationToInterfaceType(
-            interfaceType.resolve().asReferenceType().getAllMethods(), interfaceType);
+            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(interfaceType)
+                .getAllMethods(),
+            interfaceType);
       } catch (UnsolvedSymbolException e) {
         continue;
       }
@@ -592,15 +585,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       return super.visit(type, p);
     }
     try {
-      /*
-       * In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType
-       * (check an example here: https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
-       * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a specific ResolvedReferenceType.
-       * This appears to be an inaccuracy within JavaParser's type hierarchy.
-       */
-
-      // since type is a ClassOrInterfaceType instance, it is safe to cast it to a ReferenceType.
-      ResolvedReferenceType typeResolved = type.resolve().asReferenceType();
+      ResolvedReferenceType typeResolved =
+          JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type);
       updateUsedClassBasedOnType(typeResolved);
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
@@ -722,21 +708,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
               .describe()
               .equals(interfaceMethod.getReturnType().describe())) {
             if (method.getNumberOfParams() == interfaceMethod.getNumberOfParams()) {
-              /*
-               * In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType
-               * (check an example here: https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
-               * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a specific ResolvedReferenceType.
-               * This appears to be an inaccuracy within JavaParser's type hierarchy.
-               */
-
-              // since methodDeclarationToInterfaceType.get(interfaceMethod) is a
-              // ClassOrInterfaceType instance, it is safe to cast it to a ReferenceType.
+              ResolvedReferenceType resolvedInterface =
+                  JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(
+                      methodDeclarationToInterfaceType.get(interfaceMethod));
               updateUsedClassWithQualifiedClassName(
-                  methodDeclarationToInterfaceType
-                      .get(interfaceMethod)
-                      .resolve()
-                      .asReferenceType()
-                      .getQualifiedName(),
+                  resolvedInterface.getQualifiedName(),
                   usedTypeElement,
                   nonPrimaryClassesToPrimaryClass);
               usedMembers.add(interfaceMethod.getQualifiedSignature());
