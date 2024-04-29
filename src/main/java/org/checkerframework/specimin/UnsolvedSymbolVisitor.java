@@ -1176,8 +1176,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       className = oldClassName;
       return result;
     }
-    SimpleName typeName = newExpr.getType().getName();
-    String type = typeName.asString();
+    String type = newExpr.getTypeAsString();
     if (canBeSolved(newExpr)) {
       if (isFromAJarFile(newExpr)) {
         updateClassesFromJarSourcesForObjectCreation(newExpr);
@@ -1854,7 +1853,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Given the simple name of an unsolved class, this method will create an UnsolvedClass instance
    * to represent that class and update the list of missing class with that UnsolvedClass instance.
    *
-   * @param nameOfClass the name of an unsolved class
+   * @param nameOfClass the name of an unsolved class. This is a simple name but it may also contain
+   *     scoping constructs for outer classes. For example, it could be "Outer.Inner".
    * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
    *     missing classes (optional, may be omitted)
    * @param isExceptionType if the class is of exceptionType
@@ -1863,13 +1863,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *     ignored.
    */
   public UnsolvedClassOrInterface updateUnsolvedClassWithClassName(
-      @ClassGetSimpleName String nameOfClass,
+      String nameOfClass,
       boolean isExceptionType,
       boolean isUpdatingInterface,
       UnsolvedMethod... unsolvedMethods) {
-    // if the name of the class is not present among import statements, we assume that this unsolved
-    // class is in the same directory as the current class
-    String packageName = getPackageFromClassName(nameOfClass);
+    // If the name of the class is not present among import statements, we assume that this unsolved
+    // class is in the same directory as the current class. If the class name is not simple, use
+    // the outermost scope.
+    String scope =
+        nameOfClass.indexOf('.') == -1
+            ? nameOfClass
+            : nameOfClass.substring(0, nameOfClass.indexOf('.'));
+    String packageName = getPackageFromClassName(scope);
     UnsolvedClassOrInterface result;
     result =
         new UnsolvedClassOrInterface(
@@ -2179,7 +2184,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public List<String> getArgumentTypesFromObjectCreation(
       ObjectCreationExpr creationExpr, @Nullable String pkgName) {
     NodeList<Expression> argList = creationExpr.getArguments();
-    return getArgumentTypesImpl(argList, null);
+    return getArgumentTypesImpl(argList, pkgName);
   }
 
   /**
@@ -2525,15 +2530,31 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // If the input contains something simple like Map.Entry,
     // try to avoid creating a synthetic class Entry in package Map if there is
     // also a synthetic class for a Map elsewhere (make it an inner class instead).
+    // There are two possibilities for how this might be encoded:
+    // 1. the "qualified name" might be "Map.Entry", or
+    // 2. the class' "simple name" might have a dot in it. For example, the package
+    //    name might be "java.util" and the class name might be "Map.Entry".
+    String outerClassName = null, innerClassName = null;
+    // First case, looking for "Map.Entry" pattern
     if (isCapital(qualifiedName)
         &&
         // This test checks that it has only one .
         qualifiedName.indexOf('.') == qualifiedName.lastIndexOf('.')) {
-      String outerClassName = qualifiedName.substring(0, qualifiedName.indexOf('.'));
-      String innerClassName = qualifiedName.substring(qualifiedName.indexOf('.') + 1);
-      Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
-      while (iterator.hasNext()) {
-        UnsolvedClassOrInterface e = iterator.next();
+      outerClassName = qualifiedName.substring(0, qualifiedName.indexOf('.'));
+      innerClassName = qualifiedName.substring(qualifiedName.indexOf('.') + 1);
+    }
+    // Second case, looking for "org.example.Map.Entry"-style
+    String simpleName = missedClass.getClassName();
+    if (simpleName.indexOf('.') != -1) {
+      outerClassName = simpleName.substring(0, simpleName.indexOf('.'));
+      innerClassName = simpleName.substring(simpleName.indexOf('.') + 1);
+    }
+    System.out.println("missedClass: " + missedClass);
+    System.out.println("outer class name: " + outerClassName);
+    System.out.println("inner class name: " + innerClassName);
+
+    if (innerClassName != null && outerClassName != null) {
+      for (UnsolvedClassOrInterface e : missingClass) {
         if (e.getClassName().equals(outerClassName)) {
           UnsolvedClassOrInterface innerClass =
               new UnsolvedClassOrInterface.UnsolvedInnerClass(innerClassName, e.getPackageName());
@@ -2542,11 +2563,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           return;
         }
       }
+      // There is an ordering dependency, and the outer class doesn't exist yet.
+      // Try again in the next run.
+      gotException();
+      return;
     }
 
-    Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
-    while (iterator.hasNext()) {
-      UnsolvedClassOrInterface e = iterator.next();
+    for (UnsolvedClassOrInterface e : missingClass) {
       if (e.equals(missedClass)) {
         updateMissingClassHelper(missedClass, e);
         return;
