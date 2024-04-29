@@ -111,21 +111,26 @@ public class SpeciminRunner {
       String outputDirectory)
       throws IOException {
     // The set of path of files that have been created by Specimin. We must be careful to delete all
-    // those
-    // files in the end, because otherwise they can pollute the input directory.
+    // those files in the end, because otherwise they can pollute the input directory. To do that,
+    // we need to register a shutdown hook with the JVM.
     Set<Path> createdClass = new HashSet<>();
-    try {
-      performMinimizationImpl(
-          root,
-          targetFiles,
-          jarPaths,
-          targetMethodNames,
-          targetFieldNames,
-          outputDirectory,
-          createdClass);
-    } finally {
-      deleteFiles(createdClass);
-    }
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread() {
+              @Override
+              public void run() {
+                deleteFiles(createdClass);
+              }
+            });
+
+    performMinimizationImpl(
+        root,
+        targetFiles,
+        jarPaths,
+        targetMethodNames,
+        targetFieldNames,
+        outputDirectory,
+        createdClass);
   }
 
   /**
