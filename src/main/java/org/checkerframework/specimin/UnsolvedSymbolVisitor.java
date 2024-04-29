@@ -92,7 +92,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Flag for whether or not to print debugging output. Should always be false except when you are
    * actively debugging.
    */
-  private static final boolean DEBUG = true;
+  private static final boolean DEBUG = false;
 
   /**
    * This map associates class names with their respective superclasses. The keys in this map

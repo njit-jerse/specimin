@@ -379,9 +379,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // utilized. It's not surprising for unused members to remain unresolved.
       // If this constructor is from the parent of the current class, and it is not resolved, we
       // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
-      System.out.println(
-          "removing " + constructorDecl.getDeclarationAsString() + " because it is unsolvable");
-      System.out.println(e);
       constructorDecl.remove();
       return constructorDecl;
     }
