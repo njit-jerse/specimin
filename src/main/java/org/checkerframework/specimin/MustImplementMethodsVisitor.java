@@ -192,7 +192,8 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
     for (ClassOrInterfaceType implementedType : implementedTypes) {
       ResolvedReferenceType resolvedInterface;
       try {
-        resolvedInterface = implementedType.resolve();
+        resolvedInterface =
+            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(implementedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // In this case, we're implementing an interface that we don't control
         // or that will not be preserved.

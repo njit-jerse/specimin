@@ -111,21 +111,26 @@ public class SpeciminRunner {
       String outputDirectory)
       throws IOException {
     // The set of path of files that have been created by Specimin. We must be careful to delete all
-    // those
-    // files in the end, because otherwise they can pollute the input directory.
+    // those files in the end, because otherwise they can pollute the input directory. To do that,
+    // we need to register a shutdown hook with the JVM.
     Set<Path> createdClass = new HashSet<>();
-    try {
-      performMinimizationImpl(
-          root,
-          targetFiles,
-          jarPaths,
-          targetMethodNames,
-          targetFieldNames,
-          outputDirectory,
-          createdClass);
-    } finally {
-      deleteFiles(createdClass);
-    }
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread() {
+              @Override
+              public void run() {
+                deleteFiles(createdClass);
+              }
+            });
+
+    performMinimizationImpl(
+        root,
+        targetFiles,
+        jarPaths,
+        targetMethodNames,
+        targetFieldNames,
+        outputDirectory,
+        createdClass);
   }
 
   /**
@@ -477,7 +482,7 @@ public class SpeciminRunner {
       // Write the string representation of CompilationUnit to the file
       try {
         PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
-        writer.print(target.getValue());
+        writer.print(getCompilationUnitWithCommentsTrimmed(target.getValue()));
         writer.close();
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
@@ -637,6 +642,20 @@ public class SpeciminRunner {
         throw new RuntimeException("Unresolved file path: " + filePath);
       }
     }
+  }
+
+  /**
+   * Returns a comment-free version of a compilation unit.
+   *
+   * @param cu A compilation unit possibly containing comments.
+   * @return A comment-free version of the compilation unit.
+   */
+  private static CompilationUnit getCompilationUnitWithCommentsTrimmed(CompilationUnit cu) {
+    CompilationUnit cuWithNoComments = cu;
+    for (Comment child : cuWithNoComments.getAllComments()) {
+      child.remove();
+    }
+    return cuWithNoComments;
   }
 
   /**

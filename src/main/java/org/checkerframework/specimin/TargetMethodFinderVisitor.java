@@ -265,7 +265,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     for (ClassOrInterfaceType interfaceType : decl.getImplementedTypes()) {
       try {
         updateMethodDeclarationToInterfaceType(
-            interfaceType.resolve().getAllMethods(), interfaceType);
+            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(interfaceType)
+                .getAllMethods(),
+            interfaceType);
       } catch (UnsolvedSymbolException e) {
         continue;
       }
@@ -584,7 +586,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       return super.visit(type, p);
     }
     try {
-      ResolvedReferenceType typeResolved = type.resolve();
+      ResolvedReferenceType typeResolved =
+          JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type);
       updateUsedClassBasedOnType(typeResolved);
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
@@ -706,11 +709,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
               .describe()
               .equals(interfaceMethod.getReturnType().describe())) {
             if (method.getNumberOfParams() == interfaceMethod.getNumberOfParams()) {
+              ResolvedReferenceType resolvedInterface =
+                  JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(
+                      methodDeclarationToInterfaceType.get(interfaceMethod));
               updateUsedClassWithQualifiedClassName(
-                  methodDeclarationToInterfaceType
-                      .get(interfaceMethod)
-                      .resolve()
-                      .getQualifiedName(),
+                  resolvedInterface.getQualifiedName(),
                   usedTypeElement,
                   nonPrimaryClassesToPrimaryClass);
               usedMembers.add(interfaceMethod.getQualifiedSignature());
