@@ -134,7 +134,6 @@ public class EnumVisitor extends VoidVisitorAdapter<Void> {
 
     if (resolvedField.isEnumConstant()) {
       ResolvedType correspondingEnumDeclaration = resolvedField.asEnumConstant().getType();
-      System.out.println("adding to used enum: " + correspondingEnumDeclaration.describe());
       usedEnum.add(correspondingEnumDeclaration.describe());
     }
   }

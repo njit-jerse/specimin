@@ -264,4 +264,17 @@ public final class JavaLangUtils {
         throw new IllegalArgumentException("unexpected binary operator: " + binOp);
     }
   }
+
+  /**
+   * Returns true iff both input types are java.lang.Class followed by some type parameter.
+   *
+   * @param type1 a type
+   * @param type2 another type
+   * @return true iff they're both Class
+   */
+  public static boolean bothAreJavaLangClass(String type1, String type2) {
+    boolean type1IsClass = type1.startsWith("Class<") || type1.startsWith("java.lang.Class<");
+    boolean type2IsClass = type2.startsWith("Class<") || type2.startsWith("java.lang.Class<");
+    return type1IsClass && type2IsClass;
+  }
 }
