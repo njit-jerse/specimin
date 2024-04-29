@@ -225,6 +225,7 @@ public class SpeciminRunner {
       boolean gettingStuck =
           workDoneAfterIteration.equals(workDoneBeforeIteration)
               && addMissingClass.gettingException();
+      System.out.println("work done after iteration: " + workDoneAfterIteration);
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
