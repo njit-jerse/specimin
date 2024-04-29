@@ -1,13 +1,19 @@
 package com.example;
 
-class Simple {
+import java.lang.annotation.Annotation;
 
-    void bar() {
-        Object obj = new Object();
-        obj = baz(obj);
+public class Simple {
+
+    public enum Kind {
+        PRECONDITION(PreconditionAnnotation.class), POSTCONDITION(PostconditionAnnotation.class);
+
+        Kind(Class<? extends Annotation> metaAnnotation) {
+            throw new Error();
+        }
     }
 
-    Object baz(Object obj) {
-        throw new Error();
+    public void bar() {
+        Kind kind = Kind.POSTCONDITION;
+        kind = Kind.PRECONDITION;
     }
 }

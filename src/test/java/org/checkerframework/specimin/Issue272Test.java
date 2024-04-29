@@ -10,9 +10,6 @@ public class Issue272Test {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "issue272",
         new String[] {"com/example/Simple.java"},
-        new String[] {
-          "com.example.Simple#viewpointAdaptDependentTypeAnnotation(GenericAnnotatedTypeFactory<?,?,?,?>,"
-              + " StringToJavaExpression, Tree)"
-        });
+        new String[] {"com.example.Simple#bar()"});
   }
 }
