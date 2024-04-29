@@ -266,10 +266,6 @@ public class SpeciminRunner {
       boolean gettingStuck =
           workDoneAfterIteration.equals(workDoneBeforeIteration)
               && addMissingClass.gettingException();
-      System.out.println("getting stuck? " + gettingStuck);
-      System.out.println("getting exception? " + addMissingClass.gettingException());
-      System.out.println(
-          "making progress? " + workDoneAfterIteration.equals(workDoneBeforeIteration));
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
@@ -291,14 +287,11 @@ public class SpeciminRunner {
             new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
         typeCorrecter.correctTypesForAllFiles();
         typesToChange = typeCorrecter.getTypeToChange();
-        System.out.println("types to change: " + typesToChange);
-        System.out.println("types to extend: " + typeCorrecter.getExtendedTypes());
         classAndUnresolvedInterface = typeCorrecter.getClassAndUnresolvedInterface();
         boolean changeAtLeastOneType = addMissingClass.updateTypes(typesToChange);
         boolean extendAtLeastOneType =
             addMissingClass.updateTypesWithExtends(typeCorrecter.getExtendedTypes());
         boolean atLeastOneTypeIsUpdated = changeAtLeastOneType || extendAtLeastOneType;
-        System.out.println("at least one type updated: " + atLeastOneTypeIsUpdated);
 
         // this is case 2. We will stop addMissingClass. In the next phase,
         // TargetMethodFinderVisitor will give us a meaningful exception message regarding which

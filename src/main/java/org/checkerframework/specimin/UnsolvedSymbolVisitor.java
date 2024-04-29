@@ -3085,7 +3085,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // of Javac
         if (typeToExtend.equals(missedClass.getQualifiedClassName())
             || typeToExtend.equals(missedClass.getClassName())) {
-          atLeastOneTypeIsUpdated = true;
+
+          String missedClassBefore = missedClass.toString();
+
           iterator.remove();
 
           // Special case: if the type to extend is "Annotation", then change the
@@ -3102,6 +3104,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);
+          // Only count an update if the text of the synthetic class changes, to avoid infinite
+          // loops.
+          atLeastOneTypeIsUpdated |= (!missedClassBefore.equals(missedClass.toString()));
         }
       }
     }
