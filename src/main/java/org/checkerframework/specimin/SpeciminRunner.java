@@ -110,7 +110,51 @@ public class SpeciminRunner {
       List<String> targetFieldNames,
       String outputDirectory)
       throws IOException {
+    // The set of path of files that have been created by Specimin. We must be careful to delete all
+    // those files in the end, because otherwise they can pollute the input directory. To do that,
+    // we need to register a shutdown hook with the JVM.
+    Set<Path> createdClass = new HashSet<>();
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread() {
+              @Override
+              public void run() {
+                deleteFiles(createdClass);
+              }
+            });
 
+    performMinimizationImpl(
+        root,
+        targetFiles,
+        jarPaths,
+        targetMethodNames,
+        targetFieldNames,
+        outputDirectory,
+        createdClass);
+  }
+
+  /**
+   * Helper method for performMinimization. The logic of performMinimization is here;
+   * performMinimization itself wraps this in a try-finally to ensure that all created files are
+   * cleaned up properly in the event of a crash or interrupt.
+   *
+   * @param root The root directory of the input files.
+   * @param targetFiles A list of files that contain the target methods.
+   * @param jarPaths Paths to relevant JAR files.
+   * @param targetMethodNames A set of target method names to be preserved.
+   * @param targetFieldNames A set of target field names to be preserved.
+   * @param outputDirectory The directory for the output.
+   * @throws IOException if there is an exception
+   */
+  private static void performMinimizationImpl(
+      String root,
+      List<String> targetFiles,
+      List<String> jarPaths,
+      List<String> targetMethodNames,
+      List<String> targetFieldNames,
+      String outputDirectory,
+      Set<Path> createdClass)
+      throws IOException {
     // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
     // trailing slash.
     if (!root.endsWith("/")) {
@@ -177,9 +221,6 @@ public class SpeciminRunner {
             root, existingClassesToFilePath, targetMethodNames, targetFieldNames);
     addMissingClass.setClassesFromJar(jarPaths);
 
-    // The set of path of files that have been created by addMissingClass. We will delete all those
-    // files in the end.
-    Set<Path> createdClass = new HashSet<>();
     Map<String, String> typesToChange = new HashMap<>();
     Map<String, String> classAndUnresolvedInterface = new HashMap<>();
     while (addMissingClass.gettingException()) {
@@ -440,8 +481,6 @@ public class SpeciminRunner {
       }
     }
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
-    // delete all the temporary files created by UnsolvedSymbolVisitor and VineFlower.
-    deleteFiles(createdClass);
   }
 
   /**
