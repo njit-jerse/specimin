@@ -1059,6 +1059,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // target method.
     boolean oldInsideTargetMember = insideTargetMember;
     insideTargetMember = true;
+    // Enum constants always have an enum as their parent.
+    //    EnumDeclaration parent = (EnumDeclaration) expr.getParentNode().get();
+    //    String type = parent.getNameAsString();
+    //    try {
+    //      List<String> argumentsCreation =
+    //          getArgumentTypesImpl(expr.getArguments(), getPackageFromClassName(type));
+    //      UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
+    //      updateUnsolvedClassWithClassName(type, false, false, creationMethod);
+    //    } catch (Exception q) {
+    //      // can not solve the parameters for this object creation in this current run
+    //      gotException();
+    //    }
     Visitable result = super.visit(expr, p);
     insideTargetMember = oldInsideTargetMember;
     return result;

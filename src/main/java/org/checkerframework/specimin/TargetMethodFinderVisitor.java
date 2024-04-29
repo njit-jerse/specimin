@@ -35,6 +35,7 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclar
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.resolution.types.ResolvedWildcard;
 import com.google.common.base.Splitter;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -878,7 +879,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     ResolvedReferenceType typeAsReference = type.asReferenceType();
     List<ResolvedType> typeParameters = typeAsReference.typeParametersValues();
     for (ResolvedType typePara : typeParameters) {
-      if (typePara.isPrimitive() || typePara.isTypeVariable() || typePara.isWildcard()) {
+      if (typePara.isPrimitive() || typePara.isTypeVariable()) {
+        // Nothing to do, since these are already in-scope.
+        continue;
+      }
+      if (typePara.isWildcard()) {
+        ResolvedWildcard asWildcard = typePara.asWildcard();
+        // Recurse into the bound, if one exists.
+        if (asWildcard.isBounded()) {
+          updateUsedClassBasedOnType(asWildcard.getBoundedType());
+        }
         continue;
       }
       updateUsedClassWithQualifiedClassName(
