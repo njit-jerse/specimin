@@ -3106,7 +3106,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           this.createMissingClass(missedClass);
           // Only count an update if the text of the synthetic class changes, to avoid infinite
           // loops.
-          atLeastOneTypeIsUpdated |= (!missedClassBefore.equals(missedClass.toString()));
+          atLeastOneTypeIsUpdated |= !missedClassBefore.equals(missedClass.toString());
         }
       }
     }
