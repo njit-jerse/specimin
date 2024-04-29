@@ -53,6 +53,33 @@ public class UnsolvedClassOrInterface {
   private @MonotonicNonNull Set<UnsolvedClassOrInterface> innerClasses = null;
 
   /**
+   * Returns true if this class has an inner class with the name "typeToExtend". As a side effect,
+   * calls extend() on that inner class with the given extendedType.
+   *
+   * @param typeToExtend the name of an inner class, with the name of the correct outer class before
+   *     it (dot-separated)
+   * @param extendedType the name of the type that ought to be extended
+   * @return true iff there is a matching inner class that was extended
+   */
+  public boolean extendInnerClass(String typeToExtend, String extendedType) {
+    if (innerClasses == null) {
+      return false;
+    }
+    String outerName = typeToExtend.substring(0, typeToExtend.indexOf('.'));
+    if (!outerName.equals(this.className)) {
+      return false;
+    }
+    String innerName = typeToExtend.substring(typeToExtend.indexOf('.') + 1);
+    for (UnsolvedClassOrInterface unsolvedInnerClass : innerClasses) {
+      if (unsolvedInnerClass.getClassName().equals(innerName)) {
+        unsolvedInnerClass.extend(extendedType);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * This class' constructor should be used for creating inner classes. Frankly, this design is a
    * mess (sorry) - controlling whether this is an inner class via inheritance is probably bad.
    * TODO: clean this up after ISSTA.

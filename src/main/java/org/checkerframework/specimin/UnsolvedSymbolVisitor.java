@@ -2549,9 +2549,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       outerClassName = simpleName.substring(0, simpleName.indexOf('.'));
       innerClassName = simpleName.substring(simpleName.indexOf('.') + 1);
     }
-    System.out.println("missedClass: " + missedClass);
-    System.out.println("outer class name: " + outerClassName);
-    System.out.println("inner class name: " + innerClassName);
 
     if (innerClassName != null && outerClassName != null) {
       for (UnsolvedClassOrInterface e : missingClass) {
@@ -3102,6 +3099,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);
+        } else {
+          // Try extending an inner class. TODO: combine this code with the code above.
+          String extendedType = typesToExtend.get(typeToExtend);
+          if (!isAClassPath(extendedType)) {
+            extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
+          }
+          boolean success = missedClass.extendInnerClass(typeToExtend, extendedType);
+          if (success) {
+            modifiedClasses.add(missedClass);
+            this.deleteOldSyntheticClass(missedClass);
+            this.createMissingClass(missedClass);
+            atLeastOneTypeIsUpdated = true;
+          }
         }
       }
     }
