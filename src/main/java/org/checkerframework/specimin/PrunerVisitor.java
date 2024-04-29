@@ -544,7 +544,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a NodeList of types, this method removes those type not used by target methods.
+   * Given a NodeList of types, this method removes those types not used by target methods.
    *
    * @param inputList a NodeList of ClassOrInterfaceType instances.
    * @return the updated list with unused types removed.
@@ -556,7 +556,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       ResolvedType resolvedType;
       try {
         resolvedType = type.resolve();
-      } catch (UnsolvedSymbolException e) {
+      } catch (UnsolvedSymbolException | IllegalStateException e) {
         continue;
       }
       if (classesUsedByTargetMethods.contains(resolvedType.asReferenceType().getQualifiedName())) {

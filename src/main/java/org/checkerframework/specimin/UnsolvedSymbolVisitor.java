@@ -3103,38 +3103,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         UnsolvedClassOrInterface missedClass = iterator.next();
         // typeToExtend can be either a simple name or an FQN, due to the limitations
         // of Javac
-        if (typeToExtend.equals(missedClass.getQualifiedClassName())
-            || typeToExtend.equals(missedClass.getClassName())) {
-          atLeastOneTypeIsUpdated = true;
+        String missedClassBefore = missedClass.toString();
+        boolean success = missedClass.extend(typeToExtend, extendedType, this);
+        if (success) {
           iterator.remove();
-
-          // Special case: if the type to extend is "Annotation", then change the
-          // target class to an @interface declaration.
-          if ("Annotation".equals(extendedType)
-              || "java.lang.annotation.Annotation".equals(extendedType)) {
-            missedClass.setIsAnAnnotationToTrue();
-          } else {
-            if (!isAClassPath(extendedType)) {
-              extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
-            }
-            missedClass.extend(extendedType);
-          }
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);
-        } else {
-          // Try extending an inner class. TODO: combine this code with the code above.
-          String extendedType = typesToExtend.get(typeToExtend);
-          if (!isAClassPath(extendedType)) {
-            extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
-          }
-          boolean success = missedClass.extendInnerClass(typeToExtend, extendedType);
-          if (success) {
-            modifiedClasses.add(missedClass);
-            this.deleteOldSyntheticClass(missedClass);
-            this.createMissingClass(missedClass);
-            atLeastOneTypeIsUpdated = true;
-          }
+          // Only count an update if the text of the synthetic class changes, to avoid infinite
+          // loops.
+          atLeastOneTypeIsUpdated |= !missedClassBefore.equals(missedClass.toString());
         }
       }
     }

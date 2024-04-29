@@ -56,33 +56,6 @@ public class UnsolvedClassOrInterface {
   private boolean isAnAnnotation = false;
 
   /**
-   * Returns true if this class has an inner class with the name "typeToExtend". As a side effect,
-   * calls extend() on that inner class with the given extendedType.
-   *
-   * @param typeToExtend the name of an inner class, with the name of the correct outer class before
-   *     it (dot-separated)
-   * @param extendedType the name of the type that ought to be extended
-   * @return true iff there is a matching inner class that was extended
-   */
-  public boolean extendInnerClass(String typeToExtend, String extendedType) {
-    if (innerClasses == null) {
-      return false;
-    }
-    String outerName = typeToExtend.substring(0, typeToExtend.indexOf('.'));
-    if (!outerName.equals(this.className)) {
-      return false;
-    }
-    String innerName = typeToExtend.substring(typeToExtend.indexOf('.') + 1);
-    for (UnsolvedClassOrInterface unsolvedInnerClass : innerClasses) {
-      if (unsolvedInnerClass.getClassName().equals(innerName)) {
-        unsolvedInnerClass.extend(extendedType);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
    * This class' constructor should be used for creating inner classes. Frankly, this design is a
    * mess (sorry) - controlling whether this is an inner class via inheritance is probably bad.
    * TODO: clean this up after ISSTA.
@@ -317,6 +290,48 @@ public class UnsolvedClassOrInterface {
    */
   public void extend(String className) {
     this.extendsClause = "extends " + className;
+  }
+
+  /**
+   * Attempts to add an extends clause to this class or (recursively) to one of its inner classes.
+   * An extends clause will only be added if the name of this class matches the target type name.
+   * The name of the class in the extends clause is extendsName.
+   *
+   * @param targetTypeName the name of the class to be extended. This may be a fully-qualified name,
+   *     a simple name, or a dot-separated identifier.
+   * @param extendsName the name of the class to extend. Always fully-qualified.
+   * @param visitor the current visitor state
+   * @return true if an extends clause was added, false otherwise
+   */
+  public boolean extend(String targetTypeName, String extendsName, UnsolvedSymbolVisitor visitor) {
+    if (targetTypeName.equals(this.getQualifiedClassName())
+        || targetTypeName.equals(this.getClassName())) {
+      // Special case: if the type to extend is "Annotation", then change the
+      // target class to an @interface declaration.
+      if ("Annotation".equals(extendsName)
+          || "java.lang.annotation.Annotation".equals(extendsName)) {
+        setIsAnAnnotationToTrue();
+      } else {
+        if (!UnsolvedSymbolVisitor.isAClassPath(extendsName)) {
+          extendsName = visitor.getPackageFromClassName(extendsName) + "." + extendsName;
+        }
+        extend(extendsName);
+      }
+      return true;
+    }
+    if (innerClasses == null || targetTypeName.indexOf('.') == -1) {
+      return false;
+    }
+    String outerName = targetTypeName.substring(0, targetTypeName.indexOf('.'));
+    if (!outerName.equals(this.className)) {
+      return false;
+    }
+    String innerName = targetTypeName.substring(targetTypeName.indexOf('.') + 1);
+    boolean result = false;
+    for (UnsolvedClassOrInterface unsolvedInnerClass : innerClasses) {
+      result |= unsolvedInnerClass.extend(innerName, extendsName, visitor);
+    }
+    return result;
   }
 
   /**
