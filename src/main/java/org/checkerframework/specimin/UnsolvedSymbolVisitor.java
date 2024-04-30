@@ -1176,7 +1176,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       className = oldClassName;
       return result;
     }
-    String type = newExpr.getTypeAsString();
+    // Cannot be newExpr.getTypeAsString(), because that will include type variables,
+    // which is undesirable.
+    String type = newExpr.getType().getNameAsString();
     if (canBeSolved(newExpr)) {
       if (isFromAJarFile(newExpr)) {
         updateClassesFromJarSourcesForObjectCreation(newExpr);

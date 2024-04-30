@@ -303,7 +303,7 @@ class JavaTypeCorrect {
       }
       i++;
     }
-    return result.toString();
+    return result.toString().trim();
   }
 
   /**

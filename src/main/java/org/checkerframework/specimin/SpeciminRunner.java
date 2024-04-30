@@ -311,13 +311,6 @@ public class SpeciminRunner {
       }
     }
 
-    UnsolvedSymbolVisitorProgress workDoneAfterAllIterations =
-        new UnsolvedSymbolVisitorProgress(
-            addMissingClass.getPotentialUsedMembers(),
-            addMissingClass.getAddedTargetFiles(),
-            addMissingClass.getSyntheticClassesAsAStringSet());
-    System.out.println(workDoneAfterAllIterations);
-
     UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(annoRemover, null);
