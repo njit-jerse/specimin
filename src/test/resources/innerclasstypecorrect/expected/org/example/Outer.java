@@ -6,7 +6,7 @@ public class Outer {
 
     }
 
-    public static Outer.Inner getInner() {
+    public static org.example.Outer.Inner getInner() {
         throw new Error();
     }
 }
