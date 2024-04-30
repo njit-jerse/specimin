@@ -2587,6 +2587,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedClassOrInterface innerClass =
           new UnsolvedClassOrInterface.UnsolvedInnerClass(
               innerClassName, missedClass.getPackageName());
+      updateMissingClassHelper(missedClass, innerClass);
       outerClass.addInnerClass(innerClass);
       missingClass.add(outerClass);
       return;
