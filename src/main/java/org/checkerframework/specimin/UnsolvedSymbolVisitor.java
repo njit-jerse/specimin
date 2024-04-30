@@ -3062,6 +3062,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Set<UnsolvedClassOrInterface> modifiedClasses = new HashSet<>();
 
     for (String typeToExtend : typesToExtend.keySet()) {
+      String extendedType = typesToExtend.get(typeToExtend);
+
+      // Special case for types with the form Class<X>. In this case, the incompatibility
+      // is in the type variable X (which is probably a synthetic class whose .class literal
+      // is used by the target), not in Class itself.
+      if (JavaLangUtils.bothAreJavaLangClass(typeToExtend, extendedType)) {
+        // Remove the Class<>
+        typeToExtend =
+            typeToExtend.substring(typeToExtend.indexOf('<') + 1, typeToExtend.length() - 1);
+        extendedType =
+            extendedType.substring(extendedType.indexOf('<') + 1, extendedType.length() - 1);
+      }
+      if (extendedType.startsWith("? extends ")) {
+        extendedType = extendedType.substring(10);
+      }
+
       Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
       while (iterator.hasNext()) {
         UnsolvedClassOrInterface missedClass = iterator.next();
@@ -3071,11 +3087,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             || typeToExtend.equals(missedClass.getClassName())) {
           atLeastOneTypeIsUpdated = true;
           iterator.remove();
-          String extendedType = typesToExtend.get(typeToExtend);
-          if (!isAClassPath(extendedType)) {
-            extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
+
+          // Special case: if the type to extend is "Annotation", then change the
+          // target class to an @interface declaration.
+          if ("Annotation".equals(extendedType)
+              || "java.lang.annotation.Annotation".equals(extendedType)) {
+            missedClass.setIsAnAnnotationToTrue();
+          } else {
+            if (!isAClassPath(extendedType)) {
+              extendedType = getPackageFromClassName(extendedType) + "." + extendedType;
+            }
+            missedClass.extend(extendedType);
           }
-          missedClass.extend(extendedType);
           modifiedClasses.add(missedClass);
           this.deleteOldSyntheticClass(missedClass);
           this.createMissingClass(missedClass);

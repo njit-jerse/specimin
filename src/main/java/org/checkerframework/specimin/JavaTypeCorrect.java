@@ -13,7 +13,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * This class uses javac to analyze files. If there are any incompatible type errors in those files,
@@ -284,12 +286,34 @@ class JavaTypeCorrect {
   }
 
   /**
+   * Parses a type from a space-separated error message.
+   *
+   * @param splitErrorMessage the space-separated error message
+   * @param startIndex the index into the error message at which the type starts
+   * @param next the stop word to look for. Null if the type should go to the end of the input list.
+   * @return the type as a string
+   */
+  private String getTypeFrom(
+      List<String> splitErrorMessage, int startIndex, @Nullable String next) {
+    StringBuilder result = new StringBuilder(splitErrorMessage.get(startIndex));
+    int i = startIndex + 1;
+    while (i < splitErrorMessage.size() && !Objects.equals(splitErrorMessage.get(i), next)) {
+      result.append(" ").append(splitErrorMessage.get(i));
+      i++;
+    }
+    return result.toString();
+  }
+
+  /**
    * This method updates typeToChange by relying on the error messages from javac
    *
    * @param errorMessage the error message to be analyzed
    * @param filePath the path of the file where this error happens
    */
   private void updateTypeToChange(String errorMessage, String filePath) {
+    // TODO: splitting on spaces here isn't safe, because types can contain spaces (e.g., if they
+    // are wildcards or have multiple type parameters!). We should find an alternative way to parse
+    // these error messages that doesn't require us to then re-parse the types from this list.
     List<String> splitErrorMessage = Splitter.onPattern("\\s+").splitToList(errorMessage);
     if (splitErrorMessage.size() < 7) {
       throw new RuntimeException("Unexpected type error messages: " + errorMessage);
@@ -298,8 +322,9 @@ class JavaTypeCorrect {
      * 1. error: incompatible types: <type1> cannot be converted to <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      String rhs = splitErrorMessage.get(4);
-      String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
+      String rhs = getTypeFrom(splitErrorMessage, 4, "cannot");
+      int toIndex = splitErrorMessage.indexOf("to");
+      String lhs = getTypeFrom(splitErrorMessage, toIndex + 1, null);
       if ("Throwable".equals(lhs)) {
         // Since all the checked exceptions have already been handled by UnsolvedSymbolVisitor, we
         // know that all the remaining uncompiled exceptions are unchecked.
@@ -324,18 +349,20 @@ class JavaTypeCorrect {
      * 4. error: incompatible types: found <type1> required <type2> (unknown triggers)
      */
     else {
-      String rhs;
+      String rhs, lhs;
       if (errorMessage.contains("incomparable types")) {
         // Case 2
-        rhs = splitErrorMessage.get(4);
+        rhs = getTypeFrom(splitErrorMessage, 4, "and");
+        lhs = getTypeFrom(splitErrorMessage, splitErrorMessage.indexOf("and") + 1, null);
       } else if (errorMessage.contains("is not compatible with")) {
         // Case 3
-        rhs = splitErrorMessage.get(3);
+        rhs = getTypeFrom(splitErrorMessage, 3, "is");
+        lhs = getTypeFrom(splitErrorMessage, splitErrorMessage.indexOf("with") + 1, null);
       } else {
         // Case 4
-        rhs = splitErrorMessage.get(5);
+        rhs = getTypeFrom(splitErrorMessage, 5, "required");
+        lhs = getTypeFrom(splitErrorMessage, splitErrorMessage.indexOf("required") + 1, null);
       }
-      String lhs = splitErrorMessage.get(splitErrorMessage.size() - 1);
       if (isSynthetic(lhs)) {
         changeType(lhs, tryResolveFullyQualifiedType(rhs, filePath));
       } else if (isSynthetic(rhs)) {

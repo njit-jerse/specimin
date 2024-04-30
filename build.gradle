@@ -56,6 +56,11 @@ task expectedTestOutputsMustCompile(type: Exec) {
     commandLine "sh", "typecheck_test_outputs.sh"
 }
 
+tasks.compileJava {
+    // uncomment for testing
+    // options.errorprone.enabled = false
+}
+
 checkerFramework {
     // uncomment for testing
     // skipCheckerFramework = true
