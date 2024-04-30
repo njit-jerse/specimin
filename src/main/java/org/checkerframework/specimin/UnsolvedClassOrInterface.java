@@ -319,17 +319,23 @@ public class UnsolvedClassOrInterface {
       }
       return true;
     }
-    if (innerClasses == null || targetTypeName.indexOf('.') == -1) {
+    if (innerClasses == null) {
       return false;
     }
-    String outerName = targetTypeName.substring(0, targetTypeName.indexOf('.'));
-    if (!outerName.equals(this.className)) {
-      return false;
+    // Two possibilities, depending on how Javac's error message looks:
+    // 1. Javac provides the whole class name in the form Outer.Inner
+    // 2. Javac provides only the inner class name
+    if (targetTypeName.indexOf('.') != -1) {
+      String outerName = targetTypeName.substring(0, targetTypeName.indexOf('.'));
+      if (!outerName.equals(this.className)) {
+        return false;
+      }
+      // set the targetTypeName to the name of the inner class
+      targetTypeName = targetTypeName.substring(targetTypeName.indexOf('.') + 1);
     }
-    String innerName = targetTypeName.substring(targetTypeName.indexOf('.') + 1);
     boolean result = false;
     for (UnsolvedClassOrInterface unsolvedInnerClass : innerClasses) {
-      result |= unsolvedInnerClass.extend(innerName, extendsName, visitor);
+      result |= unsolvedInnerClass.extend(targetTypeName, extendsName, visitor);
     }
     return result;
   }
