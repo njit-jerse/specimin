@@ -1367,16 +1367,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
     String packageName, className;
     if (isAClassPath(typeRawName)) {
-      packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
-      className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
+      // Two cases: this could be either an Outer.Inner pair or it could
+      // be a fully-qualified name. If it's an Outer.Inner pair, we identify
+      // that via the heuristic that there are only two elements if we split on
+      // the dot and that the whole string is capital
+      if (typeRawName.indexOf('.') == typeRawName.lastIndexOf('.') && isCapital(typeRawName)) {
+        className = typeRawName;
+        packageName = getPackageFromClassName(typeRawName.substring(0, typeRawName.indexOf('.')));
+      } else {
+        packageName = typeRawName.substring(0, typeRawName.lastIndexOf("."));
+        className = typeRawName.substring(typeRawName.lastIndexOf(".") + 1);
+      }
     } else {
       className = typeRawName;
       packageName = getPackageFromClassName(className);
     }
+
     classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
     classToUpdate.setPreferedTypeVariables(preferredTypeVariables);
+
     updateMissingClass(classToUpdate);
   }
 
@@ -2165,9 +2176,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String typeSimpleName = type.getName().asString();
     if (!typeAsString.equals(typeSimpleName)) {
       // check for inner classes.
-      if (typeAsString.split("\\.").length > 2) {
-        // if the above conditions are met, this type is already in the qualified form.
+      List<String> splitType = Splitter.on('.').splitToList(typeAsString);
+      if (splitType.size() > 2) {
+        // if the above conditions are met, this type is probably already in the qualified form.
         return typeAsString;
+      } else if (isCapital(typeAsString)) {
+        // Heuristic: if the type name has two dot-separated components and
+        // the first one is capitalized, then it's probably an inner class.
+        // Return the outer class' package.
+        String outerClass = splitType.get(0);
+        return getPackageFromClassName(outerClass) + "." + typeAsString;
       }
     }
     return getPackageFromClassName(typeSimpleName) + "." + typeSimpleName;
@@ -2562,9 +2580,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           return;
         }
       }
-      // There is an ordering dependency, and the outer class doesn't exist yet.
-      // Try again in the next run.
-      gotException();
+      // The outer class doesn't exist yet. Create it.
+      UnsolvedClassOrInterface outerClass =
+          new UnsolvedClassOrInterface(
+              outerClassName, missedClass.getPackageName(), false, missedClass.isAnInterface());
+      UnsolvedClassOrInterface innerClass =
+          new UnsolvedClassOrInterface.UnsolvedInnerClass(
+              innerClassName, missedClass.getPackageName());
+      outerClass.addInnerClass(innerClass);
+      missingClass.add(outerClass);
       return;
     }
 
