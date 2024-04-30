@@ -2,7 +2,7 @@ package com.example;
 
 public class Outer {
 
-    public class Inner<T> {
+    public static class Inner<T> {
 
     }
 }

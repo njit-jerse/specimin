@@ -267,8 +267,6 @@ public class SpeciminRunner {
           workDoneAfterIteration.equals(workDoneBeforeIteration)
               && addMissingClass.gettingException();
 
-      System.out.println("current state: " + workDoneAfterIteration);
-
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
@@ -378,6 +376,7 @@ public class SpeciminRunner {
     }
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
     Set<String> totalSetOfAddedInheritedClasses = classToFindInheritance;
+    System.out.println(totalSetOfAddedInheritedClasses);
     InheritancePreserveVisitor inheritancePreserve;
     while (!classToFindInheritance.isEmpty()) {
       inheritancePreserve = new InheritancePreserveVisitor(classToFindInheritance);
@@ -405,6 +404,8 @@ public class SpeciminRunner {
 
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
+
+    System.out.println("after running inheritance preserver visitor: " + updatedUsedClass);
 
     // remove the unsolved annotations in the newly added files.
     for (CompilationUnit cu : parsedTargetFiles.values()) {

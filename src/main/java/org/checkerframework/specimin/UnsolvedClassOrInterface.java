@@ -444,6 +444,20 @@ public class UnsolvedClassOrInterface {
     if (this.getClass() != UnsolvedInnerClass.class) {
       sb.append("package ").append(packageName).append(";\n");
     }
+    sb.append("public ");
+    if (this.getClass() == UnsolvedInnerClass.class) {
+      // Nested classes that are visible outside their parent class
+      // are usually static. There is no downside to making them static
+      // (it imposes no additional requirements), but there is a downside
+      // to making them non-static (they must be attached to a specific member
+      // of the outer class, which may or may not be true in the event).
+      // TODO: I'm not sure we actually have test cases for "real" inner classes
+      // (which are non-static nested classes). All of our "inner class" tests
+      // appear to be intended for static nested classes. See
+      // https://docs.oracle.com/javase/tutorial/java/javaOO/nested.html for
+      // a discussion of the difference.
+      sb.append("static ");
+    }
     if (isAnInterface) {
       // For synthetic interfaces created for lambdas only.
       if (methods.size() == 1
@@ -451,11 +465,11 @@ public class UnsolvedClassOrInterface {
               || className.startsWith("SyntheticConsumer"))) {
         sb.append("@FunctionalInterface\n");
       }
-      sb.append("public interface ");
+      sb.append("interface ");
     } else if (isAnAnnotation) {
-      sb.append("public @interface ");
+      sb.append("@interface ");
     } else {
-      sb.append("public class ");
+      sb.append("class ");
     }
     sb.append(className).append(getTypeVariablesAsString());
     if (extendsClause != null) {

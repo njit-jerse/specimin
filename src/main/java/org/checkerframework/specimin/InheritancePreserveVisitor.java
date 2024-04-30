@@ -85,9 +85,9 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
           TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
               extendedType.resolve().describe(), addedClasses, new HashMap<>());
           if (extendedType.getTypeArguments().isPresent()) {
-            for (Type typeAgrument : extendedType.getTypeArguments().get()) {
+            for (Type typeArgument : extendedType.getTypeArguments().get()) {
               TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
-                  typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
+                  typeArgument.resolve().describe(), addedClasses, new HashMap<>());
             }
           }
         } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
