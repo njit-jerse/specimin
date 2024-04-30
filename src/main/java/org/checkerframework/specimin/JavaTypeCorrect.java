@@ -295,10 +295,12 @@ class JavaTypeCorrect {
    */
   private String getTypeFrom(
       List<String> splitErrorMessage, int startIndex, @Nullable String next) {
-    StringBuilder result = new StringBuilder(splitErrorMessage.get(startIndex));
-    int i = startIndex + 1;
+    StringBuilder result = new StringBuilder();
+    int i = startIndex;
     while (i < splitErrorMessage.size() && !Objects.equals(splitErrorMessage.get(i), next)) {
-      result.append(" ").append(splitErrorMessage.get(i));
+      if (!splitErrorMessage.get(i).startsWith("@")) {
+        result.append(" ").append(splitErrorMessage.get(i));
+      }
       i++;
     }
     return result.toString();
