@@ -304,7 +304,12 @@ public class UnsolvedClassOrInterface {
    * @return true if an extends clause was added, false otherwise
    */
   public boolean extend(String targetTypeName, String extendsName, UnsolvedSymbolVisitor visitor) {
-    System.out.println("calling extend on " + targetTypeName + ", " + extendsName);
+    targetTypeName = targetTypeName.trim();
+    extendsName = extendsName.trim();
+    // strip type variables, if they're present
+    if (targetTypeName.contains("<")) {
+      targetTypeName = targetTypeName.substring(0, targetTypeName.indexOf("<"));
+    }
     if (targetTypeName.equals(this.getQualifiedClassName())
         || targetTypeName.equals(this.getClassName())) {
       // Special case: if the type to extend is "Annotation", then change the

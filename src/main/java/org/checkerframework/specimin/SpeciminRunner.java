@@ -266,7 +266,6 @@ public class SpeciminRunner {
       boolean gettingStuck =
           workDoneAfterIteration.equals(workDoneBeforeIteration)
               && addMissingClass.gettingException();
-
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
@@ -311,6 +310,13 @@ public class SpeciminRunner {
         updateStaticSolver(root, jarPaths);
       }
     }
+
+    UnsolvedSymbolVisitorProgress workDoneAfterAllIterations =
+        new UnsolvedSymbolVisitorProgress(
+            addMissingClass.getPotentialUsedMembers(),
+            addMissingClass.getAddedTargetFiles(),
+            addMissingClass.getSyntheticClassesAsAStringSet());
+    System.out.println(workDoneAfterAllIterations);
 
     UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
