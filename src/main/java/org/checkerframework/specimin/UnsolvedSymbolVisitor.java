@@ -1348,6 +1348,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
         if (isTypeVar(typeArgStandardForm)) {
           preferredTypeVariables.add(typeArgStandardForm);
+        } else if (typeArgument.isClassOrInterfaceType()) {
+          // If the type argument is not a type variable, then
+          // it must be a class/interface/etc. Try solving for it.
+          // If that fails, create a synthetic class, just as we
+          // would for something directly extended.
+          try {
+            typeArgument.resolve();
+          } catch (UnsolvedSymbolException e) {
+            // Assumption: type arguments are not interfaces. This isn't really true, but
+            // Specimin doesn't have a way to know because the type argument context doesn't
+            // tell us if this type is an interface or not.
+            solveSymbolsForClassOrInterfaceType(typeArgument.asClassOrInterfaceType(), false);
+          }
         }
       }
       if (!preferredTypeVariables.isEmpty() && preferredTypeVariables.size() != numberOfArguments) {
