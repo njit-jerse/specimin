@@ -986,6 +986,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!insideTargetMember) {
       return super.visit(method, p);
     }
+    System.out.println("visiting a meethod call expression: " + method);
     potentialUsedMembers.add(method.getName().asString());
     if (canBeSolved(method) && isFromAJarFile(method)) {
       updateClassesFromJarSourcesForMethodCall(method);
@@ -993,8 +994,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     // we will wait for the next run to solve this method call
     if (!canSolveArguments(method.getArguments())) {
+      System.out.println("cannot solve arguments");
       return super.visit(method, p);
     }
+    System.out.println("can be solved? " + canBeSolved(method));
     if (isASuperCall(method) && !canBeSolved(method)) {
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
@@ -1124,6 +1127,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // remove type arguments
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
+
+      System.out.println("type raw name: " + typeRawName);
+      System.out.println("typeExpr: " + typeExpr);
+      System.out.println("type vars: " + typeVariables);
+      System.out.println("while inside: " + className);
+      System.out.println("isTypeVar? " + isTypeVar(typeRawName));
+
       if (isTypeVar(typeRawName)) {
         // If the type name itself is an in-scope type variable, just return without attempting
         // to create a missing class.
@@ -1396,6 +1406,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName = getPackageFromClassName(className);
     }
 
+    if (className.equals("K")) {
+      throw new RuntimeException("tracing");
+    }
+
+    System.out.println("class name: " + className);
+    System.out.println("package name: " + packageName);
+
     classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
@@ -1651,6 +1668,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @ClassGetSimpleName String className,
       String desiredReturnType,
       boolean updatingInterface) {
+    System.out.println("updating an unsolved class with a method:");
+    System.out.println("class: " + className);
+    System.out.println("method: " + method);
+    System.out.println("desired return type: " + desiredReturnType);
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
     String accessModifer = "public";
@@ -2009,6 +2030,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     // If we're inside an object creation, this is an anonymous class. Locate any super things
     // in the class that's being extended.
+
     String parentClassName;
     try {
       parentClassName = insideAnObjectCreation(expr) ? className : getParentClass(className);
@@ -2108,6 +2130,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param typeParameters a list of type parameters
    */
   private void addTypeVariableScope(List<TypeParameter> typeParameters) {
+    System.out.println(
+        "adding a new type variable scope with this set of type parameters: " + typeParameters);
     Map<String, NodeList<ClassOrInterfaceType>> typeVariableScope = new HashMap<>();
     for (TypeParameter t : typeParameters) {
       typeVariableScope.put(t.getNameAsString(), t.getTypeBound());
