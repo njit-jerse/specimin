@@ -934,7 +934,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else if (insideTargetMember) {
       return processMethodDeclaration(node);
     } else {
-      return super.visit(node, arg);
+      // Do not call super.visit(): this method is definitely unused by the targets, and so
+      // there's no reason to solve its symbols. Furthermore, doing so may lead to data
+      // structure corruption (e.g., of type variables), since processMethodDeclaration,
+      // which does data structure management, will not be called.
+      return null;
     }
   }
 
@@ -986,7 +990,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!insideTargetMember) {
       return super.visit(method, p);
     }
-    System.out.println("visiting a meethod call expression: " + method);
     potentialUsedMembers.add(method.getName().asString());
     if (canBeSolved(method) && isFromAJarFile(method)) {
       updateClassesFromJarSourcesForMethodCall(method);
@@ -994,10 +997,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     // we will wait for the next run to solve this method call
     if (!canSolveArguments(method.getArguments())) {
-      System.out.println("cannot solve arguments");
       return super.visit(method, p);
     }
-    System.out.println("can be solved? " + canBeSolved(method));
     if (isASuperCall(method) && !canBeSolved(method)) {
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
@@ -1127,12 +1128,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // remove type arguments
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
-
-      System.out.println("type raw name: " + typeRawName);
-      System.out.println("typeExpr: " + typeExpr);
-      System.out.println("type vars: " + typeVariables);
-      System.out.println("while inside: " + className);
-      System.out.println("isTypeVar? " + isTypeVar(typeRawName));
 
       if (isTypeVar(typeRawName)) {
         // If the type name itself is an in-scope type variable, just return without attempting
@@ -1406,12 +1401,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName = getPackageFromClassName(className);
     }
 
-    if (className.equals("K")) {
-      throw new RuntimeException("tracing");
+    if (isTypeVar(className)) {
+      // don't create synthetic classes for in-scope type variables
+      return;
     }
-
-    System.out.println("class name: " + className);
-    System.out.println("package name: " + packageName);
 
     classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
 
@@ -1668,10 +1661,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       @ClassGetSimpleName String className,
       String desiredReturnType,
       boolean updatingInterface) {
-    System.out.println("updating an unsolved class with a method:");
-    System.out.println("class: " + className);
-    System.out.println("method: " + method);
-    System.out.println("desired return type: " + desiredReturnType);
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
     String accessModifer = "public";
@@ -2130,8 +2119,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @param typeParameters a list of type parameters
    */
   private void addTypeVariableScope(List<TypeParameter> typeParameters) {
-    System.out.println(
-        "adding a new type variable scope with this set of type parameters: " + typeParameters);
     Map<String, NodeList<ClassOrInterfaceType>> typeVariableScope = new HashMap<>();
     for (TypeParameter t : typeParameters) {
       typeVariableScope.put(t.getNameAsString(), t.getTypeBound());
