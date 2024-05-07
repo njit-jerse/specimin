@@ -14,6 +14,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
@@ -84,8 +85,8 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
  * creates synthetic versions of those symbols. This preliminary step helps to prevent
  * UnsolvedSymbolException errors for the next phases.
  *
- * <p>Note: To comprehend this visitor quickly, it is recommended for future programmers to start by
- * reading all the visit methods.
+ * <p>Note: To comprehend this visitor quickly, it is recommended to start by reading all the visit
+ * methods.
  */
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
@@ -246,8 +247,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The qualified name of the current class. */
   private String currentClassQualifiedName = "";
 
-  /** Check if the visitor is inside a catch clause. */
-  private boolean insideACatchClause = false;
+  /**
+   * Indicating whether the visitor is currently visiting the parameter part of a catch block (i.e.,
+   * the "(...)" segment within a catch(...){...} clause).
+   */
+  private boolean isInsideCatchBlockParameter = false;
 
   /**
    * Create a new UnsolvedSymbolVisitor instance
@@ -701,17 +705,33 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
-  public Visitable visit(CatchClause node, Void p) {
+  @SuppressWarnings("nullness")
+  // This method returns a nullable result, and "comment" can be null for the phrase
+  // node.setComment(comment).
+  // These are the codes from JavaParser, so we optimistically assume that these lines are safe.
+  public Visitable visit(CatchClause node, Void arg) {
+    /*
+     * This method is a copy from the visit(CatchClause, Void) method of JavaParser. We adds lines to update the local variables and isInsideCatchBlockParameter.
+     */
     HashSet<String> currentLocalVariables = new HashSet<>();
     currentLocalVariables.add(node.getParameter().getNameAsString());
     localVariables.addFirst(currentLocalVariables);
-    // Since there can not be a catch clause inside a catch clause, we don't need to use a temporary
-    // variable like in the case of insideTargetMethod.
-    insideACatchClause = true;
-    Visitable result = super.visit(node, p);
-    insideACatchClause = false;
+    BlockStmt body = (BlockStmt) node.getBody().accept(this, arg);
+    // There can not be a parameter list inside a parameter list, hence we don't need a temporary
+    // local variable like in the case of insideTargetMethod.
+    isInsideCatchBlockParameter = true;
+    Parameter parameter = (Parameter) node.getParameter().accept(this, arg);
+    isInsideCatchBlockParameter = false;
+    Comment comment = node.getComment().map(s -> (Comment) s.accept(this, arg)).orElse(null);
+    if (body == null || parameter == null) {
+      localVariables.removeFirst();
+      return null;
+    }
+    node.setBody(body);
+    node.setParameter(parameter);
+    node.setComment(comment);
     localVariables.removeFirst();
-    return result;
+    return node;
   }
 
   @Override
@@ -1372,7 +1392,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName = getPackageFromClassName(className);
     }
     classToUpdate =
-        new UnsolvedClassOrInterface(className, packageName, insideACatchClause, isAnInterface);
+        new UnsolvedClassOrInterface(
+            className, packageName, isInsideCatchBlockParameter, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
     classToUpdate.setPreferedTypeVariables(preferredTypeVariables);
