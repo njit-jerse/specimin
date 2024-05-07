@@ -1650,27 +1650,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Node parentNode = node.getParentNode().get();
     Type nodeType = node.getType();
 
-    // This scope logic must happen here, because later in this method there is a check for
-    // whether the return type is a type variable, which must succeed if the type variable
-    // was declared for this scope.
     addTypeVariableScope(node.getTypeParameters());
 
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
     @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
     @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
-    if (!this.isTypeVar(nodeTypeSimpleForm)) {
-      // Don't attempt to resolve a type variable, since we will inevitably fail.
-      try {
-        nodeType.resolve();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        // Note that this could also be an interface (if it is used in an implements clause
-        // elsewhere).
-        // updateMissingClass is responsible for fixing this up later after we encounter the
-        // relevant implements clause.
-        updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false, false);
-      }
-    }
 
     if (!insideAnObjectCreation(node)) {
       SimpleName classNodeSimpleName = getSimpleNameOfClass(node);
