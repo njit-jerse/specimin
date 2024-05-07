@@ -1207,7 +1207,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     gotException();
     /*
-     * For an unresolved object creation, the symbols are resolved first before the expression itself is resolved.
+     * For an unresolved object creation, the arguments are resolved first before the expression itself is resolved.
      */
     try {
       List<String> argumentsCreation =
