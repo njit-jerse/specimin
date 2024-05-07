@@ -1186,13 +1186,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return result;
     }
     gotException();
+    /*
+     * For an unresolved object creation, the symbols are resolved first before the expression itself is resolved.
+     */
     try {
       List<String> argumentsCreation =
           getArgumentTypesFromObjectCreation(newExpr, getPackageFromClassName(type));
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
       updateUnsolvedClassWithClassName(type, false, false, creationMethod);
     } catch (Exception q) {
-      // can not solve the parameters for this object creation in this current run
+      // The exception originates from the call to getArgumentTypesFromObjectCreation within the try
+      // block, indicating unresolved parameters in this object creation.
     }
     if (newExpr.getAnonymousClassBody().isPresent()) {
       // Need to do data structure maintenance
