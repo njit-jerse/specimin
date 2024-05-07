@@ -711,7 +711,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   // These are the codes from JavaParser, so we optimistically assume that these lines are safe.
   public Visitable visit(CatchClause node, Void arg) {
     /*
-     * This method is a copy from the visit(CatchClause, Void) method of JavaParser. We adds lines to update the local variables and isInsideCatchBlockParameter.
+     * This method is a copy from the visit(CatchClause, Void) method of JavaParser. We add lines to update the set of local variables and isInsideCatchBlockParameter.
      */
     HashSet<String> currentLocalVariables = new HashSet<>();
     currentLocalVariables.add(node.getParameter().getNameAsString());
