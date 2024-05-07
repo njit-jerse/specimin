@@ -246,6 +246,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The qualified name of the current class. */
   private String currentClassQualifiedName = "";
 
+  /** Check if the visitor is inside a catch clause. */
+  private boolean insideACatchClause = false;
+
   /**
    * Create a new UnsolvedSymbolVisitor instance
    *
@@ -702,7 +705,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     HashSet<String> currentLocalVariables = new HashSet<>();
     currentLocalVariables.add(node.getParameter().getNameAsString());
     localVariables.addFirst(currentLocalVariables);
+    // Since there can not be a catch clause inside a catch clause, we don't need to use a temporary
+    // variable like in the case of insideTargetMethod.
+    insideACatchClause = true;
     Visitable result = super.visit(node, p);
+    insideACatchClause = false;
     localVariables.removeFirst();
     return result;
   }
@@ -1360,7 +1367,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       className = typeRawName;
       packageName = getPackageFromClassName(className);
     }
-    classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
+    classToUpdate =
+        new UnsolvedClassOrInterface(className, packageName, insideACatchClause, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
     classToUpdate.setPreferedTypeVariables(preferredTypeVariables);
