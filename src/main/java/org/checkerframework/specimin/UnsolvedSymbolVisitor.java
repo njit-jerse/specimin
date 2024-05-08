@@ -911,7 +911,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return result;
   }
 
-  @SuppressWarnings("nullness:return") // return type is not used, and we need to avoid calling super.visit()
+  @SuppressWarnings(
+      "nullness:return") // return type is not used, and we need to avoid calling super.visit()
   @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
     String methodQualifiedSignature =
