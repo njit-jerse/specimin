@@ -11,7 +11,7 @@ by anything in *M*.
 Specimin is useful as a static program reduction tool when debugging a compiler or type
 system that does *modular* program analysis, such as a [Checker Framework](checkerframework.org)
 checker or the type system of Java itself. Specimin's output should preserve the output
-of a type-system-like analysis (such a crash, false positive, or false negative).
+of a type-system-like analysis (such as a crash, false positive, or false negative).
 
 Specimin supports two *modes*: exact and approximate specification slicing. Exact mode
 is automatically used if all relevant source or class files are provided to Specimin. If
@@ -36,7 +36,7 @@ The available options are (required options in **bold**, repeatable options in *
 * *--targetField*: a target field that must be preserved (including its initializer). Uses the same format as `--targetMethod`, but without the parameter list. The `--targetMethod` and `--targetField` options can be freely combined, but if at least one of the two is not provided then Specimin will always produce empty output.
 
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
-* **--jarPath**: a directory path that contains all the jar files for Specimin to take as input.
+* *--jarPath*: a directory path that contains all the jar files for Specimin to take as input.
 
 Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
 
