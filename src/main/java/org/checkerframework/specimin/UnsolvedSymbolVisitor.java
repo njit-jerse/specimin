@@ -14,6 +14,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
@@ -38,7 +39,6 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
-import com.github.javaparser.ast.type.UnionType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -74,7 +74,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
@@ -82,9 +81,12 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
- * notices all the methods belonging to classes not in the source codes, and creates synthetic
- * versions of those classes and methods. This preliminary step helps to prevent
+ * notices all the methods, fields, and types belonging to classes not in the source codes, and
+ * creates synthetic versions of those symbols. This preliminary step helps to prevent
  * UnsolvedSymbolException errors for the next phases.
+ *
+ * <p>Note: To comprehend this visitor quickly, it is recommended to start by reading all the visit
+ * methods.
  */
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
@@ -246,6 +248,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private String currentClassQualifiedName = "";
 
   /**
+   * Indicating whether the visitor is currently visiting the parameter part of a catch block (i.e.,
+   * the "(...)" segment within a catch(...){...} clause).
+   */
+  private boolean isInsideCatchBlockParameter = false;
+
+  /**
    * Create a new UnsolvedSymbolVisitor instance
    *
    * @param rootDirectory the root directory of the input files
@@ -404,6 +412,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Node visit(ImportDeclaration decl, Void arg) {
+    /*
+     * This method visits an import declaration in the currently visiting CompilationUnit and update the content of wildCardImports and staticImportedMembersMap accordingly.
+     */
+
     if (decl.isAsterisk()) {
       wildcardImports.add(decl.getNameAsString());
     }
@@ -576,6 +588,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ExplicitConstructorInvocationStmt node, Void arg) {
+    /*
+     * This methods create synthetic classes for unsolved explicit constructor invocation, such as super(). We only solve the invocation after all of its arguments have been solved.
+     */
     if (node.isThis()) {
       return super.visit(node, arg);
     }
@@ -618,6 +633,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   @SuppressWarnings("nullness:override")
   public @Nullable Visitable visit(IfStmt n, Void arg) {
+    /*
+     * This method is a copy from the original visit(IfStmt, Void) from JavaParser. We add additional codes here to update the set of local variables.
+     */
     HashSet<String> localVarInCon = new HashSet<>();
     localVariables.addFirst(localVarInCon);
     Expression condition = (Expression) n.getCondition().accept(this, arg);
@@ -687,13 +705,33 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
-  public Visitable visit(CatchClause node, Void p) {
+  @SuppressWarnings("nullness")
+  // This method returns a nullable result, and "comment" can be null for the phrase
+  // node.setComment(comment).
+  // These are the codes from JavaParser, so we optimistically assume that these lines are safe.
+  public Visitable visit(CatchClause node, Void arg) {
+    /*
+     * This method is a copy from the visit(CatchClause, Void) method of JavaParser. We extend it to update the set of local variables and the flag isInsideCatchBlockParameter
+     */
     HashSet<String> currentLocalVariables = new HashSet<>();
     currentLocalVariables.add(node.getParameter().getNameAsString());
     localVariables.addFirst(currentLocalVariables);
-    Visitable result = super.visit(node, p);
+    BlockStmt body = (BlockStmt) node.getBody().accept(this, arg);
+    // There can not be a parameter list inside a parameter list, hence we don't need a temporary
+    // local variable like in the case of insideTargetMethod.
+    isInsideCatchBlockParameter = true;
+    Parameter parameter = (Parameter) node.getParameter().accept(this, arg);
+    isInsideCatchBlockParameter = false;
+    Comment comment = node.getComment().map(s -> (Comment) s.accept(this, arg)).orElse(null);
+    if (body == null || parameter == null) {
+      localVariables.removeFirst();
+      return null;
+    }
+    node.setBody(body);
+    node.setParameter(parameter);
+    node.setComment(comment);
     localVariables.removeFirst();
-    return result;
+    return node;
   }
 
   @Override
@@ -893,8 +931,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration node, Void arg) {
-    // TODO: Loi: do we need to do anything for the parameters, like we do in
-    // visit(MethodDeclaration)?
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
@@ -983,6 +1019,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
+    /*
+     * There's a specific order in which we resolve symbols for a method call.
+     * We ensure that the caller and its parameters are resolved before solving the method itself.
+     * For instance, in a method call like a.b(c, d, e,...), we solve a, c, d, e,... before resolving b.
+     */
     if (!insideTargetMember) {
       return super.visit(method, p);
     }
@@ -1004,6 +1045,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
       updateClassSetWithStaticMethodCall(method);
     } else if (calledByAnIncompleteClass(method)) {
+      /*
+       * Note that the body here assumes that the method is not static. This assumption is safe since we have isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method) and unsolvedAndCalledByASimpleClassName(method) before this condition.
+       */
       String qualifiedNameOfIncompleteClass = getIncompleteClass(method);
       if (classfileIsInOriginalCodebase(qualifiedNameOfIncompleteClass)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedNameOfIncompleteClass));
@@ -1136,35 +1180,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
-  public Visitable visit(Parameter parameter, Void p) {
-    if (!insidePotentialUsedMember && !insideTargetMember) {
-      return super.visit(parameter, p);
-    }
-    try {
-      if (parameter.getType() instanceof UnionType) {
-        resolveUnionType(parameter);
-      } else {
-        if (parameter.getParentNode().isPresent()
-            && parameter.getParentNode().get() instanceof CatchClause) {
-          parameter.getType().resolve();
-        } else {
-          parameter.resolve();
-        }
-      }
-      return super.visit(parameter, p);
-    }
-    // If the parameter originates from a Java built-in library, such as java.io or java.lang,
-    // an UnsupportedOperationException will be thrown instead.
-    catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-      if (!parameter.getType().isUnknownType()) {
-        handleParameterResolveFailure(parameter);
-        gotException();
-      }
-    }
-    return super.visit(parameter, p);
-  }
-
-  @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     String oldClassName = className;
     if (!insideTargetMember) {
@@ -1191,13 +1206,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return result;
     }
     gotException();
+    /*
+     * For an unresolved object creation, the arguments are resolved first before the expression itself is resolved.
+     */
     try {
       List<String> argumentsCreation =
           getArgumentTypesFromObjectCreation(newExpr, getPackageFromClassName(type));
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
       updateUnsolvedClassWithClassName(type, false, false, creationMethod);
     } catch (Exception q) {
-      // can not solve the parameters for this object creation in this current run
+      // The exception originates from the call to getArgumentTypesFromObjectCreation within the try
+      // block, indicating unresolved parameters in this object creation.
     }
     if (newExpr.getAnonymousClassBody().isPresent()) {
       // Need to do data structure maintenance
@@ -1372,7 +1391,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       className = typeRawName;
       packageName = getPackageFromClassName(className);
     }
-    classToUpdate = new UnsolvedClassOrInterface(className, packageName, false, isAnInterface);
+    classToUpdate =
+        new UnsolvedClassOrInterface(
+            className, packageName, isInsideCatchBlockParameter, isAnInterface);
 
     classToUpdate.setNumberOfTypeVariables(numberOfArguments);
     classToUpdate.setPreferedTypeVariables(preferredTypeVariables);
@@ -1389,51 +1410,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public boolean belongsToARealClassFile(FieldAccessExpr node) {
     Expression nodeScope = node.getScope();
     return existingClassesToFilePath.containsKey(nodeScope.calculateResolvedType().describe());
-  }
-
-  /**
-   * @param parameter parameter from visitor method which is unsolvable.
-   */
-  private void handleParameterResolveFailure(@NonNull Parameter parameter) {
-    String parameterInString = parameter.toString();
-    if (isAClassPath(parameterInString)) {
-      // parameterInString needs to be a fully-qualified name. As this parameter has a form of
-      // class path, we can say that it is a fully-qualified name
-      @SuppressWarnings("signature")
-      UnsolvedClassOrInterface newClass =
-          getSimpleSyntheticClassFromFullyQualifiedName(parameterInString);
-      updateMissingClass(newClass);
-
-    } else {
-      // since it is unsolved, it could not be a primitive type
-      @ClassGetSimpleName String className = parameter.getType().asClassOrInterfaceType().getName().asString();
-      if (parameter.getParentNode().isPresent()
-          && parameter.getParentNode().get() instanceof CatchClause) {
-        updateUnsolvedClassWithClassName(className, true, false);
-      } else {
-        updateUnsolvedClassWithClassName(className, false, false);
-      }
-    }
-  }
-
-  /**
-   * Given the unionType parameter, this method will try resolving each element separately. If any
-   * of the element is unsolvable, an unsolved class instance will be created to generate synthetic
-   * class for the element.
-   *
-   * @param parameter unionType parameter from visitor class
-   */
-  private void resolveUnionType(@NonNull Parameter parameter) {
-    for (ReferenceType param : parameter.getType().asUnionType().getElements()) {
-      try {
-        param.resolve();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        // since this type is unsolved, it could not be a primitive type
-        @ClassGetSimpleName String typeName = param.getElementType().asClassOrInterfaceType().getName().asString();
-        UnsolvedClassOrInterface newClass = updateUnsolvedClassWithClassName(typeName, true, false);
-        updateMissingClass(newClass);
-      }
-    }
   }
 
   /**
@@ -1695,27 +1671,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Node parentNode = node.getParentNode().get();
     Type nodeType = node.getType();
 
-    // This scope logic must happen here, because later in this method there is a check for
-    // whether the return type is a type variable, which must succeed if the type variable
-    // was declared for this scope.
     addTypeVariableScope(node.getTypeParameters());
 
     // since this is a return type of a method, it is a dot-separated identifier
     @SuppressWarnings("signature")
     @DotSeparatedIdentifiers String nodeTypeAsString = nodeType.asString();
     @ClassGetSimpleName String nodeTypeSimpleForm = toSimpleName(nodeTypeAsString);
-    if (!this.isTypeVar(nodeTypeSimpleForm)) {
-      // Don't attempt to resolve a type variable, since we will inevitably fail.
-      try {
-        nodeType.resolve();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        // Note that this could also be an interface (if it is used in an implements clause
-        // elsewhere).
-        // updateMissingClass is responsible for fixing this up later after we encounter the
-        // relevant implements clause.
-        updateUnsolvedClassWithClassName(nodeTypeSimpleForm, false, false);
-      }
-    }
 
     if (!insideAnObjectCreation(node)) {
       SimpleName classNodeSimpleName = getSimpleNameOfClass(node);
