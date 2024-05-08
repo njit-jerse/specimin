@@ -437,6 +437,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // the type variable must have been declared in one of the containing scopes,
         // and UnsolvedSymbolVisitor should already guarantee that the variable will
         // be included in one of the classes that Specimin outputs.
+      } catch (UnsolvedSymbolException e) {
+        throw new RuntimeException(
+            "failed to solve the return type ("
+                + returnType
+                + ") of "
+                + methodWithoutReturnAndAnnos,
+            e);
       }
     } else {
       updateUnfoundMethods(methodName);

@@ -293,6 +293,54 @@ public class UnsolvedClassOrInterface {
   }
 
   /**
+   * Attempts to add an extends clause to this class or (recursively) to one of its inner classes.
+   * An extends clause will only be added if the name of this class matches the target type name.
+   * The name of the class in the extends clause is extendsName.
+   *
+   * @param targetTypeName the name of the class to be extended. This may be a fully-qualified name,
+   *     a simple name, or a dot-separated identifier.
+   * @param extendsName the name of the class to extend. Always fully-qualified.
+   * @param visitor the current visitor state
+   * @return true if an extends clause was added, false otherwise
+   */
+  public boolean extend(String targetTypeName, String extendsName, UnsolvedSymbolVisitor visitor) {
+    if (targetTypeName.equals(this.getQualifiedClassName())
+        || targetTypeName.equals(this.getClassName())) {
+      // Special case: if the type to extend is "Annotation", then change the
+      // target class to an @interface declaration.
+      if ("Annotation".equals(extendsName)
+          || "java.lang.annotation.Annotation".equals(extendsName)) {
+        setIsAnAnnotationToTrue();
+      } else {
+        if (!UnsolvedSymbolVisitor.isAClassPath(extendsName)) {
+          extendsName = visitor.getPackageFromClassName(extendsName) + "." + extendsName;
+        }
+        extend(extendsName);
+      }
+      return true;
+    }
+    if (innerClasses == null) {
+      return false;
+    }
+    // Two possibilities, depending on how Javac's error message looks:
+    // 1. Javac provides the whole class name in the form Outer.Inner
+    // 2. Javac provides only the inner class name
+    if (targetTypeName.indexOf('.') != -1) {
+      String outerName = targetTypeName.substring(0, targetTypeName.indexOf('.'));
+      if (!outerName.equals(this.className)) {
+        return false;
+      }
+      // set the targetTypeName to the name of the inner class
+      targetTypeName = targetTypeName.substring(targetTypeName.indexOf('.') + 1);
+    }
+    boolean result = false;
+    for (UnsolvedClassOrInterface unsolvedInnerClass : innerClasses) {
+      result |= unsolvedInnerClass.extend(targetTypeName, extendsName, visitor);
+    }
+    return result;
+  }
+
+  /**
    * Update the return type of a method. Note: this method is supposed to be used to update
    * synthetic methods, where the return type of each method is distinct.
    *
@@ -402,6 +450,20 @@ public class UnsolvedClassOrInterface {
     if (this.getClass() != UnsolvedInnerClass.class) {
       sb.append("package ").append(packageName).append(";\n");
     }
+    sb.append("public ");
+    if (this.getClass() == UnsolvedInnerClass.class) {
+      // Nested classes that are visible outside their parent class
+      // are usually static. There is no downside to making them static
+      // (it imposes no additional requirements), but there is a downside
+      // to making them non-static (they must be attached to a specific member
+      // of the outer class, which may or may not be true in the event).
+      // TODO: I'm not sure we actually have test cases for "real" inner classes
+      // (which are non-static nested classes). All of our "inner class" tests
+      // appear to be intended for static nested classes. See
+      // https://docs.oracle.com/javase/tutorial/java/javaOO/nested.html for
+      // a discussion of the difference.
+      sb.append("static ");
+    }
     if (isAnInterface) {
       // For synthetic interfaces created for lambdas only.
       if (methods.size() == 1
@@ -409,11 +471,11 @@ public class UnsolvedClassOrInterface {
               || className.startsWith("SyntheticConsumer"))) {
         sb.append("@FunctionalInterface\n");
       }
-      sb.append("public interface ");
+      sb.append("interface ");
     } else if (isAnAnnotation) {
-      sb.append("public @interface ");
+      sb.append("@interface ");
     } else {
-      sb.append("public class ");
+      sb.append("class ");
     }
     sb.append(className).append(getTypeVariablesAsString());
     if (extendsClause != null) {

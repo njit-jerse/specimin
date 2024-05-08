@@ -2,6 +2,6 @@ package com.example;
 
 public class Map {
 
-    public class Entry<T, T1> {
+    public static class Entry<T, T1> {
     }
 }
