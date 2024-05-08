@@ -5,7 +5,7 @@ package com.example;
 
 import java.util.Map.Entry;
 
-abstract class AbstractMapEntry<K, V> extends Entry<K, V> {
+abstract class AbstractMapEntry<K, V> implements Entry<K, V> {
 
     public V setValue(V value) {
         throw new Error();
