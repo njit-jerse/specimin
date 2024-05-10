@@ -341,8 +341,17 @@ class JavaTypeCorrect {
         changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
       } else {
         // In this case, neither is truly synthetic (both must be used
-        // in the target), so make the rhs a subtype of the lhs
-        extendedTypes.put(rhs, lhs);
+        // in the target), so make the rhs a subtype of the lhs if there is no
+        // entry for the rhs. If there is an entry for the rhs, then the correct
+        // remedy is to make both the previous entry and the new lhs subtypes of
+        // the rhs, instead.
+        if (extendedTypes.containsKey(rhs)) {
+          // String other = extendedTypes.remove(rhs);
+          extendedTypes.put(lhs, rhs);
+          // extendedTypes.put(other, rhs);
+        } else {
+          extendedTypes.put(rhs, lhs);
+        }
       }
     }
     /*

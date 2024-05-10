@@ -263,9 +263,14 @@ public class SpeciminRunner {
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
-      boolean gettingStuck =
-          workDoneAfterIteration.equals(workDoneBeforeIteration)
-              && addMissingClass.gettingException();
+      boolean gettingStuck = workDoneAfterIteration.equals(workDoneBeforeIteration);
+      // && addMissingClass.gettingException();
+
+      System.out.println("getting stuck? " + gettingStuck);
+      System.out.println("getting exception? " + addMissingClass.gettingException());
+      System.out.println("equal? " + workDoneAfterIteration.equals(workDoneBeforeIteration));
+      // System.out.println("workDoneAfterIteration: " + workDoneAfterIteration);
+
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
@@ -293,6 +298,8 @@ public class SpeciminRunner {
             addMissingClass.updateTypesWithExtends(typeCorrecter.getExtendedTypes());
         boolean atLeastOneTypeIsUpdated = changeAtLeastOneType || extendAtLeastOneType;
 
+        System.out.println("at least one type updated? " + atLeastOneTypeIsUpdated);
+
         // this is case 2. We will stop addMissingClass. In the next phase,
         // TargetMethodFinderVisitor will give us a meaningful exception message regarding which
         // element in the input is not solvable.
@@ -302,6 +309,8 @@ public class SpeciminRunner {
           // this is case 3: ensure that unsolved symbol solver is called at least once, to force us
           // to reach a correct fixpoint
           addMissingClass.gotException();
+          System.out.println("typesToChange: " + typesToChange);
+          System.out.println("typesToExtend: " + typeCorrecter.getExtendedTypes());
           continue;
         }
 
