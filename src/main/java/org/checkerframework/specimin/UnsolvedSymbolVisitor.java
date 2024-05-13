@@ -22,6 +22,7 @@ import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.PatternExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
@@ -754,11 +755,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     //
     // This visit method uses this fact to add extends clauses to classes created by
     // UnsolvedSymbolVisitor.
+    ReferenceType referenceType;
     if (node.getPattern().isPresent()) {
-      // TODO: handle JDK14 pattern variables
-      return super.visit(node, p);
+      PatternExpr patternExpr = node.getPattern().get();
+      referenceType = patternExpr.getType();
+    } else {
+      referenceType = node.getType();
     }
-    ReferenceType referenceType = node.getType();
     Expression relationalExpr = node.getExpression();
     String relationalExprFQN, referenceTypeFQN;
     try {
