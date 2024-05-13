@@ -263,13 +263,9 @@ public class SpeciminRunner {
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
-      boolean gettingStuck = workDoneAfterIteration.equals(workDoneBeforeIteration);
-      // && addMissingClass.gettingException();
-
-      System.out.println("getting stuck? " + gettingStuck);
-      System.out.println("getting exception? " + addMissingClass.gettingException());
-      System.out.println("equal? " + workDoneAfterIteration.equals(workDoneBeforeIteration));
-      // System.out.println("workDoneAfterIteration: " + workDoneAfterIteration);
+      boolean gettingStuck =
+          workDoneAfterIteration.equals(workDoneBeforeIteration)
+              && addMissingClass.gettingException();
 
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:

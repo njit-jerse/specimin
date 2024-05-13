@@ -341,17 +341,17 @@ class JavaTypeCorrect {
         changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
       } else {
         // In this case, neither is truly synthetic (both must be used
-        // in the target), so make the rhs a subtype of the lhs if there is no
-        // entry for the rhs. If there is an entry for the rhs, then the correct
-        // remedy is to make both the previous entry and the new lhs subtypes of
-        // the rhs, instead.
+        // in the target), so make the rhs a subtype of the lhs.
+        // TODO: we must check here that there is no entry for the rhs already.
+        // However, it's not clear what the right behavior is when there is
+        // an existing entry. I've set this up to crash to avoid thrashing
+        // behavior like that seen in https://github.com/njit-jerse/specimin/issues/279.
         if (extendedTypes.containsKey(rhs)) {
-          // String other = extendedTypes.remove(rhs);
-          extendedTypes.put(lhs, rhs);
-          // extendedTypes.put(other, rhs);
-        } else {
-          extendedTypes.put(rhs, lhs);
+          throw new RuntimeException("Trying to extend a class that already extends " +
+                  "another class. Class to be extended: " + rhs + "\nclass it currently extends: "
+                  + extendedTypes.get(rhs) + "\nclass it also should extend: " + lhs);
         }
+        extendedTypes.put(rhs, lhs);
       }
     }
     /*
