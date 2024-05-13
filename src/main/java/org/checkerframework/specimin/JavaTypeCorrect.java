@@ -347,9 +347,14 @@ class JavaTypeCorrect {
         // an existing entry. I've set this up to crash to avoid thrashing
         // behavior like that seen in https://github.com/njit-jerse/specimin/issues/279.
         if (extendedTypes.containsKey(rhs)) {
-          throw new RuntimeException("Trying to extend a class that already extends " +
-                  "another class. Class to be extended: " + rhs + "\nclass it currently extends: "
-                  + extendedTypes.get(rhs) + "\nclass it also should extend: " + lhs);
+          throw new RuntimeException(
+              "Trying to extend a class that already extends "
+                  + "another class. Class to be extended: "
+                  + rhs
+                  + "\nclass it currently extends: "
+                  + extendedTypes.get(rhs)
+                  + "\nclass it also should extend: "
+                  + lhs);
         }
         extendedTypes.put(rhs, lhs);
       }
