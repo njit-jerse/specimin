@@ -209,6 +209,7 @@ class JavaTypeCorrect {
           String typeToCorrect = line.substring(line.indexOf(':') + 1).trim();
           changeType(typeToCorrect, loopType + "[]");
           loopType = null;
+          continue;
         }
         if (lookingForLoopType) {
           // line should look like: "for (Foo f : b.getFoos()) {"; we want to extract the "Foo"
@@ -220,9 +221,11 @@ class JavaTypeCorrect {
           int startIndex = line.indexOf('(') + 1;
           loopType = line.substring(startIndex, line.indexOf(' ', startIndex));
           lookingForLoopType = false;
+          continue;
         }
         if (line.contains("for-each not applicable to expression type")) {
           lookingForLoopType = true;
+          continue;
         }
 
         if (line.contains("error: incompatible types")
