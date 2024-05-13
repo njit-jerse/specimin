@@ -168,7 +168,7 @@ class JavaTypeCorrect {
       String binOp = null;
       String firstBinOpType = null;
 
-      // This temporary is for the for-each case.
+      // These temporaries are for the for-each case.
       String loopType = null;
       boolean lookingForLoopType = false;
 
