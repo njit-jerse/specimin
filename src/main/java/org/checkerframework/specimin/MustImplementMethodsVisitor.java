@@ -141,7 +141,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
     String methodSignature = method.getQualifiedSignature();
     // These classes are beyond our control. It's better to retain the implementations of all
     // abstract methods to ensure the code remains compilable.
-    if (methodSignature.startsWith("java.")) {
+    if (JavaLangUtils.inJdkPackage(methodSignature)) {
       return true;
     }
     return usedMembers.contains(methodSignature);

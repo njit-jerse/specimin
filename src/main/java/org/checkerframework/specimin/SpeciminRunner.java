@@ -514,7 +514,7 @@ public class SpeciminRunner {
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
         new CombinedTypeSolver(
-            new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+            new ReflectionTypeSolver(false), new JavaParserTypeSolver(new File(root)));
     for (String path : jarPaths) {
       typeSolver.add(new JarTypeSolver(path));
     }

@@ -229,7 +229,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
           iterator.remove();
         }
         // all unresolvable interfaces that need to be removed belong to the Java package.
-        if (!typeFullName.startsWith("java.")) {
+        if (!JavaLangUtils.inJdkPackage(typeFullName)) {
           continue;
         }
         for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
