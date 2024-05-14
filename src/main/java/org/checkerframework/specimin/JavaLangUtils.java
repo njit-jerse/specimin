@@ -288,8 +288,8 @@ public final class JavaLangUtils {
     // TODO: can we get a list of such packages from the JDK instead of using this relatively-coarse
     // heuristic?
     return qualifiedName.startsWith("java.")
-        || qualifiedName.startsWith("javax.")
-        || qualifiedName.startsWith("com.sun.")
-        || qualifiedName.startsWith("jdk.");
+            || qualifiedName.startsWith("javax.")
+            || qualifiedName.startsWith("com.sun.")
+            || qualifiedName.startsWith("jdk.");
   }
 }

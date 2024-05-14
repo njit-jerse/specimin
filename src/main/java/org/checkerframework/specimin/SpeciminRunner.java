@@ -13,7 +13,6 @@ import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import com.github.javaparser.utils.SourceRoot;
 import java.io.File;
 import java.io.IOException;
@@ -513,8 +512,7 @@ public class SpeciminRunner {
   private static void updateStaticSolver(String root, List<String> jarPaths) throws IOException {
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
-        new CombinedTypeSolver(
-            new ReflectionTypeSolver(false), new JavaParserTypeSolver(new File(root)));
+        new CombinedTypeSolver(new JdkTypeSolver(), new JavaParserTypeSolver(new File(root)));
     for (String path : jarPaths) {
       typeSolver.add(new JarTypeSolver(path));
     }
