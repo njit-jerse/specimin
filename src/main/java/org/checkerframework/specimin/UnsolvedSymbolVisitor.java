@@ -17,10 +17,12 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.PatternExpr;
 import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
@@ -741,6 +743,50 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(node, p);
     localVariables.removeFirst();
     return result;
+  }
+
+  @Override
+  public Visitable visit(InstanceOfExpr node, Void p) {
+    // If we have x : X and x instanceof Y, then X must be a supertype
+    // of Y if X != Y. The JLS says (15.20.2): "If a cast of the RelationalExpression to the
+    // ReferenceType would be rejected as a compile-time error, then the instanceof relational
+    // expression likewise produces a compile-time error. In such a situation, the result of the
+    // instanceof expression could never be true."
+    //
+    // This visit method uses this fact to add extends clauses to classes created by
+    // UnsolvedSymbolVisitor.
+    ReferenceType referenceType;
+    if (node.getPattern().isPresent()) {
+      PatternExpr patternExpr = node.getPattern().get();
+      referenceType = patternExpr.getType();
+    } else {
+      referenceType = node.getType();
+    }
+    Expression relationalExpr = node.getExpression();
+    String relationalExprFQN, referenceTypeFQN;
+    try {
+      referenceTypeFQN = referenceType.resolve().describe();
+      relationalExprFQN = relationalExpr.calculateResolvedType().describe();
+    } catch (UnsolvedSymbolException e) {
+      // Try again next time.
+      this.gotException();
+      return super.visit(node, p);
+    }
+
+    if (referenceTypeFQN.equals(relationalExprFQN)) {
+      // A type can't extend itself.
+      return super.visit(node, p);
+    }
+
+    for (UnsolvedClassOrInterface syntheticClass : missingClass) {
+      if (syntheticClass.getQualifiedClassName().equals(referenceTypeFQN)) {
+        // TODO: check for double extends?
+        syntheticClass.extend(relationalExprFQN);
+        break;
+      }
+    }
+
+    return super.visit(node, p);
   }
 
   @Override

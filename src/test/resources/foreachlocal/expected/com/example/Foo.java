@@ -1,6 +1,6 @@
 package com.example;
 
-public class Foo extends com.example.Bar {
+public class Foo {
 
     public DoSomethingReturnType doSomething() {
         throw new Error();

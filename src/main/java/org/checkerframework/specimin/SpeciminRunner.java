@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ParseProblemException;
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -222,13 +223,19 @@ public class SpeciminRunner {
 
     Map<String, String> typesToChange = new HashMap<>();
     Map<String, String> classAndUnresolvedInterface = new HashMap<>();
+
+    // This is a defense against infinite loop bugs. The idea is this:
+    // if we encounter the same set of outputs three times, that's a good indication
+    // that we're in an infinite loop. But, we sometimes encounter the same set
+    // of outputs *twice* during normal operation (because some symbol needs to be
+    // solved). So, we track all previous iterations, and if we ever see the same
+    // outputs we set "problematicIteration" to that one. If we see that output again,
+    // we break the loop below early.
+    Set<UnsolvedSymbolVisitorProgress> previousIterations = new HashSet<>();
+    UnsolvedSymbolVisitorProgress problematicIteration = null;
+
     while (addMissingClass.gettingException()) {
       addMissingClass.setExceptionToFalse();
-      UnsolvedSymbolVisitorProgress workDoneBeforeIteration =
-          new UnsolvedSymbolVisitorProgress(
-              addMissingClass.getPotentialUsedMembers(),
-              addMissingClass.getAddedTargetFiles(),
-              addMissingClass.getSyntheticClassesAsAStringSet());
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
         // it's important to make sure that getDeclarations and addMissingClass will visit the same
@@ -262,9 +269,25 @@ public class SpeciminRunner {
               addMissingClass.getPotentialUsedMembers(),
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
-      boolean gettingStuck =
-          workDoneAfterIteration.equals(workDoneBeforeIteration)
-              && addMissingClass.gettingException();
+
+      // Infinite loop protection.
+      boolean gettingStuck = previousIterations.contains(workDoneAfterIteration);
+      if (gettingStuck) {
+        if (problematicIteration == null) {
+          problematicIteration = workDoneAfterIteration;
+        } else if (workDoneAfterIteration.equals(problematicIteration)) {
+          // This is the third time that we've made no changes, so we're probably
+          // in an infinite loop.
+          break;
+        }
+      } else { // not getting stuck
+        if (problematicIteration != null && !problematicIteration.equals(workDoneAfterIteration)) {
+          // unset problematicIteration
+          problematicIteration = null;
+        }
+      }
+      previousIterations.add(workDoneAfterIteration);
+
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
@@ -517,7 +540,9 @@ public class SpeciminRunner {
       typeSolver.add(new JarTypeSolver(path));
     }
     JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
-    StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
+    StaticJavaParser.getParserConfiguration().setSymbolResolver(symbolSolver);
+    StaticJavaParser.getParserConfiguration()
+        .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
   }
 
   /**

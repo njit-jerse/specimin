@@ -341,8 +341,16 @@ class JavaTypeCorrect {
         changeType(rhs, tryResolveFullyQualifiedType(lhs, filePath));
       } else {
         // In this case, neither is truly synthetic (both must be used
-        // in the target), so make the rhs a subtype of the lhs
-        extendedTypes.put(rhs, lhs);
+        // in the target), so make the rhs a subtype of the lhs.
+        // TODO: we must check here that there is no entry for the rhs already.
+        // However, it's not clear what the right behavior is when there is
+        // an existing entry. I've set this up to do nothing to avoid thrashing
+        // behavior like that seen in https://github.com/njit-jerse/specimin/issues/279.
+        // However, this does sometimes occur, including in some of our test targets,
+        // so we have to not crash.
+        if (!extendedTypes.containsKey(rhs)) {
+          extendedTypes.put(rhs, lhs);
+        }
       }
     }
     /*
