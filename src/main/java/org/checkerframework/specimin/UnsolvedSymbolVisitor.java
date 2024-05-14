@@ -20,6 +20,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.PatternExpr;
@@ -1065,6 +1066,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isAClassPath(node.getScope().toString())) {
         gotException();
       }
+    }
+    return super.visit(node, p);
+  }
+
+  @Override
+  public Visitable visit(MethodReferenceExpr node, Void p) {
+    if (insideTargetMember) {
+      // scope can be ignored - our other rules should handle that
+      String identifier = node.getIdentifier();
+      // can be either the name of a method or "new"
+      if ("new".equals(identifier)) {
+        // TODO: figure out how to handle this case
+        System.err.println("Specimin warning: new in method references is not supported: " + node);
+        return super.visit(node, p);
+      }
+      potentialUsedMembers.add(identifier);
     }
     return super.visit(node, p);
   }
