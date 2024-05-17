@@ -271,6 +271,8 @@ public class SpeciminRunner {
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
 
+      System.out.println("current state: " + workDoneAfterIteration);
+
       // Infinite loop protection.
       boolean gettingStuck = previousIterations.contains(workDoneAfterIteration);
       if (gettingStuck) {
@@ -288,6 +290,9 @@ public class SpeciminRunner {
         }
       }
       previousIterations.add(workDoneAfterIteration);
+
+      System.out.println("getting stuck? " + gettingStuck);
+      System.out.println("getting exceptions? " + addMissingClass.gettingException());
 
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:

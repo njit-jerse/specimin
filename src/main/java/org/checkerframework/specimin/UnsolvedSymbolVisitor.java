@@ -1072,8 +1072,23 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodReferenceExpr node, Void p) {
+    System.out.println("visiting a method ref: " + node);
     if (insideTargetMember) {
-      // scope can be ignored - our other rules should handle that
+      // TODO: handle all of the possible forms listed in JLS 15.13, not just the simplest
+      Expression scope = node.getScope();
+      if (scope.isTypeExpr()) {
+        Type scopeAsType = scope.asTypeExpr().getType();
+        String scopeAsTypeFQN = scopeAsType.asString();
+        if (!isAClassPath(scopeAsTypeFQN) && scopeAsType.isClassOrInterfaceType()) {
+          scopeAsTypeFQN =
+              getQualifiedNameForClassOrInterfaceType(scopeAsType.asClassOrInterfaceType());
+        }
+        if (classfileIsInOriginalCodebase(scopeAsTypeFQN)) {
+          addedTargetFiles.add(qualifiedNameToFilePath(scopeAsTypeFQN));
+        } else {
+          // TODO: create a synthetic class?
+        }
+      }
       String identifier = node.getIdentifier();
       // can be either the name of a method or "new"
       if ("new".equals(identifier)) {
@@ -1081,6 +1096,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         System.err.println("Specimin warning: new in method references is not supported: " + node);
         return super.visit(node, p);
       }
+      System.out.println(
+          "adding this identifier to the list of potential used members: " + identifier);
       potentialUsedMembers.add(identifier);
     }
     return super.visit(node, p);
@@ -1093,16 +1110,38 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
      * We ensure that the caller and its parameters are resolved before solving the method itself.
      * For instance, in a method call like a.b(c, d, e,...), we solve a, c, d, e,... before resolving b.
      */
+    System.out.println("visiting a method call: " + method);
     if (!insideTargetMember) {
+      System.out.println("1");
       return super.visit(method, p);
     }
     potentialUsedMembers.add(method.getName().asString());
     if (canBeSolved(method) && isFromAJarFile(method)) {
       updateClassesFromJarSourcesForMethodCall(method);
+      System.out.println("2");
       return super.visit(method, p);
     }
     // we will wait for the next run to solve this method call
     if (!canSolveArguments(method.getArguments())) {
+      if (hasUnsolvedReceiverLikeClassName(method)) {
+        // Make sure that we try to solve the receiver first if
+        // it looks like a class name and is unsolved, because otherwise
+        // it might prevent us from solving the rest of the arguments.
+        // The receiver is guaranteed to be present by the check above.
+        Expression receiver = method.getScope().orElseThrow();
+        System.out.println("triggering the special case: " + receiver);
+        String typeName = receiver.toString();
+        String pkgName;
+        if (isAClassPath(typeName)) {
+          pkgName = typeName.substring(0, typeName.lastIndexOf('.'));
+          typeName = typeName.substring(typeName.lastIndexOf('.') + 1);
+        } else {
+          pkgName = getPackageFromClassName(typeName);
+        }
+        UnsolvedClassOrInterface receiverClass = new UnsolvedClassOrInterface(typeName, pkgName);
+        updateMissingClass(receiverClass);
+        this.gotException();
+      }
       return super.visit(method, p);
     }
     if (isASuperCall(method) && !canBeSolved(method)) {
@@ -1112,6 +1151,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       updateClassSetWithStaticMethodCall(method);
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
+      System.out.println("4");
       updateClassSetWithStaticMethodCall(method);
     } else if (calledByAnIncompleteClass(method)) {
       /*
@@ -1163,6 +1203,34 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       gotException();
     }
     return super.visit(method, p);
+  }
+
+  /**
+   * Does this method call expression have a receiver that 1) looks like a class name, suggesting
+   * that this is a static method call, and 2) that receiver is unsolved. If both of these are true,
+   * we need to create a synthetic class for that receiver before trying to solve the other
+   * arguments.
+   *
+   * @param method a method call expr
+   * @return true iff 1 and 2 above are both true
+   */
+  private boolean hasUnsolvedReceiverLikeClassName(MethodCallExpr method) {
+    Optional<Expression> maybeReceiver = method.getScope();
+    if (!maybeReceiver.isPresent()) {
+      return false;
+    }
+    Expression receiver = maybeReceiver.get();
+    if (!isAClassPath(receiver.toString()) && !looksLikeSimpleClassName(receiver.toString())) {
+      // the receiver looks like a regular expression, not a class, so we don't need
+      // to create an additional synthetic class
+      return false;
+    }
+    try {
+      receiver.calculateResolvedType();
+      return false;
+    } catch (UnsolvedSymbolException e) {
+      return true;
+    }
   }
 
   @Override
@@ -2186,11 +2254,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return true;
     }
     for (Expression arg : argList) {
-      if (arg.isLambdaExpr()) {
-        // Skip lambdas here and treat them specially later.
+      if (arg.isLambdaExpr() || arg.isMethodReferenceExpr()) {
+        // Skip lambdas and method refs here and treat them specially later.
         continue;
       }
       if (!canBeSolved(arg)) {
+        System.out.println("could not solve: " + arg);
         return false;
       }
     }
@@ -2279,6 +2348,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
         LambdaExpr lambda = arg.asLambdaExpr();
         parametersList.add(resolveLambdaType(lambda, pkgName));
+        continue;
+      } else if (arg.isMethodReferenceExpr()) {
+        // TODO: is there a better way to handle this? How should we know
+        // what the type is? The method ref is sometimes not solvable here.
+        // Maybe we will need to handle this in JavaTypeCorrect?
+        parametersList.add("java.util.function.Supplier<?>");
         continue;
       }
 
@@ -2449,6 +2524,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the expression can be solved
    */
   public static boolean canBeSolved(Expression expr) {
+    System.out.println("checking if " + expr + " is solvable");
 
     // The method calculateResolvedType() gets lazy and lacks precision when it comes to handling
     // ObjectCreationExpr instances, thus requiring separate treatment for ObjectCreationExpr.
@@ -2474,8 +2550,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           bound.getType().asReferenceType();
         }
       }
+      System.out.println("solvable");
       return true;
     } catch (Exception e) {
+      System.out.println("not solvable, because " + e);
       return false;
     }
   }

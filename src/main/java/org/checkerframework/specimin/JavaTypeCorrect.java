@@ -257,6 +257,7 @@ class JavaTypeCorrect {
           }
         }
       }
+      System.out.println("error messages from javac: " + lines);
     } catch (IOException e) {
       // TODO: Handle this properly
       System.out.println(e);
