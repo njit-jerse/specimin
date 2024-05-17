@@ -1072,7 +1072,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodReferenceExpr node, Void p) {
-    System.out.println("visiting a method ref: " + node);
     if (insideTargetMember) {
       // TODO: handle all of the possible forms listed in JLS 15.13, not just the simplest
       Expression scope = node.getScope();
@@ -1096,8 +1095,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         System.err.println("Specimin warning: new in method references is not supported: " + node);
         return super.visit(node, p);
       }
-      System.out.println(
-          "adding this identifier to the list of potential used members: " + identifier);
       potentialUsedMembers.add(identifier);
     }
     return super.visit(node, p);
@@ -1110,15 +1107,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
      * We ensure that the caller and its parameters are resolved before solving the method itself.
      * For instance, in a method call like a.b(c, d, e,...), we solve a, c, d, e,... before resolving b.
      */
-    System.out.println("visiting a method call: " + method);
     if (!insideTargetMember) {
-      System.out.println("1");
       return super.visit(method, p);
     }
     potentialUsedMembers.add(method.getName().asString());
     if (canBeSolved(method) && isFromAJarFile(method)) {
       updateClassesFromJarSourcesForMethodCall(method);
-      System.out.println("2");
       return super.visit(method, p);
     }
     // we will wait for the next run to solve this method call
@@ -1129,7 +1123,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         // it might prevent us from solving the rest of the arguments.
         // The receiver is guaranteed to be present by the check above.
         Expression receiver = method.getScope().orElseThrow();
-        System.out.println("triggering the special case: " + receiver);
         String typeName = receiver.toString();
         String pkgName;
         if (isAClassPath(typeName)) {
@@ -1151,7 +1144,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       updateClassSetWithStaticMethodCall(method);
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
-      System.out.println("4");
       updateClassSetWithStaticMethodCall(method);
     } else if (calledByAnIncompleteClass(method)) {
       /*
@@ -2259,7 +2251,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         continue;
       }
       if (!canBeSolved(arg)) {
-        System.out.println("could not solve: " + arg);
         return false;
       }
     }
@@ -2524,7 +2515,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * @return true if the expression can be solved
    */
   public static boolean canBeSolved(Expression expr) {
-    System.out.println("checking if " + expr + " is solvable");
 
     // The method calculateResolvedType() gets lazy and lacks precision when it comes to handling
     // ObjectCreationExpr instances, thus requiring separate treatment for ObjectCreationExpr.
@@ -2550,10 +2540,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           bound.getType().asReferenceType();
         }
       }
-      System.out.println("solvable");
       return true;
     } catch (Exception e) {
-      System.out.println("not solvable, because " + e);
       return false;
     }
   }
