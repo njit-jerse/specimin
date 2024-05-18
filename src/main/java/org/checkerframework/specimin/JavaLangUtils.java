@@ -277,4 +277,19 @@ public final class JavaLangUtils {
     boolean type2IsClass = type2.startsWith("Class<") || type2.startsWith("java.lang.Class<");
     return type1IsClass && type2IsClass;
   }
+
+  /**
+   * Is the given package name or fully-qualified name in one of the packages provided by the JDK?
+   *
+   * @param qualifiedName a package name or fully-qualified name of a class or interface
+   * @return true if qualifiedName is from the JDK
+   */
+  public static boolean inJdkPackage(String qualifiedName) {
+    // TODO: can we get a list of such packages from the JDK instead of using this relatively-coarse
+    // heuristic?
+    return qualifiedName.startsWith("java.")
+            || qualifiedName.startsWith("javax.")
+            || qualifiedName.startsWith("com.sun.")
+            || qualifiedName.startsWith("jdk.");
+  }
 }

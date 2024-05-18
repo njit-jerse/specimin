@@ -2576,7 +2576,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (classfileIsInOriginalCodebase(qualifiedName)) {
       return;
     }
-    if (qualifiedName.startsWith("java.")) {
+    if (JavaLangUtils.inJdkPackage(qualifiedName)) {
       return;
     }
 
