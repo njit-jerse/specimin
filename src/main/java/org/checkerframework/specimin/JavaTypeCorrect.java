@@ -157,6 +157,7 @@ class JavaTypeCorrect {
       // We support multiline error messages of the following kinds:
       // * incompatible equality constraints
       // * bad operand types for binary operators
+      // * for-each not applicable to expression type
 
       // These are temporaries for the equality constraints case.
       String[] firstConstraints = {"equality constraints: "};
@@ -166,6 +167,10 @@ class JavaTypeCorrect {
       // These are temporaries for the binary operator case.
       String binOp = null;
       String firstBinOpType = null;
+
+      // These temporaries are for the for-each case.
+      String loopType = null;
+      boolean lookingForLoopType = false;
 
       StringBuilder lines = new StringBuilder("\n");
 
@@ -184,6 +189,45 @@ class JavaTypeCorrect {
         if (line.contains("not abstract and does not override abstract method")) {
           updateClassAndUnresolvedInterface(line);
         }
+
+        // For-each logic
+        if (loopType != null) {
+          // intermediate parts of the error message, which we can skip
+          if (line.contains("^")) {
+            continue;
+          }
+          if (line.contains("required: array or java.lang.Iterable")) {
+            continue;
+          }
+          // the next line should look like: "found:    GetFoosReturnType"
+          if (!line.contains("found: ")) {
+            throw new RuntimeException(
+                "could not complete a for-each correction, because encountered "
+                    + "an unexpected line in a javac error message: "
+                    + line);
+          }
+          String typeToCorrect = line.substring(line.indexOf(':') + 1).trim();
+          changeType(typeToCorrect, loopType + "[]");
+          loopType = null;
+          continue;
+        }
+        if (lookingForLoopType) {
+          // line should look like: "for (Foo f : b.getFoos()) {"; we want to extract the "Foo"
+          // and put it into loopType.
+          if (loopType != null) {
+            throw new RuntimeException(
+                "loopType wasn't null when trying to set a loopType: " + loopType);
+          }
+          int startIndex = line.indexOf('(') + 1;
+          loopType = line.substring(startIndex, line.indexOf(' ', startIndex));
+          lookingForLoopType = false;
+          continue;
+        }
+        if (line.contains("for-each not applicable to expression type")) {
+          lookingForLoopType = true;
+          continue;
+        }
+
         if (line.contains("error: incompatible types")
             || line.contains("error: incomparable types")) {
           updateTypeToChange(line, filePath);

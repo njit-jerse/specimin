@@ -98,7 +98,7 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
       for (ClassOrInterfaceType implementedType : decl.getImplementedTypes()) {
         try {
           String interfacename = implementedType.resolve().describe();
-          if (interfacename.startsWith("java.")) {
+          if (JavaLangUtils.inJdkPackage(interfacename)) {
             // Avoid keeping implementations of java.* classes, because those
             // would require us to actually implement them (we can't remove things
             // from their definitions). This might technically break our guarantees, but it works
