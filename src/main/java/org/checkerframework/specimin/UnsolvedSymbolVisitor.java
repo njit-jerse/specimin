@@ -1117,24 +1117,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
     // we will wait for the next run to solve this method call
     if (!canSolveArguments(method.getArguments())) {
-      if (hasUnsolvedReceiverLikeClassName(method)) {
-        // Make sure that we try to solve the receiver first if
-        // it looks like a class name and is unsolved, because otherwise
-        // it might prevent us from solving the rest of the arguments.
-        // The receiver is guaranteed to be present by the check above.
-        Expression receiver = method.getScope().orElseThrow();
-        String typeName = receiver.toString();
-        String pkgName;
-        if (isAClassPath(typeName)) {
-          pkgName = typeName.substring(0, typeName.lastIndexOf('.'));
-          typeName = typeName.substring(typeName.lastIndexOf('.') + 1);
-        } else {
-          pkgName = getPackageFromClassName(typeName);
-        }
-        UnsolvedClassOrInterface receiverClass = new UnsolvedClassOrInterface(typeName, pkgName);
-        updateMissingClass(receiverClass);
-        this.gotException();
-      }
       return super.visit(method, p);
     }
     if (isASuperCall(method) && !canBeSolved(method)) {
@@ -1195,34 +1177,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       gotException();
     }
     return super.visit(method, p);
-  }
-
-  /**
-   * Does this method call expression have a receiver that 1) looks like a class name, suggesting
-   * that this is a static method call, and 2) that receiver is unsolved. If both of these are true,
-   * we need to create a synthetic class for that receiver before trying to solve the other
-   * arguments.
-   *
-   * @param method a method call expr
-   * @return true iff 1 and 2 above are both true
-   */
-  private boolean hasUnsolvedReceiverLikeClassName(MethodCallExpr method) {
-    Optional<Expression> maybeReceiver = method.getScope();
-    if (!maybeReceiver.isPresent()) {
-      return false;
-    }
-    Expression receiver = maybeReceiver.get();
-    if (!isAClassPath(receiver.toString()) && !looksLikeSimpleClassName(receiver.toString())) {
-      // the receiver looks like a regular expression, not a class, so we don't need
-      // to create an additional synthetic class
-      return false;
-    }
-    try {
-      receiver.calculateResolvedType();
-      return false;
-    } catch (UnsolvedSymbolException e) {
-      return true;
-    }
   }
 
   @Override
