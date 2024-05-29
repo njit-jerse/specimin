@@ -172,6 +172,39 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       return super.visit(decl, p);
     }
 
+    // Check to see if import is used in a separate method used by the target method(s)
+    for (String member : membersToEmpty) {
+      int openParen = member.indexOf('(');
+      int closeParen = member.lastIndexOf(')');
+
+      if (openParen == -1 || closeParen == -1) {
+        continue;
+      }
+
+      String parameters = member.substring(openParen + 1, closeParen);
+
+      int index = parameters.indexOf(classFullName);
+      if (index == -1) {
+        continue;
+      } else if (index == 0) {
+        if (parameters.length() == classFullName.length()) {
+          return super.visit(decl, p);
+        }
+        char after = parameters.charAt(index + classFullName.length());
+        // Check to see generic or if it matches the first parameter
+        if (after == '<' || after == ',') {
+          return super.visit(decl, p);
+        }
+      }
+      // Check to see if it is a parameter
+      else if (index > 1 && parameters.substring(index - 2, index).equals(", ")) {
+        char after = parameters.charAt(index + classFullName.length());
+        if (after == '<' || after == ',') {
+          return super.visit(decl, p);
+        }
+      }
+    }
+
     decl.remove();
     return decl;
   }
