@@ -2,7 +2,7 @@ package com.example;
 
 public interface Analysis {
 
-    enum Direction{
+    enum Direction {
         FORWARD, BACKWARD;
     }
 
