@@ -5,7 +5,7 @@ import java.util.List;
 
 class Simple {
     void bar() {
-        foo(new ArrayList<?>());
+        foo(new ArrayList());
     }
 
     void foo(List<?> baz) {
