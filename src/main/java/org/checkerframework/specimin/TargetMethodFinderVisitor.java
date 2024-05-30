@@ -29,6 +29,7 @@ import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
@@ -825,6 +826,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       updateUsedClassWithQualifiedClassName(
           classFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
+      updateUsedClassBasedOnType(exprDecl.getType());
+    } else if (exprDecl instanceof ResolvedEnumConstantDeclaration) {
+      String enumFullName = exprDecl.asEnumConstant().getType().describe();
+      updateUsedClassWithQualifiedClassName(
+          enumFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+      // "." and not "#" because enum constants are not fields
+      usedMembers.add(enumFullName + "." + expr.getNameAsString());
       updateUsedClassBasedOnType(exprDecl.getType());
     }
   }
