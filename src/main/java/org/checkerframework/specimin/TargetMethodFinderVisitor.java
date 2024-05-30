@@ -673,9 +673,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // when the type is a primitive array, we will have an UnsupportedOperationException
         if (e instanceof UnsupportedOperationException) {
-          updateUsedElementWithPotentialFieldNameExpr(expr.getScope().asNameExpr());
+          Expression scope = expr.getScope();
+          if (scope.isNameExpr()) {
+            updateUsedElementWithPotentialFieldNameExpr(scope.asNameExpr());
+          }
+          // If the scope is not a name expression, then it must be "this" (handled elsewhere),
+          // "super" (handled directly below), or another field access expression (handled by
+          // the visitor), so there's nothing to do.
         }
-        // if the a field is accessed in the form of a fully-qualified path, such as
+        // if a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
         // name, such as org and org.example, will also be considered as FieldAccessExpr.
       }

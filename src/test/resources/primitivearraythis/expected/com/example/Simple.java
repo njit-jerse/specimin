@@ -1,7 +1,7 @@
 package com.example;
 
 class Simple {
-    final byte[] values = new byte[10];
+    final byte[] values = null;
 
     void bar() {
         int length = this.values.length;
