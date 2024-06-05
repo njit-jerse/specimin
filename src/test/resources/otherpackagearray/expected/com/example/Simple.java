@@ -1,5 +1,7 @@
 package com.example;
 
+import org.example.Type;
+
 class Simple {
     void bar(org.example.Method method) {
         baz(method.getTypes());
