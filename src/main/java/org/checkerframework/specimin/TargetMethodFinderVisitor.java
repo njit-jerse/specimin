@@ -32,6 +32,7 @@ import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclarat
 import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -576,6 +577,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         nonPrimaryClassesToPrimaryClass);
     try {
       ResolvedType methodReturnType = decl.getReturnType();
+      // TODO: this should handle array types, generics, etc.: need
+      // to handle all component types.
       if (methodReturnType instanceof ResolvedReferenceType) {
         updateUsedClassBasedOnType(methodReturnType);
       }
@@ -585,6 +588,17 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // 2) UnsolvedSymbolVisitor has missed some unsolved symbols.
     catch (UnsolvedSymbolException e) {
       return;
+    }
+
+    for (int i = 0; i < decl.getNumberOfParams(); ++i) {
+      // Why is there no getParams() method??
+      ResolvedParameterDeclaration p = decl.getParam(i);
+      ResolvedType pType = p.getType();
+      // TODO: this should handle array types, generics, etc.: need
+      // to handle all component types.
+      if (p instanceof ResolvedReferenceType) {
+        updateUsedClassBasedOnType(pType);
+      }
     }
   }
 
