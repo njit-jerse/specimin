@@ -42,10 +42,19 @@ Options may be specified in any order. When supplying repeatable options more th
 
 Here is a sample command to run the tool: `./gradlew run --args='--outputDirectory "tempDir" --root "src/test/resources/twofilesimple/input/" --targetFile "com/example/Foo.java" --targetFile "com/example/Baz.java" --targetMethod "com.example.Foo#bar()" --jarpath "path/to/jar/directory"'`
 
+# Important limitations and caveats
+
+The current implementation makes use of heuristics to distinguish simple from fully-qualified names
+at several points. In particular, it assumes that package and class names follow Java convention:
+* class names always begin with an uppercase letter
+* package names always begin with a lowercase letter
+
+Specimin will likely produce incorrect output if the input program does not follow this convention.
+
 # Input/output examples
 
 The following examples illustrate the kinds of programs that Specimin
-produces. You can find (many) more such examples in Specimin's 
+produces. You can find (many) more such examples in Specimin's
 [test suite](https://github.com/kelloggm/specimin/tree/main/src/test/resources).
 
 ## A very simple example

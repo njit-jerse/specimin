@@ -1104,8 +1104,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (classfileIsInOriginalCodebase(qualifiedNameOfIncompleteClass)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedNameOfIncompleteClass));
       } else {
-        @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
-        updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
+        updateUnsolvedClassOrInterfaceWithMethod(method, qualifiedNameOfIncompleteClass, "", false);
       }
     } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
       String methodName = method.getNameAsString();
@@ -1675,16 +1674,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * will create another synthetic class to be the return type of that method.
    *
    * @param method the method call or method declaration in the original input
-   * @param className the name of the synthetic class
+   * @param className the name of the synthetic class, which may be either simple or fully-qualified
    * @param desiredReturnType the desired return type for this method
    * @param updatingInterface true if this method is being used to update an interface, false for
    *     updating classes
    */
   public void updateUnsolvedClassOrInterfaceWithMethod(
-      Node method,
-      @ClassGetSimpleName String className,
-      String desiredReturnType,
-      boolean updatingInterface) {
+      Node method, String className, String desiredReturnType, boolean updatingInterface) {
+    System.out.println("updating unsolved class or method with method:");
+    System.out.println("method: " + method);
+    System.out.println("class name: " + className);
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
     String accessModifer = "public";
@@ -1898,8 +1897,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * Given the simple name of an unsolved class, this method will create an UnsolvedClass instance
    * to represent that class and update the list of missing class with that UnsolvedClass instance.
    *
-   * @param nameOfClass the name of an unsolved class. This is a simple name but it may also contain
-   *     scoping constructs for outer classes. For example, it could be "Outer.Inner".
+   * @param nameOfClass the name of an unsolved class. This could be a simple name, but it may also
+   *     contain scoping constructs for outer classes. For example, it could be "Outer.Inner".
+   *     Alternatively, it may already be a fully-qualified name.
    * @param unsolvedMethods unsolved methods to add to the class before updating this visitor's set
    *     missing classes (optional, may be omitted)
    * @param isExceptionType if the class is of exceptionType
@@ -1913,17 +1913,47 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       boolean isUpdatingInterface,
       UnsolvedMethod... unsolvedMethods) {
     // If the name of the class is not present among import statements, we assume that this unsolved
-    // class is in the same directory as the current class. If the class name is not simple, use
-    // the outermost scope.
-    String scope =
-        nameOfClass.indexOf('.') == -1
-            ? nameOfClass
-            : nameOfClass.substring(0, nameOfClass.indexOf('.'));
-    String packageName = getPackageFromClassName(scope);
+    // class is in the same directory as the current class.
+    String packageName = "", simpleClassName = "";
+
+    // Four cases based on these examples: org.pkg.Simple, org.pkg.Simple.Inner, Simple,
+    // Simple.Inner
+    // Using a heuristic for checking for an FQN: that package names start with lower-case letters,
+    // and class names start with upper-class letters.
+    if (Character.isLowerCase(nameOfClass.charAt(0))) {
+      // original name assumed to have been fully-qualified
+      Iterable<String> parts = Splitter.on('.').split(nameOfClass);
+      for (String part : parts) {
+        if (Character.isLowerCase(part.charAt(0))) {
+          if ("".equals(packageName)) {
+            packageName = part;
+          } else {
+            packageName += "." + part;
+          }
+        } else {
+          if ("".equals(simpleClassName)) {
+            simpleClassName = part;
+          } else {
+            simpleClassName += "." + part;
+          }
+        }
+      }
+    } else {
+      // original name assumed to have been simple (but might have inner classes)
+      String scope =
+          nameOfClass.indexOf('.') == -1
+              ? nameOfClass
+              : nameOfClass.substring(0, nameOfClass.indexOf('.'));
+      // If the class name is not purely simple, use the outermost scope.
+      packageName = getPackageFromClassName(scope);
+      simpleClassName = nameOfClass;
+    }
+    System.out.println("package name: " + packageName);
+    System.out.println("class name: " + simpleClassName);
     UnsolvedClassOrInterface result;
     result =
         new UnsolvedClassOrInterface(
-            nameOfClass, packageName, isExceptionType, isUpdatingInterface);
+            simpleClassName, packageName, isExceptionType, isUpdatingInterface);
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
       result.addMethod(unsolvedMethod);
     }

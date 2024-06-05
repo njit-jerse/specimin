@@ -270,6 +270,8 @@ public class SpeciminRunner {
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
 
+      // System.out.println("iteration: " + workDoneAfterIteration);
+
       // Infinite loop protection.
       boolean gettingStuck = previousIterations.contains(workDoneAfterIteration);
       if (gettingStuck) {
