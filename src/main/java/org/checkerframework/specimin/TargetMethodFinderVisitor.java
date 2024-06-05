@@ -577,11 +577,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         nonPrimaryClassesToPrimaryClass);
     try {
       ResolvedType methodReturnType = decl.getReturnType();
-      // TODO: this should handle array types, generics, etc.: need
-      // to handle all component types.
-      if (methodReturnType instanceof ResolvedReferenceType) {
-        updateUsedClassBasedOnType(methodReturnType);
-      }
+      updateUsedClassBasedOnType(methodReturnType);
     }
     // There could be two cases here:
     // 1) The return type is a completely generic type.
@@ -596,9 +592,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedType pType = p.getType();
       // TODO: this should handle array types, generics, etc.: need
       // to handle all component types.
-      if (p instanceof ResolvedReferenceType) {
-        updateUsedClassBasedOnType(pType);
-      }
+      updateUsedClassBasedOnType(pType);
     }
   }
 
@@ -903,7 +897,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * Updates the list of used classes based on the resolved type of a used element, where a element
-   * can be a method, a field, a variable, or a parameter.
+   * can be a method, a field, a variable, or a parameter. Also updates the set of used classes
+   * based on component types, wildcard bounds, etc., as needed: any type that is used in the type
+   * will be included.
    *
    * @param type The resolved type of the used element.
    */
@@ -916,6 +912,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         updateUsedClassWithQualifiedClassName(
             bound.getType().describe(), usedTypeElement, nonPrimaryClassesToPrimaryClass);
       }
+      return;
+    } else if (type.isArray()) {
+      ResolvedType componentType = type.asArrayType().getComponentType();
+      updateUsedClassBasedOnType(componentType);
       return;
     }
     updateUsedClassWithQualifiedClassName(
