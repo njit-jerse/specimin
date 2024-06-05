@@ -20,6 +20,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.PatternExpr;
@@ -1065,6 +1066,36 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isAClassPath(node.getScope().toString())) {
         gotException();
       }
+    }
+    return super.visit(node, p);
+  }
+
+  @Override
+  public Visitable visit(MethodReferenceExpr node, Void p) {
+    if (insideTargetMember) {
+      // TODO: handle all of the possible forms listed in JLS 15.13, not just the simplest
+      Expression scope = node.getScope();
+      if (scope.isTypeExpr()) {
+        Type scopeAsType = scope.asTypeExpr().getType();
+        String scopeAsTypeFQN = scopeAsType.asString();
+        if (!isAClassPath(scopeAsTypeFQN) && scopeAsType.isClassOrInterfaceType()) {
+          scopeAsTypeFQN =
+              getQualifiedNameForClassOrInterfaceType(scopeAsType.asClassOrInterfaceType());
+        }
+        if (classfileIsInOriginalCodebase(scopeAsTypeFQN)) {
+          addedTargetFiles.add(qualifiedNameToFilePath(scopeAsTypeFQN));
+        } else {
+          // TODO: create a synthetic class?
+        }
+      }
+      String identifier = node.getIdentifier();
+      // can be either the name of a method or "new"
+      if ("new".equals(identifier)) {
+        // TODO: figure out how to handle this case
+        System.err.println("Specimin warning: new in method references is not supported: " + node);
+        return super.visit(node, p);
+      }
+      potentialUsedMembers.add(identifier);
     }
     return super.visit(node, p);
   }
@@ -2169,8 +2200,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return true;
     }
     for (Expression arg : argList) {
-      if (arg.isLambdaExpr()) {
-        // Skip lambdas here and treat them specially later.
+      if (arg.isLambdaExpr() || arg.isMethodReferenceExpr()) {
+        // Skip lambdas and method refs here and treat them specially later.
         continue;
       }
       if (!canBeSolved(arg)) {
@@ -2262,6 +2293,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
         LambdaExpr lambda = arg.asLambdaExpr();
         parametersList.add(resolveLambdaType(lambda, pkgName));
+        continue;
+      } else if (arg.isMethodReferenceExpr()) {
+        // TODO: is there a better way to handle this? How should we know
+        // what the type is? The method ref is sometimes not solvable here.
+        // Maybe we will need to handle this in JavaTypeCorrect?
+        parametersList.add("java.util.function.Supplier<?>");
         continue;
       }
 
