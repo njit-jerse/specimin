@@ -611,12 +611,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMember) {
-      ResolvedConstructorDeclaration resolved = newExpr.resolve();
-      usedMembers.add(resolved.getQualifiedSignature());
-      updateUsedClassWithQualifiedClassName(
-          resolved.getPackageName() + "." + resolved.getClassName(),
-          usedTypeElement,
-          nonPrimaryClassesToPrimaryClass);
+      try {
+        ResolvedConstructorDeclaration resolved = newExpr.resolve();
+        usedMembers.add(resolved.getQualifiedSignature());
+        updateUsedClassWithQualifiedClassName(
+            resolved.getPackageName() + "." + resolved.getClassName(),
+            usedTypeElement,
+            nonPrimaryClassesToPrimaryClass);
+        usedMembers.add(resolved.getQualifiedSignature());
+        updateUsedClassWithQualifiedClassName(
+            resolved.getPackageName() + "." + resolved.getClassName(),
+            usedTypeElement,
+            nonPrimaryClassesToPrimaryClass);
+      } catch (UnsolvedSymbolException e) {
+        throw new RuntimeException("trying to resolve : " + newExpr, e);
+      }
     }
     return super.visit(newExpr, p);
   }
