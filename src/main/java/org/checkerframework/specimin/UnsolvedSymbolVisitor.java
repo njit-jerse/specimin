@@ -1102,6 +1102,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr method, Void p) {
+    System.out.println("visiting this method call: " + method);
     /*
      * There's a specific order in which we resolve symbols for a method call.
      * We ensure that the caller and its parameters are resolved before solving the method itself.
@@ -1113,21 +1114,27 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     potentialUsedMembers.add(method.getName().asString());
     if (canBeSolved(method) && isFromAJarFile(method)) {
       updateClassesFromJarSourcesForMethodCall(method);
+      System.out.println("0");
       return super.visit(method, p);
     }
     // we will wait for the next run to solve this method call
     if (!canSolveArguments(method.getArguments())) {
+      System.out.println("1");
       return super.visit(method, p);
     }
     if (isASuperCall(method) && !canBeSolved(method)) {
+      System.out.println("2");
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
     }
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
+      System.out.println("3");
       updateClassSetWithStaticMethodCall(method);
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
+      System.out.println("4");
       updateClassSetWithStaticMethodCall(method);
     } else if (calledByAnIncompleteClass(method)) {
+      System.out.println("5");
       /*
        * Note that the body here assumes that the method is not static. This assumption is safe since we have isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method) and unsolvedAndCalledByASimpleClassName(method) before this condition.
        */
@@ -1139,6 +1146,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
       }
     } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
+      System.out.println("6");
       String methodName = method.getNameAsString();
       @FullyQualifiedName String className = staticImportedMembersMap.get(methodName);
       String methodFullyQualifiedCall = className + "." + methodName;
@@ -1147,6 +1155,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateClassSetWithQualifiedStaticMethodCall(
           methodFullyQualifiedCall + "()", getArgumentTypesFromMethodCall(method, pkgName));
     } else if (haveNoScopeOrCallByThisKeyword(method)) {
+      System.out.println("7");
       // in this case, the method must be declared inside the interface or the superclass that the
       // current class extends/implements.
       if (!declaredInCurrentClass(method)) {
@@ -1162,6 +1171,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           updateUnsolvedClassOrInterfaceWithMethod(method, parentName, "", false);
         }
       }
+    } else {
+      System.out.println("8");
     }
 
     // Though this structure looks a bit silly, it is intentional

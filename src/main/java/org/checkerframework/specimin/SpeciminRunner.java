@@ -169,6 +169,8 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    System.out.println("parsed target files: " + parsedTargetFiles);
+
     if (!jarPaths.isEmpty()) {
       List<String> argsToDecompile = new ArrayList<>();
       argsToDecompile.add("--silent");
