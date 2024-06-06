@@ -148,10 +148,11 @@ test {
     }
 }
 
-// This should not be necessary, but otherwise after a clean
-// compilation of the test sources fails?
+// Avoids "symbol not found" errors in builds immediately after cleaning.
+// Not 100% sure why. One theory: test data would otherwise be treated as
+// code by Gradle?
 sourceSets {
     test {
-        java.srcDirs = ['src/main/java', 'src/test/java']
+        java.srcDirs = ['src/main/java/', 'src/test/java/']
     }
 }
