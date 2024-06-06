@@ -79,9 +79,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
         && usedClass.contains(type.getFullyQualifiedName().get())) {
       return super.visit(type, p);
     } else {
-      // the effect of not calling super here is that only used classes
-      // will actually be visited by this class
-      return null;
+      return super.visit(type, p);
     }
   }
 

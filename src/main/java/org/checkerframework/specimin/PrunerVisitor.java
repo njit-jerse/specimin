@@ -501,7 +501,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     String methodSimpleName = method.getNameAsString();
     int numberOfParams = decl.getNumberOfParams();
     boolean isVarArgs = numberOfParams == 0 ? false : decl.getLastParam().isVariadic();
+    System.out.println("checking whether this method is a resolved yet stuck method: " + method);
     for (String stuckMethodCall : resolvedYetStuckMethodCall) {
+      System.out.println("stuck method: " + stuckMethodCall);
       if (stuckMethodCall.contains("@")) {
         // The stuck method call contains an @ iff it is in the stuck method call
         // list because we couldn't determine its qualified signature from the context

@@ -290,6 +290,8 @@ public class SpeciminRunner {
       }
       previousIterations.add(workDoneAfterIteration);
 
+      System.out.println("work after this iteration: " + workDoneAfterIteration);
+
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.

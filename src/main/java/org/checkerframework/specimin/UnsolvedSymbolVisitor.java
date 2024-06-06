@@ -2999,7 +2999,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       methodCall = toFullyQualifiedCall(method);
     }
-    System.out.println("method call: " + methodCall);
     List<String> methodParts = methodParts(methodCall);
     StringBuilder packageName = new StringBuilder(methodParts.get(0));
     int i = 1;
@@ -3007,10 +3006,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       packageName.append(".").append(methodParts.get(i));
       i++;
     }
-    System.out.println("package name: " + packageName);
     List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName.toString());
-    System.out.println("parts: " + methodParts);
-    System.out.println("arguments: " + methodArguments);
     updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArguments);
   }
 
@@ -3042,6 +3038,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       returnTypeClassName.append(toCapital(methodParts.get(i)));
       packageName.append(".").append(methodParts.get(i));
     }
+
+    // Before we proceed to making a synthetic class, check if the source class
+    // is in the original codebase. If so, just add it as a target file instead of
+    // proceeding to try to make a synthetic class.
+    String qualifiedName = packageName + "." + className;
+    if (classfileIsInOriginalCodebase(qualifiedName)) {
+      System.out.println("adding a target file: " + qualifiedName);
+      addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
+      gotException();
+      return;
+    }
+
     // At this point, returnTypeClassName will be ComExampleMyClassProcessReturnType
     returnTypeClassName
         .append(toCapital(className))

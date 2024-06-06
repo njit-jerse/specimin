@@ -549,8 +549,31 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // leading to a RuntimeException.
         // Note: this preservation is safe because we are not having an UnsolvedSymbolException.
         // Only unsolved symbols can make the output failed to compile.
-        resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+        if (call.hasScope()) {
+          Expression scope = call.getScope().orElseThrow();
+          System.out.println("scope: " + scope);
+          String scopeAsString = scope.toString();
+          if (scopeAsString.equals("this") || scopeAsString.equals("super")) {
+            resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+          } else {
+            // Use the scope instead. There are two cases: the scope is an FQN (e.g., in
+            // a call to a fully-qualified static method) or the scope is a simple name.
+            // In the simple name case, append the current package to the front, since
+            // if it had been imported we wouldn't be in this situation.
+            if (UnsolvedSymbolVisitor.isAClassPath(scopeAsString)) {
+              resolvedYetStuckMethodCall.add(scopeAsString + "." + call.getNameAsString());
+              usedTypeElement.add(scopeAsString);
+            } else {
+              resolvedYetStuckMethodCall.add(
+                  getCurrentPackage() + "." + scopeAsString + "." + call.getNameAsString());
+              usedTypeElement.add(getCurrentPackage() + "." + scopeAsString);
+            }
+          }
+        } else {
+          resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+        }
         System.out.println("not resolved 2: " + e);
+        System.out.println(resolvedYetStuckMethodCall);
         return super.visit(call, p);
       }
       preserveMethodDecl(decl);
@@ -581,10 +604,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     String qualifiedSignature = decl.getQualifiedSignature();
     if ("".equals(declPkg) || declPkg == null) {
       // assume that package names are lowercase
-      declPkg = this.classFQName;
-      while (Character.isUpperCase(declPkg.charAt(declPkg.lastIndexOf('.') + 1))) {
-        declPkg = declPkg.substring(0, declPkg.lastIndexOf('.'));
-      }
+      declPkg = getCurrentPackage();
       qualifiedSignature = declPkg + "." + qualifiedSignature;
     }
 
@@ -607,6 +627,20 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     catch (UnsolvedSymbolException e) {
       return;
     }
+  }
+
+  /**
+   * Uses the heuristic that packages always start with lower case letters and classes always start
+   * with uppercase letters to find the current package name.
+   *
+   * @return the current package name
+   */
+  private String getCurrentPackage() {
+    String result = this.classFQName;
+    while (Character.isUpperCase(result.charAt(result.lastIndexOf('.') + 1))) {
+      result = result.substring(0, result.lastIndexOf('.'));
+    }
+    return result;
   }
 
   @Override
