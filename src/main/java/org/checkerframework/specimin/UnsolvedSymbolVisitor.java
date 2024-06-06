@@ -1127,6 +1127,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
     }
+    String methodName = method.getNameAsString();
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       System.out.println("3");
       updateClassSetWithStaticMethodCall(method);
@@ -1145,9 +1146,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
         updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
       }
-    } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
+    } else if (staticImportedMembersMap.containsKey(methodName)) {
       System.out.println("6");
-      String methodName = method.getNameAsString();
       @FullyQualifiedName String className = staticImportedMembersMap.get(methodName);
       String methodFullyQualifiedCall = className + "." + methodName;
       String pkgName = className.substring(0, className.lastIndexOf('.'));
@@ -2999,9 +2999,18 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       methodCall = toFullyQualifiedCall(method);
     }
+    System.out.println("method call: " + methodCall);
     List<String> methodParts = methodParts(methodCall);
-    String packageName = methodParts.get(0);
-    List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName);
+    StringBuilder packageName = new StringBuilder(methodParts.get(0));
+    int i = 1;
+    while (Character.isLowerCase(methodParts.get(i).charAt(0))) {
+      packageName.append(".").append(methodParts.get(i));
+      i++;
+    }
+    System.out.println("package name: " + packageName);
+    List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName.toString());
+    System.out.println("parts: " + methodParts);
+    System.out.println("arguments: " + methodArguments);
     updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArguments);
   }
 

@@ -525,9 +525,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMember) {
+      System.out.println("visiting: " + call);
       ResolvedMethodDeclaration decl;
       try {
         decl = call.resolve();
+        System.out.println("resolved");
       } catch (UnsupportedOperationException e) {
         // This case only occurs when a method is called on a lambda parameter.
         // JavaParser has a type variable for the lambda parameter, but it won't
@@ -540,6 +542,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // (we believe that newer JP versions are much improved), or
         // * add another javac pass after pruning that checks for this kind of error.
         resolvedYetStuckMethodCall.add(call.getNameAsString() + "@" + call.getArguments().size());
+        System.out.println("not resolved 1");
         return super.visit(call, p);
       } catch (RuntimeException e) {
         // Handle cases where a method call is resolved but its signature confuses JavaParser,
@@ -547,6 +550,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // Note: this preservation is safe because we are not having an UnsolvedSymbolException.
         // Only unsolved symbols can make the output failed to compile.
         resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+        System.out.println("not resolved 2: " + e);
         return super.visit(call, p);
       }
       preserveMethodDecl(decl);
@@ -575,14 +579,14 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     // but this code has been written defensively in case that's possible.
     String declPkg = decl.getPackageName();
     String qualifiedSignature = decl.getQualifiedSignature();
-    //    if ("".equals(declPkg) || declPkg == null) {
-    //      // assume that package names are lowercase
-    //      declPkg = this.classFQName;
-    //      while (Character.isUpperCase(declPkg.charAt(declPkg.lastIndexOf('.') + 1))) {
-    //        declPkg = declPkg.substring(0, declPkg.lastIndexOf('.'));
-    //      }
-    //      qualifiedSignature = declPkg + "." + qualifiedSignature;
-    //    }
+    if ("".equals(declPkg) || declPkg == null) {
+      // assume that package names are lowercase
+      declPkg = this.classFQName;
+      while (Character.isUpperCase(declPkg.charAt(declPkg.lastIndexOf('.') + 1))) {
+        declPkg = declPkg.substring(0, declPkg.lastIndexOf('.'));
+      }
+      qualifiedSignature = declPkg + "." + qualifiedSignature;
+    }
 
     System.out.println("decl: " + decl);
     System.out.println("declPkg: " + declPkg);
