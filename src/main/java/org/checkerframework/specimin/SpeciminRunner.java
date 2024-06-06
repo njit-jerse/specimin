@@ -169,8 +169,6 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
-    System.out.println("parsed target files: " + parsedTargetFiles);
-
     if (!jarPaths.isEmpty()) {
       List<String> argsToDecompile = new ArrayList<>();
       argsToDecompile.add("--silent");
@@ -289,8 +287,6 @@ public class SpeciminRunner {
         }
       }
       previousIterations.add(workDoneAfterIteration);
-
-      System.out.println("work after this iteration: " + workDoneAfterIteration);
 
       if (gettingStuck || !addMissingClass.gettingException()) {
         // Three possible cases here:
