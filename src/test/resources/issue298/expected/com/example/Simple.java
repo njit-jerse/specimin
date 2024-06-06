@@ -9,8 +9,7 @@ class Simple {
   public boolean isSideEffectFree(ExecutableElement methodElement) {
     List<? extends AnnotationMirror> annotationMirrors = methodElement.getAnnotationMirrors();
     for (AnnotationMirror am : annotationMirrors) {
-      boolean found =
-          AnnotationUtils.areSameByName(am, "org.checkerframework.dataflow.qual.SideEffectFree");
+      boolean found = AnnotationUtils.areSameByName(am, "org.checkerframework.dataflow.qual.SideEffectFree");
       if (found) {
         return true;
       }
