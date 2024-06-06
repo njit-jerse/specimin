@@ -2989,8 +2989,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       methodCall = toFullyQualifiedCall(method);
     }
     List<String> methodParts = methodParts(methodCall);
-    String packageName = methodParts.get(0);
-    List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName);
+    StringBuilder packageName = new StringBuilder(methodParts.get(0));
+    int i = 1;
+    while (Character.isLowerCase(methodParts.get(i).charAt(0))) {
+      packageName.append(".").append(methodParts.get(i));
+      i++;
+    }
+    List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName.toString());
     updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArguments);
   }
 
