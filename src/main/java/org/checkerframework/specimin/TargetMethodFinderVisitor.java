@@ -577,7 +577,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         nonPrimaryClassesToPrimaryClass);
     try {
       ResolvedType methodReturnType = decl.getReturnType();
-      updateUsedClassBasedOnType(methodReturnType);
+      if (methodReturnType instanceof ResolvedReferenceType) {
+        updateUsedClassBasedOnType(methodReturnType);
+      }
     }
     // There could be two cases here:
     // 1) The return type is a completely generic type.

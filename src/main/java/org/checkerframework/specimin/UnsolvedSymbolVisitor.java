@@ -1689,6 +1689,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String accessModifer = "public";
     if (method instanceof MethodCallExpr) {
       methodName = ((MethodCallExpr) method).getNameAsString();
+      // TODO: this is the problem. className can (now) be an FQN - it couldn't be before
+      // Need to handle that case properly, because getPackageFromClassName can only take
+      // a simple name
       listOfParameters =
           getArgumentTypesFromMethodCall(
               ((MethodCallExpr) method), getPackageFromClassName(className));
@@ -2335,6 +2338,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *     of the given lambda, according to javac's arity-based typechecking rules for functions
    */
   private String resolveLambdaType(LambdaExpr lambda, String pkgName) {
+    System.out.println("calling resolve lambda type on: " + lambda);
+    System.out.println("package name was? " + pkgName);
     int cparam = lambda.getParameters().size();
     boolean isvoid = isLambdaVoidReturn(lambda);
     // we need to run at least once more to solve the functional interface we're about to create
