@@ -590,21 +590,11 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * @param decl a resolved method declaration to be preserved
    */
   private void preserveMethodDecl(ResolvedMethodDeclaration decl) {
-    // Handle the case where the method declaration is in a different class
-    // in the same package, in which case the symbol solver might leave
-    // the package name in decl empty. I'm not sure if declPkg can be null,
-    // but this code has been written defensively in case that's possible.
-    String declPkg = decl.getPackageName();
-    String qualifiedSignature = decl.getQualifiedSignature();
-    if ("".equals(declPkg) || declPkg == null) {
-      // assume that package names are lowercase
-      declPkg = getCurrentPackage();
-      qualifiedSignature = declPkg + "." + qualifiedSignature;
-    }
-
-    usedMembers.add(qualifiedSignature);
+    usedMembers.add(decl.getQualifiedSignature());
     updateUsedClassWithQualifiedClassName(
-        declPkg + "." + decl.getClassName(), usedTypeElement, nonPrimaryClassesToPrimaryClass);
+        decl.getPackageName() + "." + decl.getClassName(),
+        usedTypeElement,
+        nonPrimaryClassesToPrimaryClass);
     try {
       ResolvedType methodReturnType = decl.getReturnType();
       if (methodReturnType instanceof ResolvedReferenceType) {
