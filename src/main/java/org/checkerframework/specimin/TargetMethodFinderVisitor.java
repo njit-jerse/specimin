@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -69,6 +70,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /** The fully-qualified name of the class currently being visited. */
   private String classFQName = "";
+
+  /** The name of the package currently being visited. */
+  private String currentPackage = "";
 
   /**
    * The members (methods and fields) that were actually used by the targets, and therefore ought to
@@ -247,6 +251,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         unfoundMethods.get(targetMethodInClass).add(methodAsString);
       }
     }
+  }
+
+  @Override
+  public Visitable visit(PackageDeclaration decl, Void p) {
+    this.currentPackage = decl.getNameAsString();
+    return super.visit(decl, p);
   }
 
   @Override
@@ -555,7 +565,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             // 1) we currently don't track the list of classes/interfaces that the current class
             // extends and/or implements in this visitor and 2) even if we did track that, there
             // is no way for us to know which of those classes/interfaces the method belongs to.
-            // TODO: write a test for the "super" case and then figure out a better way to handle it.
+            // TODO: write a test for the "super" case and then figure out a better way to handle
+            // it.
             resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
           } else {
             // Use the scope instead. There are two cases: the scope is an FQN (e.g., in
@@ -616,17 +627,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Uses the heuristic that packages always start with lower case letters and classes always start
-   * with uppercase letters to find the current package name.
+   * Gets the package name of the current class.
    *
    * @return the current package name
    */
   private String getCurrentPackage() {
-    String result = this.classFQName;
-    while (Character.isUpperCase(result.charAt(result.lastIndexOf('.') + 1))) {
-      result = result.substring(0, result.lastIndexOf('.'));
-    }
-    return result;
+    return currentPackage;
   }
 
   @Override
