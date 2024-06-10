@@ -550,6 +550,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           Expression scope = call.getScope().orElseThrow();
           String scopeAsString = scope.toString();
           if (scopeAsString.equals("this") || scopeAsString.equals("super")) {
+            // In the "super" case, it would be better to add the name of an
+            // extended or implemented class/interface. However, there are two complications:
+            // 1) we currently don't track the list of classes/interfaces that the current class
+            // extends and/or implements in this visitor and 2) even if we did track that, there
+            // is no way for us to know which of those classes/interfaces the method belongs to.
+            // TODO: write a test for the "super" case and then figure out a better way to handle it.
             resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
           } else {
             // Use the scope instead. There are two cases: the scope is an FQN (e.g., in
