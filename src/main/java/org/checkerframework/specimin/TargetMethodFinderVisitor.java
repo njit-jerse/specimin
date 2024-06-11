@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -11,6 +12,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
@@ -274,6 +276,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
 
+    processAnnotations(decl.getAnnotations());
+
     manageClassFQNamePreSuper(decl);
     Visitable result = super.visit(decl, p);
     manageClassFQNamePostSuper(decl);
@@ -282,6 +286,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(EnumDeclaration decl, Void p) {
+    processAnnotations(decl.getAnnotations());
+
     manageClassFQNamePreSuper(decl);
     Visitable result = super.visit(decl, p);
     manageClassFQNamePostSuper(decl);
@@ -345,9 +351,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
+
+      processAnnotations(method.getAnnotations());
     } else {
       updateUnfoundMethods(methodName);
     }
+
     Visitable result = super.visit(method, p);
     insideTargetMember = oldInsideTargetMember;
 
@@ -381,6 +390,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         Visitable result = super.visit(node, arg);
         usedTypeElement.add(this.classFQName);
         insideTargetMember = oldInsideTargetMember;
+
+        processAnnotations(((FieldDeclaration) node.getParentNode().get()).getAnnotations());
+
         return result;
       }
     }
@@ -416,6 +428,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
+      processAnnotations(method.getAnnotations());
       insideTargetMember = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       // make sure that differences in spacing does not interfere with the result
@@ -449,6 +462,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     } else {
       updateUnfoundMethods(methodName);
     }
+
     Visitable result = super.visit(method, p);
     insideTargetMember = oldInsideTargetMember;
     return result;
@@ -480,6 +494,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           }
         }
 
+        processAnnotations(para.getAnnotations());
+
         if (paramType.isReferenceType()) {
           String paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().orElseThrow().getQualifiedName();
@@ -499,6 +515,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         }
       }
     }
+
     return super.visit(para, p);
   }
 
@@ -597,6 +614,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedReferenceType typeResolved =
           JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type);
       updateUsedClassBasedOnType(typeResolved);
+      processAnnotations(type.getAnnotations());
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
@@ -637,6 +655,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
     Node parentNode = enumConstantDeclaration.getParentNode().orElseThrow();
+
     if (parentNode instanceof EnumDeclaration) {
       if (usedTypeElement.contains(
           ((EnumDeclaration) parentNode)
@@ -649,6 +668,8 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         insideTargetMember = true;
         Visitable result = super.visit(enumConstantDeclaration, p);
         insideTargetMember = oldInsideTargetMember;
+
+        processAnnotations(enumConstantDeclaration.getAnnotations());
         return result;
       }
     }
@@ -766,6 +787,19 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   }
 
   /**
+   * Resolve annotations one by one and adds the in the usedClass set.
+   *
+   * @param annotations The annotations to resolve
+   */
+  public void processAnnotations(NodeList<AnnotationExpr> annotations) {
+    for (AnnotationExpr anno : annotations) {
+      String qualifiedName = anno.resolve().getQualifiedName();
+      updateUsedClassWithQualifiedClassName(
+          qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+    }
+  }
+
+  /**
    * Resolves unionType parameters one by one and adds them in the usedClass set.
    *
    * @param type unionType parameter
@@ -861,7 +895,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       qualifiedClassName = qualifiedClassName.substring(0, qualifiedClassName.indexOf("<"));
     }
     usedTypeElement.add(qualifiedClassName);
-
     // in case this class is not a primary class.
     if (nonPrimaryClassesToPrimaryClass.containsKey(qualifiedClassName)) {
       updateUsedClassWithQualifiedClassName(
