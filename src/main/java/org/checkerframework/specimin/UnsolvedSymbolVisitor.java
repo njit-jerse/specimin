@@ -1131,6 +1131,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
     }
+    String methodName = method.getNameAsString();
     if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       updateClassSetWithStaticMethodCall(method);
     } else if (unsolvedAndCalledByASimpleClassName(method)) {
@@ -1146,8 +1147,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         @ClassGetSimpleName String incompleteClassName = fullyQualifiedToSimple(qualifiedNameOfIncompleteClass);
         updateUnsolvedClassOrInterfaceWithMethod(method, incompleteClassName, "", false);
       }
-    } else if (staticImportedMembersMap.containsKey(method.getNameAsString())) {
-      String methodName = method.getNameAsString();
+    } else if (staticImportedMembersMap.containsKey(methodName)) {
       @FullyQualifiedName String className = staticImportedMembersMap.get(methodName);
       String methodFullyQualifiedCall = className + "." + methodName;
       String pkgName = className.substring(0, className.lastIndexOf('.'));
@@ -3033,8 +3033,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       methodCall = toFullyQualifiedCall(method);
     }
     List<String> methodParts = methodParts(methodCall);
-    String packageName = methodParts.get(0);
-    List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName);
+    StringBuilder packageName = new StringBuilder(methodParts.get(0));
+    int i = 1;
+    while (Character.isLowerCase(methodParts.get(i).charAt(0))) {
+      packageName.append(".").append(methodParts.get(i));
+      i++;
+    }
+    List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName.toString());
     updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArguments);
   }
 
@@ -3066,6 +3071,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       returnTypeClassName.append(toCapital(methodParts.get(i)));
       packageName.append(".").append(methodParts.get(i));
     }
+
+    // Before we proceed to making a synthetic class, check if the source class
+    // is in the original codebase. If so, just add it as a target file instead of
+    // proceeding to try to make a synthetic class.
+    String qualifiedName = packageName + "." + className;
+    if (classfileIsInOriginalCodebase(qualifiedName)) {
+      addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
+      gotException();
+      return;
+    }
+
     // At this point, returnTypeClassName will be ComExampleMyClassProcessReturnType
     returnTypeClassName
         .append(toCapital(className))
