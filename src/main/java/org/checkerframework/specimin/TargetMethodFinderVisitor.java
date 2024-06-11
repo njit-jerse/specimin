@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -69,6 +70,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /** The fully-qualified name of the class currently being visited. */
   private String classFQName = "";
+
+  /** The name of the package currently being visited. */
+  private String currentPackage = "";
 
   /**
    * The members (methods and fields) that were actually used by the targets, and therefore ought to
@@ -247,6 +251,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         unfoundMethods.get(targetMethodInClass).add(methodAsString);
       }
     }
+  }
+
+  @Override
+  public Visitable visit(PackageDeclaration decl, Void p) {
+    this.currentPackage = decl.getNameAsString();
+    return super.visit(decl, p);
   }
 
   @Override
@@ -546,7 +556,35 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         // leading to a RuntimeException.
         // Note: this preservation is safe because we are not having an UnsolvedSymbolException.
         // Only unsolved symbols can make the output failed to compile.
-        resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+        if (call.hasScope()) {
+          Expression scope = call.getScope().orElseThrow();
+          String scopeAsString = scope.toString();
+          if (scopeAsString.equals("this") || scopeAsString.equals("super")) {
+            // In the "super" case, it would be better to add the name of an
+            // extended or implemented class/interface. However, there are two complications:
+            // 1) we currently don't track the list of classes/interfaces that the current class
+            // extends and/or implements in this visitor and 2) even if we did track that, there
+            // is no way for us to know which of those classes/interfaces the method belongs to.
+            // TODO: write a test for the "super" case and then figure out a better way to handle
+            // it.
+            resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+          } else {
+            // Use the scope instead. There are two cases: the scope is an FQN (e.g., in
+            // a call to a fully-qualified static method) or the scope is a simple name.
+            // In the simple name case, append the current package to the front, since
+            // if it had been imported we wouldn't be in this situation.
+            if (UnsolvedSymbolVisitor.isAClassPath(scopeAsString)) {
+              resolvedYetStuckMethodCall.add(scopeAsString + "." + call.getNameAsString());
+              usedTypeElement.add(scopeAsString);
+            } else {
+              resolvedYetStuckMethodCall.add(
+                  getCurrentPackage() + "." + scopeAsString + "." + call.getNameAsString());
+              usedTypeElement.add(getCurrentPackage() + "." + scopeAsString);
+            }
+          }
+        } else {
+          resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+        }
         return super.visit(call, p);
       }
       preserveMethodDecl(decl);
@@ -586,6 +624,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     catch (UnsolvedSymbolException e) {
       return;
     }
+  }
+
+  /**
+   * Gets the package name of the current class.
+   *
+   * @return the current package name
+   */
+  private String getCurrentPackage() {
+    return currentPackage;
   }
 
   @Override
