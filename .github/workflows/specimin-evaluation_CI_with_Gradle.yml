@@ -35,6 +35,11 @@ jobs:
       - name: Clone Specimin Evaluation repository (for scripts)
         run: git clone https://github.com/NiharikaJamble/specimin-evaluation
 
+      - name: Download CSV file
+        run: |
+          mkdir -p $(pwd)/CI
+          curl -sSL -o $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv https://raw.githubusercontent.com/NiharikaJamble/CI_FOR_SPECIMIN_PERFORMANCE/main/PROJECT_LIST_FOR_CI_TEST.csv
+
       - name: Run ASHE and Specimin analysis scripts
         run: |
           python3 specimin-evaluation/ashe_scripts/run_ashe_for_stats.py \
