@@ -1777,12 +1777,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     String accessModifer = "public";
     if (method instanceof MethodCallExpr) {
       methodName = ((MethodCallExpr) method).getNameAsString();
-      // TODO: this is the problem. className can (now) be an FQN - it couldn't be before
-      // Need to handle that case properly, because getPackageFromClassName can only take
-      // a simple name
-      listOfParameters =
-          getArgumentTypesFromMethodCall(
-              ((MethodCallExpr) method), getPackageFromClassName(className));
+      String packageName = splitName(className).a;
+      listOfParameters = getArgumentTypesFromMethodCall(((MethodCallExpr) method), packageName);
     }
     // method is a MethodDeclaration
     else {
@@ -2005,15 +2001,36 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       UnsolvedMethod... unsolvedMethods) {
     // If the name of the class is not present among import statements, we assume that this unsolved
     // class is in the same directory as the current class.
+
+    Pair<String, String> packageAndClassNames = splitName(nameOfClass);
+    UnsolvedClassOrInterface result;
+    result =
+        new UnsolvedClassOrInterface(
+            packageAndClassNames.a, packageAndClassNames.b, isExceptionType, isUpdatingInterface);
+    for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
+      result.addMethod(unsolvedMethod);
+    }
+    updateMissingClass(result);
+    return result;
+  }
+
+  /**
+   * Splits a name into the package and class names, based on the upper/lower case heuristic.
+   *
+   * @param name a simple name, a fully-qualified name, or an inner class name like Outer.Inner
+   * @return a pair whose first element is the package name and whose second element is the class
+   *     name
+   */
+  private Pair<String, String> splitName(String name) {
     String packageName = "", simpleClassName = "";
 
     // Four cases based on these examples: org.pkg.Simple, org.pkg.Simple.Inner, Simple,
     // Simple.Inner
     // Using a heuristic for checking for an FQN: that package names start with lower-case letters,
     // and class names start with upper-class letters.
-    if (Character.isLowerCase(nameOfClass.charAt(0))) {
+    if (Character.isLowerCase(name.charAt(0))) {
       // original name assumed to have been fully-qualified
-      Iterable<String> parts = Splitter.on('.').split(nameOfClass);
+      Iterable<String> parts = Splitter.on('.').split(name);
       for (String part : parts) {
         if (Character.isLowerCase(part.charAt(0))) {
           if ("".equals(packageName)) {
@@ -2031,25 +2048,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     } else {
       // original name assumed to have been simple (but might have inner classes)
-      String scope =
-          nameOfClass.indexOf('.') == -1
-              ? nameOfClass
-              : nameOfClass.substring(0, nameOfClass.indexOf('.'));
+      String scope = name.indexOf('.') == -1 ? name : name.substring(0, name.indexOf('.'));
       // If the class name is not purely simple, use the outermost scope.
       packageName = getPackageFromClassName(scope);
-      simpleClassName = nameOfClass;
+      simpleClassName = name;
     }
-    System.out.println("package name: " + packageName);
-    System.out.println("class name: " + simpleClassName);
-    UnsolvedClassOrInterface result;
-    result =
-        new UnsolvedClassOrInterface(
-            simpleClassName, packageName, isExceptionType, isUpdatingInterface);
-    for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
-      result.addMethod(unsolvedMethod);
-    }
-    updateMissingClass(result);
-    return result;
+    return new Pair(packageName, simpleClassName);
   }
 
   /**
