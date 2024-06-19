@@ -34,13 +34,13 @@ jobs:
 
       - name: Run ASHE and Specimin analysis scripts
         run: |
-          python3 run_ashe_for_stats.py /path/to/ASHE /path/to/repositories.csv /path/to/clone/repos /path/to/config.properties
+          python3 run_ashe_for_stats.py https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints https://github.com/NiharikaJamble/CI_FOR_SPECIMIN_PERFORMANCE/blob/main/PROJECT_LIST_FOR_CI_TEST.csv https://github.com/NiharikaJamble/CI_FOR_SPECIMIN_PERFORMANCE/REPO_CLONE_SPACE https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints/blob/main/src/main/resources/config.properties
 
       - name: Parse compilable percentage
         id: parse_compilable_percentage
         run: |
-          python3 specimin_statistics.py /path/to/ASHE/logs/app.log
-          grep 'Fully successful from minimization to compilation' /path/to/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > compilable_percentage.txt
+          python3 specimin_statistics.py https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints/tree/main/logs/test_log.log
+          grep 'Fully successful from minimization to compilation' https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints/tree/main/logs/specimin_statistics.txt | awk '{print $NF}' > compilable_percentage.txt
         continue-on-error: true
 
       - name: Check for monotonically increasing compilable percentage
