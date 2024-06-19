@@ -49,6 +49,7 @@ jobs:
           python3 specimin-evaluation/ashe_scripts/specimin_statistics.py \
           $(pwd)/ASHE/logs/app.log
           grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > compilable_percentage.txt
+          cat compilable_percentage.txt
         continue-on-error: true
 
       - name: Check for monotonically increasing compilable percentage
@@ -69,3 +70,17 @@ jobs:
         run: echo "${{ steps.parse_compilable_percentage.outputs.current_percentage }}" > prev_compilable_percentage.txt
         env:
           prev_percentage: ${{ secrets.PREV_COMPILABLE_PERCENTAGE }}
+
+      - name: Upload compilable percentage
+        if: always()  # Ensure this step runs even if previous steps fail
+        uses: actions/upload-artifact@v2
+        with:
+          name: compilable-percentage
+          path: compilable_percentage.txt
+
+      - name: Upload previous compilable percentage
+        if: always()  # Ensure this step runs even if previous steps fail
+        uses: actions/upload-artifact@v2
+        with:
+          name: prev-compilable-percentage
+          path: prev_compilable_percentage.txt
