@@ -20,11 +20,19 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: '3.8'
-          
+
       - name: Set up Java JDK
         uses: actions/setup-java@v2
         with:
-          java-version: '11'
+          java-version: '11'  # Replace with the Java version you need (e.g., 11, 16, etc.)
+          distribution: 'adopt'  # Specify the distribution of Java (e.g., adopt, zulu, etc.)
+          architecture: 'x64'  # Specify the architecture of Java (e.g., x64, x86)
+        # server-id: 'github'  # Specify the server ID (typically 'github')
+        # server-username: ${{ github.actor }}  # Use GITHUB_ACTOR for server username
+          server-password: ${{ secrets.GITHUB_TOKEN }}  # Use GITHUB_TOKEN for server password
+          overwrite-settings: true  # Overwrite any existing settings
+          check-latest: false  # Do not check for the latest version
+ 
         
       - name: Install dependencies
         run: |
