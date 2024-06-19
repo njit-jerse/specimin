@@ -38,10 +38,12 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
+import com.github.javaparser.ast.type.ArrayType;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.ast.type.WildcardType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -987,10 +989,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replace("\\s", ""))) {
       insideTargetMember = true;
     }
+    boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
+    if (potentialUsedMembers.contains(node.getNameAsString())) {
+      insidePotentialUsedMember = true;
+    }
     addTypeVariableScope(node.getTypeParameters());
+    // TODO: this is might be where we need to make sure that the ctor's parameter types are
+    // solvable
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
     insideTargetMember = oldInsideTargetMember;
+    insidePotentialUsedMember = oldInsidePotentialUsedMember;
     return result;
   }
 
@@ -1193,16 +1202,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
     // Workaround for a JavaParser bug: When a type is referenced using its fully-qualified name,
-    // like
-    // com.example.Dog dog, JavaParser considers its package components (com and com.example) as
-    // types, too. This issue happens even when the source file of the Dog class is present in the
-    // codebase.
+    // like com.example.Dog dog, JavaParser considers its package components (com and com.example)
+    // as types, too. This issue happens even when the source file of the Dog class is present in
+    // the codebase.
     if (!isCapital(typeExpr.getName().asString())) {
       return super.visit(typeExpr, p);
     }
-    if (!typeExpr.isReferenceType()) {
-      return super.visit(typeExpr, p);
-    }
+    //    if (!typeExpr.isReferenceType()) {
+    //      return super.visit(typeExpr, p);
+    //    }
     // type belonging to a class declaration will be handled by the visit method for
     // ClassOrInterfaceDeclaration
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
@@ -1211,18 +1219,67 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!insideTargetMember && !insidePotentialUsedMember) {
       return super.visit(typeExpr, p);
     }
+    resolveTypeExpr(typeExpr);
+
+    return super.visit(typeExpr, p);
+  }
+
+  @Override
+  public Visitable visit(WildcardType type, Void p) {
+    if (!insideTargetMember && !insidePotentialUsedMember) {
+      return super.visit(type, p);
+    }
+    resolveTypeExpr(type);
+    return super.visit(type, p);
+  }
+
+  @Override
+  public Visitable visit(ArrayType type, Void p) {
+    System.out.println("visiting an array type: " + type);
+    if (!insideTargetMember && !insidePotentialUsedMember) {
+      System.out.println("not inside a used member");
+      return super.visit(type, p);
+    }
+    resolveTypeExpr(type);
+    return super.visit(type, p);
+  }
+
+  private void resolveTypeExpr(Type type) {
+    System.out.println("calling resolve type expr on  " + type);
+    if (type.isArrayType()) {
+      resolveTypeExpr(type.asArrayType().getComponentType());
+      return;
+    }
+
+    if (type.isWildcardType()) {
+      Optional<ReferenceType> extended = type.asWildcardType().getExtendedType();
+      if (extended.isPresent()) {
+        resolveTypeExpr(extended.get());
+      }
+      Optional<ReferenceType> sup = type.asWildcardType().getSuperType();
+      if (sup.isPresent()) {
+        resolveTypeExpr(sup.get());
+      }
+      return;
+    }
+
+    if (!type.isClassOrInterfaceType()) {
+      return;
+    }
+    ClassOrInterfaceType typeExpr = type.asClassOrInterfaceType();
+
     if (isTypeVar(typeExpr.getName().asString())) {
       updateSyntheticClassesForTypeVar(typeExpr);
-      return super.visit(typeExpr, p);
+      return;
     }
     if (updateTargetFilesListForExistingClassWithInheritance(typeExpr)) {
-      return super.visit(typeExpr, p);
+      return;
     }
     try {
       // resolve() checks whether this type is resolved. getAllAncestor() checks whether this type
       // extends or implements a resolved class/interface.
       JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(typeExpr).getAllAncestors();
-      return super.visit(typeExpr, p);
+      return;
     }
     /*
      * 1. If the class file is in the codebase but extends/implements a class/interface not in the codebase, we got UnsolvedSymbolException.
@@ -1238,7 +1295,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
         gotException();
-        return super.visit(typeExpr, p);
+        return;
       }
 
       // below is for other three cases.
@@ -1246,7 +1303,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // This method only updates type variables for unsolved classes. Other problems causing a
       // class to be unsolved will be fixed by other methods.
       String typeRawName = typeExpr.getElementType().asString();
-      if (typeExpr.getTypeArguments().isPresent()) {
+      if (typeExpr.isClassOrInterfaceType()
+          && typeExpr.asClassOrInterfaceType().getTypeArguments().isPresent()) {
         // remove type arguments
         typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
       }
@@ -1254,12 +1312,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       if (isTypeVar(typeRawName)) {
         // If the type name itself is an in-scope type variable, just return without attempting
         // to create a missing class.
-        return super.visit(typeExpr, p);
+        return;
       }
       solveSymbolsForClassOrInterfaceType(typeExpr, false);
       gotException();
     }
-    return super.visit(typeExpr, p);
   }
 
   @Override
@@ -1274,6 +1331,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       className = oldClassName;
       return result;
     }
+    potentialUsedMembers.add(newExpr.getTypeAsString());
     // Cannot be newExpr.getTypeAsString(), because that will include type variables,
     // which is undesirable.
     String type = newExpr.getType().getNameAsString();
@@ -1301,6 +1359,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } catch (Exception q) {
       // The exception originates from the call to getArgumentTypesFromObjectCreation within the try
       // block, indicating unresolved parameters in this object creation.
+      gotException();
     }
     if (newExpr.getAnonymousClassBody().isPresent()) {
       // Need to do data structure maintenance

@@ -675,11 +675,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             resolved.getPackageName() + "." + resolved.getClassName(),
             usedTypeElement,
             nonPrimaryClassesToPrimaryClass);
-        usedMembers.add(resolved.getQualifiedSignature());
-        updateUsedClassWithQualifiedClassName(
-            resolved.getPackageName() + "." + resolved.getClassName(),
-            usedTypeElement,
-            nonPrimaryClassesToPrimaryClass);
+        // TODO: preserve parameter types, as we do for regular method calls?
       } catch (UnsolvedSymbolException e) {
         throw new RuntimeException("trying to resolve : " + newExpr, e);
       }
