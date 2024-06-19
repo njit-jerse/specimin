@@ -5,9 +5,9 @@ plugins {
     id 'maven-publish'
     id 'signing'
     id 'com.diffplug.spotless' version '6.25.0'
-    id 'org.checkerframework' version '0.6.37'
+    id 'org.checkerframework' version '0.6.40'
     id("net.ltgt.errorprone") version "3.1.0"
-    id 'com.adarshr.test-logger' version '3.1.0'
+    id 'com.adarshr.test-logger' version '4.0.0'
 }
 
 repositories {
@@ -26,9 +26,9 @@ dependencies {
 
     implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
 
-    implementation "org.vineflower:vineflower:1.10.0"
+    implementation "org.vineflower:vineflower:1.10.1"
 
-    implementation 'commons-io:commons-io:2.6'
+    implementation 'commons-io:commons-io:2.16.1'
 
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
