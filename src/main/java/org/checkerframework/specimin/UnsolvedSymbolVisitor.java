@@ -994,8 +994,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       insidePotentialUsedMember = true;
     }
     addTypeVariableScope(node.getTypeParameters());
-    // TODO: this is might be where we need to make sure that the ctor's parameter types are
-    // solvable
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
     insideTargetMember = oldInsideTargetMember;
