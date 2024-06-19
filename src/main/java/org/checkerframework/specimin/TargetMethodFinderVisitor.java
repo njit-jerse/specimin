@@ -676,6 +676,12 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             usedTypeElement,
             nonPrimaryClassesToPrimaryClass);
         // TODO: preserve parameter types, as we do for regular method calls?
+        for (int i = 0; i < resolved.getNumberOfParams(); ++i) {
+          // Why is there no getParams() method??
+          ResolvedParameterDeclaration param = resolved.getParam(i);
+          ResolvedType pType = param.getType();
+          updateUsedClassBasedOnType(pType);
+        }
       } catch (UnsolvedSymbolException e) {
         throw new RuntimeException("trying to resolve : " + newExpr, e);
       }
