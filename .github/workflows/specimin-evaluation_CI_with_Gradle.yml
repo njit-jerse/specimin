@@ -24,7 +24,7 @@ jobs:
       - name: Set up Java JDK
         uses: actions/setup-java@v2
         with:
-          java-version: '11'  # Replace with the Java version you need (e.g., 11, 16, etc.)
+          java-version: '21'  # Replace with the Java version you need (e.g., 11, 16, etc.)
           distribution: 'adopt'  # Specify the distribution of Java (e.g., adopt, zulu, etc.)
           architecture: 'x64'  # Specify the architecture of Java (e.g., x64, x86)
         # server-id: 'github'  # Specify the server ID (typically 'github')
