@@ -30,6 +30,7 @@ jobs:
         run: |
           git clone https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints
           git clone https://github.com/NiharikaJamble/specimin
+          git clone https://github.com/NiharikaJamble/specimin-evaluation
           # Add more projects as needed
 
       - name: Run ASHE and Specimin analysis scripts
