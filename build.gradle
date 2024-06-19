@@ -10,6 +10,11 @@ plugins {
     id 'com.adarshr.test-logger' version '3.1.0'
 }
 
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+}
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
