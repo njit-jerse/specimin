@@ -43,8 +43,8 @@ jobs:
       - name: Display CSV Content
         run: |
           echo "Content of PROJECT_LIST_FOR_CI_TEST.csv:"
-          cat CI_FOR_SPECIMIN_PERFORMANCE/PROJECT_LIST_FOR_CI_TEST.csv
-
+          cat $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv
+          
       - name: Run ASHE and Specimin analysis scripts
         run: |
           python3 specimin-evaluation/ashe_scripts/run_ashe_for_stats.py \
