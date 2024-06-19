@@ -47,6 +47,7 @@ jobs:
           
       - name: Run ASHE and Specimin analysis scripts
         run: |
+          echo $(pwd)
           python3 specimin-evaluation/ashe_scripts/run_ashe_for_stats.py \
           $(pwd)/ASHE \
           $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv \
@@ -58,6 +59,7 @@ jobs:
         run: |
           python3 specimin-evaluation/ashe_scripts/specimin_statistics.py \
           $(pwd)/ASHE/logs/app.log
+          echo $(pwd)
           grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > compilable_percentage.txt
           cat compilable_percentage.txt
         continue-on-error: true
