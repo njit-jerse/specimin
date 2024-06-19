@@ -2006,7 +2006,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     UnsolvedClassOrInterface result;
     result =
         new UnsolvedClassOrInterface(
-            packageAndClassNames.a, packageAndClassNames.b, isExceptionType, isUpdatingInterface);
+            packageAndClassNames.b, packageAndClassNames.a, isExceptionType, isUpdatingInterface);
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
       result.addMethod(unsolvedMethod);
     }
