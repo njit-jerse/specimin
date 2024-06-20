@@ -630,8 +630,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       // Why is there no getParams() method??
       ResolvedParameterDeclaration p = decl.getParam(i);
       ResolvedType pType = p.getType();
-      // TODO: this should handle array types, generics, etc.: need
-      // to handle all component types.
       updateUsedClassBasedOnType(pType);
     }
   }
@@ -675,7 +673,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             resolved.getPackageName() + "." + resolved.getClassName(),
             usedTypeElement,
             nonPrimaryClassesToPrimaryClass);
-        // TODO: preserve parameter types, as we do for regular method calls?
         for (int i = 0; i < resolved.getNumberOfParams(); ++i) {
           // Why is there no getParams() method??
           ResolvedParameterDeclaration param = resolved.getParam(i);
