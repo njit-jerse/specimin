@@ -1206,9 +1206,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!isCapital(typeExpr.getName().asString())) {
       return super.visit(typeExpr, p);
     }
-    //    if (!typeExpr.isReferenceType()) {
-    //      return super.visit(typeExpr, p);
-    //    }
     // type belonging to a class declaration will be handled by the visit method for
     // ClassOrInterfaceDeclaration
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
