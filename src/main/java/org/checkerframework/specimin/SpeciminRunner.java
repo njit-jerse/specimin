@@ -270,8 +270,6 @@ public class SpeciminRunner {
               addMissingClass.getAddedTargetFiles(),
               addMissingClass.getSyntheticClassesAsAStringSet());
 
-      // System.out.println("iteration: " + workDoneAfterIteration);
-
       // Infinite loop protection.
       boolean gettingStuck = previousIterations.contains(workDoneAfterIteration);
       if (gettingStuck) {
@@ -334,13 +332,6 @@ public class SpeciminRunner {
         updateStaticSolver(root, jarPaths);
       }
     }
-
-    UnsolvedSymbolVisitorProgress result =
-        new UnsolvedSymbolVisitorProgress(
-            addMissingClass.getPotentialUsedMembers(),
-            addMissingClass.getAddedTargetFiles(),
-            addMissingClass.getSyntheticClassesAsAStringSet());
-    System.out.println("result: " + result);
 
     UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
     for (CompilationUnit cu : parsedTargetFiles.values()) {

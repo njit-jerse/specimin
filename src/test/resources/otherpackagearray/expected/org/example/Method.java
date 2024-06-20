@@ -2,7 +2,7 @@ package org.example;
 
 public class Method {
 
-    public Type[] getTypes() {
+    public org.example.Type[] getTypes() {
         throw new Error();
     }
 }

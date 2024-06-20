@@ -374,8 +374,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     } catch (UnsolvedSymbolException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
-      System.out.println("removing " + methodDecl);
-      System.out.println(e);
       methodDecl.remove();
       return methodDecl;
     }

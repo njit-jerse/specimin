@@ -1233,9 +1233,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ArrayType type, Void p) {
-    System.out.println("visiting an array type: " + type);
     if (!insideTargetMember && !insidePotentialUsedMember) {
-      System.out.println("not inside a used member");
       return super.visit(type, p);
     }
     resolveTypeExpr(type);
@@ -1243,7 +1241,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   private void resolveTypeExpr(Type type) {
-    System.out.println("calling resolve type expr on  " + type);
     if (type.isArrayType()) {
       resolveTypeExpr(type.asArrayType().getComponentType());
       return;
@@ -1769,9 +1766,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   public void updateUnsolvedClassOrInterfaceWithMethod(
       Node method, String className, String desiredReturnType, boolean updatingInterface) {
-    System.out.println("updating unsolved class or method with method:");
-    System.out.println("method: " + method);
-    System.out.println("class name: " + className);
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
     String accessModifer = "public";
@@ -2436,8 +2430,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *     of the given lambda, according to javac's arity-based typechecking rules for functions
    */
   private String resolveLambdaType(LambdaExpr lambda, String pkgName) {
-    System.out.println("calling resolve lambda type on: " + lambda);
-    System.out.println("package name was? " + pkgName);
     int cparam = lambda.getParameters().size();
     boolean isvoid = isLambdaVoidReturn(lambda);
     // we need to run at least once more to solve the functional interface we're about to create
