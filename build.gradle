@@ -59,6 +59,15 @@ task expectedTestOutputsMustCompile(type: Exec) {
 tasks.compileJava {
     // uncomment for testing
     // options.errorprone.enabled = false
+    options.errorprone.disable(
+            // JavaParser's visitor design requires us to regularly violate this rule
+            "VoidUsed",
+            // Specimin should compile with Java 11, but this suggestion assumes Java 17
+            "PatternMatchingInstanceof")
+}
+
+tasks.compileTestJava {
+    options.errorprone.enabled = false
 }
 
 checkerFramework {
