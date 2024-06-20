@@ -3352,8 +3352,19 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         && !JavaLangUtils.isJavaLangOrPrimitiveName(correctTypeName)) {
       // Cannot call getPackageFromClassName here, because correctTypeName
       // might be a type variable, and this method is called after the visitor finishes
-      // running.
-      String pkgName = classAndPackageMap.get(correctTypeName);
+      // running. So, to find the package name, we need to strip off any type modifiers
+      // (array brackets, type vars, etc) to just get the simple type name, and then
+      // look that up.
+      String correctSimpleTypeName = correctTypeName;
+      if (correctSimpleTypeName.contains("[")) {
+        correctSimpleTypeName =
+            correctSimpleTypeName.substring(0, correctSimpleTypeName.indexOf('['));
+      }
+      if (correctSimpleTypeName.contains("<")) {
+        correctSimpleTypeName =
+            correctSimpleTypeName.substring(0, correctSimpleTypeName.indexOf('<'));
+      }
+      String pkgName = classAndPackageMap.get(correctSimpleTypeName);
       if (pkgName != null) {
         correctTypeName = pkgName + "." + correctTypeName;
       }
