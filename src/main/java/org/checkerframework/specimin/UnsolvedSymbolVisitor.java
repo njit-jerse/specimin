@@ -1237,6 +1237,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return super.visit(type, p);
   }
 
+  /**
+   * Shared logic for checking whether type expressions (e.g., ArrayType, ClassOrInterfaceType,
+   * etc.) are resolvable, and creating synthetic classes if not.
+   *
+   * @param type a type expression
+   */
   private void resolveTypeExpr(Type type) {
     if (type.isArrayType()) {
       resolveTypeExpr(type.asArrayType().getComponentType());
