@@ -6,7 +6,7 @@ plugins {
     id 'signing'
     id 'com.diffplug.spotless' version '6.25.0'
     id 'org.checkerframework' version '0.6.40'
-    id("net.ltgt.errorprone") version "3.1.0"
+    id("net.ltgt.errorprone") version "4.0.1"
     id 'com.adarshr.test-logger' version '4.0.0'
 }
 
@@ -22,7 +22,7 @@ application {
 
 dependencies {
 
-    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.25.10'
+    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.26.0'
 
     implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
 
@@ -33,7 +33,7 @@ dependencies {
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
 
-    errorprone("com.google.errorprone:error_prone_core:2.24.0")
+    errorprone("com.google.errorprone:error_prone_core:2.28.0")
 }
 
 // Use require-javadoc. From https://github.com/plume-lib/require-javadoc.
@@ -41,7 +41,7 @@ configurations {
     requireJavadoc
 }
 dependencies {
-    requireJavadoc "org.plumelib:require-javadoc:1.0.2"
+    requireJavadoc "org.plumelib:require-javadoc:1.0.9"
 }
 task requireJavadoc(type: JavaExec) {
     group = 'Documentation'
@@ -59,6 +59,15 @@ task expectedTestOutputsMustCompile(type: Exec) {
 tasks.compileJava {
     // uncomment for testing
     // options.errorprone.enabled = false
+    options.errorprone.disable(
+            // JavaParser's visitor design requires us to regularly violate this rule
+            "VoidUsed",
+            // Specimin should compile with Java 11, but this suggestion assumes Java 17
+            "PatternMatchingInstanceof")
+}
+
+tasks.compileTestJava {
+    options.errorprone.enabled = false
 }
 
 checkerFramework {
