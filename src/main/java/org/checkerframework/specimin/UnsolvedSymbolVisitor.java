@@ -3376,52 +3376,39 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * Lookup the fully-qualified names of each type in the given string, and replace the simple type
-   * names in the given string with their fully-qualified equivalents.
+   * names in the given string with their fully-qualified equivalents. Return the result.
    *
-   * @param javacType
-   * @return
+   * @param javacType a type from javac
+   * @return that same type, with simple names in the class-to-package map replaced with FQNs
    */
   private String lookupFQNs(String javacType) {
-    Node parsedJavac = StaticJavaParser.parseType(javacType);
-    parsedJavac.accept(
-        new ModifierVisitor<Void>() {
-          @Override
-          public Visitable visit(ClassOrInterfaceType type, Void p) {
-            if (classAndPackageMap.containsKey(type.asString())) {
-              return new ClassOrInterfaceType(
-                  classAndPackageMap.get(type.asString()) + "." + type.asString());
-            } else {
-              return super.visit(type, p);
-            }
-          }
-        },
-        null);
-    //    String simpleJavacType = javacType;
-    //    if (simpleJavacType.contains("[")) {
-    //      simpleJavacType = simpleJavacType.substring(0, simpleJavacType.indexOf('['));
-    //    }
-    //    if (simpleJavacType.contains("<")) {
-    //      int tvIndex = simpleJavacType.indexOf('<');
-    //      String restOfType = simpleJavacType.substring(tvIndex + 1,
-    // simpleJavacType.lastIndexOf('>'));
-    //      simpleJavacType = simpleJavacType.substring(0, tvIndex);
-    //      System.out.println("simple javac type: " + simpleJavacType);
-    //      System.out.println("rest of type: " + restOfType);
-    //    }
-    //    if (isAClassPath(simpleJavacType) ||
-    // JavaLangUtils.isJavaLangOrPrimitiveName(simpleJavacType)) {
-    //      return javacType;
-    //    }
-    //    // Cannot call getPackageFromClassName here, because correctTypeName
-    //    // might be a type variable, and this method is called after the visitor finishes
-    //    // running. So, to find the package name, we need to strip off any type modifiers
-    //    // (array brackets, type vars, etc) to just get the simple type name, and then
-    //    // look that up.
-    //    String pkgName = classAndPackageMap.get(simpleJavacType);
-    //    if (pkgName != null) {
-    //      return pkgName + "." + javacType;
-    //    }
-    return parsedJavac.toString();
+    // It's possible that the type could start with a new (synthetic) type variable's declaration.
+    // That won't be parseable as a type, so strip it first and then re-add it.
+    String typeVarDecl, rest;
+    if (javacType.startsWith("<")) {
+      // + 1 to the index to also include the " " that will trail it
+      typeVarDecl = javacType.substring(0, javacType.indexOf('>') + 1);
+      rest = javacType.substring(javacType.indexOf('>') + 2);
+    } else {
+      typeVarDecl = "";
+      rest = javacType;
+    }
+    Visitable parsedJavac = StaticJavaParser.parseType(rest);
+    parsedJavac =
+        parsedJavac.accept(
+            new ModifierVisitor<Void>() {
+              @Override
+              public Visitable visit(ClassOrInterfaceType type, Void p) {
+                if (classAndPackageMap.containsKey(type.asString())) {
+                  return new ClassOrInterfaceType(
+                      classAndPackageMap.get(type.asString()) + "." + type.asString());
+                } else {
+                  return super.visit(type, p);
+                }
+              }
+            },
+            null);
+    return typeVarDecl + parsedJavac.toString();
   }
 
   /**
