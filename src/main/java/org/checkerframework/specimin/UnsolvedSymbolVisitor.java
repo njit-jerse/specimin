@@ -3343,27 +3343,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String correctTypeName) {
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
-    if (!isAClassPath(correctTypeName)
-        && !JavaLangUtils.isJavaLangOrPrimitiveName(correctTypeName)) {
-      // Cannot call getPackageFromClassName here, because correctTypeName
-      // might be a type variable, and this method is called after the visitor finishes
-      // running. So, to find the package name, we need to strip off any type modifiers
-      // (array brackets, type vars, etc) to just get the simple type name, and then
-      // look that up.
-      String correctSimpleTypeName = correctTypeName;
-      if (correctSimpleTypeName.contains("[")) {
-        correctSimpleTypeName =
-            correctSimpleTypeName.substring(0, correctSimpleTypeName.indexOf('['));
-      }
-      if (correctSimpleTypeName.contains("<")) {
-        correctSimpleTypeName =
-            correctSimpleTypeName.substring(0, correctSimpleTypeName.indexOf('<'));
-      }
-      String pkgName = classAndPackageMap.get(correctSimpleTypeName);
-      if (pkgName != null) {
-        correctTypeName = pkgName + "." + correctTypeName;
-      }
-    }
+    correctTypeName = lookupFQNs(correctTypeName);
+    System.out.println("incorrect type name: " + incorrectTypeName);
+    System.out.println("correct type name: " + correctTypeName);
 
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
@@ -3390,6 +3372,56 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     throw new RuntimeException("Could not find the corresponding missing class!");
+  }
+
+  /**
+   * Lookup the fully-qualified names of each type in the given string, and replace the simple type
+   * names in the given string with their fully-qualified equivalents.
+   *
+   * @param javacType
+   * @return
+   */
+  private String lookupFQNs(String javacType) {
+    Node parsedJavac = StaticJavaParser.parseType(javacType);
+    parsedJavac.accept(
+        new ModifierVisitor<Void>() {
+          @Override
+          public Visitable visit(ClassOrInterfaceType type, Void p) {
+            if (classAndPackageMap.containsKey(type.asString())) {
+              return new ClassOrInterfaceType(
+                  classAndPackageMap.get(type.asString()) + "." + type.asString());
+            } else {
+              return super.visit(type, p);
+            }
+          }
+        },
+        null);
+    //    String simpleJavacType = javacType;
+    //    if (simpleJavacType.contains("[")) {
+    //      simpleJavacType = simpleJavacType.substring(0, simpleJavacType.indexOf('['));
+    //    }
+    //    if (simpleJavacType.contains("<")) {
+    //      int tvIndex = simpleJavacType.indexOf('<');
+    //      String restOfType = simpleJavacType.substring(tvIndex + 1,
+    // simpleJavacType.lastIndexOf('>'));
+    //      simpleJavacType = simpleJavacType.substring(0, tvIndex);
+    //      System.out.println("simple javac type: " + simpleJavacType);
+    //      System.out.println("rest of type: " + restOfType);
+    //    }
+    //    if (isAClassPath(simpleJavacType) ||
+    // JavaLangUtils.isJavaLangOrPrimitiveName(simpleJavacType)) {
+    //      return javacType;
+    //    }
+    //    // Cannot call getPackageFromClassName here, because correctTypeName
+    //    // might be a type variable, and this method is called after the visitor finishes
+    //    // running. So, to find the package name, we need to strip off any type modifiers
+    //    // (array brackets, type vars, etc) to just get the simple type name, and then
+    //    // look that up.
+    //    String pkgName = classAndPackageMap.get(simpleJavacType);
+    //    if (pkgName != null) {
+    //      return pkgName + "." + javacType;
+    //    }
+    return parsedJavac.toString();
   }
 
   /**
