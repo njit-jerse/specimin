@@ -1,5 +1,6 @@
 package com.example;
 
+import java.util.List;
 import org.example.anotherpkg.Type;
 
 class Simple {
@@ -7,7 +8,7 @@ class Simple {
         return new Simple(method.getTypes());
     }
 
-    private Simple(Type[] types) {
+    private Simple(List<? extends Type> types) {
         throw new Error();
     }
 }
