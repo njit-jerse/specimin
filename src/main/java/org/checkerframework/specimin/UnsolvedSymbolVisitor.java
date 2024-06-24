@@ -3344,9 +3344,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
     correctTypeName = lookupFQNs(correctTypeName);
-    System.out.println("incorrect type name: " + incorrectTypeName);
-    System.out.println("correct type name: " + correctTypeName);
-
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();

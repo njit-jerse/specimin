@@ -58,7 +58,7 @@ task expectedTestOutputsMustCompile(type: Exec) {
 
 tasks.compileJava {
     // uncomment for testing
-    options.errorprone.enabled = false
+    // options.errorprone.enabled = false
     options.errorprone.disable(
             // JavaParser's visitor design requires us to regularly violate this rule
             "VoidUsed",
