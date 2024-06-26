@@ -33,16 +33,6 @@ jobs:
           overwrite-settings: true  # Overwrite any existing settings
           check-latest: false  # Do not check for the latest version
  
-      - name: Install Gradle
-        run: |
-          wget https://services.gradle.org/distributions/gradle-9.0-bin.zip
-          unzip gradle-9.0-bin.zip
-          sudo mv gradle-9.0 /opt/gradle
-          sudo ln -s /opt/gradle/bin/gradle /usr/bin/gradle
-
-      - name: Verify Gradle installation
-        run: gradle --version
-        
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
