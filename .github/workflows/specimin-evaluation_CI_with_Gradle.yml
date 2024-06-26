@@ -49,13 +49,18 @@ jobs:
 
       - name: Download CSV file
         run: |
+          echo $(pwd) 
           mkdir -p $(pwd)/CI
+          echo $(pwd)
           curl -sSL -o $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv https://raw.githubusercontent.com/NiharikaJamble/CI_FOR_SPECIMIN_PERFORMANCE/main/PROJECT_LIST_FOR_CI_TEST.csv
+          echo $(pwd)
 
       - name: Display CSV Content
         run: |
           echo "Content of PROJECT_LIST_FOR_CI_TEST.csv:"
+          echo $(pwd)
           cat $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv
+          echo $(pwd)
           
       - name: Run ASHE and Specimin analysis scripts
         run: |
