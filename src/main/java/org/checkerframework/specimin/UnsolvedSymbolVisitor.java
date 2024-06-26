@@ -3380,7 +3380,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    */
   private String lookupFQNs(String javacType) {
     // It's possible that the type could start with a new (synthetic) type variable's declaration.
-    // That won't be parseable as a type, so strip it first and then re-add it.
+    // That won't be parseable as a type, so strip it first and then re-add it; it isn't parseable
+    // as a type because, technically, it isn't. However, we post-process what we get from javac
+    // to add synthetic type variable declarations to some return types (where they'll be placed
+    // in front of the method). So, for example, we might have something like <SyntheticTypeVar>
+    // SyntheticTypeVar as the input to this method; the first part is the declaration of the type
+    // variable, and the second part is a use of the type variable. (There's a test that demonstrates
+    // this - LambdaBodyStaticUnsolved2Test.)
     String typeVarDecl, rest;
     if (javacType.startsWith("<")) {
       // + 1 to the index to also include the " " that will trail it
