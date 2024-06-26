@@ -65,6 +65,7 @@ jobs:
           $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv \
           $(pwd)/CI/REPO_CLONE_SPACE \
           $(pwd)/ASHE/src/main/resources/config.properties
+          echo $(pwd)
 
       - name: Parse compilable percentage
         id: parse_compilable_percentage
