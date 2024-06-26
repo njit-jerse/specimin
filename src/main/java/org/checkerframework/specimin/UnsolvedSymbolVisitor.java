@@ -3385,7 +3385,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // to add synthetic type variable declarations to some return types (where they'll be placed
     // in front of the method). So, for example, we might have something like <SyntheticTypeVar>
     // SyntheticTypeVar as the input to this method; the first part is the declaration of the type
-    // variable, and the second part is a use of the type variable. (There's a test that demonstrates
+    // variable, and the second part is a use of the type variable. (There's a test that shows
     // this - LambdaBodyStaticUnsolved2Test.)
     String typeVarDecl, rest;
     if (javacType.startsWith("<")) {
