@@ -33,6 +33,10 @@ jobs:
           overwrite-settings: true  # Overwrite any existing settings
           check-latest: false  # Do not check for the latest version
  
+      - name: Set up Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '9.0' # Specify the Gradle version you need
         
       - name: Install dependencies
         run: |
