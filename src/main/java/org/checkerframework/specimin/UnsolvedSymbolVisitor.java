@@ -3343,28 +3343,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       String correctTypeName) {
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
-    if (!isAClassPath(correctTypeName)
-        && !JavaLangUtils.isJavaLangOrPrimitiveName(correctTypeName)) {
-      // Cannot call getPackageFromClassName here, because correctTypeName
-      // might be a type variable, and this method is called after the visitor finishes
-      // running. So, to find the package name, we need to strip off any type modifiers
-      // (array brackets, type vars, etc) to just get the simple type name, and then
-      // look that up.
-      String correctSimpleTypeName = correctTypeName;
-      if (correctSimpleTypeName.contains("[")) {
-        correctSimpleTypeName =
-            correctSimpleTypeName.substring(0, correctSimpleTypeName.indexOf('['));
-      }
-      if (correctSimpleTypeName.contains("<")) {
-        correctSimpleTypeName =
-            correctSimpleTypeName.substring(0, correctSimpleTypeName.indexOf('<'));
-      }
-      String pkgName = classAndPackageMap.get(correctSimpleTypeName);
-      if (pkgName != null) {
-        correctTypeName = pkgName + "." + correctTypeName;
-      }
-    }
-
+    correctTypeName = lookupFQNs(correctTypeName);
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
@@ -3390,6 +3369,49 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
     throw new RuntimeException("Could not find the corresponding missing class!");
+  }
+
+  /**
+   * Lookup the fully-qualified names of each type in the given string, and replace the simple type
+   * names in the given string with their fully-qualified equivalents. Return the result.
+   *
+   * @param javacType a type from javac
+   * @return that same type, with simple names in the class-to-package map replaced with FQNs
+   */
+  private String lookupFQNs(String javacType) {
+    // It's possible that the type could start with a new (synthetic) type variable's declaration.
+    // That won't be parseable as a type, so strip it first and then re-add it; it isn't parseable
+    // as a type because, technically, it isn't. However, we post-process what we get from javac
+    // to add synthetic type variable declarations to some return types (where they'll be placed
+    // in front of the method). So, for example, we might have something like <SyntheticTypeVar>
+    // SyntheticTypeVar as the input to this method; the first part is the declaration of the type
+    // variable, and the second part is a use of the type variable. (There's a test that shows
+    // this - LambdaBodyStaticUnsolved2Test.)
+    String typeVarDecl, rest;
+    if (javacType.startsWith("<")) {
+      // + 1 to the index to also include the " " that will trail it
+      typeVarDecl = javacType.substring(0, javacType.indexOf('>') + 1);
+      rest = javacType.substring(javacType.indexOf('>') + 2);
+    } else {
+      typeVarDecl = "";
+      rest = javacType;
+    }
+    Visitable parsedJavac = StaticJavaParser.parseType(rest);
+    parsedJavac =
+        parsedJavac.accept(
+            new ModifierVisitor<Void>() {
+              @Override
+              public Visitable visit(ClassOrInterfaceType type, Void p) {
+                if (classAndPackageMap.containsKey(type.asString())) {
+                  return new ClassOrInterfaceType(
+                      classAndPackageMap.get(type.asString()) + "." + type.asString());
+                } else {
+                  return super.visit(type, p);
+                }
+              }
+            },
+            null);
+    return typeVarDecl + parsedJavac.toString();
   }
 
   /**
