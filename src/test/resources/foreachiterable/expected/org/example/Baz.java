@@ -2,7 +2,7 @@ package org.example;
 
 public class Baz {
 
-    public Foo[] getFoos() {
+    public org.example.Foo[] getFoos() {
         throw new Error();
     }
 }
