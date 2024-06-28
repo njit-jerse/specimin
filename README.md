@@ -44,12 +44,14 @@ Here is a sample command to run the tool: `./gradlew run --args='--outputDirecto
 
 # Important limitations and caveats
 
-The current implementation makes use of heuristics to distinguish simple from fully-qualified names
-at several points. In particular, it assumes that package and class names follow Java convention:
+The implementation makes use of heuristics to distinguish simple names from fully-qualified names
+at several points during approximate slicing. In particular, it assumes that package and class names
+follow Java convention:
 * class names always begin with an uppercase letter
 * package names always begin with a lowercase letter
 
-Specimin will likely produce incorrect output if the input program does not follow this convention.
+Specimin will likely produce incorrect output if the input program does not follow this convention
+when the program's full classpath is not provided as a `--jarPath` input.
 
 # Input/output examples
 

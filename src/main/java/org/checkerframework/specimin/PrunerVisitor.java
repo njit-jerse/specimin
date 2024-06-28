@@ -182,8 +182,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Helper method to check if the given fully-qualified class name is used as a parameter by any of
-   * the methods in methodsToEmpty.
+   * Helper method to check if the given fully-qualified class name is used as a parameter type by
+   * any of the methods in methodsToEmpty.
    *
    * @param classFullName a fully-qualified class name
    * @return true if this type name is a parameter of a used method
