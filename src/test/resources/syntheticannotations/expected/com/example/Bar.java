@@ -2,5 +2,5 @@ package com.example;
 
 public @interface Bar {
 
-    public Object param1();
+    public Object value();
 }

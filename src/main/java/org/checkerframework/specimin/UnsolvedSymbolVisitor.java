@@ -1949,7 +1949,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           }
         } else if (anno.isSingleMemberAnnotationExpr()) {
           unsolvedAnnotation.addMethod(
-              new UnsolvedMethod("param1", "Object", Collections.emptyList(), true));
+              new UnsolvedMethod("value", "Object", Collections.emptyList(), true));
         }
       }
     }
@@ -1991,7 +1991,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method updates a synthetic file based on a solvable expression. The input expression is
-   * solvable because its data is in the jar files that Specimin taks as input.
+   * solvable because its data is in the jar files that Specimin takes as input.
    *
    * @param expr the expression to be used
    */
