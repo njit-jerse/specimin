@@ -1019,6 +1019,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
+    processAnnotations(node.getAnnotations());
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
       boolean oldInsideTargetMember = insideTargetMember;
       insideTargetMember = true;
