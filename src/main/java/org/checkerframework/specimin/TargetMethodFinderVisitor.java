@@ -35,6 +35,7 @@ import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclarat
 import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -641,6 +642,13 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     catch (UnsolvedSymbolException e) {
       return;
     }
+
+    for (int i = 0; i < decl.getNumberOfParams(); ++i) {
+      // Why is there no getParams() method??
+      ResolvedParameterDeclaration p = decl.getParam(i);
+      ResolvedType pType = p.getType();
+      updateUsedClassBasedOnType(pType);
+    }
   }
 
   /**
@@ -676,12 +684,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ObjectCreationExpr newExpr, Void p) {
     if (insideTargetMember) {
-      ResolvedConstructorDeclaration resolved = newExpr.resolve();
-      usedMembers.add(resolved.getQualifiedSignature());
-      updateUsedClassWithQualifiedClassName(
-          resolved.getPackageName() + "." + resolved.getClassName(),
-          usedTypeElement,
-          nonPrimaryClassesToPrimaryClass);
+      try {
+        ResolvedConstructorDeclaration resolved = newExpr.resolve();
+        usedMembers.add(resolved.getQualifiedSignature());
+        updateUsedClassWithQualifiedClassName(
+            resolved.getPackageName() + "." + resolved.getClassName(),
+            usedTypeElement,
+            nonPrimaryClassesToPrimaryClass);
+        for (int i = 0; i < resolved.getNumberOfParams(); ++i) {
+          // Why is there no getParams() method??
+          ResolvedParameterDeclaration param = resolved.getParam(i);
+          ResolvedType pType = param.getType();
+          updateUsedClassBasedOnType(pType);
+        }
+      } catch (UnsolvedSymbolException e) {
+        throw new RuntimeException("trying to resolve : " + newExpr, e);
+      }
     }
     return super.visit(newExpr, p);
   }
@@ -960,7 +978,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   /**
    * Updates the list of used classes based on the resolved type of a used element, where a element
-   * can be a method, a field, a variable, or a parameter.
+   * can be a method, a field, a variable, or a parameter. Also updates the set of used classes
+   * based on component types, wildcard bounds, etc., as needed: any type that is used in the type
+   * will be included.
    *
    * @param type The resolved type of the used element.
    */
@@ -973,6 +993,10 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         updateUsedClassWithQualifiedClassName(
             bound.getType().describe(), usedTypeElement, nonPrimaryClassesToPrimaryClass);
       }
+      return;
+    } else if (type.isArray()) {
+      ResolvedType componentType = type.asArrayType().getComponentType();
+      updateUsedClassBasedOnType(componentType);
       return;
     }
     updateUsedClassWithQualifiedClassName(

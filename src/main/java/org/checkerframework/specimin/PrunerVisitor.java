@@ -173,6 +173,22 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
 
     // Check to see if import is used in a separate method used by the target method(s)
+    if (isUsedMethodParameterType(classFullName)) {
+      return super.visit(decl, p);
+    }
+
+    decl.remove();
+    return decl;
+  }
+
+  /**
+   * Helper method to check if the given fully-qualified class name is used as a parameter type by
+   * any of the methods in methodsToEmpty.
+   *
+   * @param classFullName a fully-qualified class name
+   * @return true if this type name is a parameter of a used method
+   */
+  public boolean isUsedMethodParameterType(String classFullName) {
     for (String member : membersToEmpty) {
       int openParen = member.indexOf('(');
       int closeParen = member.lastIndexOf(')');
@@ -188,25 +204,23 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         continue;
       } else if (index == 0) {
         if (parameters.length() == classFullName.length()) {
-          return super.visit(decl, p);
+          return true;
         }
         char after = parameters.charAt(index + classFullName.length());
-        // Check to see generic or if it matches the first parameter
-        if (after == '<' || after == ',') {
-          return super.visit(decl, p);
+        // Check to see if it's generic or an array, or if it matches the first parameter
+        if (after == '<' || after == ',' || after == '[') {
+          return true;
         }
       }
       // Check to see if it is a parameter
       else if (index > 1 && parameters.substring(index - 2, index).equals(", ")) {
         char after = parameters.charAt(index + classFullName.length());
-        if (after == '<' || after == ',') {
-          return super.visit(decl, p);
+        if (after == '<' || after == ',' || after == '[') {
+          return true;
         }
       }
     }
-
-    decl.remove();
-    return decl;
+    return false;
   }
 
   /**
@@ -314,7 +328,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
     decl = minimizeTypeParameters(decl);
     String classQualifiedName = decl.resolve().getQualifiedName();
-    if (!classesUsedByTargetMethods.contains(classQualifiedName)) {
+    if (!classesUsedByTargetMethods.contains(classQualifiedName)
+        && !isUsedMethodParameterType(classQualifiedName)) {
       decl.remove();
       return decl;
     }
