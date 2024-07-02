@@ -46,9 +46,10 @@ jobs:
           
       - name: Run ASHE and Specimin analysis scripts
         run: |
-          python ashe_scripts/run_ashe_for_stats.py \
-            --ashe_path "/home/runner/work/ashe_repository" \
-            --csv_path "/home/runner/work/specimin/Specimin_Eval_Project_List.csv" \
-            --clone_path "/home/runner/work/cloned_repositories" \
-            --props_file_path "/home/runner/work/config_properties"
+          python specimin/ashe_scripts/run_ashe_for_stats.py \
+            $(pwd)/ASHE \
+            specimin/Specimin_Eval_Project_List.csv \
+            $(pwd)/CI_REPO_CLONE_SPACE \
+            $(pwd)/ASHE/src/main/resources/config.properties
+
 
