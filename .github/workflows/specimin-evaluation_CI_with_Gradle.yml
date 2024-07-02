@@ -44,12 +44,19 @@ jobs:
           echo "Contents of Specimin_Eval_Project_List.csv:"
           cat Specimin_Eval_Project_List.csv
           
-      - name: Run ASHE and Specimin analysis scripts
+
+      - name: List Files for Debugging
+        run: ls -R specimin
+
+      - name: Run ASHE and Specimin Analysis Scripts
         run: |
-          python specimin/ashe_scripts/run_ashe_for_stats.py \
+          python3 specimin/ashe_scripts/run_ashe_for_stats.py \
             $(pwd)/ASHE \
             specimin/Specimin_Eval_Project_List.csv \
             $(pwd)/CI_REPO_CLONE_SPACE \
             $(pwd)/ASHE/src/main/resources/config.properties
+
+      - name: Display Current Directory Again
+        run: echo "Current directory: $(pwd)"
 
 
