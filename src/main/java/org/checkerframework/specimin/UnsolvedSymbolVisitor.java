@@ -1918,15 +1918,25 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // Process any annotations that may be present in generic parameter types,
     // like Collection<@KeyForBottom ? extends T> (check AnnoInGenericTargetTest)
     for (Parameter param : node.getParameters()) {
-      Optional<NodeList<Type>> typeArguments =
-          param.getType().asClassOrInterfaceType().getTypeArguments();
+      Type paramType = param.getType();
 
-      if (!typeArguments.isPresent()) {
-        continue;
+      // Handle arrays of generics
+      if (paramType.isArrayType()) {
+        paramType = paramType.asArrayType().getElementType();
       }
 
-      for (Type type : typeArguments.get()) {
-        processAnnotations(type.getAnnotations());
+      // Generics are only available with class/interface types
+      if (paramType.isClassOrInterfaceType()) {
+        Optional<NodeList<Type>> typeArguments =
+            paramType.asClassOrInterfaceType().getTypeArguments();
+
+        if (!typeArguments.isPresent()) {
+          continue;
+        }
+
+        for (Type type : typeArguments.get()) {
+          processAnnotations(type.getAnnotations());
+        }
       }
     }
 
