@@ -439,6 +439,21 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
+
+      // Process any annotations that may be present in generic parameter types,
+      // like Collection<@KeyForBottom ? extends T> (check AnnoInGenericTargetTest)
+      for (Parameter param : method.getParameters()) {
+        Optional<NodeList<Type>> typeArguments =
+            param.getType().asClassOrInterfaceType().getTypeArguments();
+
+        if (!typeArguments.isPresent()) {
+          continue;
+        }
+
+        for (Type type : typeArguments.get()) {
+          processAnnotations(type.getAnnotations());
+        }
+      }
       processAnnotations(method.getAnnotations());
       insideTargetMember = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());

@@ -826,6 +826,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(VariableDeclarator decl, Void p) {
+    System.out.println(decl);
     boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
     // This part is to update the symbol table.
     boolean isAField =
@@ -1019,7 +1020,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
-    processAnnotations(node.getAnnotations());
+    // Annotations are handled by processMethodDeclaration
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
       boolean oldInsideTargetMember = insideTargetMember;
       insideTargetMember = true;
@@ -1911,6 +1912,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           updateUnsolvedClassOrInterfaceWithMethod(
               node, parentClassName, nodeTypeSimpleForm, false);
         }
+      }
+    }
+
+    // Process any annotations that may be present in generic parameter types,
+    // like Collection<@KeyForBottom ? extends T> (check AnnoInGenericTargetTest)
+    for (Parameter param : node.getParameters()) {
+      Optional<NodeList<Type>> typeArguments =
+          param.getType().asClassOrInterfaceType().getTypeArguments();
+
+      if (!typeArguments.isPresent()) {
+        continue;
+      }
+
+      for (Type type : typeArguments.get()) {
+        processAnnotations(type.getAnnotations());
       }
     }
 
