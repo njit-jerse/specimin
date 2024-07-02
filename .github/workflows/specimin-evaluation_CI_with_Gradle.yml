@@ -43,7 +43,10 @@ jobs:
         run: |
           echo "Contents of Specimin_Eval_Project_List.csv:"
           cat Specimin_Eval_Project_List.csv
-          
+
+      - name: Display CSV File Contents
+        run: |
+          cat /home/runner/work/specimin/specimin/Specimin_Eval_Project_List.csv   
 
       - name: List Files for Debugging
         run: ls -R
