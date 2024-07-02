@@ -50,6 +50,8 @@ jobs:
 
       - name: Run ASHE and Specimin Analysis Scripts
         run: |
+          chmod +x run_ashe_for_stats.py
+          chmod 644 Specimin_Eval_Project_List.csv
           python3 ashe_scripts/run_ashe_for_stats.py \
             $(pwd)/ASHE \
             Specimin_Eval_Project_List.csv \
