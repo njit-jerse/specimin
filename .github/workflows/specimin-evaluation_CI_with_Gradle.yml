@@ -59,7 +59,8 @@ jobs:
             $(pwd)/ASHE \
             $(pwd)/Specimin_Eval_Project_List.csv \
             $(pwd)/CI_REPO_CLONE_SPACE \
-            $(pwd)ASHE/src/main/java/edu/njit/jerse/config/Configuration.java
+            $(pwd)/ASHE/src/main/resources/config.properties
+
 
             
 
