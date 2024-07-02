@@ -52,22 +52,22 @@ jobs:
           echo $(pwd) 
           mkdir -p $(pwd)/CI
           echo $(pwd)
-          curl -sSL -o $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv https://raw.githubusercontent.com/NiharikaJamble/CI_FOR_SPECIMIN_PERFORMANCE/main/PROJECT_LIST_FOR_CI_TEST.csv
+          curl -sSL -o $(pwd)/Specimin_Eval_Project_List.csv https://github.com/NiharikaJamble/specimin/blob/main/Specimin_Eval_Project_List.csv
           echo $(pwd)
 
       - name: Display CSV Content
         run: |
-          echo "Content of PROJECT_LIST_FOR_CI_TEST.csv:"
+          echo "Content of Specimin_Eval_Project_List.csv:"
           echo $(pwd)
-          cat $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv
+          cat $(pwd)/Specimin_Eval_Project_List.csv
           echo $(pwd)
           
       - name: Run ASHE and Specimin analysis scripts
         run: |
           echo $(pwd)
-          python3 specimin-evaluation/ashe_scripts/run_ashe_for_stats.py \
+          python3 specimin/ashe_scripts/run_ashe_for_stats.py \
           $(pwd)/ASHE \
-          $(pwd)/CI/PROJECT_LIST_FOR_CI_TEST.csv \
+          $(pwd)/Specimin_Eval_Project_List.csv \
           $(pwd)/CI/REPO_CLONE_SPACE \
           $(pwd)/ASHE/src/main/resources/config.properties
           echo $(pwd)
@@ -75,7 +75,7 @@ jobs:
       - name: Parse compilable percentage
         id: parse_compilable_percentage
         run: |
-          python3 specimin-evaluation/ashe_scripts/specimin_statistics.py \
+          python3 specimin/ashe_scripts/specimin_statistics.py \
           $(pwd)/ASHE/logs/app.log
           echo $(pwd)
           grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > compilable_percentage.txt
