@@ -51,13 +51,19 @@ jobs:
       - name: List Files for Debugging
         run: ls -R
 
-      - name: Run ASHE and Specimin Analysis Scripts
+
+      - name: Clone Project B
         run: |
-          chmod +x ashe_scripts/run_ashe_for_stats.py
-          chmod 644 Specimin_Eval_Project_List.csv
+          git clone https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
+
+      - name: Make run_ashe_for_stats.py executable
+        run: chmod +x ashe_scripts/run_ashe_for_stats.py
+
+      - name: Run the script
+        run: |
           python3 ashe_scripts/run_ashe_for_stats.py \
             $(pwd)/ASHE \
-            $(pwd)/Specimin_Eval_Project_List.csv \
+            Specimin_Eval_Project_List.csv \
             $(pwd)/CI_REPO_CLONE_SPACE \
             $(pwd)/ASHE/src/main/resources/config.properties
 
