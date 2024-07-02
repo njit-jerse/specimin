@@ -2,7 +2,6 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -13,14 +12,16 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -287,8 +288,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
 
-    processAnnotations(decl.getAnnotations());
-
     manageClassFQNamePreSuper(decl);
     Visitable result = super.visit(decl, p);
     manageClassFQNamePostSuper(decl);
@@ -297,8 +296,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(EnumDeclaration decl, Void p) {
-    processAnnotations(decl.getAnnotations());
-
     manageClassFQNamePreSuper(decl);
     Visitable result = super.visit(decl, p);
     manageClassFQNamePostSuper(decl);
@@ -362,8 +359,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
-
-      processAnnotations(method.getAnnotations());
     } else {
       updateUnfoundMethods(methodName);
     }
@@ -402,8 +397,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         usedTypeElement.add(this.classFQName);
         insideTargetMember = oldInsideTargetMember;
 
-        processAnnotations(((FieldDeclaration) node.getParentNode().get()).getAnnotations());
-
         return result;
       }
     }
@@ -440,32 +433,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
           usedTypeElement,
           nonPrimaryClassesToPrimaryClass);
 
-      // Process any annotations that may be present in generic parameter types,
-      // like Collection<@KeyForBottom ? extends T> (check AnnoInGenericTargetTest)
-      for (Parameter param : method.getParameters()) {
-        Type paramType = param.getType();
-  
-        // Handle arrays of generics
-        if (paramType.isArrayType()) {
-          paramType = paramType.asArrayType().getElementType();
-        }
-  
-        // Generics are only available with class/interface types
-        if (paramType.isClassOrInterfaceType()) {
-          Optional<NodeList<Type>> typeArguments =
-              paramType.asClassOrInterfaceType().getTypeArguments();
-  
-          if (!typeArguments.isPresent()) {
-            continue;
-          }
-  
-          for (Type type : typeArguments.get()) {
-            processAnnotations(type.getAnnotations());
-          }
-        }
-      }
-      
-      processAnnotations(method.getAnnotations());
       insideTargetMember = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       // make sure that differences in spacing does not interfere with the result
@@ -530,8 +497,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             throw new RuntimeException("cannot solve: " + para, e);
           }
         }
-
-        processAnnotations(para.getAnnotations());
 
         if (paramType.isReferenceType()) {
           String paraTypeFullName =
@@ -695,7 +660,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       ResolvedReferenceType typeResolved =
           JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type);
       updateUsedClassBasedOnType(typeResolved);
-      processAnnotations(type.getAnnotations());
     }
     // if the type has a fully-qualified form, JavaParser also consider other components rather than
     // the class name as ClassOrInterfaceType. For example, if the type is org.A.B, then JavaParser
@@ -760,7 +724,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         Visitable result = super.visit(enumConstantDeclaration, p);
         insideTargetMember = oldInsideTargetMember;
 
-        processAnnotations(enumConstantDeclaration.getAnnotations());
         return result;
       }
     }
@@ -816,6 +779,30 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(expr, p);
+  }
+
+  @Override
+  public Visitable visit(MarkerAnnotationExpr anno, Void p) {
+    String qualifiedName = anno.resolve().getQualifiedName();
+    updateUsedClassWithQualifiedClassName(
+        qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+    return super.visit(anno, p);
+  }
+
+  @Override
+  public Visitable visit(NormalAnnotationExpr anno, Void p) {
+    String qualifiedName = anno.resolve().getQualifiedName();
+    updateUsedClassWithQualifiedClassName(
+        qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+    return super.visit(anno, p);
+  }
+
+  @Override
+  public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
+    String qualifiedName = anno.resolve().getQualifiedName();
+    updateUsedClassWithQualifiedClassName(
+        qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+    return super.visit(anno, p);
   }
 
   /**
@@ -875,19 +862,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
             .collect(Collectors.joining(" "));
     // sometimes an extra space may occur if an annotation right after a < was removed
     return filteredMethodDeclaration.replace("< ", "<");
-  }
-
-  /**
-   * Resolve annotations one by one and adds the in the usedClass set.
-   *
-   * @param annotations The annotations to resolve
-   */
-  public void processAnnotations(NodeList<AnnotationExpr> annotations) {
-    for (AnnotationExpr anno : annotations) {
-      String qualifiedName = anno.resolve().getQualifiedName();
-      updateUsedClassWithQualifiedClassName(
-          qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
-    }
   }
 
   /**

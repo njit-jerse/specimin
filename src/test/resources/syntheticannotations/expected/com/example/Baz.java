@@ -2,7 +2,7 @@ package com.example;
 
 public @interface Baz {
 
-    public Object foo();
+    public String foo();
 
-    public Object bar();
+    public Class<?> bar();
 }

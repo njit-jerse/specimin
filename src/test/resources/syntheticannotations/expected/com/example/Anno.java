@@ -1,6 +1,6 @@
 package com.example;
 
-public @interface Bar {
+public @interface Anno {
 
     public int value();
 }
