@@ -1016,7 +1016,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
-    // Annotations are handled by processMethodDeclaration
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
       boolean oldInsideTargetMember = insideTargetMember;
       insideTargetMember = true;
@@ -1375,59 +1374,86 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  @SuppressWarnings("EmptyCatch")
   public Visitable visit(MarkerAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
+      if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
+        return super.visit(anno, p);
+      }
     } catch (UnsolvedSymbolException ex) {
-      UnsolvedClassOrInterface unsolvedAnnotation =
-          updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
-
-      unsolvedAnnotation.setIsAnAnnotationToTrue();
+      // Remove annotations from jar to avoid compile errors in output
+      // Without this, annotations may not compile (try with Checker Framework) due to
+      // missing imports within their files
     }
+
+    UnsolvedClassOrInterface unsolvedAnnotation =
+        updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+
+    unsolvedAnnotation.setIsAnAnnotationToTrue();
+
     return super.visit(anno, p);
   }
 
   @Override
+  @SuppressWarnings("EmptyCatch")
   public Visitable visit(NormalAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
-    } catch (UnsolvedSymbolException ex) {
-      UnsolvedClassOrInterface unsolvedAnnotation =
-          updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
-
-      unsolvedAnnotation.setIsAnAnnotationToTrue();
-
-      // Add annotation parameters and resolve the annotation parameters to their types
-      for (MemberValuePair pair : anno.getPairs()) {
-        unsolvedAnnotation.addMethod(
-            new UnsolvedMethod(
-                pair.getNameAsString(),
-                getValueTypeFromAnnotationExpression(pair.getValue()),
-                Collections.emptyList(),
-                true));
+      if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
+        return super.visit(anno, p);
       }
+    } catch (UnsolvedSymbolException ex) {
+      // Remove annotations from jar to avoid compile errors in output
+      // Without this, annotations may not compile (try with Checker Framework) due to
+      // missing imports within their files
     }
+
+    UnsolvedClassOrInterface unsolvedAnnotation =
+        updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+
+    unsolvedAnnotation.setIsAnAnnotationToTrue();
+
+    // Add annotation parameters and resolve the annotation parameters to their types
+    for (MemberValuePair pair : anno.getPairs()) {
+      unsolvedAnnotation.addMethod(
+          new UnsolvedMethod(
+              pair.getNameAsString(),
+              getValueTypeFromAnnotationExpression(pair.getValue()),
+              Collections.emptyList(),
+              true));
+    }
+
     return super.visit(anno, p);
   }
 
   @Override
+  @SuppressWarnings("EmptyCatch")
   public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
+      if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
+        return super.visit(anno, p);
+      }
     } catch (UnsolvedSymbolException ex) {
-      UnsolvedClassOrInterface unsolvedAnnotation =
-          updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
-
-      unsolvedAnnotation.setIsAnAnnotationToTrue();
-
-      // Add annotation parameters and resolve the annotation parameters to their types
-      unsolvedAnnotation.addMethod(
-          new UnsolvedMethod(
-              "value",
-              getValueTypeFromAnnotationExpression(anno.getMemberValue()),
-              Collections.emptyList(),
-              true));
+      // Remove annotations from jar to avoid compile errors in output
+      // Without this, annotations may not compile (try with Checker Framework) due to
+      // missing imports within their files
     }
+
+    UnsolvedClassOrInterface unsolvedAnnotation =
+        updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+
+    unsolvedAnnotation.setIsAnAnnotationToTrue();
+
+    // Add annotation parameters and resolve the annotation parameters to their types
+    unsolvedAnnotation.addMethod(
+        new UnsolvedMethod(
+            "value",
+            getValueTypeFromAnnotationExpression(anno.getMemberValue()),
+            Collections.emptyList(),
+            true));
+
     return super.visit(anno, p);
   }
 
