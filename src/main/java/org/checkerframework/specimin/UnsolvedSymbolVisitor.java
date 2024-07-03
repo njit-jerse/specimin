@@ -1385,6 +1385,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // Remove annotations from jar to avoid compile errors in output
       // Without this, annotations may not compile (try with Checker Framework) due to
       // missing imports within their files
+    } catch (ClassCastException ex) {
+      // A ClassCastException is only raised in specific circumstances; for example, when an
+      // annotation is an inner class (has a dot) and is used in/on a class which references itself:
+      /*
+      @Foo.Bar
+      public class Test {
+        Test foo() {
+            return null;
+        }
+      }
+      */
+      // In these cases, a JavaParserClassDeclaration is being casted to a
+      // ResolvedAnnotationDeclaration, thus causing the error. However, through
+      // testing, this exception was only raised on subsequent resolve()s (not the
+      // first), so the synthetic type should already be generated.
+      return super.visit(anno, p);
     }
 
     UnsolvedClassOrInterface unsolvedAnnotation =
@@ -1407,6 +1423,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // Remove annotations from jar to avoid compile errors in output
       // Without this, annotations may not compile (try with Checker Framework) due to
       // missing imports within their files
+    } catch (ClassCastException ex) {
+      // A ClassCastException is only raised in specific circumstances; for example, when an
+      // annotation is an inner class (has a dot) and is used in/on a class which references itself:
+      /*
+      @Foo.Bar
+      public class Test {
+        Test foo() {
+            return null;
+        }
+      }
+      */
+      // In these cases, a JavaParserClassDeclaration is being casted to a
+      // ResolvedAnnotationDeclaration, thus causing the error. However, through
+      // testing, this exception was only raised on subsequent resolve()s (not the
+      // first), so the synthetic type should already be generated.
+      return super.visit(anno, p);
     }
 
     UnsolvedClassOrInterface unsolvedAnnotation =
@@ -1439,6 +1471,22 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // Remove annotations from jar to avoid compile errors in output
       // Without this, annotations may not compile (try with Checker Framework) due to
       // missing imports within their files
+    } catch (ClassCastException ex) {
+      // A ClassCastException is only raised in specific circumstances; for example, when an
+      // annotation is an inner class (has a dot) and is used in/on a class which references itself:
+      /*
+      @Foo.Bar
+      public class Test {
+        Test foo() {
+            return null;
+        }
+      }
+      */
+      // In these cases, a JavaParserClassDeclaration is being casted to a
+      // ResolvedAnnotationDeclaration, thus causing the error. However, through
+      // testing, this exception was only raised on subsequent resolve()s (not the
+      // first), so the synthetic type should already be generated.
+      return super.visit(anno, p);
     }
 
     UnsolvedClassOrInterface unsolvedAnnotation =
