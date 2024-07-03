@@ -108,7 +108,6 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   private void handleAnnotations(NodeList<AnnotationExpr> annotations) {
     for (AnnotationExpr anno : annotations) {
       usedClass.add(anno.resolve().getQualifiedName());
-      System.out.println(anno.resolve().getQualifiedName());
 
       if (anno.isSingleMemberAnnotationExpr()) {
         Expression value = anno.asSingleMemberAnnotationExpr().getMemberValue();
@@ -120,8 +119,6 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-    System.out.println(usedClass);
-    System.out.println(usedMembers);
   }
 
   /**
