@@ -153,16 +153,26 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
       // All elements in the same array will be the same type
       handleAnnotationValue(values.get(0));
     } else if (value.isClassExpr()) {
-      ResolvedType resolved = value.asClassExpr().calculateResolvedType();
+      try {
+        ResolvedType resolved = value.asClassExpr().calculateResolvedType();
 
-      if (resolved.isReferenceType()) {
-        usedClass.add(resolved.asReferenceType().getQualifiedName());
+        if (resolved.isReferenceType()) {
+          usedClass.add(resolved.asReferenceType().getQualifiedName());
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // TODO: retrigger synthetic type generation
+        return;
       }
     } else if (value.isFieldAccessExpr()) {
-      ResolvedType resolved = value.asFieldAccessExpr().calculateResolvedType();
+      try {
+        ResolvedType resolved = value.asFieldAccessExpr().calculateResolvedType();
 
-      if (resolved.isReferenceType()) {
-        usedClass.add(resolved.asReferenceType().getQualifiedName());
+        if (resolved.isReferenceType()) {
+          usedClass.add(resolved.asReferenceType().getQualifiedName());
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // TODO: retrigger synthetic type generation
+        return;
       }
     } else if (value.isAnnotationExpr()) {
       // Create a NodeList so we can re-handle the annotation in handleAnnotations
