@@ -27,17 +27,14 @@ jobs:
           java-version: '21'  # Replace with the Java version you need (e.g., 11, 16, etc.)
           distribution: 'adopt'  # Specify the distribution of Java (e.g., adopt, zulu, etc.)
           architecture: 'x64'  # Specify the architecture of Java (e.g., x64, x86)
-        # server-id: 'github'  # Specify the server ID (typically 'github')
-        # server-username: ${{ github.actor }}  # Use GITHUB_ACTOR for server username
           server-password: ${{ secrets.GITHUB_TOKEN }}  # Use GITHUB_TOKEN for server password
           overwrite-settings: true  # Overwrite any existing settings
           check-latest: false  # Do not check for the latest version
- 
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           # pip install -r requirements.txt
-
 
       - name: Display CSV Contents
         run: |
@@ -51,10 +48,13 @@ jobs:
       - name: List Files for Debugging
         run: ls -R
 
-
       - name: Clone Project B
         run: |
           git clone https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
+
+      - name: Update Config File in Project B
+        run: |
+          echo "specimin.tool.path=$(pwd)" >> ASHE/src/main/resources/config.properties
 
       - name: Make run_ashe_for_stats.py executable
         run: chmod +x ashe_scripts/run_ashe_for_stats.py
@@ -66,11 +66,6 @@ jobs:
             $(pwd)/Specimin_Eval_Project_List.csv \
             $(pwd)/CI_REPO_CLONE_SPACE \
             $(pwd)/ASHE/src/main/resources/config.properties
-
-
             
-
       - name: Display Current Directory Again
         run: echo "Current directory:" $(pwd)
-
-
