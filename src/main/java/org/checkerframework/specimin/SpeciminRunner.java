@@ -432,6 +432,14 @@ public class SpeciminRunner {
 
     updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
 
+    AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
+        new AnnotationParameterTypesVisitor(
+            solveMethodOverridingVisitor.getUsedMembers(), updatedUsedClass);
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(annotationParameterTypesVisitor, null);
+    }
+
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
         new MustImplementMethodsVisitor(
             solveMethodOverridingVisitor.getUsedMembers(),
