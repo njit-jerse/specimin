@@ -14,6 +14,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.Optional;
 import java.util.Set;
@@ -43,29 +44,41 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration decl, Void p) {
-    if (usedMembers.contains(decl.resolve().getQualifiedSignature())) {
-      handleAnnotations(decl.getAnnotations());
+    try {
+      if (usedMembers.contains(decl.resolve().getQualifiedSignature())) {
+        handleAnnotations(decl.getAnnotations());
+      }
+    } catch (UnsolvedSymbolException ex) {
+      return super.visit(decl, p);
     }
     return super.visit(decl, p);
   }
 
   @Override
   public Visitable visit(MethodDeclaration decl, Void p) {
-    if (usedMembers.contains(decl.resolve().getQualifiedSignature())) {
-      handleAnnotations(decl.getAnnotations());
+    try {
+      if (usedMembers.contains(decl.resolve().getQualifiedSignature())) {
+        handleAnnotations(decl.getAnnotations());
 
-      for (Parameter param : decl.getParameters()) {
-        handleAnnotations(param.getAnnotations());
+        for (Parameter param : decl.getParameters()) {
+          handleAnnotations(param.getAnnotations());
+        }
       }
+    } catch (UnsolvedSymbolException ex) {
+      return super.visit(decl, p);
     }
     return super.visit(decl, p);
   }
 
   @Override
   public Visitable visit(FieldDeclaration decl, Void p) {
-    String classFullName = decl.resolve().declaringType().getQualifiedName();
-    if (usedMembers.contains(classFullName + "#" + decl.resolve().getName())) {
-      handleAnnotations(decl.getAnnotations());
+    try {
+      String classFullName = decl.resolve().declaringType().getQualifiedName();
+      if (usedMembers.contains(classFullName + "#" + decl.resolve().getName())) {
+        handleAnnotations(decl.getAnnotations());
+      }
+    } catch (UnsolvedSymbolException ex) {
+      return super.visit(decl, p);
     }
     return super.visit(decl, p);
   }
