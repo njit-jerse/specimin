@@ -2,9 +2,9 @@ package com.example;
 
 import java.util.Collection;
 import org.checkerframework.checker.nullness.qual.*;
+import org.checkerframework.checker.initialization.qual.Initialized;
 
 class Simple {
-
     @Initialized
     @NonNull
     @UnknownKeyFor

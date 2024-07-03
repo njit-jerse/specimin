@@ -1,10 +1,8 @@
-package com.example;
+package org.checkerframework.checker.initialization.qual;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
 
 @Target(ElementType.TYPE_USE)
-public @interface Anno {
-
-    public int value();
+public @interface Initialized {
 }
