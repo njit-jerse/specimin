@@ -454,9 +454,7 @@ public class UnsolvedClassOrInterface {
     // Synthetic annotations used within generic types cause compile errors,
     // so we need to add this to prevent them
     if (isAnAnnotation) {
-      sb.append("import java.lang.annotation.ElementType;\n");
-      sb.append("import java.lang.annotation.Target;\n");
-      sb.append("@Target(ElementType.TYPE_USE)\n");
+      sb.append("@java.lang.annotation.Target(java.lang.annotation.ElementType.TYPE_USE)\n");
     }
 
     sb.append("public ");
