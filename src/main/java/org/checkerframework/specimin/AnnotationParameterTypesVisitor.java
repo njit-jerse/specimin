@@ -8,6 +8,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -73,9 +74,11 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(FieldDeclaration decl, Void p) {
     try {
-      String classFullName = decl.resolve().declaringType().getQualifiedName();
-      if (usedMembers.contains(classFullName + "#" + decl.resolve().getName())) {
-        handleAnnotations(decl.getAnnotations());
+      for (VariableDeclarator var : decl.getVariables()) {
+        if (usedMembers.contains(PrunerVisitor.getEnclosingClassLike(decl) + "#" + var.getNameAsString())) {
+          handleAnnotations(decl.getAnnotations());
+          break;
+        }
       }
     } catch (UnsolvedSymbolException ex) {
       return super.visit(decl, p);
