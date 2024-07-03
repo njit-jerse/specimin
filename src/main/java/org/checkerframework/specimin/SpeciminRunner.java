@@ -176,7 +176,12 @@ public class SpeciminRunner {
       argsToDecompile.add(root);
       ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
       // delete unneccessary legal files
-      FileUtils.deleteDirectory(new File(root + "META-INF"));
+      try {
+        FileUtils.deleteDirectory(new File(root + "META-INF"));
+      } catch (IOException ex) {
+        root = "/" + root;
+        root = root.substring(1);
+      }
     }
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
