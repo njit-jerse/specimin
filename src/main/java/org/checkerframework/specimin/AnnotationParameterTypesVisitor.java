@@ -45,28 +45,30 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration decl, Void p) {
-    try {
-      if (usedMembers.contains(decl.resolve().getQualifiedSignature())) {
-        handleAnnotations(decl.getAnnotations());
-      }
-    } catch (UnsolvedSymbolException ex) {
-      return super.visit(decl, p);
+    String methodQualifiedSignature =
+        PrunerVisitor.getEnclosingClassLike(decl)
+            + "#"
+            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
+                decl.getDeclarationAsString(false, false, false));
+    if (usedMembers.contains(methodQualifiedSignature)) {
+      handleAnnotations(decl.getAnnotations());
     }
     return super.visit(decl, p);
   }
 
   @Override
   public Visitable visit(MethodDeclaration decl, Void p) {
-    try {
-      if (usedMembers.contains(decl.resolve().getQualifiedSignature())) {
-        handleAnnotations(decl.getAnnotations());
+    String methodQualifiedSignature =
+        PrunerVisitor.getEnclosingClassLike(decl)
+            + "#"
+            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
+                decl.getDeclarationAsString(false, false, false));
+    if (usedMembers.contains(methodQualifiedSignature)) {
+      handleAnnotations(decl.getAnnotations());
 
-        for (Parameter param : decl.getParameters()) {
-          handleAnnotations(param.getAnnotations());
-        }
+      for (Parameter param : decl.getParameters()) {
+        handleAnnotations(param.getAnnotations());
       }
-    } catch (UnsolvedSymbolException ex) {
-      return super.visit(decl, p);
     }
     return super.visit(decl, p);
   }
@@ -75,7 +77,8 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   public Visitable visit(FieldDeclaration decl, Void p) {
     try {
       for (VariableDeclarator var : decl.getVariables()) {
-        if (usedMembers.contains(PrunerVisitor.getEnclosingClassLike(decl) + "#" + var.getNameAsString())) {
+        if (usedMembers.contains(
+            PrunerVisitor.getEnclosingClassLike(decl) + "#" + var.getNameAsString())) {
           handleAnnotations(decl.getAnnotations());
           break;
         }
