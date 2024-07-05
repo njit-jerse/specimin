@@ -37,11 +37,11 @@ jobs:
           # pip install -r requirements.txt
       - name: Display CSV Contents
         run: |
-          echo "Contents of Specimin_Eval_Project_List.csv:"
-          cat Specimin_Eval_Project_List.csv
+          echo "Contents of plume_list.csv:"
+          cat plume_list.csv
       - name: Display CSV File Contents
         run: |
-          cat /home/runner/work/specimin/specimin/Specimin_Eval_Project_List.csv   
+          cat /home/runner/work/specimin/specimin/plume_list.csv   
       - name: List Files for Debugging
         run: ls -R
 
@@ -58,8 +58,8 @@ jobs:
         run: |
           python3 ashe_scripts/run_ashe_for_stats.py \
             $(pwd)/ASHE \
-            $(pwd)/Specimin_Eval_Project_List.csv \
-            $(pwd)/CI_REPO_CLONE_SPACE \
+            $(pwd)/plume_list.csv \
+            $(pwd)/CI_REPO_CLONE_SPACE_PLUME \
             $(pwd)/ASHE/src/main/resources/config.properties
             
       - name: Display Current Directory Again
