@@ -176,12 +176,7 @@ public class SpeciminRunner {
       argsToDecompile.add(root);
       ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
       // delete unneccessary legal files
-      try {
-        FileUtils.deleteDirectory(new File(root + "META-INF"));
-      } catch (IOException ex) {
-        root = "/" + root;
-        root = root.substring(1);
-      }
+      FileUtils.deleteDirectory(new File(root + "META-INF"));
     }
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
@@ -430,20 +425,22 @@ public class SpeciminRunner {
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
 
+    AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
+        new AnnotationParameterTypesVisitor(
+            solveMethodOverridingVisitor.getUsedMembers(),
+            solveMethodOverridingVisitor.getUsedClass());
+
+    // Visit annotations of added classes
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(annotationParameterTypesVisitor, null);
+    }
+
     // remove the unsolved annotations in the newly added files.
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(annoRemover, null);
     }
 
     updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
-
-    AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
-        new AnnotationParameterTypesVisitor(
-            solveMethodOverridingVisitor.getUsedMembers(), updatedUsedClass);
-
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(annotationParameterTypesVisitor, null);
-    }
 
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
         new MustImplementMethodsVisitor(

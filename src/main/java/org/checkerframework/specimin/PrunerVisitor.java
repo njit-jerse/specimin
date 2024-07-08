@@ -4,6 +4,7 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -636,6 +637,10 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
     }
 
+    if (parent instanceof AnnotationDeclaration) {
+      return ((AnnotationDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    }
+
     throw new RuntimeException("unexpected kind of node: " + parent.getClass());
   }
 
@@ -650,7 +655,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    */
   public static Node getEnclosingClassLike(Node node) {
     Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration || parent instanceof EnumDeclaration)) {
+    while (!(parent instanceof ClassOrInterfaceDeclaration
+        || parent instanceof EnumDeclaration
+        || parent instanceof AnnotationDeclaration)) {
       parent = parent.getParentNode().orElseThrow();
     }
     return parent;

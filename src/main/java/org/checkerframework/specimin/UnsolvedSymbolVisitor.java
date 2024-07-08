@@ -15,6 +15,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -904,7 +905,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr node, Void arg) {
-    if (!insideTargetMember) {
+    Optional<Node> parent = node.getParentNode();
+
+    boolean insideAnnotation = parent.isPresent() && (parent.get() instanceof AnnotationExpr);
+
+    if (!insideTargetMember && !insideAnnotation) {
       return super.visit(node, arg);
     }
     String name = node.getNameAsString();
@@ -2086,6 +2091,21 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else if (value.isClassExpr()) {
       // Handle all classes
       return "Class<?>";
+    } else if (value.isNameExpr()) {
+      // Constant/variable
+      try {
+        ResolvedType resolvedType = value.asNameExpr().calculateResolvedType();
+
+        if (resolvedType.isPrimitive()) {
+          return resolvedType.asPrimitive().describe();
+        } else if (resolvedType.isReferenceType()) {
+          return resolvedType.asReferenceType().getQualifiedName();
+        } else {
+          return resolvedType.describe();
+        }
+      } catch (UnsolvedSymbolException ex) {
+        return value.toString();
+      }
     }
     return value.toString();
   }

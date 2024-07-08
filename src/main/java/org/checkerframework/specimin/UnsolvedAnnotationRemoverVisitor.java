@@ -9,6 +9,8 @@ import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDeclaration;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.IOException;
 import java.util.HashMap;
@@ -111,7 +113,19 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
     // If the annotation can be resolved, find its qualified name to prevent removal
     boolean isResolved = true;
     try {
-      annotationName = annotation.resolve().getQualifiedName();
+      ResolvedAnnotationDeclaration resolvedAnno = annotation.resolve();
+      annotationName = resolvedAnno.getQualifiedName();
+
+      if (resolvedAnno instanceof ReflectionAnnotationDeclaration) {
+        // These annotations do not have a file corresponding to them, which can cause
+        // compile errors in the output
+        // This is fine if it's included in java.lang, but if not, we should treat it as
+        // if it were unresolved
+
+        if (!annotationName.startsWith("java.lang")) {
+          isResolved = false;
+        }
+      }
     } catch (UnsolvedSymbolException ex) {
       isResolved = false;
     }
