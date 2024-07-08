@@ -257,3 +257,12 @@ In cases like these, Specimin chooses the latter: it assumes that the JDK
 is available. If you want to target part of the JDK itself with Specimin,
 this means that it's necessary to *relocate* JDK classes (into a non `java.*`
 package); see the CF-577 test in the integration tests for an example.
+
+### Reporting issues and contributing
+
+We welcome bug reports. Please make a GitHub issue with the command
+that you used to run Specimin and describe what went wrong, and we'll
+look into it as soon as we can.
+
+If you'd like to contribute to Specimin, we have a separate document
+with [developer documentation](https://github.com/njit-jerse/specimin/DEVELOPERS.md).
