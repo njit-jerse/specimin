@@ -15,13 +15,10 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
-import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -779,30 +776,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       }
     }
     return super.visit(expr, p);
-  }
-
-  @Override
-  public Visitable visit(MarkerAnnotationExpr anno, Void p) {
-    String qualifiedName = anno.resolve().getQualifiedName();
-    updateUsedClassWithQualifiedClassName(
-        qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
-    return super.visit(anno, p);
-  }
-
-  @Override
-  public Visitable visit(NormalAnnotationExpr anno, Void p) {
-    String qualifiedName = anno.resolve().getQualifiedName();
-    updateUsedClassWithQualifiedClassName(
-        qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
-    return super.visit(anno, p);
-  }
-
-  @Override
-  public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
-    String qualifiedName = anno.resolve().getQualifiedName();
-    updateUsedClassWithQualifiedClassName(
-        qualifiedName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
-    return super.visit(anno, p);
   }
 
   /**

@@ -1383,6 +1383,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MarkerAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
+      // TODO: keep original jar annotation definitions
       if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
         return super.visit(anno, p);
       }
@@ -1421,6 +1422,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(NormalAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
+      // TODO: keep original jar annotation definitions
       if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
         return super.visit(anno, p);
       }

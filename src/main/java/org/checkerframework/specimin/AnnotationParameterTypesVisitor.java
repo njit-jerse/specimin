@@ -22,6 +22,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -31,33 +32,50 @@ import java.util.Set;
  * if the corresponding class, method, or field declaration is marked to be preserved.
  */
 public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
-  /** Set containing the signatures of used member (fields and methods). */
+  /** Set containing the signatures of used members (fields and methods). */
   private Set<String> usedMembers;
+
+  /** Set containing the signatures of target methods. */
+  private Set<String> targetMethods;
+
+  /** Set containing the signatures of target fields. */
+  private List<String> targetFields;
 
   /** Set containing the signatures of used classes. */
   private Set<String> usedClass;
+
+  /** Set containing the signatures of classes used by annotations. */
+  private Set<String> classesToAdd = new HashSet<>();
 
   /** Map containing the signatures of static imports. */
   Map<String, String> staticImports = new HashMap<>();
 
   /**
-   * Get the set containing the signatures of used classes.
+   * Get the set containing the signatures of classes used by annotations.
    *
-   * @return The set containing the signatures of used classes.
+   * @return The set containing the signatures of classes used by annotations.
    */
-  public Set<String> getUsedClass() {
-    return usedClass;
+  public Set<String> getClassesToAdd() {
+    return classesToAdd;
   }
 
   /**
    * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
    * members, and used classes.
    *
+   * @param targetFields Set containing the signatures of target fields.
+   * @param targetMethods Set containing the signatures of target methods.
    * @param usedMembers Set containing the signatures of used members.
    * @param usedClass Set containing the signatures of used classes.
    */
-  public AnnotationParameterTypesVisitor(Set<String> usedMembers, Set<String> usedClass) {
+  public AnnotationParameterTypesVisitor(
+      List<String> targetFields,
+      Set<String> targetMethods,
+      Set<String> usedMembers,
+      Set<String> usedClass) {
     this.usedMembers = usedMembers;
+    this.targetMethods = targetMethods;
+    this.targetFields = targetFields;
     this.usedClass = usedClass;
   }
 
@@ -74,7 +92,6 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(AnnotationMemberDeclaration decl, Void p) {
     // Ensure that enums/fields that are used by default are included
-    System.out.println(PrunerVisitor.getEnclosingClassName(decl));
     if (usedClass.contains(PrunerVisitor.getEnclosingClassName(decl))) {
       Optional<Expression> defaultValue = decl.getDefaultValue();
       if (defaultValue.isPresent()) {
@@ -85,7 +102,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
                 defaultValue.get(), usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
 
         if (resolvable) {
-          usedClass.addAll(usedClassByCurrentAnnotation);
+          classesToAdd.addAll(usedClassByCurrentAnnotation);
           usedMembers.addAll(usedMembersByCurrentAnnotation);
         }
       }
@@ -95,12 +112,24 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration decl, Void p) {
-    String methodQualifiedSignature =
-        PrunerVisitor.getEnclosingClassLike(decl)
-            + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
-                decl.getDeclarationAsString(false, false, false));
-    if (usedMembers.contains(methodQualifiedSignature)) {
+    String methodSignature;
+
+    try {
+      methodSignature = decl.resolve().getQualifiedSignature();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+      // UnsupportedOperationException: type is a type variable
+      // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
+      return super.visit(decl, p);
+    } catch (RuntimeException e) {
+      // The current class is employed by the target methods, although not all of its members are
+      // utilized. It's not surprising for unused members to remain unresolved.
+      // If this constructor is from the parent of the current class, and it is not resolved, we
+      // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
+      // From PrunerVisitor.visit(ConstructorDeclaration, Void)
+      return decl;
+    }
+
+    if (usedMembers.contains(methodSignature) || targetMethods.contains(methodSignature)) {
       handleAnnotations(decl.getAnnotations());
     }
     return super.visit(decl, p);
@@ -108,12 +137,16 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration decl, Void p) {
-    String methodQualifiedSignature =
-        PrunerVisitor.getEnclosingClassLike(decl)
-            + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
-                decl.getDeclarationAsString(false, false, false));
-    if (usedMembers.contains(methodQualifiedSignature)) {
+    String methodSignature;
+
+    try {
+      methodSignature = decl.resolve().getQualifiedSignature();
+    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+      // UnsupportedOperationException: type is a type variable
+      // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
+      return super.visit(decl, p);
+    }
+    if (usedMembers.contains(methodSignature) || targetMethods.contains(methodSignature)) {
       handleAnnotations(decl.getAnnotations());
 
       for (Parameter param : decl.getParameters()) {
@@ -127,10 +160,10 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   public Visitable visit(FieldDeclaration decl, Void p) {
     try {
       for (VariableDeclarator var : decl.getVariables()) {
-        if (usedMembers.contains(
-            PrunerVisitor.getEnclosingClassLike(decl) + "#" + var.getNameAsString())) {
+        String qualifiedName =
+            PrunerVisitor.getEnclosingClassName(decl) + "#" + var.getNameAsString();
+        if (usedMembers.contains(qualifiedName) || targetFields.contains(qualifiedName)) {
           handleAnnotations(decl.getAnnotations());
-          break;
         }
       }
     } catch (UnsolvedSymbolException ex) {
@@ -177,10 +210,9 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   private void handleAnnotations(NodeList<AnnotationExpr> annotations) {
     Set<String> usedClassByCurrentAnnotation = new HashSet<>();
     Set<String> usedMembersByCurrentAnnotation = new HashSet<>();
+    Set<AnnotationExpr> annosToRemove = new HashSet<>();
     for (AnnotationExpr anno : annotations) {
       boolean resolvable = true;
-      // Only add annotation to the usedClass set if all parameters are resolvable
-      usedClassByCurrentAnnotation.add(anno.resolve().getQualifiedName());
 
       if (anno.isSingleMemberAnnotationExpr()) {
         Expression value = anno.asSingleMemberAnnotationExpr().getMemberValue();
@@ -199,12 +231,23 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
         }
       }
 
+      // Only add annotation to the usedClass set if all parameters are resolvable
       if (resolvable) {
-        usedClass.addAll(usedClassByCurrentAnnotation);
+        usedClassByCurrentAnnotation.add(anno.resolve().getQualifiedName());
+        classesToAdd.addAll(usedClassByCurrentAnnotation);
         usedMembers.addAll(usedMembersByCurrentAnnotation);
+      } else {
+        annosToRemove.add(anno);
       }
       usedClassByCurrentAnnotation.clear();
       usedMembersByCurrentAnnotation.clear();
+    }
+
+    // Remove unsolvable annotations; these parameter types are unsolvable since
+    // the UnsolvedSymbolVisitor did not create synthetic types for annotations
+    // included later on
+    for (AnnotationExpr anno : annosToRemove) {
+      anno.remove();
     }
   }
 
@@ -270,6 +313,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
             String parentName = fullStaticName.substring(0, fullStaticName.lastIndexOf("."));
             String memberName = fullStaticName.substring(fullStaticName.lastIndexOf(".") + 1);
             // static import here could be an enum or a field
+            usedClassByCurrentAnnotation.add(parentName);
             usedMembersByCurrentAnnotation.add(parentName + "#" + memberName);
             usedMembersByCurrentAnnotation.add(fullStaticName);
           }
