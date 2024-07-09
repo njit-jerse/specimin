@@ -39,7 +39,7 @@ def run(ashe_path: str, csv_path: str, clone_path: str, props_file_path: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     stats_script = os.path.join(current_dir, 'specimin_statistics.py')
     rank_script = os.path.join(current_dir, 'specimin_exception_rank.py')
-     print(f"Current directoryt path: {current_dir}")
+    print(f"Current directoryt path: {current_dir}")
     print(f"Statistics script path: {stats_script}")
     print(f"Exception rank script path: {rank_script}")
     # run Specimin scripts
