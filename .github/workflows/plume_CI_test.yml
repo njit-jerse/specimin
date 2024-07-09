@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+        
       - name: Checkout repository
         uses: actions/checkout@v2
 
@@ -51,8 +52,11 @@ jobs:
       - name: Update Config File in Project B
         run: |
           echo "specimin.tool.path=$(pwd)" >> ASHE/src/main/resources/config.properties
-      - name: Make run_ashe_for_stats.py executable
-        run: chmod +x ashe_scripts/run_ashe_for_stats.py
+      - name: Make all scripts under ashe_scripts executable
+        run: chmod +x ashe_scripts/*.py
+
+      - name: List Files in ashe_scripts for Debugging
+        run: ls -l ashe_scripts
 
       - name: Run the script
         run: |
