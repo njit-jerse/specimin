@@ -481,8 +481,6 @@ public class SpeciminRunner {
       cu.accept(annoRemover, null);
     }
 
-    updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
-
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
         new MustImplementMethodsVisitor(
             solveMethodOverridingVisitor.getUsedMembers(),
