@@ -22,6 +22,7 @@ import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDeclaration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -262,8 +263,16 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
     Set<String> usedMembersByCurrentAnnotation = new HashSet<>();
     boolean resolvable = true;
     try {
-      anno.resolve().getQualifiedName();
+      String qualifiedName = anno.resolve().getQualifiedName();
+      if (anno.resolve() instanceof ReflectionAnnotationDeclaration
+          && !qualifiedName.startsWith("java.lang")) {
+        // This usually means that JavaParser has resolved this through the import, but there
+        // is no file/CompilationUnit behind it, so we should discard it to prevent compile errors
+        anno.remove();
+        return;
+      }
     } catch (UnsolvedSymbolException ex) {
+      anno.remove();
       return;
     }
 
