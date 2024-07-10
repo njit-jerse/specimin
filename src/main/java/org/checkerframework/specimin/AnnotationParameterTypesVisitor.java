@@ -10,12 +10,14 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -94,6 +96,11 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   public Visitable visit(AnnotationMemberDeclaration decl, Void p) {
     // Ensure that enums/fields that are used by default are included
     if (usedClass.contains(PrunerVisitor.getEnclosingClassName(decl))) {
+      // Class<> from jar files may contain other classes
+      if (decl.getType().toString().startsWith("Class<")) {
+        // Replace with Class<?> to prevent compile-time errors
+        decl.setType("Class<?>");
+      }
       Optional<Expression> defaultValue = decl.getDefaultValue();
       if (defaultValue.isPresent()) {
         Set<String> usedClassByCurrentAnnotation = new HashSet<>();
@@ -112,142 +119,175 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
-  public Visitable visit(ConstructorDeclaration decl, Void p) {
-    String methodSignature;
+  public Visitable visit(MarkerAnnotationExpr anno, Void p) {
+    Node parent = findClosestParentMemberOrClassLike(anno);
 
-    try {
-      methodSignature = decl.resolve().getQualifiedSignature();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
-      // UnsupportedOperationException: type is a type variable
-      // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
-      return super.visit(decl, p);
-    } catch (RuntimeException e) {
-      // The current class is employed by the target methods, although not all of its members are
-      // utilized. It's not surprising for unused members to remain unresolved.
-      // If this constructor is from the parent of the current class, and it is not resolved, we
-      // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
-      // From PrunerVisitor.visit(ConstructorDeclaration, Void)
-      return decl;
+    if (isTargetOrUsed(parent)) {
+      handleAnnotation(anno);
     }
-
-    if (usedMembers.contains(methodSignature) || targetMethods.contains(methodSignature)) {
-      handleAnnotations(decl.getAnnotations());
-    }
-    return super.visit(decl, p);
+    return super.visit(anno, p);
   }
 
   @Override
-  public Visitable visit(MethodDeclaration decl, Void p) {
-    String methodSignature;
+  public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
+    Node parent = findClosestParentMemberOrClassLike(anno);
 
-    try {
-      methodSignature = decl.resolve().getQualifiedSignature();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
-      // UnsupportedOperationException: type is a type variable
-      // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
-      return super.visit(decl, p);
+    if (isTargetOrUsed(parent)) {
+      handleAnnotation(anno);
     }
-    if (usedMembers.contains(methodSignature) || targetMethods.contains(methodSignature)) {
-      handleAnnotations(decl.getAnnotations());
-
-      for (Parameter param : decl.getParameters()) {
-        handleAnnotations(param.getAnnotations());
-      }
-    }
-    return super.visit(decl, p);
+    return super.visit(anno, p);
   }
 
   @Override
-  public Visitable visit(FieldDeclaration decl, Void p) {
-    try {
-      for (VariableDeclarator var : decl.getVariables()) {
-        String qualifiedName =
-            PrunerVisitor.getEnclosingClassName(decl) + "#" + var.getNameAsString();
-        if (usedMembers.contains(qualifiedName) || targetFields.contains(qualifiedName)) {
-          handleAnnotations(decl.getAnnotations());
-        }
-      }
-    } catch (UnsolvedSymbolException ex) {
-      return super.visit(decl, p);
+  public Visitable visit(NormalAnnotationExpr anno, Void p) {
+    Node parent = findClosestParentMemberOrClassLike(anno);
+
+    if (isTargetOrUsed(parent)) {
+      handleAnnotation(anno);
     }
-    return super.visit(decl, p);
+    return super.visit(anno, p);
   }
 
-  @Override
-  public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
-    Optional<String> fullyQualified = decl.getFullyQualifiedName();
-    if (fullyQualified.isPresent() && usedClass.contains(fullyQualified.get())) {
-      handleAnnotations(decl.getAnnotations());
-    }
-    return super.visit(decl, p);
-  }
-
-  @Override
-  public Visitable visit(AnnotationDeclaration decl, Void p) {
-    Optional<String> fullyQualified = decl.getFullyQualifiedName();
-    if (fullyQualified.isPresent() && usedClass.contains(fullyQualified.get())) {
-      handleAnnotations(decl.getAnnotations());
-    }
-    return super.visit(decl, p);
-  }
-
-  @Override
-  public Visitable visit(EnumDeclaration decl, Void p) {
-    Optional<String> fullyQualified = decl.getFullyQualifiedName();
-    if (fullyQualified.isPresent() && usedClass.contains(fullyQualified.get())) {
-      handleAnnotations(decl.getAnnotations());
-    }
-    return super.visit(decl, p);
-  }
-
-  // We do not use visit(AnnotationExpr) for this visitor since we need the declaration context
-  // to determine whether we preserve or not
   /**
-   * Helper method to add a list of annotations to the usedClass set, including the types used in
-   * annotation parameters.
+   * Finds the closest method, field, or class-like declaration (enums, annos)
    *
-   * @param annotations The annotations to process
+   * @return the Node of the closest member or class declaration
    */
-  private void handleAnnotations(NodeList<AnnotationExpr> annotations) {
+  public Node findClosestParentMemberOrClassLike(Node node) {
+    Node parent = node.getParentNode().orElseThrow();
+    while (!(parent instanceof ClassOrInterfaceDeclaration
+        || parent instanceof EnumDeclaration
+        || parent instanceof AnnotationDeclaration
+        || parent instanceof ConstructorDeclaration
+        || parent instanceof MethodDeclaration
+        || parent instanceof FieldDeclaration)) {
+      parent = parent.getParentNode().orElseThrow();
+    }
+    return parent;
+  }
+
+  /**
+   * Determines if the given Node is a target/used method or class. Should be used following
+   * findClosestParentMemberOrClassLike().
+   *
+   * @param node The node to check
+   */
+  private boolean isTargetOrUsed(Node node) {
+    String qualifiedName;
+    boolean isClass = false;
+    if (node instanceof ClassOrInterfaceDeclaration) {
+      Optional<String> qualifiedNameOptional =
+          ((ClassOrInterfaceDeclaration) node).getFullyQualifiedName();
+      if (qualifiedNameOptional.isEmpty()) {
+        return false;
+      }
+      qualifiedName = qualifiedNameOptional.get();
+      isClass = true;
+    } else if (node instanceof EnumDeclaration) {
+      Optional<String> qualifiedNameOptional = ((EnumDeclaration) node).getFullyQualifiedName();
+      if (qualifiedNameOptional.isEmpty()) {
+        return false;
+      }
+      qualifiedName = qualifiedNameOptional.get();
+      isClass = true;
+    } else if (node instanceof AnnotationDeclaration) {
+      Optional<String> qualifiedNameOptional =
+          ((AnnotationDeclaration) node).getFullyQualifiedName();
+      if (qualifiedNameOptional.isEmpty()) {
+        return false;
+      }
+      qualifiedName = qualifiedNameOptional.get();
+      isClass = true;
+    } else if (node instanceof ConstructorDeclaration) {
+      try {
+        qualifiedName = ((ConstructorDeclaration) node).resolve().getQualifiedSignature();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+        // UnsupportedOperationException: type is a type variable
+        // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
+        return false;
+      } catch (RuntimeException e) {
+        // The current class is employed by the target methods, although not all of its members are
+        // utilized. It's not surprising for unused members to remain unresolved.
+        // If this constructor is from the parent of the current class, and it is not resolved, we
+        // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
+        // From PrunerVisitor.visit(ConstructorDeclaration, Void)
+        return false;
+      }
+    } else if (node instanceof MethodDeclaration) {
+      try {
+        qualifiedName = ((MethodDeclaration) node).resolve().getQualifiedSignature();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+        // UnsupportedOperationException: type is a type variable
+        // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
+        return false;
+      }
+    } else if (node instanceof FieldDeclaration) {
+      try {
+        FieldDeclaration decl = (FieldDeclaration) node;
+        for (VariableDeclarator var : decl.getVariables()) {
+          qualifiedName = PrunerVisitor.getEnclosingClassName(decl) + "#" + var.getNameAsString();
+          if (usedMembers.contains(qualifiedName) || targetFields.contains(qualifiedName)) {
+            return true;
+          }
+        }
+      } catch (UnsolvedSymbolException ex) {
+        return false;
+      }
+      return false;
+    } else {
+      return false;
+    }
+
+    if (isClass) {
+      return usedClass.contains(qualifiedName);
+    } else {
+      // fields should already be handled at this point
+      return usedMembers.contains(qualifiedName) || targetMethods.contains(qualifiedName);
+    }
+  }
+
+  /**
+   * Helper method to add an annotation to the usedClass set, including the types used in annotation
+   * parameters.
+   *
+   * @param anno The annotation to process
+   */
+  private void handleAnnotation(AnnotationExpr anno) {
     Set<String> usedClassByCurrentAnnotation = new HashSet<>();
     Set<String> usedMembersByCurrentAnnotation = new HashSet<>();
-    Set<AnnotationExpr> annosToRemove = new HashSet<>();
-    for (AnnotationExpr anno : annotations) {
-      boolean resolvable = true;
+    boolean resolvable = true;
+    try {
+      anno.resolve().getQualifiedName();
+    } catch (UnsolvedSymbolException ex) {
+      return;
+    }
 
-      if (anno.isSingleMemberAnnotationExpr()) {
-        Expression value = anno.asSingleMemberAnnotationExpr().getMemberValue();
+    if (anno.isSingleMemberAnnotationExpr()) {
+      Expression value = anno.asSingleMemberAnnotationExpr().getMemberValue();
+      resolvable =
+          handleAnnotationValue(
+              value, usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
+    } else if (anno.isNormalAnnotationExpr()) {
+      for (MemberValuePair pair : anno.asNormalAnnotationExpr().getPairs()) {
+        Expression value = pair.getValue();
         resolvable =
             handleAnnotationValue(
                 value, usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
-      } else if (anno.isNormalAnnotationExpr()) {
-        for (MemberValuePair pair : anno.asNormalAnnotationExpr().getPairs()) {
-          Expression value = pair.getValue();
-          resolvable =
-              handleAnnotationValue(
-                  value, usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
-          if (!resolvable) {
-            break;
-          }
+        if (!resolvable) {
+          break;
         }
       }
-
-      // Only add annotation to the usedClass set if all parameters are resolvable
-      if (resolvable) {
-        usedClassByCurrentAnnotation.add(anno.resolve().getQualifiedName());
-        classesToAdd.addAll(usedClassByCurrentAnnotation);
-        usedMembers.addAll(usedMembersByCurrentAnnotation);
-      } else {
-        annosToRemove.add(anno);
-      }
-      usedClassByCurrentAnnotation.clear();
-      usedMembersByCurrentAnnotation.clear();
     }
 
-    // Remove unsolvable annotations; these parameter types are unsolvable since
-    // the UnsolvedSymbolVisitor did not create synthetic types for annotations
-    // included later on
-    for (AnnotationExpr anno : annosToRemove) {
+    // Only add annotation to the usedClass set if all parameters are resolvable
+    if (resolvable) {
+      usedClassByCurrentAnnotation.add(anno.resolve().getQualifiedName());
+      classesToAdd.addAll(usedClassByCurrentAnnotation);
+      usedMembers.addAll(usedMembersByCurrentAnnotation);
+    } else {
+      // Remove unsolvable annotations; these parameter types are unsolvable since
+      // the UnsolvedSymbolVisitor did not create synthetic types for annotations
+      // included later on
       anno.remove();
     }
   }
@@ -321,18 +361,6 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
         }
       } catch (UnsolvedSymbolException ex) {
         // TODO: retrigger synthetic type generation
-        return false;
-      }
-      return true;
-    } else if (value.isAnnotationExpr()) {
-      // Create a NodeList so we can re-handle the annotation in handleAnnotations
-      NodeList<AnnotationExpr> annotation = new NodeList<>();
-      annotation.add(value.asAnnotationExpr());
-
-      handleAnnotations(annotation);
-      try {
-        value.asAnnotationExpr().resolve();
-      } catch (UnsolvedSymbolException ex) {
         return false;
       }
       return true;
