@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-        
       - name: Checkout repository
         uses: actions/checkout@v2
 
@@ -25,38 +24,20 @@ jobs:
       - name: Set up Java JDK
         uses: actions/setup-java@v2
         with:
-          java-version: '21'  # Replace with the Java version you need (e.g., 11, 16, etc.)
-          distribution: 'adopt'  # Specify the distribution of Java (e.g., adopt, zulu, etc.)
-          architecture: 'x64'  # Specify the architecture of Java (e.g., x64, x86)
-          server-password: ${{ secrets.GITHUB_TOKEN }}  # Use GITHUB_TOKEN for server password
-          overwrite-settings: true  # Overwrite any existing settings
-          check-latest: false  # Do not check for the latest version
+          java-version: '21'
+          distribution: 'adopt'
+          architecture: 'x64'
+          server-password: ${{ secrets.GITHUB_TOKEN }}
+          overwrite-settings: true
+          check-latest: false
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           # pip install -r requirements.txt
-      - name: Display CSV Contents
-        run: |
-          echo "Contents of plume_list.csv:"
-          cat plume_list.csv
-      - name: Display CSV File Contents
-        run: |
-          cat /home/runner/work/specimin/specimin/plume_list.csv   
-      - name: List Files for Debugging
-        run: ls -R
 
-      - name: Clone Project B
-        run: |
-          git clone https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
-      - name: Update Config File in Project B
-        run: |
-          echo "specimin.tool.path=$(pwd)" >> ASHE/src/main/resources/config.properties
       - name: Make all scripts under ashe_scripts executable
         run: chmod +x ashe_scripts/*.py
-
-      - name: List Files in ashe_scripts for Debugging
-        run: ls -l ashe_scripts
 
       - name: Run the script
         run: |
@@ -65,49 +46,78 @@ jobs:
             $(pwd)/plume_list.csv \
             $(pwd)/CI_REPO_CLONE_SPACE_PLUME \
             $(pwd)/ASHE/src/main/resources/config.properties
-            
-      - name: Display Current Directory Again
-        run: echo "Current directory:" $(pwd)
 
-      
-      - name: Parse compilable percentage
-        id: parse_compilable_percentage
+      - name: Parse accuracy percentage
+        id: parse_accuracy_percentage
         run: |
-          grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > compilable_percentage.txt
-          cat compilable_percentage.txt
-        continue-on-error: true
+          grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > current_run_accuracy_percentage.txt
+          cat current_run_accuracy_percentage.txt
 
-      - name: Check for monotonically increasing compilable percentage
+      - name: Read and update evaluation accuracy
+        id: read_and_update
         run: |
-          current_percentage=$(cat compilable_percentage.txt)
-          echo "Current compilable percentage: $current_percentage"
-          prev_percentage=${{ secrets.PREV_COMPILABLE_PERCENTAGE }}
-          echo "Previous compilable percentage: $prev_percentage"
-          if (( $(echo "$current_percentage < $prev_percentage" |bc -l) )); then
-            echo "Error: Compilable percentage is not increasing."
-            exit 1
+          # Get the current accuracy from specimin_statistics.txt
+          current_accuracy=$(cat current_run_accuracy_percentage.txt)
+          echo "Current accuracy: $current_accuracy"
+
+          # Get the previous run accuracy from the secret
+          previous_run_accuracy=${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE }}
+          if [ -z "$previous_run_accuracy" ]; then
+            previous_run_accuracy=0
           fi
-        env:
-          prev_percentage: ${{ secrets.PREV_COMPILABLE_PERCENTAGE }}
+          echo "Previous run accuracy: $previous_run_accuracy"
 
-      - name: Update Previous Compilable Percentage
-        if: success()
-        run: echo "${{ steps.parse_compilable_percentage.outputs.current_percentage }}" > prev_compilable_percentage.txt
-        env:
-          prev_percentage: ${{ secrets.PREV_COMPILABLE_PERCENTAGE }}
+          # Compare the values and update the secret if current accuracy is higher
+          if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
+            echo "Updating LATEST_SPECIMIN_EVAL_PERCENTAGE to $current_accuracy"
+            echo "::set-output name=new_accuracy::$current_accuracy"
+          else
+            echo "No update needed"
+            echo "::set-output name=new_accuracy::$previous_run_accuracy"
+          fi
 
-      - name: Upload compilable percentage
-        if: always()  # Ensure this step runs even if previous steps fail
+          # Store both values for later analysis
+          echo "Current accuracy: $current_accuracy" > comparison_values_for_current_run.txt
+          echo "Previous run accuracy: $previous_run_accuracy" >> comparison_values_for_current_run.txt
+
+      - name: Install jq and curl
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      - name: Update Evaluation Accuracy Secret
+        if: steps.read_and_update.outputs.new_accuracy != secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE
+        run: |
+          new_accuracy=${{ steps.read_and_update.outputs.new_accuracy }}
+          repo_name="${{ github.repository }}"
+          api_url="https://api.github.com"
+          
+          # Get the public key
+          public_key_response=$(curl -s -H "Authorization: token ${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE_PAT }}" $api_url/repos/$repo_name/actions/secrets/public-key)
+          public_key=$(echo $public_key_response | jq -r .key)
+          key_id=$(echo $public_key_response | jq -r .key_id)
+          
+          # Encrypt the secret value
+          encrypted_value=$(echo -n "$new_accuracy" | openssl rsautl -encrypt -pubin -inkey <(echo "$public_key") | base64)
+          
+          # Update the secret
+          curl -s \
+            -X PUT \
+            -H "Authorization: token ${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE_PAT }}" \
+            -H "Content-Type: application/json" \
+            "$api_url/repos/$repo_name/actions/secrets/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+            -d "{\"encrypted_value\":\"$encrypted_value\",\"key_id\":\"$key_id\"}"
+
+      - name: Upload comparison values
+        if: always()
         uses: actions/upload-artifact@v2
         with:
-          name: compilable-percentage
-          path: compilable_percentage.txt
+          name: comparison-values
+          path: comparison_values_for_current_run.txt
 
-      - name: Upload previous compilable percentage
-        if: always()  # Ensure this step runs even if previous steps fail
+      - name: Upload current run accuracy percentage
+        if: always()
         uses: actions/upload-artifact@v2
         with:
-          name: prev-compilable-percentage
-          path: prev_compilable_percentage.txt
-
-
+          name: current-run-accuracy-percentage
+          path: current_run_accuracy_percentage.txt
