@@ -325,8 +325,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
         return true;
       }
       for (Expression val : values) {
-        handleAnnotationValue(
-            val, usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
+        handleAnnotationValue(val, usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
       }
       return true;
     } else if (value.isClassExpr()) {
