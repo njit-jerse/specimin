@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+        
       - name: Checkout repository
         uses: actions/checkout@v2
 
@@ -24,20 +25,38 @@ jobs:
       - name: Set up Java JDK
         uses: actions/setup-java@v2
         with:
-          java-version: '21'
-          distribution: 'adopt'
-          architecture: 'x64'
-          server-password: ${{ secrets.GITHUB_TOKEN }}
-          overwrite-settings: true
-          check-latest: false
+          java-version: '21'  # Replace with the Java version you need (e.g., 11, 16, etc.)
+          distribution: 'adopt'  # Specify the distribution of Java (e.g., adopt, zulu, etc.)
+          architecture: 'x64'  # Specify the architecture of Java (e.g., x64, x86)
+          server-password: ${{ secrets.GITHUB_TOKEN }}  # Use GITHUB_TOKEN for server password
+          overwrite-settings: true  # Overwrite any existing settings
+          check-latest: false  # Do not check for the latest version
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           # pip install -r requirements.txt
+      - name: Display CSV Contents
+        run: |
+          echo "Contents of plume_list.csv:"
+          cat plume_list.csv
+      - name: Display CSV File Contents
+        run: |
+          cat /home/runner/work/specimin/specimin/plume_list.csv   
+      - name: List Files for Debugging
+        run: ls -R
 
+      - name: Clone Project B
+        run: |
+          git clone https://github.com/NiharikaJamble/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
+      - name: Update Config File in Project B
+        run: |
+          echo "specimin.tool.path=$(pwd)" >> ASHE/src/main/resources/config.properties
       - name: Make all scripts under ashe_scripts executable
         run: chmod +x ashe_scripts/*.py
+
+      - name: List Files in ashe_scripts for Debugging
+        run: ls -l ashe_scripts
 
       - name: Run the script
         run: |
@@ -46,7 +65,7 @@ jobs:
             $(pwd)/plume_list.csv \
             $(pwd)/CI_REPO_CLONE_SPACE_PLUME \
             $(pwd)/ASHE/src/main/resources/config.properties
-
+            
       - name: Parse accuracy percentage
         id: parse_accuracy_percentage
         run: |
