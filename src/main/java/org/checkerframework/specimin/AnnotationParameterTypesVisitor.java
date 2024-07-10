@@ -324,9 +324,10 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
       if (values.isEmpty()) {
         return true;
       }
-      // All elements in the same array will be the same type
-      handleAnnotationValue(
-          values.get(0), usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
+      for (Expression val : values) {
+        handleAnnotationValue(
+            val, usedClassByCurrentAnnotation, usedMembersByCurrentAnnotation);
+      }
       return true;
     } else if (value.isClassExpr()) {
       try {
