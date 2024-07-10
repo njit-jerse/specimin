@@ -1383,14 +1383,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MarkerAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
-      // TODO: keep original jar annotation definitions
-      if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
-        return super.visit(anno, p);
-      }
+      return super.visit(anno, p);
     } catch (UnsolvedSymbolException ex) {
-      // Remove annotations from jar to avoid compile errors in output
-      // Without this, annotations may not compile (try with Checker Framework) due to
-      // missing imports within their files
+
     } catch (ClassCastException ex) {
       // A ClassCastException is only raised in specific circumstances; for example, when an
       // annotation is an inner class (has a dot) and is used in/on a class which references itself:
@@ -1422,14 +1417,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(NormalAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
-      // TODO: keep original jar annotation definitions
-      if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
-        return super.visit(anno, p);
-      }
+      return super.visit(anno, p);
     } catch (UnsolvedSymbolException ex) {
-      // Remove annotations from jar to avoid compile errors in output
-      // Without this, annotations may not compile (try with Checker Framework) due to
-      // missing imports within their files
+      
     } catch (ClassCastException ex) {
       // A ClassCastException is only raised in specific circumstances; for example, when an
       // annotation is an inner class (has a dot) and is used in/on a class which references itself:
@@ -1471,13 +1461,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
     try {
       anno.resolve();
-      if (!classesFromJar.contains(anno.resolve().getQualifiedName())) {
-        return super.visit(anno, p);
-      }
+      return super.visit(anno, p);
     } catch (UnsolvedSymbolException ex) {
-      // Remove annotations from jar to avoid compile errors in output
-      // Without this, annotations may not compile (try with Checker Framework) due to
-      // missing imports within their files
+      
     } catch (ClassCastException ex) {
       // A ClassCastException is only raised in specific circumstances; for example, when an
       // annotation is an inner class (has a dot) and is used in/on a class which references itself:

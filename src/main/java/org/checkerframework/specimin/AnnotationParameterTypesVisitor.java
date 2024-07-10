@@ -309,7 +309,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   /**
    * Handles annotation parameter value types, adding all used types to the usedByCurrentAnnotation
    * set. This method can handle array types as well as annotations referenced in the parameters. If
-   * the type is a primitive, String, or Class, there is no effect.
+   * the type is a primitive or String, there is no effect.
    *
    * @return true if value is resolvable, false if not
    */
@@ -330,7 +330,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
       return true;
     } else if (value.isClassExpr()) {
       try {
-        ResolvedType resolved = value.asClassExpr().calculateResolvedType();
+        ResolvedType resolved = value.asClassExpr().getType().resolve();
 
         if (resolved.isReferenceType()) {
           usedClassByCurrentAnnotation.add(resolved.asReferenceType().getQualifiedName());
