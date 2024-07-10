@@ -1419,7 +1419,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       anno.resolve();
       return super.visit(anno, p);
     } catch (UnsolvedSymbolException ex) {
-      
+
     } catch (ClassCastException ex) {
       // A ClassCastException is only raised in specific circumstances; for example, when an
       // annotation is an inner class (has a dot) and is used in/on a class which references itself:
@@ -1463,7 +1463,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       anno.resolve();
       return super.visit(anno, p);
     } catch (UnsolvedSymbolException ex) {
-      
+
     } catch (ClassCastException ex) {
       // A ClassCastException is only raised in specific circumstances; for example, when an
       // annotation is an inner class (has a dot) and is used in/on a class which references itself:
