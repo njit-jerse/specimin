@@ -70,9 +70,11 @@ jobs:
           # Compare the values and update the secret if current accuracy is higher
           if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
             echo "Updating LATEST_SPECIMIN_EVAL_PERCENTAGE to $current_accuracy"
+            echo "::set-output name=update_needed::true"
             echo "::set-output name=new_accuracy::$current_accuracy"
           else
             echo "No update needed"
+            echo "::set-output name=update_needed::false"
             echo "::set-output name=new_accuracy::$previous_run_accuracy"
           fi
 
@@ -86,7 +88,7 @@ jobs:
           sudo apt-get install -y jq curl
 
       - name: Update Evaluation Accuracy Secret
-        if: steps.read_and_update.outputs.new_accuracy != secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE
+        if: steps.read_and_update.outputs.update_needed == 'true'
         run: |
           new_accuracy=${{ steps.read_and_update.outputs.new_accuracy }}
           repo_name="${{ github.repository }}"
