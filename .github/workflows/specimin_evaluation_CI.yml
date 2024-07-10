@@ -1,4 +1,4 @@
-name: plume_CI_test
+name: specimin_evaluation_CI 
 
 on:
   push:
@@ -38,11 +38,11 @@ jobs:
           # pip install -r requirements.txt
       - name: Display CSV Contents
         run: |
-          echo "Contents of plume_list.csv:"
-          cat plume_list.csv
+          echo "Contents of CI_repository_list.csv:"
+          cat CI_repository_list.csv
       - name: Display CSV File Contents
         run: |
-          cat /home/runner/work/specimin/specimin/plume_list.csv   
+          cat /home/runner/work/specimin/specimin/CI_repository_list.csv   
       - name: List Files for Debugging
         run: ls -R
 
@@ -62,7 +62,7 @@ jobs:
         run: |
           python3 ashe_scripts/run_ashe_for_stats.py \
             $(pwd)/ASHE \
-            $(pwd)/plume_list.csv \
+            $(pwd)/CI_repository_list.csv \
             $(pwd)/CI_REPO_CLONE_SPACE_PLUME \
             $(pwd)/ASHE/src/main/resources/config.properties
             
