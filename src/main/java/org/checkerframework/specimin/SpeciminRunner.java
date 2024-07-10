@@ -425,8 +425,21 @@ public class SpeciminRunner {
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
 
+    MustImplementMethodsVisitor mustImplementMethodsVisitor =
+        new MustImplementMethodsVisitor(
+            solveMethodOverridingVisitor.getUsedMembers(),
+            updatedUsedClass,
+            existingClassesToFilePath);
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(mustImplementMethodsVisitor, null);
+    }
+
     Set<CompilationUnit> compilationUnitsToSolveAnnotations =
         new HashSet<>(parsedTargetFiles.values());
+
+    // This should be safe to run after MustImplementMethodsVisitor because 
+    // annotations do not inherit
     AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
         new AnnotationParameterTypesVisitor(
             targetFieldNames,
@@ -479,16 +492,6 @@ public class SpeciminRunner {
     // remove the unsolved annotations in the newly added files.
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(annoRemover, null);
-    }
-
-    MustImplementMethodsVisitor mustImplementMethodsVisitor =
-        new MustImplementMethodsVisitor(
-            solveMethodOverridingVisitor.getUsedMembers(),
-            updatedUsedClass,
-            existingClassesToFilePath);
-
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(mustImplementMethodsVisitor, null);
     }
 
     PrunerVisitor methodPruner =

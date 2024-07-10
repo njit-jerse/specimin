@@ -14,10 +14,8 @@ import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDe
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /** A visitor that removes unsolved annotation expressions. */
 public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
@@ -36,9 +34,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
    */
   Map<String, String> classToFullClassName = new HashMap<>();
 
-  /** The set of full names of solvable annotations. */
-  private Set<String> solvedAnnotationFullName = new HashSet<>();
-
   /**
    * Create a new instance of UnsolvedAnnotationRemoverVisitor
    *
@@ -56,17 +51,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
         throw new RuntimeException(e);
       }
     }
-  }
-
-  /**
-   * Get a copy of the set of solved annotations.
-   *
-   * @return copy a copy of the set of solved annotations.
-   */
-  public Set<String> getSolvedAnnotationFullName() {
-    Set<String> copy = new HashSet<>();
-    copy.addAll(solvedAnnotationFullName);
-    return copy;
   }
 
   @Override
@@ -143,8 +127,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
 
     if (!isResolved && !classToJarPath.containsKey(annotationName)) {
       annotation.remove();
-    } else {
-      solvedAnnotationFullName.add(annotationName);
     }
   }
 }
