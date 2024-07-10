@@ -99,7 +99,11 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
       // Class<> from jar files may contain other classes
       if (decl.getType().toString().startsWith("Class<")) {
         // Replace with Class<?> to prevent compile-time errors
-        decl.setType("Class<?>");
+        String type = "Class<?>";
+        if (decl.getType().isArrayType()) {
+          type += "[]";
+        }
+        decl.setType(type);
       }
       Optional<Expression> defaultValue = decl.getDefaultValue();
       if (defaultValue.isPresent()) {
@@ -151,6 +155,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   /**
    * Finds the closest method, field, or class-like declaration (enums, annos)
    *
+   * @param node The node to find the parent for
    * @return the Node of the closest member or class declaration
    */
   public Node findClosestParentMemberOrClassLike(Node node) {
