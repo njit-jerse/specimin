@@ -34,6 +34,17 @@ def run(ashe_path: str, csv_path: str, clone_path: str, props_file_path: str):
     status_thread: threading.Thread = threading.Thread(target=__print_ashe_runtime, args=(start_time,))
     status_thread.daemon = True
     status_thread.start()
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    print(f"Current directory path: {current_dir}")
+    current_dir = current_dir.replace('ASHE/ashe_scripts', 'ashe_scripts')
+    main_project_dir = os.path.abspath(os.path.join(current_dir, '..', '..'))
+    stats_script = os.path.join(current_dir, 'specimin_statistics.py')
+    rank_script = os.path.join(current_dir, 'specimin_exception_rank.py')
+    print(f"Current directory path after normalising: {current_dir}")
+    print(f"main project path: {main_project_dir}")
+    print(f"Statistics script path: {stats_script}")
+    print(f"Exception rank script path: {rank_script}")
+    
     __build_and_run_ashe(csv_path, clone_path, props_file_path, working_dir=ashe_path)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
