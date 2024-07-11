@@ -3,13 +3,16 @@ package org.checkerframework.specimin;
 import java.io.IOException;
 import org.junit.Test;
 
-/** This test checks if synthetic annotations are correctly generated for unsolved annotations. */
-public class SyntheticAnnotationsTest {
+/**
+ * This test checks if synthetic annotations used in different locations will compile based
+ * on @Target.
+ */
+public class SyntheticAnnotationTargetTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "syntheticannotations",
+        "syntheticannotationtarget",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#baz(String)"});
+        new String[] {"com.example.Simple#baz(U)"});
   }
 }
