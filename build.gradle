@@ -54,7 +54,7 @@ task requireJavadoc(type: JavaExec) {
 task expectedTestOutputsMustCompile(type: Exec) {
     // TODO: should this task run in CI, or as part of the regular tests?
     if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
-        commandLine "cmd", "/c", "your_batch_file.bat"
+        commandLine "cmd", "/c", "typecheck_test_outputs.bat"
     } else {
         commandLine "sh", "typecheck_test_outputs.sh"
     }
