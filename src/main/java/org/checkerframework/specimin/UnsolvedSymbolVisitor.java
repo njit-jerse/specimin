@@ -1448,7 +1448,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       unsolvedAnnotation.addMethod(
           new UnsolvedMethod(
               pair.getNameAsString(),
-              getValueTypeFromAnnotationExpression(pair.getValue()),
+              JavaParserUtil.getValueTypeFromAnnotationExpression(pair.getValue()),
               Collections.emptyList(),
               true));
     }
@@ -1491,7 +1491,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     unsolvedAnnotation.addMethod(
         new UnsolvedMethod(
             "value",
-            getValueTypeFromAnnotationExpression(anno.getMemberValue()),
+            JavaParserUtil.getValueTypeFromAnnotationExpression(anno.getMemberValue()),
             Collections.emptyList(),
             true));
 
@@ -2039,63 +2039,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     localVariables.removeFirst();
     typeVariables.removeFirst();
     return result;
-  }
-
-  /**
-   * Returns the corresponding type name for an Expression within an annotation.
-   *
-   * @param value The value to evaluate the type of
-   * @return The corresponding type name for the value: constrained to a primitive type, String,
-   *     Class<?>, an enum, an annotation, or an array of any of those types, as per annotation
-   *     parameter requirements.
-   */
-  private String getValueTypeFromAnnotationExpression(Expression value) {
-    if (value.isBooleanLiteralExpr()) {
-      return "boolean";
-    } else if (value.isStringLiteralExpr()) {
-      return "String";
-    } else if (value.isIntegerLiteralExpr()) {
-      return "int";
-    } else if (value.isLongLiteralExpr()) {
-      return "long";
-    } else if (value.isDoubleLiteralExpr()) {
-      return "double";
-    } else if (value.isCharLiteralExpr()) {
-      return "char";
-    } else if (value.isArrayInitializerExpr()) {
-      ArrayInitializerExpr array = value.asArrayInitializerExpr();
-      if (!array.getValues().isEmpty()) {
-        Expression firstElement = array.getValues().get(0);
-        return getValueTypeFromAnnotationExpression(firstElement) + "[]";
-      }
-      // Handle empty arrays (i.e. @Anno({})); we have no way of telling
-      // what it actually is
-      return "String[]";
-    } else if (value.isAnnotationExpr()) {
-      return value.asAnnotationExpr().getNameAsString();
-    } else if (value.isFieldAccessExpr()) {
-      // Enums are FieldAccessExprs (Enum.SOMETHING)
-      return value.asFieldAccessExpr().getScope().toString();
-    } else if (value.isClassExpr()) {
-      // Handle all classes
-      return "Class<?>";
-    } else if (value.isNameExpr()) {
-      // Constant/variable
-      try {
-        ResolvedType resolvedType = value.asNameExpr().calculateResolvedType();
-
-        if (resolvedType.isPrimitive()) {
-          return resolvedType.asPrimitive().describe();
-        } else if (resolvedType.isReferenceType()) {
-          return resolvedType.asReferenceType().getQualifiedName();
-        } else {
-          return resolvedType.describe();
-        }
-      } catch (UnsolvedSymbolException ex) {
-        return value.toString();
-      }
-    }
-    return value.toString();
   }
 
   /**
