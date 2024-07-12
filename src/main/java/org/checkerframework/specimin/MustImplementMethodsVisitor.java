@@ -165,7 +165,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
       // either.
       return false;
     }
-    Node typeElt = PrunerVisitor.getEnclosingClassLike(method);
+    Node typeElt = JavaParserUtil.getEnclosingClassLike(method);
 
     if (typeElt instanceof EnumDeclaration) {
       EnumDeclaration asEnum = (EnumDeclaration) typeElt;
