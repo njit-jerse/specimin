@@ -83,7 +83,7 @@ public class JavaParserUtil {
    *
    * @param value The value to evaluate the type of
    * @return The corresponding type name for the value: constrained to a primitive type, String,
-   *     Class<?>, an enum, an annotation, or an array of any of those types, as per annotation
+   *     Class&lt;?&gt;, an enum, an annotation, or an array of any of those types, as per annotation
    *     parameter requirements.
    */
   public static String getValueTypeFromAnnotationExpression(Expression value) {
