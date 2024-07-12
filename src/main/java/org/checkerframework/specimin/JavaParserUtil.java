@@ -3,7 +3,10 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -83,8 +86,8 @@ public class JavaParserUtil {
    *
    * @param value The value to evaluate the type of
    * @return The corresponding type name for the value: constrained to a primitive type, String,
-   *     Class&lt;?&gt;, an enum, an annotation, or an array of any of those types, as per annotation
-   *     parameter requirements.
+   *     Class&lt;?&gt;, an enum, an annotation, or an array of any of those types, as per
+   *     annotation parameter requirements.
    */
   public static String getValueTypeFromAnnotationExpression(Expression value) {
     if (value.isBooleanLiteralExpr()) {
@@ -199,5 +202,24 @@ public class JavaParserUtil {
       parent = actualParent.getParentNode();
     }
     return false;
+  }
+
+  /**
+   * Finds the closest method, field, or class-like declaration (enums, annos)
+   *
+   * @param node The node to find the parent for
+   * @return the Node of the closest member or class declaration
+   */
+  public static Node findClosestParentMemberOrClassLike(Node node) {
+    Node parent = node.getParentNode().orElseThrow();
+    while (!(parent instanceof ClassOrInterfaceDeclaration
+        || parent instanceof EnumDeclaration
+        || parent instanceof AnnotationDeclaration
+        || parent instanceof ConstructorDeclaration
+        || parent instanceof MethodDeclaration
+        || parent instanceof FieldDeclaration)) {
+      parent = parent.getParentNode().orElseThrow();
+    }
+    return parent;
   }
 }

@@ -141,7 +141,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MarkerAnnotationExpr anno, Void p) {
-    Node parent = findClosestParentMemberOrClassLike(anno);
+    Node parent = JavaParserUtil.findClosestParentMemberOrClassLike(anno);
 
     if (isTargetOrUsed(parent)) {
       handleAnnotation(anno);
@@ -151,7 +151,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
-    Node parent = findClosestParentMemberOrClassLike(anno);
+    Node parent = JavaParserUtil.findClosestParentMemberOrClassLike(anno);
 
     if (isTargetOrUsed(parent)) {
       handleAnnotation(anno);
@@ -161,7 +161,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NormalAnnotationExpr anno, Void p) {
-    Node parent = findClosestParentMemberOrClassLike(anno);
+    Node parent = JavaParserUtil.findClosestParentMemberOrClassLike(anno);
 
     if (isTargetOrUsed(parent)) {
       handleAnnotation(anno);
@@ -170,31 +170,12 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Finds the closest method, field, or class-like declaration (enums, annos)
-   *
-   * @param node The node to find the parent for
-   * @return the Node of the closest member or class declaration
-   */
-  public Node findClosestParentMemberOrClassLike(Node node) {
-    Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration
-        || parent instanceof EnumDeclaration
-        || parent instanceof AnnotationDeclaration
-        || parent instanceof ConstructorDeclaration
-        || parent instanceof MethodDeclaration
-        || parent instanceof FieldDeclaration)) {
-      parent = parent.getParentNode().orElseThrow();
-    }
-    return parent;
-  }
-
-  /**
-   * Determines if the given Node is a target/used method or class. Should be used following
-   * findClosestParentMemberOrClassLike().
+   * Determines if the given Node is a target/used method or class.
    *
    * @param node The node to check
    */
   private boolean isTargetOrUsed(Node node) {
+    // TODO: create a visitor superclass that contains this method and other common fields
     String qualifiedName;
     boolean isClass = false;
     if (node instanceof ClassOrInterfaceDeclaration) {
@@ -232,7 +213,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
         // utilized. It's not surprising for unused members to remain unresolved.
         // If this constructor is from the parent of the current class, and it is not resolved, we
         // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
-        // From PrunerVisitor.visit(ConstructorDeclaration, Void)
+        // Copied from PrunerVisitor.visit(ConstructorDeclaration, Void)
         return false;
       }
     } else if (node instanceof MethodDeclaration) {
