@@ -97,8 +97,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   public Visitable visit(AnnotationMemberDeclaration decl, Void p) {
     // Ensure that enums/fields that are used by default are included
     // Also, in edge cases, preserve method type since a definition with a default value may be
-    // added,
-    // but that value type is never explored by the visit(AnnotationExpr) methods
+    // added, but that value type is never explored by the visit(AnnotationExpr) methods
     if (usedClass.contains(JavaParserUtil.getEnclosingClassName(decl))) {
       // Class<> from jar files may contain other classes
       if (decl.getType().toString().startsWith("Class<")) {
