@@ -333,11 +333,6 @@ public class SpeciminRunner {
       }
     }
 
-    UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(annoRemover, null);
-    }
-
     EnumVisitor enumVisitor = new EnumVisitor(targetMethodNames);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(enumVisitor, null);
@@ -406,8 +401,6 @@ public class SpeciminRunner {
       for (String targetFile : inheritancePreserve.getAddedClasses()) {
         String directoryOfFile = targetFile.replace(".", "/") + ".java";
         File thisFile = new File(root + directoryOfFile);
-        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
-        // create synthetic files for them
         if (thisFile.exists()) {
           try {
             parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
@@ -438,7 +431,7 @@ public class SpeciminRunner {
     Set<CompilationUnit> compilationUnitsToSolveAnnotations =
         new HashSet<>(parsedTargetFiles.values());
 
-    // This should be safe to run after MustImplementMethodsVisitor because 
+    // This is safe to run after MustImplementMethodsVisitor because 
     // annotations do not inherit
     AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
         new AnnotationParameterTypesVisitor(
@@ -489,7 +482,8 @@ public class SpeciminRunner {
       annotationParameterTypesVisitor.getClassesToAdd().clear();
     }
 
-    // remove the unsolved annotations in the newly added files.
+    // Remove the unsolved annotations (and @Override) in all files.
+    UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(annoRemover, null);
     }
