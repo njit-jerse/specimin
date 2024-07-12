@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -96,6 +97,10 @@ public class JavaParserUtil {
         return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
       }
 
+      if (parent instanceof AnnotationDeclaration) {
+        return ((AnnotationDeclaration) parent).getFullyQualifiedName().orElseThrow();
+      }
+
       throw new RuntimeException("unexpected kind of node: " + parent.getClass());
     }
 
@@ -110,7 +115,9 @@ public class JavaParserUtil {
      */
     public static Node getEnclosingClassLike(Node node) {
       Node parent = node.getParentNode().orElseThrow();
-      while (!(parent instanceof ClassOrInterfaceDeclaration || parent instanceof EnumDeclaration)) {
+      while (!(parent instanceof ClassOrInterfaceDeclaration
+              || parent instanceof EnumDeclaration
+              || parent instanceof AnnotationDeclaration)) {
         parent = parent.getParentNode().orElseThrow();
       }
       return parent;
