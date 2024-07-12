@@ -39,10 +39,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
@@ -440,7 +438,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     // TODO: we should be cleverer about whether to preserve the constructors of
     // enums, but right now we don't remove any enum constants in related classes, so
     // we need to preserve all constructors to retain compilability.
-    if (membersToEmpty.contains(qualifiedSignature) || isInEnum(constructorDecl)) {
+    if (membersToEmpty.contains(qualifiedSignature) || JavaParserUtil.isInEnum(constructorDecl)) {
       if (!needToPreserveSuperOrThisCall(constructorDecl.resolve())) {
         constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
         return constructorDecl;
@@ -474,7 +472,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
 
     boolean isFinal = fieldDecl.isFinal();
-    String classFullName = getEnclosingClassName(fieldDecl);
+    String classFullName = JavaParserUtil.getEnclosingClassName(fieldDecl);
     Iterator<VariableDeclarator> iterator = fieldDecl.getVariables().iterator();
     while (iterator.hasNext()) {
       VariableDeclarator declarator = iterator.next();
@@ -612,66 +610,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
     }
     return usedTypeOnly;
-  }
-
-  /**
-   * Searches the ancestors of the given node until it finds a class or interface node, and then
-   * returns the fully-qualified name of that class or interface.
-   *
-   * <p>This method will fail if it is called on a node that is not contained in a class or
-   * interface.
-   *
-   * @param node a node contained in a class or interface
-   * @return the fully-qualified name of the inner-most containing class or interface
-   */
-  @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
-  public static @FullyQualifiedName String getEnclosingClassName(Node node) {
-    Node parent = getEnclosingClassLike(node);
-
-    if (parent instanceof ClassOrInterfaceDeclaration) {
-      return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    }
-
-    if (parent instanceof EnumDeclaration) {
-      return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    }
-
-    throw new RuntimeException("unexpected kind of node: " + parent.getClass());
-  }
-
-  /**
-   * Returns the innermost enclosing class-like element for the given node. A class-like element is
-   * a class, interface, or enum (i.e., something that would be a {@link
-   * javax.lang.model.element.TypeElement} in javac's internal model). This method will throw if no
-   * such element exists.
-   *
-   * @param node a node that is contained in a class-like structure
-   * @return the nearest enclosing class-like node
-   */
-  public static Node getEnclosingClassLike(Node node) {
-    Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration || parent instanceof EnumDeclaration)) {
-      parent = parent.getParentNode().orElseThrow();
-    }
-    return parent;
-  }
-
-  /**
-   * Returns true iff the innermost enclosing class/interface is an enum.
-   *
-   * @param node any node
-   * @return true if the enclosing class is an enum, false otherwise
-   */
-  public static boolean isInEnum(Node node) {
-    Optional<Node> parent = node.getParentNode();
-    while (parent.isPresent()) {
-      Node actualParent = parent.get();
-      if (actualParent instanceof EnumDeclaration) {
-        return true;
-      }
-      parent = actualParent.getParentNode();
-    }
-    return false;
   }
 
   /**
