@@ -99,7 +99,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
     // Also, in edge cases, preserve method type since a definition with a default value may be
     // added,
     // but that value type is never explored by the visit(AnnotationExpr) methods
-    if (usedClass.contains(PrunerVisitor.getEnclosingClassName(decl))) {
+    if (usedClass.contains(JavaParserUtil.getEnclosingClassName(decl))) {
       // Class<> from jar files may contain other classes
       if (decl.getType().toString().startsWith("Class<")) {
         // Replace with Class<?> to prevent compile-time errors
@@ -247,7 +247,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
       try {
         FieldDeclaration decl = (FieldDeclaration) node;
         for (VariableDeclarator var : decl.getVariables()) {
-          qualifiedName = PrunerVisitor.getEnclosingClassName(decl) + "#" + var.getNameAsString();
+          qualifiedName = JavaParserUtil.getEnclosingClassName(decl) + "#" + var.getNameAsString();
           if (usedMembers.contains(qualifiedName) || targetFields.contains(qualifiedName)) {
             return true;
           }
