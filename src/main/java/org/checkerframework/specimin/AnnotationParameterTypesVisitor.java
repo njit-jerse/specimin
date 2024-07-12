@@ -33,7 +33,7 @@ import java.util.Set;
 /**
  * Preserve annotations and their parameter types for used classes. This will only keep annotations
  * if the corresponding class, method, or field declaration is marked to be preserved. If an
- * annotation is not resolvable (including its parameters), it will be removed.
+ * annotation (or its parameters) is not resolvable, it will be removed.
  */
 public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   /** Set containing the signatures of used members (fields and methods). */
