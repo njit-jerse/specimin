@@ -1,5 +1,12 @@
 package org.checkerframework.specimin;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -23,12 +30,6 @@ import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDeclaration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 
 /**
  * Preserve annotations and their parameter types for used classes. This will only keep annotations
@@ -96,8 +97,11 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(AnnotationMemberDeclaration decl, Void p) {
     // Ensure that enums/fields that are used by default are included
-    // Also, in edge cases, preserve method type since a definition with a default value may be
+    // Also, preserve method type since a definition with a default value may be
     // added, but that value type is never explored by the visit(AnnotationExpr) methods
+    // For example, when the type is an enum (Foo), the definition may set a default value to Foo.VALUE,
+    // but Foo.VALUE may never be referenced in an @Annotation() usage (instead, other Foo values may)
+    // be used, so Foo.VALUE would be removed by PrunerVisitor and result in compile errors.
     if (usedClass.contains(JavaParserUtil.getEnclosingClassName(decl))) {
       // Class<> from jar files may contain other classes
       if (decl.getType().toString().startsWith("Class<")) {
