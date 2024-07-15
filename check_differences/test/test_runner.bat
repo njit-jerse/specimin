@@ -16,14 +16,14 @@ for /d %%t in (*) do (
     )
 )
 
-endlocal
-
 if !failed!==0 (
     echo All test cases executed successfully.
     exit /b 0
 ) else (
     exit /b 1
 )
+
+endlocal
 
 :handleCase
     setlocal enabledelayedexpansion
@@ -54,6 +54,3 @@ if !failed!==0 (
         cd ..
     endlocal
 exit /b 0
-
-:failed
-exit /b 1
