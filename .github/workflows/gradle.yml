@@ -60,4 +60,24 @@ jobs:
           diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
       - name: Check preservation status
         run: diff -uw src/main/resources/preservation_status.json specimin-evaluation/ISSUES/preservation_status.json
-          
+  windows-tester:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout project sources
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # so that spotless can ratchet; see https://github.com/diffplug/spotless/issues/710
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '17'
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+      - name: Run test with Gradle Wrapper
+        run: gradlew.bat test
+      - name: Run diff test with test_runner.bat
+        working-directory: check_differences/test
+        run: test_runner.bat
+      - name: Run expectedTestOutputsMustCompile with Gradle Wrapper
+        run: gradlew.bat expectedTestOutputsMustCompile
