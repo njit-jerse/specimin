@@ -111,7 +111,10 @@ for %%f in (%DIR_1_STRUCTURE%) do (
 
     del !FILE_1!.tmp
     del !FILE_2!.tmp
-    if !fail!==1 goto differences_found
+    if !fail!==1 (
+        echo !FILE_1! and !FILE_2! are different
+        goto differences_found
+    )
 )
 
 endlocal

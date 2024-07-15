@@ -92,7 +92,7 @@ public class SpeciminTestExecutor {
     boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
     if (isWindows) {
       builder.command(
-          "check_differences.bat",
+          "check_differences/check_differences.bat",
           outputDir.toAbsolutePath().toString(),
           Path.of("src/test/resources/" + testName + "/expected").toAbsolutePath().toString());
       return;
