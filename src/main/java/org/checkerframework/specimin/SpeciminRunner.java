@@ -441,10 +441,7 @@ public class SpeciminRunner {
 
     PrunerVisitor methodPruner =
         new PrunerVisitor(
-            finder.getTargetMethods(),
-            targetFieldNames,
-            mustImplementMethodsVisitor.getUsedMembers(),
-            mustImplementMethodsVisitor.getUsedTypeElements(),
+            mustImplementMethodsVisitor,
             finder.getResolvedYetStuckMethodCall(),
             classAndUnresolvedInterface);
 

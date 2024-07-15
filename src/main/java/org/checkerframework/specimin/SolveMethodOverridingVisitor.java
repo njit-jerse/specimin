@@ -45,7 +45,7 @@ public class SolveMethodOverridingVisitor extends SpeciminStateVisitor {
     ResolvedMethodDeclaration resolvedSuperCall =
         MustImplementMethodsVisitor.getOverriddenMethodInSuperClass(methodDeclaration);
     if (resolvedSuperCall != null) {
-      usedTypeElement.add(
+      usedTypeElements.add(
           resolvedSuperCall.getPackageName() + "." + resolvedSuperCall.getClassName());
       usedMembers.add(resolvedSuperCall.getQualifiedSignature());
     }

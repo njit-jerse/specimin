@@ -26,7 +26,6 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
-import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
@@ -37,45 +36,18 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
- * #methodsToLeaveUnchanged} set or {@link #membersToEmpty} set. It also deletes the bodies of all
- * methods and replaces them with "throw new Error();" or remove the initializers of fields
- * (minimized if the field is final) within the {@link #membersToEmpty} set.
+ * #targetMethods} set or {@link #usedMembers} set. It also deletes the bodies of all methods and
+ * replaces them with "throw new Error();" or remove the initializers of fields (minimized if the
+ * field is final) within the {@link #usedMembers} set.
  */
-public class PrunerVisitor extends ModifierVisitor<Void> {
-
-  /**
-   * The methods that should NOT be touched by this pruner. The strings representing the method are
-   * those returned by ResolvedMethodDeclaration#getQualifiedSignature.
-   */
-  private Set<String> methodsToLeaveUnchanged;
-
-  /**
-   * The fields that should NOT be touched by this pruner. The strings representing the field are
-   * obtained by combining the qualified name of the current class and the name of the field.
-   */
-  private Set<String> fieldsToLeaveUnchanged;
-
-  /**
-   * The members, fields and methods, to be pruned. For methods, the bodies are removed. For fields,
-   * the initializers are removed, or minimized in case the field is final. The strings representing
-   * the method are those returned by ResolvedMethodDeclaration#getQualifiedSignature. The strings
-   * representing the field are returned by ResolvedTypeDeclaration#getQualifiedName.
-   */
-  private Set<String> membersToEmpty;
-
-  /**
-   * This is the set of classes used by the target methods. We use this set to determine if we
-   * should keep or delete an import statement. The strings representing the classes are in
-   * the @FullyQualifiedName form.
-   */
-  private Set<String> classesUsedByTargetMethods;
+public class PrunerVisitor extends SpeciminStateVisitor {
 
   /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
@@ -97,47 +69,33 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   private final Set<String> resolvedYetStuckMethodCall;
 
   /** This map connects a class and its unresolved interface. */
-  private java.util.Map<String, String> classAndUnresolvedInterface;
+  private final Map<String, String> classAndUnresolvedInterface;
 
   /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
-   * be removed entirely. For methods in both arguments, the Strings should be in the format
-   * produced by ResolvedMethodDeclaration#getQualifiedSignature. For fields in {@link
-   * #membersToEmpty}, the Strings should be in the format produced by
-   * ResolvedTypeDeclaration#getQualifiedName.
+   * be removed entirely.
    *
-   * @param methodsToKeep the set of methods whose bodies should be kept intact (usually the target
-   *     methods for specimin)
-   * @param fieldsToKeep the set of fields whose initializers should be kept intact
-   * @param membersToEmpty the set of members that this pruner will empty
-   * @param classesUsedByTargetMethods the classes used by target methods
+   * @param previousVisitor the previous visitor to run, from whence state should be copied
    * @param resolvedYetStuckMethodCall set of methods that are resolved yet can not be solved by
    *     JavaParser
    * @param classAndUnresolvedInterface connects a class to its corresponding unresolved interface
    */
   public PrunerVisitor(
-      Set<String> methodsToKeep,
-      List<String> fieldsToKeep,
-      Set<String> membersToEmpty,
-      Set<String> classesUsedByTargetMethods,
+      SpeciminStateVisitor previousVisitor,
       Set<String> resolvedYetStuckMethodCall,
       java.util.Map<String, String> classAndUnresolvedInterface) {
-    this.methodsToLeaveUnchanged = methodsToKeep;
-    this.membersToEmpty = membersToEmpty;
-    this.classesUsedByTargetMethods = classesUsedByTargetMethods;
+    super(previousVisitor);
     this.classAndUnresolvedInterface = classAndUnresolvedInterface;
-    this.fieldsToLeaveUnchanged = new HashSet<>();
-    fieldsToLeaveUnchanged.addAll(fieldsToKeep);
     Set<String> toRemove = new HashSet<>();
-    for (String classUsedByTargetMethods : classesUsedByTargetMethods) {
+    for (String classUsedByTargetMethods : usedTypeElements) {
       if (classUsedByTargetMethods.contains("<")) {
         toRemove.add(classUsedByTargetMethods);
       }
     }
     for (String s : toRemove) {
-      classesUsedByTargetMethods.remove(s);
+      usedTypeElements.remove(s);
       String withoutAngleBrackets = s.substring(0, s.indexOf("<"));
-      classesUsedByTargetMethods.add(withoutAngleBrackets);
+      usedTypeElements.add(withoutAngleBrackets);
     }
     this.resolvedYetStuckMethodCall = resolvedYetStuckMethodCall;
   }
@@ -151,7 +109,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // make the code less confusing.
       String importedPackage = classFullName;
       boolean isUsedAtLeastOnce = false;
-      for (String usedClassFQN : classesUsedByTargetMethods) {
+      for (String usedClassFQN : usedTypeElements) {
         if (usedClassFQN.startsWith(importedPackage)) {
           isUsedAtLeastOnce = true;
         }
@@ -166,7 +124,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       // if it's a static import, classFullName will actually be a method name
       return super.visit(decl, p);
     }
-    if (classesUsedByTargetMethods.contains(classFullName)) {
+    if (usedTypeElements.contains(classFullName)) {
       return super.visit(decl, p);
     }
 
@@ -187,7 +145,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @return true if this type name is a parameter of a used method
    */
   public boolean isUsedMethodParameterType(String classFullName) {
-    for (String member : membersToEmpty) {
+    for (String member : usedMembers) {
       int openParen = member.indexOf('(');
       int closeParen = member.lastIndexOf(')');
 
@@ -228,7 +186,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @return true if a method with this name will be preserved
    */
   private boolean isUsedMethod(String staticImport) {
-    for (String methodSignature : methodsToLeaveUnchanged) {
+    for (String methodSignature : targetMethods) {
       if (methodSignature.startsWith(staticImport)) {
         return true;
       }
@@ -237,7 +195,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     StringBuilder asFieldNameBuilder = new StringBuilder(staticImport);
     asFieldNameBuilder.setCharAt(lastDotIndex, '#');
     String asFieldName = asFieldNameBuilder.toString();
-    for (String member : membersToEmpty) {
+    for (String member : usedMembers) {
       if (member.startsWith(staticImport)) {
         return true;
       }
@@ -270,7 +228,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         String typeFullName =
             JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(interfaceType)
                 .getQualifiedName();
-        if (!classesUsedByTargetMethods.contains(typeFullName)) {
+        if (!usedTypeElements.contains(typeFullName)) {
           iterator.remove();
         }
         // all unresolvable interfaces that need to be removed belong to the Java package.
@@ -298,7 +256,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(EnumDeclaration decl, Void p) {
     String qualifiedName = decl.resolve().getQualifiedName();
-    if (!classesUsedByTargetMethods.contains(qualifiedName)) {
+    if (!usedTypeElements.contains(qualifiedName)) {
       decl.remove();
       return decl;
     }
@@ -326,7 +284,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
     decl = minimizeTypeParameters(decl);
     String classQualifiedName = decl.resolve().getQualifiedName();
-    if (!classesUsedByTargetMethods.contains(classQualifiedName)
+    if (!usedTypeElements.contains(classQualifiedName)
         && !isUsedMethodParameterType(classQualifiedName)) {
       decl.remove();
       return decl;
@@ -356,7 +314,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       JavaParserUtil.removeNode(enumConstantDeclaration);
       return enumConstantDeclaration;
     }
-    if (!membersToEmpty.contains(
+    if (!usedMembers.contains(
         resolved.getType().describe() + "." + enumConstantDeclaration.getNameAsString())) {
       JavaParserUtil.removeNode(enumConstantDeclaration);
     }
@@ -377,7 +335,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     }
 
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
-    if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
+    if (targetMethods.contains(resolved.getQualifiedSignature())) {
       boolean oldInsideTargetMethod = insideTargetMethod;
       insideTargetMethod = true;
       Visitable result = super.visit(methodDecl, p);
@@ -385,7 +343,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       return result;
     }
 
-    if (membersToEmpty.contains(resolved.getQualifiedSignature())
+    if (usedMembers.contains(resolved.getQualifiedSignature())
         || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
@@ -431,14 +389,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       return constructorDecl;
     }
 
-    if (methodsToLeaveUnchanged.contains(qualifiedSignature)) {
+    if (targetMethods.contains(qualifiedSignature)) {
       return super.visit(constructorDecl, p);
     }
 
     // TODO: we should be cleverer about whether to preserve the constructors of
     // enums, but right now we don't remove any enum constants in related classes, so
     // we need to preserve all constructors to retain compilability.
-    if (membersToEmpty.contains(qualifiedSignature) || JavaParserUtil.isInEnum(constructorDecl)) {
+    if (usedMembers.contains(qualifiedSignature) || JavaParserUtil.isInEnum(constructorDecl)) {
       if (!needToPreserveSuperOrThisCall(constructorDecl.resolve())) {
         constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
         return constructorDecl;
@@ -486,9 +444,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
       String varFullName = classFullName + "#" + declarator.getNameAsString();
 
-      if (fieldsToLeaveUnchanged.contains(varFullName)) {
+      if (targetFields.contains(varFullName)) {
         continue;
-      } else if (membersToEmpty.contains(varFullName)) {
+      } else if (usedMembers.contains(varFullName)) {
         declarator.removeInitializer();
         if (isFinal) {
           declarator.setInitializer(getBasicInitializer(declarator.getType()));
@@ -605,7 +563,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       } catch (UnsolvedSymbolException | IllegalStateException e) {
         continue;
       }
-      if (classesUsedByTargetMethods.contains(resolvedType.asReferenceType().getQualifiedName())) {
+      if (usedTypeElements.contains(resolvedType.asReferenceType().getQualifiedName())) {
         usedTypeOnly.add(type);
       }
     }
@@ -646,7 +604,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       try {
         for (ResolvedConstructorDeclaration constructorOfExtendedClass :
             extendedClass.getTypeDeclaration().get().getConstructors()) {
-          if (membersToEmpty.contains(constructorOfExtendedClass.getQualifiedSignature())) {
+          if (usedMembers.contains(constructorOfExtendedClass.getQualifiedSignature())) {
             return true;
           }
         }

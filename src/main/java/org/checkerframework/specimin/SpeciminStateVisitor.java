@@ -12,13 +12,19 @@ import java.util.Set;
  * <p>This class tracks the following: - the lists of target methods and fields - the lists of used
  * members and classes - the set of existing classes to file paths
  */
-public /*abstract*/ class SpeciminStateVisitor extends ModifierVisitor<Void> {
+public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
   /**
    * Set containing the signatures of target methods. The Strings in the set are the fully-qualified
-   * names, as returned by ResolvedMethodDeclaration#getQualifiedSignature
+   * names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
    */
   protected final Set<String> targetMethods;
+
+  /**
+   * Set containing the fully-qualified names of target fields. The format is
+   * class.fully.qualified.Name#fieldName.
+   */
+  protected final Set<String> targetFields;
 
   /**
    * The members (methods and fields) that were actually used by the targets, and therefore ought to
@@ -32,7 +38,7 @@ public /*abstract*/ class SpeciminStateVisitor extends ModifierVisitor<Void> {
    * Type elements (classes, interfaces, and enums) related to the methods used by the targets.
    * These classes will be included in the input.
    */
-  protected final Set<String> usedTypeElement;
+  protected final Set<String> usedTypeElements;
 
   /** for checking if class files are in the original codebase. */
   protected final Map<String, Path> existingClassesToFilePath;
@@ -41,18 +47,24 @@ public /*abstract*/ class SpeciminStateVisitor extends ModifierVisitor<Void> {
    * Constructs a new instance with the provided sets. Use this constructor only for the first
    * visitor to run.
    *
-   * @param usedMembers Set containing the signatures of used members.
-   * @param usedTypeElement Set containing the signatures of used classes.
+   * @param targetMethods the fully-qualified signatures of the target methods, in the form returned
+   *     by ResolvedMethodDeclaration#getQualifiedSignature
+   * @param targetFields the fully-qualified names of the target fields, in the form
+   *     class.fully.qualified.Name#fieldName
+   * @param usedMembers set containing the signatures of used members
+   * @param usedTypeElements set containing the signatures of used classes, enums, annotations, etc.
    * @param existingClassesToFilePath map from existing classes to file paths
    */
   public SpeciminStateVisitor(
       Set<String> targetMethods,
+      Set<String> targetFields,
       Set<String> usedMembers,
-      Set<String> usedTypeElement,
+      Set<String> usedTypeElements,
       Map<String, Path> existingClassesToFilePath) {
     this.targetMethods = targetMethods;
+    this.targetFields = targetFields;
     this.usedMembers = usedMembers;
-    this.usedTypeElement = usedTypeElement;
+    this.usedTypeElements = usedTypeElements;
     this.existingClassesToFilePath = existingClassesToFilePath;
   }
 
@@ -64,18 +76,10 @@ public /*abstract*/ class SpeciminStateVisitor extends ModifierVisitor<Void> {
    */
   public SpeciminStateVisitor(SpeciminStateVisitor previous) {
     this.targetMethods = previous.targetMethods;
-    this.usedTypeElement = previous.usedTypeElement;
+    this.targetFields = previous.targetFields;
+    this.usedTypeElements = previous.usedTypeElements;
     this.usedMembers = previous.usedMembers;
     this.existingClassesToFilePath = previous.existingClassesToFilePath;
-  }
-
-  /**
-   * Get the set containing the signatures of used members.
-   *
-   * @return The set containing the signatures of used members.
-   */
-  public Set<String> getUsedMembers() {
-    return usedMembers;
   }
 
   /**
@@ -84,16 +88,6 @@ public /*abstract*/ class SpeciminStateVisitor extends ModifierVisitor<Void> {
    * @return The set containing the signatures of used classes.
    */
   public Set<String> getUsedTypeElements() {
-    return usedTypeElement;
-  }
-
-  /**
-   * Get the target methods that this visitor has encountered so far. The Strings in the set are the
-   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
-   *
-   * @return the target methods
-   */
-  public Set<String> getTargetMethods() {
-    return targetMethods;
+    return usedTypeElements;
   }
 }

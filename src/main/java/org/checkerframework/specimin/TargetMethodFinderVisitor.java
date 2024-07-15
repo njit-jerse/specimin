@@ -59,9 +59,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
    */
   private final Set<String> targetMethodNames;
 
-  /** The names of the target fields. The format is class.fully.qualified.Name#fieldName. */
-  private final Set<String> targetFieldNames;
-
   /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
    * is set by {@link #visit(MethodDeclaration, Void)}.
@@ -126,13 +123,16 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       Map<String, String> nonPrimaryClassesToPrimaryClass,
       Map<String, Path> existingClassesToFilePath,
       Set<String> usedTypeElement) {
-    super(new HashSet<>(), new HashSet<>(), usedTypeElement, existingClassesToFilePath);
+    super(
+        new HashSet<>(),
+        new HashSet<>(fieldNames),
+        new HashSet<>(),
+        usedTypeElement,
+        existingClassesToFilePath);
     targetMethodNames = new HashSet<>();
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
-    targetFieldNames = new HashSet<>();
-    targetFieldNames.addAll(fieldNames);
     unfoundMethods = new HashMap<>(methodNames.size());
     targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
@@ -283,7 +283,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       unfoundMethods.remove(methodName);
       updateUsedClassWithQualifiedClassName(
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
-          usedTypeElement,
+          usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
     } else {
       updateUnfoundMethods(methodName);
@@ -300,7 +300,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         return result;
       }
       // used enums needs to have compilable constructors.
-      if (usedTypeElement.contains(parentNode.getFullyQualifiedName().orElseThrow())) {
+      if (usedTypeElements.contains(parentNode.getFullyQualifiedName().orElseThrow())) {
         for (Parameter parameter : method.getParameters()) {
           updateUsedClassBasedOnType(parameter.getType().resolve());
         }
@@ -313,11 +313,11 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   public Visitable visit(VariableDeclarator node, Void arg) {
     if (node.getParentNode().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
-      if (targetFieldNames.contains(this.classFQName + "#" + node.getNameAsString())) {
+      if (targetFields.contains(this.classFQName + "#" + node.getNameAsString())) {
         boolean oldInsideTargetMember = insideTargetMember;
         insideTargetMember = true;
         Visitable result = super.visit(node, arg);
-        usedTypeElement.add(this.classFQName);
+        usedTypeElements.add(this.classFQName);
         insideTargetMember = oldInsideTargetMember;
         return result;
       }
@@ -343,7 +343,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         String methodClass = resolved.getClassName();
         usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
         updateUsedClassWithQualifiedClassName(
-            methodPackage + "." + methodClass, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+            methodPackage + "." + methodClass, usedTypeElements, nonPrimaryClassesToPrimaryClass);
       }
     }
     String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
@@ -352,7 +352,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
-          usedTypeElement,
+          usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
       insideTargetMember = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
@@ -422,7 +422,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
           String paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().orElseThrow().getQualifiedName();
           updateUsedClassWithQualifiedClassName(
-              paraTypeFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+              paraTypeFullName, usedTypeElements, nonPrimaryClassesToPrimaryClass);
           for (ResolvedType typeParameterValue :
               paramType.asReferenceType().typeParametersValues()) {
             String typeParameterValueName = typeParameterValue.describe();
@@ -432,7 +432,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
                   typeParameterValueName.substring(0, typeParameterValueName.indexOf("<"));
             }
             updateUsedClassWithQualifiedClassName(
-                typeParameterValueName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+                typeParameterValueName, usedTypeElements, nonPrimaryClassesToPrimaryClass);
           }
         }
       }
@@ -503,11 +503,11 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
             // if it had been imported we wouldn't be in this situation.
             if (UnsolvedSymbolVisitor.isAClassPath(scopeAsString)) {
               resolvedYetStuckMethodCall.add(scopeAsString + "." + call.getNameAsString());
-              usedTypeElement.add(scopeAsString);
+              usedTypeElements.add(scopeAsString);
             } else {
               resolvedYetStuckMethodCall.add(
                   getCurrentPackage() + "." + scopeAsString + "." + call.getNameAsString());
-              usedTypeElement.add(getCurrentPackage() + "." + scopeAsString);
+              usedTypeElements.add(getCurrentPackage() + "." + scopeAsString);
             }
           }
         } else {
@@ -538,7 +538,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     usedMembers.add(decl.getQualifiedSignature());
     updateUsedClassWithQualifiedClassName(
         decl.getPackageName() + "." + decl.getClassName(),
-        usedTypeElement,
+        usedTypeElements,
         nonPrimaryClassesToPrimaryClass);
     try {
       ResolvedType methodReturnType = decl.getReturnType();
@@ -598,7 +598,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         usedMembers.add(resolved.getQualifiedSignature());
         updateUsedClassWithQualifiedClassName(
             resolved.getPackageName() + "." + resolved.getClassName(),
-            usedTypeElement,
+            usedTypeElements,
             nonPrimaryClassesToPrimaryClass);
         for (int i = 0; i < resolved.getNumberOfParams(); ++i) {
           // Why is there no getParams() method??
@@ -620,7 +620,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
           resolved.getPackageName() + "." + resolved.getClassName(),
-          usedTypeElement,
+          usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
     }
     return super.visit(expr, p);
@@ -630,7 +630,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
     Node parentNode = enumConstantDeclaration.getParentNode().orElseThrow();
     if (parentNode instanceof EnumDeclaration) {
-      if (usedTypeElement.contains(
+      if (usedTypeElements.contains(
           ((EnumDeclaration) parentNode)
               .asEnumDeclaration()
               .getFullyQualifiedName()
@@ -660,7 +660,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         updateUsedClassWithQualifiedClassName(
-            fullNameOfClass, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+            fullNameOfClass, usedTypeElements, nonPrimaryClassesToPrimaryClass);
         ResolvedType exprResolvedType = expr.resolve().getType();
         updateUsedClassBasedOnType(exprResolvedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
@@ -720,7 +720,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
                       methodDeclarationToInterfaceType.get(interfaceMethod));
               updateUsedClassWithQualifiedClassName(
                   resolvedInterface.getQualifiedName(),
-                  usedTypeElement,
+                  usedTypeElements,
                   nonPrimaryClassesToPrimaryClass);
               usedMembers.add(interfaceMethod.getQualifiedSignature());
             }
@@ -792,7 +792,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     }
     String classFullName = resolved.asEnumConstant().getType().describe();
     updateUsedClassWithQualifiedClassName(
-        classFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+        classFullName, usedTypeElements, nonPrimaryClassesToPrimaryClass);
     usedMembers.add(classFullName + "." + fieldAccessExpr.getNameAsString());
     return true;
   }
@@ -816,13 +816,13 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       // field is declared
       String classFullName = exprDecl.asField().declaringType().getQualifiedName();
       updateUsedClassWithQualifiedClassName(
-          classFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+          classFullName, usedTypeElements, nonPrimaryClassesToPrimaryClass);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
       updateUsedClassBasedOnType(exprDecl.getType());
     } else if (exprDecl instanceof ResolvedEnumConstantDeclaration) {
       String enumFullName = exprDecl.asEnumConstant().getType().describe();
       updateUsedClassWithQualifiedClassName(
-          enumFullName, usedTypeElement, nonPrimaryClassesToPrimaryClass);
+          enumFullName, usedTypeElements, nonPrimaryClassesToPrimaryClass);
       // "." and not "#" because enum constants are not fields
       usedMembers.add(enumFullName + "." + expr.getNameAsString());
       updateUsedClassBasedOnType(exprDecl.getType());
@@ -885,7 +885,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       ResolvedTypeParameterDeclaration asTypeParameter = type.asTypeParameter();
       for (ResolvedTypeParameterDeclaration.Bound bound : asTypeParameter.getBounds()) {
         updateUsedClassWithQualifiedClassName(
-            bound.getType().describe(), usedTypeElement, nonPrimaryClassesToPrimaryClass);
+            bound.getType().describe(), usedTypeElements, nonPrimaryClassesToPrimaryClass);
       }
       return;
     } else if (type.isArray()) {
@@ -894,7 +894,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       return;
     }
     updateUsedClassWithQualifiedClassName(
-        type.describe(), usedTypeElement, nonPrimaryClassesToPrimaryClass);
+        type.describe(), usedTypeElements, nonPrimaryClassesToPrimaryClass);
     if (!type.isReferenceType()) {
       return;
     }
@@ -915,7 +915,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       }
       updateUsedClassWithQualifiedClassName(
           typePara.asReferenceType().getQualifiedName(),
-          usedTypeElement,
+          usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
     }
   }

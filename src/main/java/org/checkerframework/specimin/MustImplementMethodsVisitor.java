@@ -41,7 +41,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
   @SuppressWarnings("nullness:return") // ok to return null, because this is a void visitor
   public Visitable visit(ClassOrInterfaceDeclaration type, Void p) {
     if (type.getFullyQualifiedName().isPresent()
-        && usedTypeElement.contains(type.getFullyQualifiedName().get())) {
+        && usedTypeElements.contains(type.getFullyQualifiedName().get())) {
       return super.visit(type, p);
     } else {
       // the effect of not calling super here is that only used classes
@@ -87,7 +87,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
         if (type.contains("[]")) {
           type = type.replace("[]", "");
         }
-        usedTypeElement.add(type);
+        usedTypeElements.add(type);
       }
     }
     return super.visit(method, p);
