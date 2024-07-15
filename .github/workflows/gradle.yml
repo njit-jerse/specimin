@@ -76,8 +76,11 @@ jobs:
         uses: gradle/gradle-build-action@v2
       - name: Run test with Gradle Wrapper
         run: gradlew.bat test
+        shell: cmd
       - name: Run diff test with test_runner.bat
         working-directory: check_differences/test
         run: test_runner.bat
+        shell: cmd
       - name: Run expectedTestOutputsMustCompile with Gradle Wrapper
         run: gradlew.bat expectedTestOutputsMustCompile
+        shell: cmd
