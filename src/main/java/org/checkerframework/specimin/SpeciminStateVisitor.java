@@ -14,7 +14,10 @@ import java.util.Set;
  */
 public /*abstract*/ class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
-  /** Set containing the signatures of target methods. */
+  /**
+   * Set containing the signatures of target methods. The Strings in the set are the fully-qualified
+   * names, as returned by ResolvedMethodDeclaration#getQualifiedSignature
+   */
   protected final Set<String> targetMethods;
 
   /**
@@ -82,5 +85,15 @@ public /*abstract*/ class SpeciminStateVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getUsedTypeElements() {
     return usedTypeElement;
+  }
+
+  /**
+   * Get the target methods that this visitor has encountered so far. The Strings in the set are the
+   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
+   *
+   * @return the target methods
+   */
+  public Set<String> getTargetMethods() {
+    return targetMethods;
   }
 }

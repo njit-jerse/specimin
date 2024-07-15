@@ -1,6 +1,5 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -26,7 +25,6 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.UnionType;
-import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
@@ -40,6 +38,7 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedWildcard;
 import com.google.common.base.Splitter;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,16 +51,16 @@ import java.util.stream.Collectors;
  * The main visitor for Specimin's first phase, which locates the target method(s) and compiles
  * information on what specifications they use.
  */
-public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
+public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   /**
    * The names of the target methods. The format is
    * class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...). All the names will have
    * spaces remove for ease of comparison.
    */
-  private Set<String> targetMethodNames;
+  private final Set<String> targetMethodNames;
 
   /** The names of the target fields. The format is class.fully.qualified.Name#fieldName. */
-  private Set<String> targetFieldNames;
+  private final Set<String> targetFieldNames;
 
   /**
    * This boolean tracks whether the element currently being visited is inside a target method. It
@@ -76,29 +75,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private String currentPackage = "";
 
   /**
-   * The members (methods and fields) that were actually used by the targets, and therefore ought to
-   * have their specifications (but not bodies) preserved. The Strings in the set are the
-   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature for
-   * methods and FieldAccessExpr#getName for fields.
-   */
-  private final Set<String> usedMembers = new HashSet<>();
-
-  /**
-   * Type elements (classes, interfaces, and enums) related to the methods used by the targets.
-   * These classes will be included in the input.
-   */
-  private Set<String> usedTypeElement = new HashSet<>();
-
-  /** Set of variables declared in this current class */
-  private final Set<String> declaredNames = new HashSet<>();
-
-  /**
-   * The resolved target methods. The Strings in the set are the fully-qualified names, as returned
-   * by ResolvedMethodDeclaration#getQualifiedSignature.
-   */
-  private final Set<String> targetMethods = new HashSet<>();
-
-  /**
    * The keys of this map are a local copy of the input list of methods. A method is removed from
    * this copy's key set when it is located. If the visitor has been run on all source files and the
    * key set isn't empty, that usually indicates an error. The values are other method signatures
@@ -107,11 +83,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    * name/signature of a method actually is.
    */
   private final Map<String, Set<String>> unfoundMethods;
-
-  /**
-   * This map has the name of an imported class as key and the package of that class as the value.
-   */
-  private final Map<String, String> importedClassToPackage;
 
   /**
    * This map connects the resolved declaration of a method to the interface that contains it, if
@@ -146,13 +117,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    *     class.fully.qualified.Name#fieldName
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
-   * @param usedTypeElement set of type elements used by target methods.
+   * @param existingClassesToFilePath map from existing classes to file paths
+   * @param usedTypeElement set of type elements already known to be used by the target methods.
    */
   public TargetMethodFinderVisitor(
       List<String> methodNames,
       List<String> fieldNames,
       Map<String, String> nonPrimaryClassesToPrimaryClass,
+      Map<String, Path> existingClassesToFilePath,
       Set<String> usedTypeElement) {
+    super(new HashSet<>(), new HashSet<>(), usedTypeElement, existingClassesToFilePath);
     targetMethodNames = new HashSet<>();
     for (String methodSignature : methodNames) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
@@ -161,9 +135,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     targetFieldNames.addAll(fieldNames);
     unfoundMethods = new HashMap<>(methodNames.size());
     targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
-    importedClassToPackage = new HashMap<>();
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
-    this.usedTypeElement = usedTypeElement;
   }
 
   /**
@@ -177,37 +149,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public Map<String, Set<String>> getUnfoundMethods() {
     return unfoundMethods;
-  }
-
-  /**
-   * Get the methods that this visitor has concluded that the target method(s) use, and therefore
-   * ought to be retained. The Strings in the set are the fully-qualified names, as returned by
-   * ResolvedMethodDeclaration#getQualifiedSignature.
-   *
-   * @return the used methods
-   */
-  public Set<String> getUsedMembers() {
-    return usedMembers;
-  }
-
-  /**
-   * Get the classes of the methods and enums that the target method uses. The Strings in the set
-   * are the fully-qualified names.
-   *
-   * @return the used type elements.
-   */
-  public Set<String> getUsedTypeElement() {
-    return usedTypeElement;
-  }
-
-  /**
-   * Get the target methods that this visitor has encountered so far. The Strings in the set are the
-   * fully-qualified names, as returned by ResolvedMethodDeclaration#getQualifiedSignature.
-   *
-   * @return the target methods
-   */
-  public Set<String> getTargetMethods() {
-    return targetMethods;
   }
 
   /**
@@ -257,18 +198,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(PackageDeclaration decl, Void p) {
     this.currentPackage = decl.getNameAsString();
-    return super.visit(decl, p);
-  }
-
-  @Override
-  public Node visit(ImportDeclaration decl, Void p) {
-    String classFullName = decl.getNameAsString();
-    if (decl.isStatic()) {
-      classFullName = classFullName.substring(0, classFullName.lastIndexOf("."));
-    }
-    String classSimpleName = classFullName.substring(classFullName.lastIndexOf(".") + 1);
-    String packageName = classFullName.replace("." + classSimpleName, "");
-    importedClassToPackage.put(classSimpleName, packageName);
     return super.visit(decl, p);
   }
 
@@ -382,8 +311,6 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(VariableDeclarator node, Void arg) {
-    declaredNames.add(node.getNameAsString());
-
     if (node.getParentNode().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
       if (targetFieldNames.contains(this.classFQName + "#" + node.getNameAsString())) {
