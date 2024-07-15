@@ -1,0 +1,17 @@
+check_differences
+.bat
+
+should  ignore       whitespace
+and 
+
+empty lines
+
+as well as
+
+lines with batch delimiters
+
+like
+
+;;;
+;
+;;;
