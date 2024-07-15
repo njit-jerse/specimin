@@ -1,10 +1,17 @@
 package org.checkerframework.specimin;
 
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Set;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -36,12 +43,6 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
@@ -614,7 +615,6 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-
    * Check if a node is inside an interface.
    *
    * @param node the node to be checked.
