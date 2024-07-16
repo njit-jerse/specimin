@@ -461,17 +461,17 @@ public class SpeciminRunner {
       // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
         // target key will have this form: "path/of/package/ClassName.java"
-        String classFullyQualfiedName = getFullyQualifiedClassName(target.getKey());
+        String classFullyQualifiedName = getFullyQualifiedClassName(target.getKey());
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
-            classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
+            classFullyQualifiedName.substring(classFullyQualifiedName.lastIndexOf(".") + 1);
         // If this condition is true, this class is a synthetic class initially created to be a
         // return type of some synthetic methods, but later javac has found the correct return type
         // for that method.
         if (typesToChange.containsKey(simpleName)) {
           continue;
         }
-        if (!finder.getUsedTypeElements().contains(classFullyQualfiedName)) {
+        if (!finder.getUsedTypeElements().contains(classFullyQualifiedName)) {
           continue;
         }
       }

@@ -83,7 +83,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
   public PrunerVisitor(
       SpeciminStateVisitor previousVisitor,
       Set<String> resolvedYetStuckMethodCall,
-      java.util.Map<String, String> classAndUnresolvedInterface) {
+      Map<String, String> classAndUnresolvedInterface) {
     super(previousVisitor);
     this.classAndUnresolvedInterface = classAndUnresolvedInterface;
     Set<String> toRemove = new HashSet<>();
@@ -139,7 +139,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
   /**
    * Helper method to check if the given fully-qualified class name is used as a parameter type by
-   * any of the methods in methodsToEmpty.
+   * any of the methods in {@link #usedMembers}.
    *
    * @param classFullName a fully-qualified class name
    * @return true if this type name is a parameter of a used method
