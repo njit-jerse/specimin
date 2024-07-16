@@ -1,57 +1,24 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
-import java.util.Set;
 
 /**
  * If used or target methods override another methods, this visitor updates the list of used classes
  * and methods accordingly.
  */
-public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
-  /** Set containing the signatures of target methods. */
-  private Set<String> targetMethod;
-
-  /** Set containing the signatures of used member (fields and methods). */
-  private Set<String> usedMembers;
-
-  /** Set containing the signatures of used classes. */
-  private Set<String> usedClass;
+public class SolveMethodOverridingVisitor extends SpeciminStateVisitor {
 
   /**
    * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
    * members, and used classes.
    *
-   * @param targetMethod Set containing the signatures of target methods.
-   * @param usedMembers Set containing the signatures of used members.
-   * @param usedClass Set containing the signatures of used classes.
+   * @param previousVisitor the last visitor to run before this one
    */
-  public SolveMethodOverridingVisitor(
-      Set<String> targetMethod, Set<String> usedMembers, Set<String> usedClass) {
-    this.targetMethod = targetMethod;
-    this.usedMembers = usedMembers;
-    this.usedClass = usedClass;
-  }
-
-  /**
-   * Get the set containing the signatures of used members.
-   *
-   * @return The set containing the signatures of used members.
-   */
-  public Set<String> getUsedMembers() {
-    return usedMembers;
-  }
-
-  /**
-   * Get the set containing the signatures of used classes.
-   *
-   * @return The set containing the signatures of used classes.
-   */
-  public Set<String> getUsedClass() {
-    return usedClass;
+  public SolveMethodOverridingVisitor(SpeciminStateVisitor previousVisitor) {
+    super(previousVisitor);
   }
 
   @Override
@@ -63,7 +30,7 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
       // this method is not used by target methods, so it is unresolved.
       return super.visit(method, p);
     }
-    if (targetMethod.contains(methodSignature) || usedMembers.contains(methodSignature)) {
+    if (targetMethods.contains(methodSignature) || usedMembers.contains(methodSignature)) {
       checkForOverridingAndUpdateUsedClasses(method);
     }
     return super.visit(method, p);
@@ -78,7 +45,8 @@ public class SolveMethodOverridingVisitor extends ModifierVisitor<Void> {
     ResolvedMethodDeclaration resolvedSuperCall =
         MustImplementMethodsVisitor.getOverriddenMethodInSuperClass(methodDeclaration);
     if (resolvedSuperCall != null) {
-      usedClass.add(resolvedSuperCall.getPackageName() + "." + resolvedSuperCall.getClassName());
+      usedTypeElements.add(
+          resolvedSuperCall.getPackageName() + "." + resolvedSuperCall.getClassName());
       usedMembers.add(resolvedSuperCall.getQualifiedSignature());
     }
   }
