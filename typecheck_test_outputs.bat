@@ -13,12 +13,15 @@ set returnval=0
 cd src\test\resources || exit /b 1
 
 for /d %%t in (*) do (
-    if "%%t"=="shared" goto continue
-    rem https://bugs.openjdk.org/browse/JDK-8319461 wasn't actually fixed (this test is based on that bug)
-    if "%%t"=="superinterfaceextends" goto continue
-    rem incomplete handling of method references: https://github.com/njit-jerse/specimin/issues/291
-    rem this test exists to check that no crash occurs, not that Specimin produces the correct output
-    if "%%t"=="methodref2" goto continue
+  echo %%t
+  set continue=0
+  if "%%t"=="shared" set continue=1
+  rem https://bugs.openjdk.org/browse/JDK-8319461 wasn't actually fixed (this test is based on that bug)
+  if "%%t"=="superinterfaceextends" set continue=1
+  rem incomplete handling of method references: https://github.com/njit-jerse/specimin/issues/291
+  rem this test exists to check that no crash occurs, not that Specimin produces the correct output
+  if "%%t"=="methodref2" set continue=1
+  if !continue!==0 (
     cd "%%t/expected/" || exit 1
     rem javac relies on word splitting
     rem shellcheck disable=SC2046
@@ -32,8 +35,7 @@ for /d %%t in (*) do (
         set returnval=2
     )
     cd ../.. || exit 1
-    :continue
-    rem putting :continue without anything after gives an error, so put a comment here to prevent it
+  )
 )
 
 if !returnval!==0 (
