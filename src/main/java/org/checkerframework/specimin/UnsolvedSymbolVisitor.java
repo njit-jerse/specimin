@@ -93,7 +93,7 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
  * <p>Note: To comprehend this visitor quickly, it is recommended to start by reading all the visit
  * methods.
  */
-public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
+public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
   /**
    * Flag for whether or not to print debugging output. Should always be false except when you are
@@ -119,9 +119,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   /** The symbol table for type variables. A type variable is mapped to the list of its bounds. */
   private final ArrayDeque<Map<String, NodeList<ClassOrInterfaceType>>> typeVariables =
       new ArrayDeque<>();
-
-  /** The simple name of the class currently visited */
-  private @ClassGetSimpleName String className = "";
 
   /**
    * This map will map the name of variables in the current class and its corresponding declaration
@@ -198,12 +195,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
 
   /**
-   * The fully-qualified name of each Java class in the original codebase mapped to the
-   * corresponding Java file.
-   */
-  private Map<String, Path> existingClassesToFilePath;
-
-  /**
    * Mapping of statically imported members where keys are the imported members and values are their
    * corresponding classes.
    */
@@ -220,27 +211,10 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       classToItsUnsolvedInterface = new HashMap<>();
 
   /**
-   * List of signatures of target methods as specified by users. All signatures have spaces removed
-   * for ease of comparison.
-   */
-  private final Set<String> targetMethodsSignatures;
-
-  /** List of signatures of target fields as specified by users. */
-  private final Set<String> targetFieldsSignatures;
-
-  /**
    * Fields and methods that could be called inside the target methods. We call them potential-used
    * because the usage check is simply based on the simple names of those members.
    */
   private final Set<String> potentialUsedMembers = new HashSet<>();
-
-  /**
-   * Check whether the visitor is inside the declaration of a target method or field. Symbols inside
-   * the declarations of target members will be solved if they have one of the following types:
-   * ClassOrInterfaceType, Parameters, VariableDeclarator, MethodCallExpr, FieldAccessExpr,
-   * ExplicitConstructorInvocationStmt, NameExpr, MethodDeclaration, and ObjectCreationExpr.
-   */
-  private boolean insideTargetMember = false;
 
   /**
    * Check whether the visitor is inside the declaration of a member that could be used by the
@@ -248,9 +222,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    * they have one of the following types: ClassOrInterfaceType, Parameters, and VariableDeclarator.
    */
   private boolean insidePotentialUsedMember = false;
-
-  /** The qualified name of the current class. */
-  private String currentClassQualifiedName = "";
 
   /**
    * Indicating whether the visitor is currently visiting the parameter part of a catch block (i.e.,
@@ -271,17 +242,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   public UnsolvedSymbolVisitor(
       String rootDirectory,
       Map<String, Path> existingClassesToFilePath,
-      List<String> targetMethodsSignatures,
-      List<String> targetFieldsSignature) {
+      Set<String> targetMethodsSignatures,
+      Set<String> targetFieldsSignature) {
+    super(
+        targetMethodsSignatures,
+        targetFieldsSignature,
+        new HashSet<>(),
+        new HashSet<>(),
+        existingClassesToFilePath);
     this.rootDirectory = rootDirectory;
     this.gotException = true;
-    this.existingClassesToFilePath = existingClassesToFilePath;
-    this.targetMethodsSignatures = new HashSet<>();
-    for (String methodSignature : targetMethodsSignatures) {
-      this.targetMethodsSignatures.add(methodSignature.replaceAll("\\s", ""));
-    }
-    this.targetFieldsSignatures = new HashSet<>();
-    this.targetFieldsSignatures.addAll(targetFieldsSignature);
   }
 
   /**
@@ -449,17 +419,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param decl the class, interface, or enum declaration
    */
-  private void maintainDataStructuresPreSuper(TypeDeclaration<?> decl) {
-    SimpleName nodeName = decl.getName();
-    className = nodeName.asString();
-    if (decl.isNestedType()) {
-      this.currentClassQualifiedName += "." + decl.getName().asString();
-    } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
-      // the purpose of keeping track of class name is to recognize the signatures of target
-      // methods. Since we don't take methods inside local classes as target methods, we don't need
-      // to keep track of class name in this case.
-      this.currentClassQualifiedName = decl.getFullyQualifiedName().orElseThrow();
-    }
+  @Override
+  protected void maintainDataStructuresPreSuper(TypeDeclaration<?> decl) {
+    super.maintainDataStructuresPreSuper(decl);
     if (decl.isEnumDeclaration()) {
       // Enums cannot extend other classes (they always extend Enum) and cannot have type
       // parameters, o it's not necessary to do any maintenance on the data structures that
@@ -503,7 +465,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
    *
    * @param decl the class, interface, or enum declaration
    */
-  private void maintainDataStructuresPostSuper(TypeDeclaration<?> decl) {
+  @Override
+  protected void maintainDataStructuresPostSuper(TypeDeclaration<?> decl) {
     if (decl.isClassOrInterfaceDeclaration()) {
       // Enums don't have type variables, so no scope for them is created
       // when entering an enum.
@@ -511,29 +474,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     }
 
     declaredMethod.removeFirst();
-    if (decl.isNestedType()) {
-      this.currentClassQualifiedName =
-          this.currentClassQualifiedName.substring(
-              0, this.currentClassQualifiedName.lastIndexOf('.'));
-    } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
-      this.currentClassQualifiedName = "";
-    }
-  }
-
-  @Override
-  public Visitable visit(EnumDeclaration node, Void arg) {
-    maintainDataStructuresPreSuper(node);
-    Visitable result = super.visit(node, arg);
-    maintainDataStructuresPostSuper(node);
-    return result;
-  }
-
-  @Override
-  public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
-    maintainDataStructuresPreSuper(node);
-    Visitable result = super.visit(node, arg);
-    maintainDataStructuresPostSuper(node);
-    return result;
+    super.maintainDataStructuresPostSuper(decl);
   }
 
   /**
@@ -965,30 +906,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             this.setInitialValueForVariableDeclaration(variableType, variableDeclaration);
       }
       variablesAndDeclaration.put(variableName, variableDeclaration);
-
-      if (targetFieldsSignatures.contains(
-          currentClassQualifiedName + "#" + var.getNameAsString())) {
-        boolean oldInsideTargetMember = insideTargetMember;
-        insideTargetMember = true;
-        Visitable result = super.visit(node, arg);
-        insideTargetMember = oldInsideTargetMember;
-        return result;
-      }
     }
     return super.visit(node, arg);
   }
 
   @Override
   public Visitable visit(ConstructorDeclaration node, Void arg) {
-    String methodQualifiedSignature =
-        this.currentClassQualifiedName
-            + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
-                node.getDeclarationAsString(false, false, false));
-    boolean oldInsideTargetMember = insideTargetMember;
-    if (targetMethodsSignatures.contains(methodQualifiedSignature.replace("\\s", ""))) {
-      insideTargetMember = true;
-    }
     boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
     if (potentialUsedMembers.contains(node.getNameAsString())) {
       insidePotentialUsedMember = true;
@@ -996,7 +919,6 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     addTypeVariableScope(node.getTypeParameters());
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
-    insideTargetMember = oldInsideTargetMember;
     insidePotentialUsedMember = oldInsidePotentialUsedMember;
     return result;
   }
@@ -1005,17 +927,15 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       "nullness:return") // return type is not used, and we need to avoid calling super.visit()
   @Override
   public Visitable visit(MethodDeclaration node, Void arg) {
+    // Duplicative with super, but needed to maintain the if...else... structure below.
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
+            + SpeciminStateVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
-    if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
-      boolean oldInsideTargetMember = insideTargetMember;
-      insideTargetMember = true;
+    if (targetMethods.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
       Visitable result = processMethodDeclaration(node);
-      insideTargetMember = oldInsideTargetMember;
       return result;
     } else if (potentialUsedMembers.contains(methodSimpleName)) {
       boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;

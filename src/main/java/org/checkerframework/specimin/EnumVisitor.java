@@ -78,7 +78,7 @@ public class EnumVisitor extends VoidVisitorAdapter<Void> {
     String methodQualifiedSignature =
         this.classFQName
             + "#"
-            + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
+            + SpeciminStateVisitor.removeMethodReturnTypeAndAnnotations(
                 methodDeclaration.getDeclarationAsString(false, false, false));
     if (targetMethods.contains(methodQualifiedSignature)) {
       boolean oldInsideTargetMethod = insideTargetMethod;

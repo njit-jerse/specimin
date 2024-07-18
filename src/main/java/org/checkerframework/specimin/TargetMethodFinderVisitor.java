@@ -37,7 +37,6 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedWildcard;
-import com.google.common.base.Splitter;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -58,12 +57,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
    * spaces remove for ease of comparison.
    */
   private final Set<String> targetMethodNames;
-
-  /**
-   * This boolean tracks whether the element currently being visited is inside a target method. It
-   * is set by {@link #visit(MethodDeclaration, Void)}.
-   */
-  private boolean insideTargetMember = false;
 
   /** The fully-qualified name of the class currently being visited. */
   private String classFQName = "";
@@ -275,9 +268,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.classFQName + "#" + constructorMethodAsString;
-    boolean oldInsideTargetMember = insideTargetMember;
     if (this.targetMethodNames.contains(methodName)) {
-      insideTargetMember = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
@@ -289,7 +280,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       updateUnfoundMethods(methodName);
     }
     Visitable result = super.visit(method, p);
-    insideTargetMember = oldInsideTargetMember;
 
     if (method.getParentNode().isEmpty()) {
       return result;
@@ -731,30 +721,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         }
       }
     }
-  }
-
-  /**
-   * Given a method declaration, this method return the declaration of that method without the
-   * return type and any possible annotation.
-   *
-   * @param methodDeclaration the method declaration to be used as input
-   * @return methodDeclaration without the return type and any possible annotation.
-   */
-  public static String removeMethodReturnTypeAndAnnotations(String methodDeclaration) {
-    String methodDeclarationWithoutParen =
-        methodDeclaration.substring(0, methodDeclaration.indexOf("("));
-    List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
-    String methodName = methodParts.get(methodParts.size() - 1);
-    String methodReturnType = methodDeclaration.substring(0, methodDeclaration.indexOf(methodName));
-    String methodWithoutReturnType = methodDeclaration.replace(methodReturnType, "");
-    methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
-    String filteredMethodDeclaration =
-        methodParts.stream()
-            .filter(part -> !part.startsWith("@"))
-            .map(part -> part.indexOf('@') == -1 ? part : part.substring(0, part.indexOf('@')))
-            .collect(Collectors.joining(" "));
-    // sometimes an extra space may occur if an annotation right after a < was removed
-    return filteredMethodDeclaration.replace("< ", "<");
   }
 
   /**

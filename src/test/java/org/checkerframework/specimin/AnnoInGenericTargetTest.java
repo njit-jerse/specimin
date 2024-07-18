@@ -23,7 +23,7 @@ public class AnnoInGenericTargetTest {
         "TargetMethodFinderVisitor#removeMethodReturnTypeAndAnnotations is failing to properly"
             + " remove some annotations",
         "unmodifiableCollection(Collection<? extends T>)",
-        TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
+        SpeciminStateVisitor.removeMethodReturnTypeAndAnnotations(
             "Collection<T> unmodifiableCollection(Collection<@Initialized @KeyForBottom @NonNull ?"
                 + " extends T>)"));
   }

@@ -227,7 +227,10 @@ public class SpeciminRunner {
     }
     UnsolvedSymbolVisitor addMissingClass =
         new UnsolvedSymbolVisitor(
-            root, existingClassesToFilePath, targetMethodNames, targetFieldNames);
+            root,
+            existingClassesToFilePath,
+            new HashSet<>(targetMethodNames),
+            new HashSet<>(targetFieldNames));
     addMissingClass.setClassesFromJar(jarPaths);
 
     Map<String, String> typesToChange = new HashMap<>();

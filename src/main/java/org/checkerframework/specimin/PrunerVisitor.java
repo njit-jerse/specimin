@@ -50,12 +50,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 public class PrunerVisitor extends SpeciminStateVisitor {
 
   /**
-   * This boolean tracks whether the element currently being visited is inside a target method. It
-   * is set by {@link #visit(MethodDeclaration, Void)}.
-   */
-  private boolean insideTargetMethod = false;
-
-  /**
    * This boolean tracks whether the element currently being visited is inside an interface
    * annotated as @FunctionalInterface. This annotation is added to allow lambdas in target methods
    * to be passed to other methods, so the methods in such interfaces need to be preserved.
@@ -334,12 +328,9 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return methodDecl;
     }
 
+    Visitable result = super.visit(methodDecl, p);
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
     if (targetMethods.contains(resolved.getQualifiedSignature())) {
-      boolean oldInsideTargetMethod = insideTargetMethod;
-      insideTargetMethod = true;
-      Visitable result = super.visit(methodDecl, p);
-      insideTargetMethod = oldInsideTargetMethod;
       return result;
     }
 
@@ -367,7 +358,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
     // if insideTargetMethod is true, this current method declaration belongs to an anonnymous
     // class inside the target method.
-    if (!insideTargetMethod) {
+    if (!insideTargetMember) {
       methodDecl.remove();
     }
     return methodDecl;
@@ -425,7 +416,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(FieldDeclaration fieldDecl, Void p) {
-    if (insideTargetMethod) {
+    if (insideTargetMember) {
       return super.visit(fieldDecl, p);
     }
 
