@@ -91,8 +91,10 @@ public class SpeciminTestExecutor {
     ProcessBuilder builder = new ProcessBuilder();
     boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
     if (isWindows) {
-      // TODO: make this work
-      Assert.fail("specimin cannot be tested on Windows");
+      builder.command(
+          "check_differences/check_differences.bat",
+          outputDir.toAbsolutePath().toString(),
+          Path.of("src/test/resources/" + testName + "/expected").toAbsolutePath().toString());
       return;
     } else {
       builder.command(

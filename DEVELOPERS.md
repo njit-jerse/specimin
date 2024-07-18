@@ -5,13 +5,6 @@ contribute to Specimin. We welcome improvements, bug fixes, new test
 cases, and any other contributions that you'd like to make. To suggest
 a change to Specimin, please open a [GitHub pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request).
 
-### Development Environment
-
-Specimin's testing infrasture relies on the presence of a `bash` interpreter
-and the availability of the standard Unix `diff` command, so the Specimin tests
-don't natively run on Windows. To work on Specimin, you should either do your work
-on a Unix machine or install [WSL](https://en.wikipedia.org/wiki/Windows_Subsystem_for_Linux).
-
 ### Testing infrastructure
 
 Even Specimin's "unit tests" are actually full system tests: each

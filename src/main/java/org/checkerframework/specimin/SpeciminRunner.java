@@ -176,7 +176,16 @@ public class SpeciminRunner {
       argsToDecompile.add(root);
       ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
       // delete unneccessary legal files
-      FileUtils.deleteDirectory(new File(root + "META-INF"));
+      try {
+        FileUtils.deleteDirectory(new File(root + "META-INF"));
+      } catch (IOException ex) {
+        // Following decompilation, Windows raises an IOException because the files are still
+        // being used (by what?), so we should defer deletion until the end
+        for (File legalFile :
+            FileUtils.listFiles(new File(root + "META-INF"), new String[] {}, true)) {
+          createdClass.add(legalFile.toPath());
+        }
+      }
     }
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
@@ -347,6 +356,7 @@ public class SpeciminRunner {
             targetMethodNames,
             targetFieldNames,
             nonPrimaryClassesToPrimaryClass,
+            existingClassesToFilePath,
             enumVisitor.getUsedEnum());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -360,15 +370,14 @@ public class SpeciminRunner {
               + unfoundMethodsTable(unfoundMethods));
     }
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
-        new SolveMethodOverridingVisitor(
-            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedTypeElement());
+        new SolveMethodOverridingVisitor(finder);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }
 
     Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
     // add all files related to the targeted methods
-    for (String classFullName : solveMethodOverridingVisitor.getUsedClass()) {
+    for (String classFullName : solveMethodOverridingVisitor.getUsedTypeElements()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
       File thisFile = new File(root + directoryOfFile);
       // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
@@ -390,7 +399,7 @@ public class SpeciminRunner {
         }
       }
     }
-    Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
+    Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedTypeElements();
     Set<String> totalSetOfAddedInheritedClasses = classToFindInheritance;
     InheritancePreserveVisitor inheritancePreserve;
     while (!classToFindInheritance.isEmpty()) {
@@ -415,14 +424,11 @@ public class SpeciminRunner {
       inheritancePreserve.emptyAddedClasses();
     }
 
-    Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
+    Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedTypeElements();
     updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
 
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
-        new MustImplementMethodsVisitor(
-            solveMethodOverridingVisitor.getUsedMembers(),
-            updatedUsedClass,
-            existingClassesToFilePath);
+        new MustImplementMethodsVisitor(solveMethodOverridingVisitor);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(mustImplementMethodsVisitor, null);
@@ -490,10 +496,7 @@ public class SpeciminRunner {
 
     PrunerVisitor methodPruner =
         new PrunerVisitor(
-            finder.getTargetMethods(),
-            targetFieldNames,
-            mustImplementMethodsVisitor.getUsedMembers(),
-            mustImplementMethodsVisitor.getUsedClass(),
+            mustImplementMethodsVisitor,
             finder.getResolvedYetStuckMethodCall(),
             classAndUnresolvedInterface);
 
@@ -513,17 +516,17 @@ public class SpeciminRunner {
       // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
         // target key will have this form: "path/of/package/ClassName.java"
-        String classFullyQualfiedName = getFullyQualifiedClassName(target.getKey());
+        String classFullyQualifiedName = getFullyQualifiedClassName(target.getKey());
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
-            classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
+            classFullyQualifiedName.substring(classFullyQualifiedName.lastIndexOf(".") + 1);
         // If this condition is true, this class is a synthetic class initially created to be a
         // return type of some synthetic methods, but later javac has found the correct return type
         // for that method.
         if (typesToChange.containsKey(simpleName)) {
           continue;
         }
-        if (!finder.getUsedTypeElement().contains(classFullyQualfiedName)) {
+        if (!finder.getUsedTypeElements().contains(classFullyQualifiedName)) {
           continue;
         }
       }

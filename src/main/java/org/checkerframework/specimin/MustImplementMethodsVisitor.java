@@ -10,16 +10,13 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
-import java.nio.file.Path;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -28,55 +25,23 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * or implements an interface that requires them), this visitor marks them for preservation. Should
  * run after the list of used classes is finalized.
  */
-public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
-
-  /** Set containing the signatures of used member (fields and methods). */
-  private Set<String> usedMembers;
-
-  /** Set containing the signatures of used classes. */
-  private Set<String> usedClass;
-
-  /** for checking if class files are in the original codebase. */
-  private Map<String, Path> existingClassesToFilePath;
+public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
 
   /**
    * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
    * members, and used classes.
    *
-   * @param usedMembers Set containing the signatures of used members.
-   * @param usedClass Set containing the signatures of used classes.
-   * @param existingClassesToFilePath map from existing classes to file paths
+   * @param previousVisitor the last visitor to run
    */
-  public MustImplementMethodsVisitor(
-      Set<String> usedMembers, Set<String> usedClass, Map<String, Path> existingClassesToFilePath) {
-    this.usedMembers = usedMembers;
-    this.usedClass = usedClass;
-    this.existingClassesToFilePath = existingClassesToFilePath;
-  }
-
-  /**
-   * Get the set containing the signatures of used members.
-   *
-   * @return The set containing the signatures of used members.
-   */
-  public Set<String> getUsedMembers() {
-    return usedMembers;
-  }
-
-  /**
-   * Get the set containing the signatures of used classes.
-   *
-   * @return The set containing the signatures of used classes.
-   */
-  public Set<String> getUsedClass() {
-    return usedClass;
+  public MustImplementMethodsVisitor(SpeciminStateVisitor previousVisitor) {
+    super(previousVisitor);
   }
 
   @Override
   @SuppressWarnings("nullness:return") // ok to return null, because this is a void visitor
   public Visitable visit(ClassOrInterfaceDeclaration type, Void p) {
     if (type.getFullyQualifiedName().isPresent()
-        && usedClass.contains(type.getFullyQualifiedName().get())) {
+        && usedTypeElements.contains(type.getFullyQualifiedName().get())) {
       return super.visit(type, p);
     } else {
       // the effect of not calling super here is that only used classes
@@ -122,7 +87,7 @@ public class MustImplementMethodsVisitor extends ModifierVisitor<Void> {
         if (type.contains("[]")) {
           type = type.replace("[]", "");
         }
-        usedClass.add(type);
+        usedTypeElements.add(type);
       }
     }
     return super.visit(method, p);
