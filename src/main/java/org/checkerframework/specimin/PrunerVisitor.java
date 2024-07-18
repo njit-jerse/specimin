@@ -328,10 +328,9 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return methodDecl;
     }
 
-    Visitable result = super.visit(methodDecl, p);
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
     if (targetMethods.contains(resolved.getQualifiedSignature())) {
-      return result;
+      return super.visit(methodDecl, p);
     }
 
     if (usedMembers.contains(resolved.getQualifiedSignature())
