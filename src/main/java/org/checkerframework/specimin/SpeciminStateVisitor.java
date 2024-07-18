@@ -10,8 +10,8 @@ import java.util.Set;
  * should not be used directly.
  *
  * <p>This class tracks the following: the lists of target methods and fields, the lists of used
- * members and classes, and the set of existing classes to file paths. It may be expanded to
- * handle additional state tracking in the future.
+ * members and classes, and the set of existing classes to file paths. It may be expanded to handle
+ * additional state tracking in the future.
  */
 public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
