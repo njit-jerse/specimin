@@ -109,6 +109,8 @@ jobs:
         shell: cmd
       - name: Compile minimized programs
         run: |
+          set SPECIMIN=%cd%
           cd specimin-evaluation
+          echo specimin path-^> %SPECIMIN%
           check_compilation.bat 1
         shell: cmd
