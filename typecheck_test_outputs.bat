@@ -13,7 +13,6 @@ set returnval=0
 cd src\test\resources || exit /b 1
 
 for /d %%t in (*) do (
-  echo %%t
   set continue=0
   if "%%t"=="shared" set continue=1
   rem https://bugs.openjdk.org/browse/JDK-8319461 wasn't actually fixed (this test is based on that bug)
