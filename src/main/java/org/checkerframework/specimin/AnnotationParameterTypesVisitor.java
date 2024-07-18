@@ -1,12 +1,5 @@
 package org.checkerframework.specimin;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -25,29 +18,31 @@ import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
-import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDeclaration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Preserve annotations and their parameter types for used classes. This will only keep annotations
  * if the corresponding class, method, or field declaration is marked to be preserved. If an
  * annotation (or its parameters) is not resolvable, it will be removed.
  */
-public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
-  /** Set containing the signatures of used members (fields and methods). */
-  private Set<String> usedMembers;
-
-  /** Set containing the signatures of target methods. */
-  private Set<String> targetMethods;
-
-  /** Set containing the signatures of target fields. */
-  private List<String> targetFields;
-
-  /** Set containing the signatures of used classes. */
-  private Set<String> usedClass;
+public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
+  /**
+   * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
+   * members, and used classes.
+   *
+   * @param previousVisitor the last visitor to run before this one
+   */
+  public AnnotationParameterTypesVisitor(SpeciminStateVisitor previousVisitor) {
+    super(previousVisitor);
+  }
 
   /** Set containing the signatures of classes used by annotations. */
   private Set<String> classesToAdd = new HashSet<>();
@@ -62,26 +57,6 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getClassesToAdd() {
     return classesToAdd;
-  }
-
-  /**
-   * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
-   * members, and used classes.
-   *
-   * @param targetFields Set containing the signatures of target fields.
-   * @param targetMethods Set containing the signatures of target methods.
-   * @param usedMembers Set containing the signatures of used members.
-   * @param usedClass Set containing the signatures of used classes.
-   */
-  public AnnotationParameterTypesVisitor(
-      List<String> targetFields,
-      Set<String> targetMethods,
-      Set<String> usedMembers,
-      Set<String> usedClass) {
-    this.usedMembers = usedMembers;
-    this.targetMethods = targetMethods;
-    this.targetFields = targetFields;
-    this.usedClass = usedClass;
   }
 
   @Override
@@ -99,10 +74,11 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
     // Ensure that enums/fields that are used by default are included
     // Also, preserve method type since a definition with a default value may be
     // added, but that value type is never explored by the visit(AnnotationExpr) methods
-    // For example, when the type is an enum (Foo), the definition may set a default value to Foo.VALUE,
-    // but Foo.VALUE may never be referenced in an @Annotation() usage (instead, other Foo values may)
-    // be used, so Foo.VALUE would be removed by PrunerVisitor and result in compile errors.
-    if (usedClass.contains(JavaParserUtil.getEnclosingClassName(decl))) {
+    // For example, when the type is an enum (Foo), the definition may set a default value to
+    // Foo.VALUE, but Foo.VALUE may never be referenced in an @Annotation() usage (instead,
+    // other Foo values may) be used, so Foo.VALUE would be removed by PrunerVisitor and result
+    // in compile errors.
+    if (usedTypeElements.contains(JavaParserUtil.getEnclosingClassName(decl))) {
       // Class<> from jar files may contain other classes
       if (decl.getType().toString().startsWith("Class<")) {
         // Replace with Class<?> to prevent compile-time errors
@@ -118,7 +94,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
             resolved = resolved.asArrayType().getComponentType();
           }
           if (resolved.isReferenceType()) {
-            usedClass.add(resolved.asReferenceType().getQualifiedName());
+            usedTypeElements.add(resolved.asReferenceType().getQualifiedName());
           }
         } catch (UnsolvedSymbolException ex) {
           // TODO: retrigger synthetic type generation
@@ -245,7 +221,7 @@ public class AnnotationParameterTypesVisitor extends ModifierVisitor<Void> {
     }
 
     if (isClass) {
-      return usedClass.contains(qualifiedName);
+      return usedTypeElements.contains(qualifiedName);
     } else {
       // fields should already be handled at this point
       return usedMembers.contains(qualifiedName) || targetMethods.contains(qualifiedName);
