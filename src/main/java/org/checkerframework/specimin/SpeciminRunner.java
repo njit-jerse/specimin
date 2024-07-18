@@ -434,59 +434,9 @@ public class SpeciminRunner {
       cu.accept(mustImplementMethodsVisitor, null);
     }
 
-    Set<CompilationUnit> compilationUnitsToSolveAnnotations =
-        new HashSet<>(parsedTargetFiles.values());
-
-    // This is safe to run after MustImplementMethodsVisitor because 
+    // This is safe to run after MustImplementMethodsVisitor because
     // annotations do not inherit
-    AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
-        new AnnotationParameterTypesVisitor(
-            targetFieldNames,
-            finder.getTargetMethods(),
-            solveMethodOverridingVisitor.getUsedMembers(),
-            solveMethodOverridingVisitor.getUsedClass());
-
-    relatedClass = new HashSet<>(parsedTargetFiles.keySet());
-
-    while (!compilationUnitsToSolveAnnotations.isEmpty()) {
-      for (CompilationUnit cu : compilationUnitsToSolveAnnotations) {
-        cu.accept(annotationParameterTypesVisitor, null);
-      }
-
-      // add all files related to the target annotations
-      for (String annoFullName : annotationParameterTypesVisitor.getClassesToAdd()) {
-        String directoryOfFile = annoFullName.replace(".", "/") + ".java";
-        File thisFile = new File(root + directoryOfFile);
-        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
-        // create synthetic files for them
-        if (thisFile.exists()) {
-          relatedClass.add(directoryOfFile);
-        }
-      }
-
-      compilationUnitsToSolveAnnotations.clear();
-
-      for (String directory : relatedClass) {
-        // directories already in parsedTargetFiles are original files in the root directory, we are
-        // not supposed to update them.
-        if (!parsedTargetFiles.containsKey(directory)) {
-          try {
-            // We need to continue solving annotations and parameters in newly added annotation
-            // files
-            CompilationUnit parsed = parseJavaFile(root, directory);
-            parsedTargetFiles.put(directory, parsed);
-            compilationUnitsToSolveAnnotations.add(parsed);
-
-          } catch (ParseProblemException e) {
-            // TODO: Figure out why the CI is crashing.
-            continue;
-          }
-        }
-      }
-
-      updatedUsedClass.addAll(annotationParameterTypesVisitor.getClassesToAdd());
-      annotationParameterTypesVisitor.getClassesToAdd().clear();
-    }
+    processAnnotationTypes(mustImplementMethodsVisitor, root, parsedTargetFiles);
 
     // Remove the unsolved annotations (and @Override) in all files.
     UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
@@ -552,6 +502,68 @@ public class SpeciminRunner {
       }
     }
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
+  }
+
+  /**
+   * Fully solve all annotations by processing all annotations, annotation parameters, and their
+   * types. This method also removes any annotations which are not fully solvable and includes all
+   * necessary files in Specimin's output.
+   *
+   * @param last The last SpeciminStateVisitor to run
+   * @param root The root directory
+   * @param parsedTargetFiles A map of file names to parsed CompilationUnits
+   */
+  private static SpeciminStateVisitor processAnnotationTypes(
+      SpeciminStateVisitor last, String root, Map<String, CompilationUnit> parsedTargetFiles)
+      throws IOException {
+    AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
+        new AnnotationParameterTypesVisitor(last);
+
+    Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
+    Set<CompilationUnit> compilationUnitsToSolveAnnotations =
+        new HashSet<>(parsedTargetFiles.values());
+
+    while (!compilationUnitsToSolveAnnotations.isEmpty()) {
+      for (CompilationUnit cu : compilationUnitsToSolveAnnotations) {
+        cu.accept(annotationParameterTypesVisitor, null);
+      }
+
+      // add all files related to the target annotations
+      for (String annoFullName : annotationParameterTypesVisitor.getClassesToAdd()) {
+        String directoryOfFile = annoFullName.replace(".", "/") + ".java";
+        File thisFile = new File(root + directoryOfFile);
+        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
+        // create synthetic files for them
+        if (thisFile.exists()) {
+          relatedClass.add(directoryOfFile);
+        }
+      }
+
+      compilationUnitsToSolveAnnotations.clear();
+
+      for (String directory : relatedClass) {
+        // directories already in parsedTargetFiles are original files in the root directory, we are
+        // not supposed to update them.
+        if (!parsedTargetFiles.containsKey(directory)) {
+          try {
+            // We need to continue solving annotations and parameters in newly added annotation
+            // files
+            CompilationUnit parsed = parseJavaFile(root, directory);
+            parsedTargetFiles.put(directory, parsed);
+            compilationUnitsToSolveAnnotations.add(parsed);
+          } catch (ParseProblemException e) {
+            // TODO: Figure out why the CI is crashing.
+            continue;
+          }
+        }
+      }
+
+      annotationParameterTypesVisitor
+          .getUsedTypeElements()
+          .addAll(annotationParameterTypesVisitor.getClassesToAdd());
+      annotationParameterTypesVisitor.getClassesToAdd().clear();
+    }
+    return annotationParameterTypesVisitor;
   }
 
   /**
