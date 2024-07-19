@@ -15,16 +15,21 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.PatternExpr;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -47,6 +52,7 @@ import com.github.javaparser.ast.type.WildcardType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
@@ -55,6 +61,7 @@ import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedTypeVariable;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDeclaration;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
@@ -899,7 +906,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr node, Void arg) {
-    if (!insideTargetMember) {
+    Optional<Node> parent = node.getParentNode();
+
+    boolean insideAnnotation = parent.isPresent() && (parent.get() instanceof AnnotationExpr);
+
+    if (!insideTargetMember && !insideAnnotation) {
       return super.visit(node, arg);
     }
     String name = node.getNameAsString();
@@ -1366,6 +1377,164 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     Visitable result = super.visit(newExpr, p);
     className = oldClassName;
     return result;
+  }
+
+  @Override
+  @SuppressWarnings("EmptyCatch")
+  public Visitable visit(MarkerAnnotationExpr anno, Void p) {
+    try {
+      ResolvedAnnotationDeclaration resolvedAnno = anno.resolve();
+      if (!(resolvedAnno instanceof ReflectionAnnotationDeclaration)) {
+        // ResolvedAnnotationDeclaration means no file/CompilationUnit behind anno
+        // So, we must still generate it even though it's resolved
+        return super.visit(anno, p);
+      }
+    } catch (UnsolvedSymbolException ex) {
+
+    } catch (ClassCastException ex) {
+      // A ClassCastException is only raised in specific circumstances; for example, when an
+      // annotation is an inner class (has a dot) and is used in/on a class which references itself:
+      /*
+      @Foo.Bar
+      public class Test {
+        Test foo() {
+            return null;
+        }
+      }
+      */
+      // In these cases, a JavaParserClassDeclaration is being casted to a
+      // ResolvedAnnotationDeclaration, thus causing the error. However, through
+      // testing, this exception was only raised on subsequent resolve()s (not the
+      // first), so the synthetic type should already be generated.
+      return super.visit(anno, p);
+    }
+
+    UnsolvedClassOrInterface unsolvedAnnotation;
+
+    if (isAClassPath(anno.getNameAsString())) {
+      @SuppressWarnings("signature") // Already guaranteed to be a FQN here
+      @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
+      unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+      updateMissingClass(unsolvedAnnotation);
+    } else {
+      unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    }
+
+    unsolvedAnnotation.setIsAnAnnotationToTrue();
+
+    return super.visit(anno, p);
+  }
+
+  @Override
+  @SuppressWarnings("EmptyCatch")
+  public Visitable visit(NormalAnnotationExpr anno, Void p) {
+    try {
+      ResolvedAnnotationDeclaration resolvedAnno = anno.resolve();
+      if (!(resolvedAnno instanceof ReflectionAnnotationDeclaration)) {
+        // ResolvedAnnotationDeclaration means no file/CompilationUnit behind anno
+        // So, we must still generate it even though it's resolved
+        return super.visit(anno, p);
+      }
+      return super.visit(anno, p);
+    } catch (UnsolvedSymbolException ex) {
+
+    } catch (ClassCastException ex) {
+      // A ClassCastException is only raised in specific circumstances; for example, when an
+      // annotation is an inner class (has a dot) and is used in/on a class which references itself:
+      /*
+      @Foo.Bar
+      public class Test {
+        Test foo() {
+            return null;
+        }
+      }
+      */
+      // In these cases, a JavaParserClassDeclaration is being casted to a
+      // ResolvedAnnotationDeclaration, thus causing the error. However, through
+      // testing, this exception was only raised on subsequent resolve()s (not the
+      // first), so the synthetic type should already be generated.
+      return super.visit(anno, p);
+    }
+
+    UnsolvedClassOrInterface unsolvedAnnotation;
+
+    if (isAClassPath(anno.getNameAsString())) {
+      @SuppressWarnings("signature") // Already guaranteed to be a FQN here
+      @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
+      unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+      updateMissingClass(unsolvedAnnotation);
+    } else {
+      unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    }
+
+    unsolvedAnnotation.setIsAnAnnotationToTrue();
+
+    // Add annotation parameters and resolve the annotation parameters to their types
+    for (MemberValuePair pair : anno.getPairs()) {
+      unsolvedAnnotation.addMethod(
+          new UnsolvedMethod(
+              pair.getNameAsString(),
+              JavaParserUtil.getValueTypeFromAnnotationExpression(pair.getValue()),
+              Collections.emptyList(),
+              true));
+    }
+
+    return super.visit(anno, p);
+  }
+
+  @Override
+  @SuppressWarnings("EmptyCatch")
+  public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
+    try {
+      ResolvedAnnotationDeclaration resolvedAnno = anno.resolve();
+      if (!(resolvedAnno instanceof ReflectionAnnotationDeclaration)) {
+        // ResolvedAnnotationDeclaration means no file/CompilationUnit behind anno
+        // So, we must still generate it even though it's resolved
+        return super.visit(anno, p);
+      }
+      return super.visit(anno, p);
+    } catch (UnsolvedSymbolException ex) {
+
+    } catch (ClassCastException ex) {
+      // A ClassCastException is only raised in specific circumstances; for example, when an
+      // annotation is an inner class (has a dot) and is used in/on a class which references itself:
+      /*
+      @Foo.Bar
+      public class Test {
+        Test foo() {
+            return null;
+        }
+      }
+      */
+      // In these cases, a JavaParserClassDeclaration is being casted to a
+      // ResolvedAnnotationDeclaration, thus causing the error. However, through
+      // testing, this exception was only raised on subsequent resolve()s (not the
+      // first), so the synthetic type should already be generated.
+      return super.visit(anno, p);
+    }
+
+    UnsolvedClassOrInterface unsolvedAnnotation;
+
+    if (isAClassPath(anno.getNameAsString())) {
+      @SuppressWarnings("signature") // Already guaranteed to be a FQN here
+      @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
+      unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+      updateMissingClass(unsolvedAnnotation);
+    } else {
+      unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    }
+
+    unsolvedAnnotation.setIsAnAnnotationToTrue();
+
+    // Add annotation parameters and resolve the annotation parameters to their types
+    unsolvedAnnotation.addMethod(
+        new UnsolvedMethod(
+            "value",
+            JavaParserUtil.getValueTypeFromAnnotationExpression(anno.getMemberValue()),
+            Collections.emptyList(),
+            true));
+
+    return super.visit(anno, p);
   }
 
   /**
@@ -1947,7 +2116,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method updates a synthetic file based on a solvable expression. The input expression is
-   * solvable because its data is in the jar files that Specimin taks as input.
+   * solvable because its data is in the jar files that Specimin takes as input.
    *
    * @param expr the expression to be used
    */
