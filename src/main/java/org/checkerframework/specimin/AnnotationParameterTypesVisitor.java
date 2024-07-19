@@ -241,7 +241,7 @@ public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
     try {
       String qualifiedName = anno.resolve().getQualifiedName();
       if (anno.resolve() instanceof ReflectionAnnotationDeclaration
-          && !qualifiedName.startsWith("java.lang")) {
+          && !JavaLangUtils.inJdkPackage(qualifiedName)) {
         // This usually means that JavaParser has resolved this through the import, but there
         // is no file/CompilationUnit behind it, so we should discard it to prevent compile errors
         anno.remove();

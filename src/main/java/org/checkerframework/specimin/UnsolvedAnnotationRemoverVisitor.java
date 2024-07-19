@@ -106,7 +106,7 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
         // This is fine if it's included in java.lang, but if not, we should treat it as
         // if it were unresolved
 
-        if (!annotationName.startsWith("java.lang")) {
+        if (!JavaLangUtils.inJdkPackage(annotationName)) {
           isResolved = false;
         }
       }
