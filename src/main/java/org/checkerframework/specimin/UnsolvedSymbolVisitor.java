@@ -16,7 +16,6 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
-import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
@@ -53,6 +52,7 @@ import com.github.javaparser.ast.type.WildcardType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
@@ -61,6 +61,7 @@ import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedTypeVariable;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDeclaration;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
@@ -1382,8 +1383,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @SuppressWarnings("EmptyCatch")
   public Visitable visit(MarkerAnnotationExpr anno, Void p) {
     try {
-      anno.resolve();
-      return super.visit(anno, p);
+      ResolvedAnnotationDeclaration resolvedAnno = anno.resolve();
+      if (!(resolvedAnno instanceof ReflectionAnnotationDeclaration)) {
+        // ResolvedAnnotationDeclaration means no file/CompilationUnit behind anno
+        // So, we must still generate it even though it's resolved
+        return super.visit(anno, p);
+      }
     } catch (UnsolvedSymbolException ex) {
 
     } catch (ClassCastException ex) {
@@ -1404,8 +1409,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(anno, p);
     }
 
-    UnsolvedClassOrInterface unsolvedAnnotation =
-        updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    UnsolvedClassOrInterface unsolvedAnnotation;
+
+    if (isAClassPath(anno.getNameAsString())) {
+      @SuppressWarnings("signature") // Already guaranteed to be a FQN here
+      @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
+      unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+      updateMissingClass(unsolvedAnnotation);
+    } else {
+      unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    }
 
     unsolvedAnnotation.setIsAnAnnotationToTrue();
 
@@ -1416,7 +1429,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @SuppressWarnings("EmptyCatch")
   public Visitable visit(NormalAnnotationExpr anno, Void p) {
     try {
-      anno.resolve();
+      ResolvedAnnotationDeclaration resolvedAnno = anno.resolve();
+      if (!(resolvedAnno instanceof ReflectionAnnotationDeclaration)) {
+        // ResolvedAnnotationDeclaration means no file/CompilationUnit behind anno
+        // So, we must still generate it even though it's resolved
+        return super.visit(anno, p);
+      }
       return super.visit(anno, p);
     } catch (UnsolvedSymbolException ex) {
 
@@ -1438,8 +1456,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(anno, p);
     }
 
-    UnsolvedClassOrInterface unsolvedAnnotation =
-        updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    UnsolvedClassOrInterface unsolvedAnnotation;
+
+    if (isAClassPath(anno.getNameAsString())) {
+      @SuppressWarnings("signature") // Already guaranteed to be a FQN here
+      @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
+      unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+      updateMissingClass(unsolvedAnnotation);
+    } else {
+      unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    }
 
     unsolvedAnnotation.setIsAnAnnotationToTrue();
 
@@ -1460,7 +1486,12 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @SuppressWarnings("EmptyCatch")
   public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
     try {
-      anno.resolve();
+      ResolvedAnnotationDeclaration resolvedAnno = anno.resolve();
+      if (!(resolvedAnno instanceof ReflectionAnnotationDeclaration)) {
+        // ResolvedAnnotationDeclaration means no file/CompilationUnit behind anno
+        // So, we must still generate it even though it's resolved
+        return super.visit(anno, p);
+      }
       return super.visit(anno, p);
     } catch (UnsolvedSymbolException ex) {
 
@@ -1482,8 +1513,16 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(anno, p);
     }
 
-    UnsolvedClassOrInterface unsolvedAnnotation =
-        updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    UnsolvedClassOrInterface unsolvedAnnotation;
+
+    if (isAClassPath(anno.getNameAsString())) {
+      @SuppressWarnings("signature") // Already guaranteed to be a FQN here
+      @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
+      unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
+      updateMissingClass(unsolvedAnnotation);
+    } else {
+      unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+    }
 
     unsolvedAnnotation.setIsAnAnnotationToTrue();
 
