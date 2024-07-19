@@ -446,6 +446,11 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       }
     }
 
+    // if all the declarators were removed, remove this field, too
+    if (fieldDecl.getVariables().size() == 0) {
+      fieldDecl.remove();
+    }
+
     return super.visit(fieldDecl, p);
   }
 
