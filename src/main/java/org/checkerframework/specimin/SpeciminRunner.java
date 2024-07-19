@@ -350,7 +350,7 @@ public class SpeciminRunner {
       cu.accept(annoRemover, null);
     }
 
-    EnumVisitor enumVisitor = new EnumVisitor(targetMethodNames);
+    EnumVisitor enumVisitor = new EnumVisitor(addMissingClass);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(enumVisitor, null);
     }
@@ -360,12 +360,7 @@ public class SpeciminRunner {
     // and removes all non-used code.
 
     TargetMethodFinderVisitor finder =
-        new TargetMethodFinderVisitor(
-            targetMethodNames,
-            targetFieldNames,
-            nonPrimaryClassesToPrimaryClass,
-            existingClassesToFilePath,
-            enumVisitor.getUsedEnum());
+        new TargetMethodFinderVisitor(enumVisitor, nonPrimaryClassesToPrimaryClass);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);

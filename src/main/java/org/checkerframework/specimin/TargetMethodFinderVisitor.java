@@ -37,7 +37,6 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedWildcard;
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -101,32 +100,18 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   /**
    * Create a new target method finding visitor.
    *
-   * @param methodNames the names of the target methods, the format
-   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
-   * @param fieldNames the names of the target fields, the format is
-   *     class.fully.qualified.Name#fieldName
+   * @param previous the previous Specimin visitor
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
-   * @param existingClassesToFilePath map from existing classes to file paths
-   * @param usedTypeElement set of type elements already known to be used by the target methods.
    */
   public TargetMethodFinderVisitor(
-      List<String> methodNames,
-      List<String> fieldNames,
-      Map<String, String> nonPrimaryClassesToPrimaryClass,
-      Map<String, Path> existingClassesToFilePath,
-      Set<String> usedTypeElement) {
-    super(
-        new HashSet<>(),
-        new HashSet<>(fieldNames),
-        new HashSet<>(),
-        usedTypeElement,
-        existingClassesToFilePath);
+      SpeciminStateVisitor previous, Map<String, String> nonPrimaryClassesToPrimaryClass) {
+    super(previous);
     targetMethodNames = new HashSet<>();
-    for (String methodSignature : methodNames) {
+    for (String methodSignature : targetMethods) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
-    unfoundMethods = new HashMap<>(methodNames.size());
+    unfoundMethods = new HashMap<>(targetMethods.size());
     targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
   }
@@ -303,14 +288,9 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   public Visitable visit(VariableDeclarator node, Void arg) {
     if (node.getParentNode().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
-      if (targetFields.contains(this.classFQName + "#" + node.getNameAsString())) {
-        boolean oldInsideTargetMember = insideTargetMember;
-        insideTargetMember = true;
-        Visitable result = super.visit(node, arg);
-        usedTypeElements.add(this.classFQName);
-        insideTargetMember = oldInsideTargetMember;
-        return result;
-      }
+      Visitable result = super.visit(node, arg);
+      usedTypeElements.add(this.classFQName);
+      return result;
     }
     return super.visit(node, arg);
   }
