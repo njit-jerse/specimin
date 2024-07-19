@@ -579,6 +579,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         ResolvedType exprResolvedType = expr.resolve().getType();
         updateUsedClassBasedOnType(exprResolvedType);
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+        System.out.println(e);
         // when the type is a primitive array, we will have an UnsupportedOperationException
         if (e instanceof UnsupportedOperationException) {
           Expression scope = expr.getScope();

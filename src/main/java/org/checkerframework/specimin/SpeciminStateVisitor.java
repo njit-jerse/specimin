@@ -169,10 +169,13 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldDeclaration node, Void p) {
+    System.out.println("visiting: " + node);
     for (VariableDeclarator var : node.getVariables()) {
+      System.out.println("var: " + var);
       boolean oldInsideTargetMember = insideTargetMember;
       insideTargetMember =
-          targetFields.contains(currentClassQualifiedName + "#" + var.getNameAsString());
+          oldInsideTargetMember
+              || targetFields.contains(currentClassQualifiedName + "#" + var.getNameAsString());
       super.visit(var, p);
       insideTargetMember = oldInsideTargetMember;
     }
@@ -185,7 +188,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodDeclaration methodDeclaration, Void p) {
     boolean oldInsideTargetMember = insideTargetMember;
     String methodQualifiedSignature = getSignature(methodDeclaration);
-    insideTargetMember = targetMethods.contains(methodQualifiedSignature);
+    insideTargetMember = oldInsideTargetMember || targetMethods.contains(methodQualifiedSignature);
     Visitable result = super.visit(methodDeclaration, p);
     insideTargetMember = oldInsideTargetMember;
     return result;
@@ -195,9 +198,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ConstructorDeclaration ctorDecl, Void p) {
     String methodQualifiedSignature = getSignature(ctorDecl);
     boolean oldInsideTargetMember = insideTargetMember;
-    if (targetMethods.contains(methodQualifiedSignature)) {
-      insideTargetMember = true;
-    }
+    insideTargetMember = oldInsideTargetMember || targetMethods.contains(methodQualifiedSignature);
     Visitable result = super.visit(ctorDecl, p);
     insideTargetMember = oldInsideTargetMember;
     return result;
