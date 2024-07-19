@@ -9,7 +9,6 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -56,9 +55,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
    * spaces remove for ease of comparison.
    */
   private final Set<String> targetMethodNames;
-
-  /** The fully-qualified name of the class currently being visited. */
-  private String classFQName = "";
 
   /** The name of the package currently being visited. */
   private String currentPackage = "";
@@ -161,7 +157,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   private void updateUnfoundMethods(String methodAsString) {
     Set<String> targetMethodsInClass =
         targetMethodNames.stream()
-            .filter(t -> t.startsWith(this.classFQName))
+            .filter(t -> t.startsWith(this.currentClassQualifiedName))
             .collect(Collectors.toSet());
 
     for (String targetMethodInClass : targetMethodsInClass) {
@@ -192,67 +188,14 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       }
     }
 
-    manageClassFQNamePreSuper(decl);
-    Visitable result = super.visit(decl, p);
-    manageClassFQNamePostSuper(decl);
-    return result;
-  }
-
-  @Override
-  public Visitable visit(EnumDeclaration decl, Void p) {
-    manageClassFQNamePreSuper(decl);
-    Visitable result = super.visit(decl, p);
-    manageClassFQNamePostSuper(decl);
-    return result;
-  }
-
-  /**
-   * Helper method to share code for managing the {@link #classFQName} field between
-   * classes/interfaces and enums. Call this method before calling super.visit().
-   *
-   * @see #classFQName
-   * @see #manageClassFQNamePostSuper(TypeDeclaration)
-   * @param decl a class, interface, or enum declaration
-   */
-  private void manageClassFQNamePreSuper(TypeDeclaration<?> decl) {
-    if (decl.isNestedType()) {
-      this.classFQName += "." + decl.getName().toString();
-    } else {
-      if (!JavaParserUtil.isLocalClassDecl(decl)) {
-        if (!"".equals(this.classFQName)) {
-          throw new UnsupportedOperationException(
-              "Attempted to enter an unexpected kind of class: "
-                  + decl.getFullyQualifiedName()
-                  + " but already had a set classFQName: "
-                  + classFQName);
-        }
-        // Should always be present.
-        this.classFQName = decl.getFullyQualifiedName().orElseThrow();
-      }
-    }
-  }
-
-  /**
-   * Helper method to share code for managing the {@link #classFQName} field between
-   * classes/interfaces and enums. Call this method after calling super.visit().
-   *
-   * @see #classFQName
-   * @see #manageClassFQNamePreSuper(TypeDeclaration)
-   * @param decl a class, interface, or enum declaration
-   */
-  private void manageClassFQNamePostSuper(TypeDeclaration<?> decl) {
-    if (decl.isNestedType()) {
-      this.classFQName = this.classFQName.substring(0, this.classFQName.lastIndexOf('.'));
-    } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
-      this.classFQName = "";
-    }
+    return super.visit(decl, p);
   }
 
   @Override
   public Visitable visit(ConstructorDeclaration method, Void p) {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
-    String methodName = this.classFQName + "#" + constructorMethodAsString;
+    String methodName = this.currentClassQualifiedName + "#" + constructorMethodAsString;
     if (this.targetMethodNames.contains(methodName)) {
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
@@ -289,7 +232,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     if (node.getParentNode().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
       Visitable result = super.visit(node, arg);
-      usedTypeElements.add(this.classFQName);
+      usedTypeElements.add(this.currentClassQualifiedName);
       return result;
     }
     return super.visit(node, arg);
@@ -301,7 +244,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
     String methodWithoutReturnAndAnnos = removeMethodReturnTypeAndAnnotations(methodDeclAsString);
-    String methodName = this.classFQName + "#" + methodWithoutReturnAndAnnos;
+    String methodName = this.currentClassQualifiedName + "#" + methodWithoutReturnAndAnnos;
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMember) {
       Node parentNode = method.getParentNode().get();
@@ -465,7 +408,8 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
             // is no way for us to know which of those classes/interfaces the method belongs to.
             // TODO: write a test for the "super" case and then figure out a better way to handle
             // it.
-            resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+            resolvedYetStuckMethodCall.add(
+                this.currentClassQualifiedName + "." + call.getNameAsString());
           } else {
             // Use the scope instead. There are two cases: the scope is an FQN (e.g., in
             // a call to a fully-qualified static method) or the scope is a simple name.
@@ -481,7 +425,8 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
             }
           }
         } else {
-          resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+          resolvedYetStuckMethodCall.add(
+              this.currentClassQualifiedName + "." + call.getNameAsString());
         }
         return super.visit(call, p);
       }

@@ -8,6 +8,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.google.common.base.Splitter;
@@ -150,6 +151,22 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
     return filteredMethodDeclaration.replace("< ", "<");
   }
 
+  /**
+   * Gets the (fully-qualified) signature of a declaration (method or constructor). Removes things
+   * like annotations, the return type, spaces, etc.
+   *
+   * @param decl a method or constructor declaration
+   * @return the fully qualified signature of that declaration
+   */
+  protected String getSignature(NodeWithDeclaration decl) {
+    StringBuilder result = new StringBuilder();
+    result.append(this.currentClassQualifiedName);
+    result.append("#");
+    result.append(
+        removeMethodReturnTypeAndAnnotations(decl.getDeclarationAsString(false, false, false)));
+    return result.toString().replaceAll("\\s", "");
+  }
+
   @Override
   public Visitable visit(FieldDeclaration node, Void p) {
     for (VariableDeclarator var : node.getVariables()) {
@@ -166,12 +183,8 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration methodDeclaration, Void p) {
-    String methodQualifiedSignature =
-        this.currentClassQualifiedName
-            + "#"
-            + removeMethodReturnTypeAndAnnotations(
-                methodDeclaration.getDeclarationAsString(false, false, false));
     boolean oldInsideTargetMember = insideTargetMember;
+    String methodQualifiedSignature = getSignature(methodDeclaration);
     insideTargetMember = targetMethods.contains(methodQualifiedSignature);
     Visitable result = super.visit(methodDeclaration, p);
     insideTargetMember = oldInsideTargetMember;
@@ -180,13 +193,9 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration ctorDecl, Void p) {
-    String methodQualifiedSignature =
-        this.currentClassQualifiedName
-            + "#"
-            + removeMethodReturnTypeAndAnnotations(
-                ctorDecl.getDeclarationAsString(false, false, false));
+    String methodQualifiedSignature = getSignature(ctorDecl);
     boolean oldInsideTargetMember = insideTargetMember;
-    if (targetMethods.contains(methodQualifiedSignature.replace("\\s", ""))) {
+    if (targetMethods.contains(methodQualifiedSignature)) {
       insideTargetMember = true;
     }
     Visitable result = super.visit(ctorDecl, p);

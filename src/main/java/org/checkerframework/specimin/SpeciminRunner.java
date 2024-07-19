@@ -429,15 +429,16 @@ public class SpeciminRunner {
       inheritancePreserve.emptyAddedClasses();
     }
 
-    Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedTypeElements();
-    updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
+    solveMethodOverridingVisitor.getUsedTypeElements().addAll(totalSetOfAddedInheritedClasses);
 
     // remove the unsolved annotations in the newly added files.
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(annoRemover, null);
     }
 
-    updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
+    solveMethodOverridingVisitor
+        .getUsedTypeElements()
+        .addAll(annoRemover.getSolvedAnnotationFullName());
 
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
         new MustImplementMethodsVisitor(solveMethodOverridingVisitor);
