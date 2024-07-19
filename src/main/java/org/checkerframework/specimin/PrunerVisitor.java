@@ -329,12 +329,12 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     }
 
     ResolvedMethodDeclaration resolved = methodDecl.resolve();
-    if (targetMethods.contains(resolved.getQualifiedSignature())) {
+    String signature = resolved.getQualifiedSignature();
+    if (targetMethods.contains(signature)) {
       return super.visit(methodDecl, p);
     }
 
-    if (usedMembers.contains(resolved.getQualifiedSignature())
-        || isAResolvedYetStuckMethod(methodDecl)) {
+    if (usedMembers.contains(signature) || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
       if (methodDecl.getBody().isPresent() || isMethodInsideInterface) {

@@ -229,7 +229,8 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(VariableDeclarator node, Void arg) {
-    if (node.getParentNode().isPresent()
+    if (insideTargetMember
+        && node.getParentNode().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
       Visitable result = super.visit(node, arg);
       usedTypeElements.add(this.currentClassQualifiedName);
@@ -735,6 +736,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       String qualifiedClassName,
       Set<String> usedTypeElement,
       Map<String, String> nonPrimaryClassesToPrimaryClass) {
+
     // in case of type variables
     if (!qualifiedClassName.contains(".")) {
       return;
