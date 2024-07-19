@@ -169,14 +169,13 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldDeclaration node, Void p) {
-    System.out.println("visiting: " + node);
     for (VariableDeclarator var : node.getVariables()) {
-      System.out.println("var: " + var);
       boolean oldInsideTargetMember = insideTargetMember;
       insideTargetMember =
           oldInsideTargetMember
               || targetFields.contains(currentClassQualifiedName + "#" + var.getNameAsString());
-      super.visit(var, p);
+      // Note: NOT super.visit()! that would break clients that extend this class!
+      visit(var, p);
       insideTargetMember = oldInsideTargetMember;
     }
     // Do not call super, since sub-nodes are already visited by the call to super.visit
