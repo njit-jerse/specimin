@@ -228,8 +228,8 @@ public class JavaParserUtil {
   }
 
   /**
-   * Given a method or constructor declaration, this method return the declaration of that method
-   * without the return type and any possible annotation.
+   * Given a method or constructor declaration, this method returns the declaration of that method
+   * without the return type and any possible annotation. Note: the result may have spaces!
    *
    * @param decl the declaration to be used as input
    * @return decl without the return type and any possible annotation.
@@ -237,6 +237,18 @@ public class JavaParserUtil {
   public static String removeMethodReturnTypeAndAnnotations(NodeWithDeclaration decl) {
     String declAsString = decl.getDeclarationAsString(false, false, false);
     return removeMethodReturnTypeAndAnnotationsImpl(declAsString);
+  }
+
+  /**
+   * Given a method or constructor declaration, this method returns the declaration of that method
+   * without the return type, internal spaces, and any possible annotation.
+   *
+   * @param decl the declaration to be used as input
+   * @return decl without the return type and any possible annotation.
+   */
+  public static String removeMethodReturnTypeSpacesAndAnnotations(NodeWithDeclaration decl) {
+    String declAsString = decl.getDeclarationAsString(false, false, false);
+    return removeMethodReturnTypeAndAnnotationsImpl(declAsString).replaceAll("\\s", "");
   }
 
   /**

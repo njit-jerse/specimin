@@ -942,9 +942,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
-            + JavaParserUtil.removeMethodReturnTypeAndAnnotations(node);
+            + JavaParserUtil.removeMethodReturnTypeSpacesAndAnnotations(node);
     String methodSimpleName = node.getName().asString();
-    if (targetMethods.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
+    if (targetMethods.contains(methodQualifiedSignature)) {
       Visitable result = processMethodDeclaration(node);
       return result;
     } else if (potentialUsedMembers.contains(methodSimpleName)) {

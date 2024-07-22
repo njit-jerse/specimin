@@ -139,8 +139,8 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
     StringBuilder result = new StringBuilder();
     result.append(this.currentClassQualifiedName);
     result.append("#");
-    result.append(JavaParserUtil.removeMethodReturnTypeAndAnnotations(decl));
-    return result.toString().replaceAll("\\s", "");
+    result.append(JavaParserUtil.removeMethodReturnTypeSpacesAndAnnotations(decl));
+    return result.toString();
   }
 
   @Override
