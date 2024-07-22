@@ -185,18 +185,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   private final Set<@FullyQualifiedName String> classesFromJar = new HashSet<>();
 
   /**
-   * This set has the fully-qualfied name of the synthetic return types created by this instance of
-   * UnsolvedSymbolVisitor
-   */
-  private final Set<String> syntheticReturnTypes = new HashSet<>();
-
-  /**
-   * This set has all the name of synthetic types created by this visitor. These types represent the
-   * type of fields in the parent class of the current class.
-   */
-  private final Set<String> syntheticTypes = new HashSet<>();
-
-  /**
    * A mapping of field name to the name of the class currently being visited and its inner classes
    */
   private Map<String, @ClassGetSimpleName String> fieldNameToClassNameMap = new HashMap<>();
@@ -1899,11 +1887,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // if the return type is not specified, a synthetic return type will be created. This part of
     // codes creates the corresponding class for that synthetic return type
     if (desiredReturnType.equals("")) {
-      @SuppressWarnings(
-          "signature") // returnType is a @ClassGetSimpleName, so combining it with the package will
-      // give us the fully-qualified name
-      @FullyQualifiedName String packageName = missingClass.getPackageName() + "." + returnType;
-      syntheticReturnTypes.add(packageName);
       UnsolvedClassOrInterface returnTypeForThisMethod =
           new UnsolvedClassOrInterface(returnType, missingClass.getPackageName());
       this.updateMissingClass(returnTypeForThisMethod);
@@ -2288,7 +2271,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       @ClassGetSimpleName String variableType = "SyntheticTypeFor" + toCapital(var);
       UnsolvedClassOrInterface varType =
           new UnsolvedClassOrInterface(variableType, getPackageFromClassName(variableType));
-      syntheticTypes.add(variableType);
       relatedClass.addFields(
           setInitialValueForVariableDeclaration(
               variableType, varType.getQualifiedClassName() + " " + var));
@@ -3234,11 +3216,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     newMethod.setStatic();
     classThatContainMethod.addMethod(newMethod);
     syntheticMethodReturnTypeAndClass.put(thisReturnType, classThatContainMethod);
-    @SuppressWarnings(
-        "signature") // thisReturnType is a @ClassGetSimpleName, so combining it with the
-    // packageName will give us the @FullyQualifiedName
-    @FullyQualifiedName String returnTypeFullName = packageName + "." + thisReturnType;
-    syntheticReturnTypes.add(returnTypeFullName);
     this.updateMissingClass(returnClass);
     this.updateMissingClass(classThatContainMethod);
   }
