@@ -84,3 +84,33 @@ jobs:
       - name: Run expectedTestOutputsMustCompile with Gradle Wrapper
         run: gradlew.bat expectedTestOutputsMustCompile
         shell: cmd
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Checkout specimin-evaluation repository
+        uses: actions/checkout@v3
+        with:
+         repository: njit-jerse/specimin-evaluation
+         path: specimin-evaluation
+      - name: Run evaluation script
+        # cf-1291: test typical integration test
+        # cf-577: download + unzip + rename/file access errors
+        # cf-691: download + unzip 2
+        # cf-4614: slightly different than expected CF outputs 
+        run: |
+          set SPECIMIN=%cd%
+          cd specimin-evaluation
+          echo specimin path-^> %SPECIMIN%
+          python main.py --debug cf-1291
+          python main.py --debug cf-577
+          python main.py --debug cf-691
+          python main.py --debug cf-4614
+        shell: cmd
+      - name: Compile minimized programs
+        run: |
+          set SPECIMIN=%cd%
+          cd specimin-evaluation
+          echo specimin path-^> %SPECIMIN%
+          check_compilation.bat 1
+        shell: cmd
