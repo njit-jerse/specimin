@@ -1,5 +1,7 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
@@ -11,11 +13,13 @@ import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.google.common.base.Splitter;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -254,6 +258,89 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
               0, this.currentClassQualifiedName.lastIndexOf('.'));
     } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
       this.currentClassQualifiedName = "";
+    }
+  }
+
+  /**
+   * Determines if the given Node is a target/used method or class.
+   *
+   * @param node The node to check
+   */
+  protected boolean isTargetOrUsed(Node node) {
+    String qualifiedName;
+    boolean isClass = false;
+    if (node instanceof ClassOrInterfaceDeclaration) {
+      Optional<String> qualifiedNameOptional =
+          ((ClassOrInterfaceDeclaration) node).getFullyQualifiedName();
+      if (qualifiedNameOptional.isEmpty()) {
+        return false;
+      }
+      qualifiedName = qualifiedNameOptional.get();
+      isClass = true;
+    } else if (node instanceof EnumDeclaration) {
+      Optional<String> qualifiedNameOptional = ((EnumDeclaration) node).getFullyQualifiedName();
+      if (qualifiedNameOptional.isEmpty()) {
+        return false;
+      }
+      qualifiedName = qualifiedNameOptional.get();
+      isClass = true;
+    } else if (node instanceof AnnotationDeclaration) {
+      Optional<String> qualifiedNameOptional =
+          ((AnnotationDeclaration) node).getFullyQualifiedName();
+      if (qualifiedNameOptional.isEmpty()) {
+        return false;
+      }
+      qualifiedName = qualifiedNameOptional.get();
+      isClass = true;
+    } else if (node instanceof ConstructorDeclaration) {
+      try {
+        qualifiedName = ((ConstructorDeclaration) node).resolve().getQualifiedSignature();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+        // UnsupportedOperationException: type is a type variable
+        // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
+        return false;
+      } catch (RuntimeException e) {
+        // The current class is employed by the target methods, although not all of its members are
+        // utilized. It's not surprising for unused members to remain unresolved.
+        // If this constructor is from the parent of the current class, and it is not resolved, we
+        // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
+        // Copied from PrunerVisitor.visit(ConstructorDeclaration, Void)
+        return false;
+      }
+    } else if (node instanceof MethodDeclaration) {
+      try {
+        qualifiedName = ((MethodDeclaration) node).resolve().getQualifiedSignature();
+      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+        // UnsupportedOperationException: type is a type variable
+        // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
+        return false;
+      }
+    } else if (node instanceof FieldDeclaration) {
+      try {
+        FieldDeclaration decl = (FieldDeclaration) node;
+        for (VariableDeclarator var : decl.getVariables()) {
+          qualifiedName = JavaParserUtil.getEnclosingClassName(decl) + "#" + var.getNameAsString();
+          if (usedMembers.contains(qualifiedName) || targetFields.contains(qualifiedName)) {
+            return true;
+          }
+        }
+      } catch (UnsolvedSymbolException ex) {
+        return false;
+      }
+      return false;
+    } else {
+      return false;
+    }
+
+    if (qualifiedName.contains(" ")) {
+      qualifiedName = qualifiedName.replaceAll("//s", "");
+    }
+
+    if (isClass) {
+      return usedTypeElements.contains(qualifiedName);
+    } else {
+      // fields should already be handled at this point
+      return usedMembers.contains(qualifiedName) || targetMethods.contains(qualifiedName);
     }
   }
 }
