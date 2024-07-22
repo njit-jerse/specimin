@@ -207,6 +207,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     } else {
       updateUnfoundMethods(methodName);
     }
+
     Visitable result = super.visit(method, p);
 
     if (method.getParentNode().isEmpty()) {
@@ -268,6 +269,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
+
       insideTargetMember = true;
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       // make sure that differences in spacing does not interfere with the result
@@ -301,6 +303,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     } else {
       updateUnfoundMethods(methodName);
     }
+
     Visitable result = super.visit(method, p);
     insideTargetMember = oldInsideTargetMember;
     return result;
@@ -351,6 +354,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         }
       }
     }
+
     return super.visit(para, p);
   }
 
@@ -545,6 +549,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   @Override
   public Visitable visit(EnumConstantDeclaration enumConstantDeclaration, Void p) {
     Node parentNode = enumConstantDeclaration.getParentNode().orElseThrow();
+
     if (parentNode instanceof EnumDeclaration) {
       if (usedTypeElements.contains(
           ((EnumDeclaration) parentNode)
@@ -557,6 +562,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         insideTargetMember = true;
         Visitable result = super.visit(enumConstantDeclaration, p);
         insideTargetMember = oldInsideTargetMember;
+
         return result;
       }
     }
@@ -746,7 +752,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       qualifiedClassName = qualifiedClassName.substring(0, qualifiedClassName.indexOf("<"));
     }
     usedTypeElement.add(qualifiedClassName);
-
     // in case this class is not a primary class.
     if (nonPrimaryClassesToPrimaryClass.containsKey(qualifiedClassName)) {
       updateUsedClassWithQualifiedClassName(

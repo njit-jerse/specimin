@@ -3,13 +3,19 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
-import org.checkerframework.checker.signature.qual.FullyQualifiedName;
-
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.Optional;
+import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
  * A class containing useful static functions using JavaParser.
@@ -75,69 +81,145 @@ public class JavaParserUtil {
     return type.resolve().asReferenceType();
   }
 
-    /**
-     * Searches the ancestors of the given node until it finds a class or interface node, and then
-     * returns the fully-qualified name of that class or interface.
-     *
-     * <p>This method will fail if it is called on a node that is not contained in a class or
-     * interface.
-     *
-     * @param node a node contained in a class or interface
-     * @return the fully-qualified name of the inner-most containing class or interface
-     */
-    @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
-    public static @FullyQualifiedName String getEnclosingClassName(Node node) {
-      Node parent = getEnclosingClassLike(node);
-
-      if (parent instanceof ClassOrInterfaceDeclaration) {
-        return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
+  /**
+   * Returns the corresponding type name for an Expression within an annotation.
+   *
+   * @param value The value to evaluate the type of
+   * @return The corresponding type name for the value: constrained to a primitive type, String,
+   *     Class&lt;?&gt;, an enum, an annotation, or an array of any of those types, as per
+   *     annotation parameter requirements.
+   */
+  public static String getValueTypeFromAnnotationExpression(Expression value) {
+    if (value.isBooleanLiteralExpr()) {
+      return "boolean";
+    } else if (value.isStringLiteralExpr()) {
+      return "String";
+    } else if (value.isIntegerLiteralExpr()) {
+      return "int";
+    } else if (value.isLongLiteralExpr()) {
+      return "long";
+    } else if (value.isDoubleLiteralExpr()) {
+      return "double";
+    } else if (value.isCharLiteralExpr()) {
+      return "char";
+    } else if (value.isArrayInitializerExpr()) {
+      ArrayInitializerExpr array = value.asArrayInitializerExpr();
+      if (!array.getValues().isEmpty()) {
+        Expression firstElement = array.getValues().get(0);
+        return getValueTypeFromAnnotationExpression(firstElement) + "[]";
       }
+      // Handle empty arrays (i.e. @Anno({})); we have no way of telling
+      // what it actually is
+      return "String[]";
+    } else if (value.isAnnotationExpr()) {
+      return value.asAnnotationExpr().getNameAsString();
+    } else if (value.isFieldAccessExpr()) {
+      // Enums are FieldAccessExprs (Enum.SOMETHING)
+      return value.asFieldAccessExpr().getScope().toString();
+    } else if (value.isClassExpr()) {
+      // Handle all classes
+      return "Class<?>";
+    } else if (value.isNameExpr()) {
+      // Constant/variable
+      try {
+        ResolvedType resolvedType = value.asNameExpr().calculateResolvedType();
 
-      if (parent instanceof EnumDeclaration) {
-        return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
-      }
-
-      if (parent instanceof AnnotationDeclaration) {
-        return ((AnnotationDeclaration) parent).getFullyQualifiedName().orElseThrow();
-      }
-
-      throw new RuntimeException("unexpected kind of node: " + parent.getClass());
-    }
-
-    /**
-     * Returns the innermost enclosing class-like element for the given node. A class-like element is
-     * a class, interface, or enum (i.e., something that would be a {@link
-     * javax.lang.model.element.TypeElement} in javac's internal model). This method will throw if no
-     * such element exists.
-     *
-     * @param node a node that is contained in a class-like structure
-     * @return the nearest enclosing class-like node
-     */
-    public static Node getEnclosingClassLike(Node node) {
-      Node parent = node.getParentNode().orElseThrow();
-      while (!(parent instanceof ClassOrInterfaceDeclaration
-              || parent instanceof EnumDeclaration
-              || parent instanceof AnnotationDeclaration)) {
-        parent = parent.getParentNode().orElseThrow();
-      }
-      return parent;
-    }
-
-    /**
-     * Returns true iff the innermost enclosing class/interface is an enum.
-     *
-     * @param node any node
-     * @return true if the enclosing class is an enum, false otherwise
-     */
-    public static boolean isInEnum(Node node) {
-      Optional<Node> parent = node.getParentNode();
-      while (parent.isPresent()) {
-        Node actualParent = parent.get();
-        if (actualParent instanceof EnumDeclaration) {
-          return true;
+        if (resolvedType.isPrimitive()) {
+          return resolvedType.asPrimitive().describe();
+        } else if (resolvedType.isReferenceType()) {
+          return resolvedType.asReferenceType().getQualifiedName();
+        } else {
+          return resolvedType.describe();
         }
-        parent = actualParent.getParentNode();
+      } catch (UnsolvedSymbolException ex) {
+        return value.toString();
       }
-      return false;
     }
+    return value.toString();
+  }
+
+  /**
+   * Searches the ancestors of the given node until it finds a class or interface node, and then
+   * returns the fully-qualified name of that class or interface.
+   *
+   * <p>This method will fail if it is called on a node that is not contained in a class or
+   * interface.
+   *
+   * @param node a node contained in a class or interface
+   * @return the fully-qualified name of the inner-most containing class or interface
+   */
+  @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
+  public static @FullyQualifiedName String getEnclosingClassName(Node node) {
+    Node parent = getEnclosingClassLike(node);
+
+    if (parent instanceof ClassOrInterfaceDeclaration) {
+      return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    }
+
+    if (parent instanceof EnumDeclaration) {
+      return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    }
+
+    if (parent instanceof AnnotationDeclaration) {
+      return ((AnnotationDeclaration) parent).getFullyQualifiedName().orElseThrow();
+    }
+
+    throw new RuntimeException("unexpected kind of node: " + parent.getClass());
+  }
+
+  /**
+   * Returns the innermost enclosing class-like element for the given node. A class-like element is
+   * a class, interface, or enum (i.e., something that would be a {@link
+   * javax.lang.model.element.TypeElement} in javac's internal model). This method will throw if no
+   * such element exists.
+   *
+   * @param node a node that is contained in a class-like structure
+   * @return the nearest enclosing class-like node
+   */
+  public static Node getEnclosingClassLike(Node node) {
+    Node parent = node.getParentNode().orElseThrow();
+    while (!(parent instanceof ClassOrInterfaceDeclaration
+        || parent instanceof EnumDeclaration
+        || parent instanceof AnnotationDeclaration)) {
+      parent = parent.getParentNode().orElseThrow();
+    }
+    return parent;
+  }
+
+  /**
+   * Returns true iff the innermost enclosing class/interface is an enum.
+   *
+   * @param node any node
+   * @return true if the enclosing class is an enum, false otherwise
+   */
+  public static boolean isInEnum(Node node) {
+    Optional<Node> parent = node.getParentNode();
+    while (parent.isPresent()) {
+      Node actualParent = parent.get();
+      if (actualParent instanceof EnumDeclaration) {
+        return true;
+      }
+      parent = actualParent.getParentNode();
+    }
+    return false;
+  }
+
+  /**
+   * Finds the closest method, field, or class-like declaration (enums, annos)
+   *
+   * @param node The node to find the parent for
+   * @return the Node of the closest member or class declaration
+   */
+  public static Node findClosestParentMemberOrClassLike(Node node) {
+    Node parent = node.getParentNode().orElseThrow();
+    while (!(parent instanceof ClassOrInterfaceDeclaration
+        || parent instanceof EnumDeclaration
+        || parent instanceof AnnotationDeclaration
+        || parent instanceof ConstructorDeclaration
+        || parent instanceof MethodDeclaration
+        || parent instanceof FieldDeclaration)) {
+      parent = parent.getParentNode().orElseThrow();
+    }
+    return parent;
+  }
 }

@@ -8,13 +8,14 @@ import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionAnnotationDeclaration;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /** A visitor that removes unsolved annotation expressions. */
 public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
@@ -33,9 +34,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
    */
   Map<String, String> classToFullClassName = new HashMap<>();
 
-  /** The set of full names of solvable annotations. */
-  private Set<String> solvedAnnotationFullName = new HashSet<>();
-
   /**
    * Create a new instance of UnsolvedAnnotationRemoverVisitor
    *
@@ -53,17 +51,6 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
         throw new RuntimeException(e);
       }
     }
-  }
-
-  /**
-   * Get a copy of the set of solved annotations.
-   *
-   * @return copy a copy of the set of solved annotations.
-   */
-  public Set<String> getSolvedAnnotationFullName() {
-    Set<String> copy = new HashSet<>();
-    copy.addAll(solvedAnnotationFullName);
-    return copy;
   }
 
   @Override
@@ -100,21 +87,46 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
    */
   public void processAnnotations(AnnotationExpr annotation) {
     String annotationName = annotation.getNameAsString();
+
+    // Never preserve @Override, since it causes compile errors but does not fix them.
+    if ("Override".equals(annotationName)) {
+      annotation.remove();
+      return;
+    }
+
+    // If the annotation can be resolved, find its qualified name to prevent removal
+    boolean isResolved = true;
+    try {
+      ResolvedAnnotationDeclaration resolvedAnno = annotation.resolve();
+      annotationName = resolvedAnno.getQualifiedName();
+
+      if (resolvedAnno instanceof ReflectionAnnotationDeclaration) {
+        // These annotations do not have a file corresponding to them, which can cause
+        // compile errors in the output
+        // This is fine if it's included in java.lang, but if not, we should treat it as
+        // if it were unresolved
+
+        if (!annotationName.startsWith("java.lang")) {
+          isResolved = false;
+        }
+      }
+    } catch (UnsolvedSymbolException ex) {
+      isResolved = false;
+    }
+
     if (!UnsolvedSymbolVisitor.isAClassPath(annotationName)) {
       if (!classToFullClassName.containsKey(annotationName)) {
         // An annotation not imported and from the java.lang package is not our concern.
-        // Never preserve @Override, since it causes compile errors but does not fix them.
-        if (!JavaLangUtils.isJavaLangName(annotationName) || "Override".equals(annotationName)) {
+        if (!JavaLangUtils.isJavaLangName(annotationName)) {
           annotation.remove();
         }
         return;
       }
       annotationName = classToFullClassName.get(annotationName);
     }
-    if (!classToJarPath.containsKey(annotationName)) {
+
+    if (!isResolved && !classToJarPath.containsKey(annotationName)) {
       annotation.remove();
-    } else {
-      solvedAnnotationFullName.add(annotationName);
     }
   }
 }

@@ -450,6 +450,15 @@ public class UnsolvedClassOrInterface {
     if (this.getClass() != UnsolvedInnerClass.class) {
       sb.append("package ").append(packageName).append(";\n");
     }
+
+    // Synthetic annotations used within generic types cause compile errors,
+    // so we need to add this to prevent them
+    if (isAnAnnotation) {
+      sb.append(
+          "@java.lang.annotation.Target({java.lang.annotation.ElementType.TYPE_USE,"
+              + " java.lang.annotation.ElementType.METHOD})\n");
+    }
+
     sb.append("public ");
     if (this.getClass() == UnsolvedInnerClass.class) {
       // Nested classes that are visible outside their parent class
