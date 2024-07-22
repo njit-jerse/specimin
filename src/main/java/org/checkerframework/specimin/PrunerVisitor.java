@@ -118,6 +118,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       // if it's a static import, classFullName will actually be a method name
       return super.visit(decl, p);
     }
+
     if (usedTypeElements.contains(classFullName)) {
       return super.visit(decl, p);
     }
