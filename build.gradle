@@ -33,7 +33,7 @@ dependencies {
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
 
-    errorprone("com.google.errorprone:error_prone_core:2.28.0")
+    errorprone("com.google.errorprone:error_prone_core:2.29.2")
 }
 
 // Use require-javadoc. From https://github.com/plume-lib/require-javadoc.

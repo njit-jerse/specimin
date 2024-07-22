@@ -342,11 +342,6 @@ public class SpeciminRunner {
       }
     }
 
-    UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(annoRemover, null);
-    }
-
     EnumVisitor enumVisitor = new EnumVisitor(targetMethodNames);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(enumVisitor, null);
@@ -361,6 +356,7 @@ public class SpeciminRunner {
             targetMethodNames,
             targetFieldNames,
             nonPrimaryClassesToPrimaryClass,
+            existingClassesToFilePath,
             enumVisitor.getUsedEnum());
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -374,15 +370,14 @@ public class SpeciminRunner {
               + unfoundMethodsTable(unfoundMethods));
     }
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
-        new SolveMethodOverridingVisitor(
-            finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedTypeElement());
+        new SolveMethodOverridingVisitor(finder);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }
 
     Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
     // add all files related to the targeted methods
-    for (String classFullName : solveMethodOverridingVisitor.getUsedClass()) {
+    for (String classFullName : solveMethodOverridingVisitor.getUsedTypeElements()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
       File thisFile = new File(root + directoryOfFile);
       // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
@@ -404,7 +399,7 @@ public class SpeciminRunner {
         }
       }
     }
-    Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
+    Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedTypeElements();
     Set<String> totalSetOfAddedInheritedClasses = classToFindInheritance;
     InheritancePreserveVisitor inheritancePreserve;
     while (!classToFindInheritance.isEmpty()) {
@@ -415,8 +410,6 @@ public class SpeciminRunner {
       for (String targetFile : inheritancePreserve.getAddedClasses()) {
         String directoryOfFile = targetFile.replace(".", "/") + ".java";
         File thisFile = new File(root + directoryOfFile);
-        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
-        // create synthetic files for them
         if (thisFile.exists()) {
           try {
             parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
@@ -431,32 +424,29 @@ public class SpeciminRunner {
       inheritancePreserve.emptyAddedClasses();
     }
 
-    Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
+    Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedTypeElements();
     updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
 
-    // remove the unsolved annotations in the newly added files.
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(annoRemover, null);
-    }
-
-    updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
-
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
-        new MustImplementMethodsVisitor(
-            solveMethodOverridingVisitor.getUsedMembers(),
-            updatedUsedClass,
-            existingClassesToFilePath);
+        new MustImplementMethodsVisitor(solveMethodOverridingVisitor);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(mustImplementMethodsVisitor, null);
     }
 
+    // This is safe to run after MustImplementMethodsVisitor because
+    // annotations do not inherit
+    processAnnotationTypes(mustImplementMethodsVisitor, root, parsedTargetFiles);
+
+    // Remove the unsolved annotations (and @Override) in all files.
+    UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(annoRemover, null);
+    }
+
     PrunerVisitor methodPruner =
         new PrunerVisitor(
-            finder.getTargetMethods(),
-            targetFieldNames,
-            mustImplementMethodsVisitor.getUsedMembers(),
-            mustImplementMethodsVisitor.getUsedClass(),
+            mustImplementMethodsVisitor,
             finder.getResolvedYetStuckMethodCall(),
             classAndUnresolvedInterface);
 
@@ -476,17 +466,17 @@ public class SpeciminRunner {
       // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
         // target key will have this form: "path/of/package/ClassName.java"
-        String classFullyQualfiedName = getFullyQualifiedClassName(target.getKey());
+        String classFullyQualifiedName = getFullyQualifiedClassName(target.getKey());
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
-            classFullyQualfiedName.substring(classFullyQualfiedName.lastIndexOf(".") + 1);
+            classFullyQualifiedName.substring(classFullyQualifiedName.lastIndexOf(".") + 1);
         // If this condition is true, this class is a synthetic class initially created to be a
         // return type of some synthetic methods, but later javac has found the correct return type
         // for that method.
         if (typesToChange.containsKey(simpleName)) {
           continue;
         }
-        if (!finder.getUsedTypeElement().contains(classFullyQualfiedName)) {
+        if (!finder.getUsedTypeElements().contains(classFullyQualifiedName)) {
           continue;
         }
       }
@@ -512,6 +502,68 @@ public class SpeciminRunner {
       }
     }
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
+  }
+
+  /**
+   * Fully solve all annotations by processing all annotations, annotation parameters, and their
+   * types. This method also removes any annotations which are not fully solvable and includes all
+   * necessary files in Specimin's output.
+   *
+   * @param last The last SpeciminStateVisitor to run
+   * @param root The root directory
+   * @param parsedTargetFiles A map of file names to parsed CompilationUnits
+   */
+  private static SpeciminStateVisitor processAnnotationTypes(
+      SpeciminStateVisitor last, String root, Map<String, CompilationUnit> parsedTargetFiles)
+      throws IOException {
+    AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
+        new AnnotationParameterTypesVisitor(last);
+
+    Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
+    Set<CompilationUnit> compilationUnitsToSolveAnnotations =
+        new HashSet<>(parsedTargetFiles.values());
+
+    while (!compilationUnitsToSolveAnnotations.isEmpty()) {
+      for (CompilationUnit cu : compilationUnitsToSolveAnnotations) {
+        cu.accept(annotationParameterTypesVisitor, null);
+      }
+
+      // add all files related to the target annotations
+      for (String annoFullName : annotationParameterTypesVisitor.getClassesToAdd()) {
+        String directoryOfFile = annoFullName.replace(".", "/") + ".java";
+        File thisFile = new File(root + directoryOfFile);
+        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
+        // create synthetic files for them
+        if (thisFile.exists()) {
+          relatedClass.add(directoryOfFile);
+        }
+      }
+
+      compilationUnitsToSolveAnnotations.clear();
+
+      for (String directory : relatedClass) {
+        // directories already in parsedTargetFiles are original files in the root directory, we are
+        // not supposed to update them.
+        if (!parsedTargetFiles.containsKey(directory)) {
+          try {
+            // We need to continue solving annotations and parameters in newly added annotation
+            // files
+            CompilationUnit parsed = parseJavaFile(root, directory);
+            parsedTargetFiles.put(directory, parsed);
+            compilationUnitsToSolveAnnotations.add(parsed);
+          } catch (ParseProblemException e) {
+            // TODO: Figure out why the CI is crashing.
+            continue;
+          }
+        }
+      }
+
+      annotationParameterTypesVisitor
+          .getUsedTypeElements()
+          .addAll(annotationParameterTypesVisitor.getClassesToAdd());
+      annotationParameterTypesVisitor.getClassesToAdd().clear();
+    }
+    return annotationParameterTypesVisitor;
   }
 
   /**
