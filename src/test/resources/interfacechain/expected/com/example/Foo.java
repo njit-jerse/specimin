@@ -5,7 +5,6 @@ import java.util.Iterator;
 public class Foo<E> {
     public Iterator<E> iterator() {
         return new AbstractLinkedIterator() {
-            @Override
             E computeNext() {
                 throw new Error();
             }
@@ -15,12 +14,10 @@ public class Foo<E> {
     public abstract class AbstractLinkedIterator implements Iterator3<E> {
         abstract E computeNext();
 
-        @Override
         public E next() {
             throw new Error();
         }
 
-        @Override
         public boolean hasNext() {
             throw new Error();
         }
