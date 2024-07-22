@@ -29,8 +29,7 @@ public class EnumVisitor extends SpeciminStateVisitor {
     String methodQualifiedSignature =
         this.currentClassQualifiedName
             + "#"
-            + SpeciminStateVisitor.removeMethodReturnTypeAndAnnotations(
-                methodDeclaration.getDeclarationAsString(false, false, false));
+            + JavaParserUtil.removeMethodReturnTypeAndAnnotations(methodDeclaration);
     if (targetMethods.contains(methodQualifiedSignature)) {
       return super.visit(methodDeclaration, arg);
     }

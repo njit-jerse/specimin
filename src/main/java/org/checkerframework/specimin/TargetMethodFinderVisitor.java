@@ -243,9 +243,9 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
     boolean oldInsideTargetMember = insideTargetMember;
-    String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
-    String methodWithoutReturnAndAnnos = removeMethodReturnTypeAndAnnotations(methodDeclAsString);
+    String methodWithoutReturnAndAnnos =
+        JavaParserUtil.removeMethodReturnTypeAndAnnotations(method);
     String methodName = this.currentClassQualifiedName + "#" + methodWithoutReturnAndAnnos;
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMember) {

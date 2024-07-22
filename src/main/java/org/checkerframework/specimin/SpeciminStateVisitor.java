@@ -14,14 +14,11 @@ import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
-import com.google.common.base.Splitter;
 import java.nio.file.Path;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
@@ -132,30 +129,6 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Given a method declaration, this method return the declaration of that method without the
-   * return type and any possible annotation.
-   *
-   * @param methodDeclaration the method declaration to be used as input
-   * @return methodDeclaration without the return type and any possible annotation.
-   */
-  public static String removeMethodReturnTypeAndAnnotations(String methodDeclaration) {
-    String methodDeclarationWithoutParen =
-        methodDeclaration.substring(0, methodDeclaration.indexOf("("));
-    List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
-    String methodName = methodParts.get(methodParts.size() - 1);
-    String methodReturnType = methodDeclaration.substring(0, methodDeclaration.indexOf(methodName));
-    String methodWithoutReturnType = methodDeclaration.replace(methodReturnType, "");
-    methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
-    String filteredMethodDeclaration =
-        methodParts.stream()
-            .filter(part -> !part.startsWith("@"))
-            .map(part -> part.indexOf('@') == -1 ? part : part.substring(0, part.indexOf('@')))
-            .collect(Collectors.joining(" "));
-    // sometimes an extra space may occur if an annotation right after a < was removed
-    return filteredMethodDeclaration.replace("< ", "<");
-  }
-
-  /**
    * Gets the (fully-qualified) signature of a declaration (method or constructor). Removes things
    * like annotations, the return type, spaces, etc.
    *
@@ -166,8 +139,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
     StringBuilder result = new StringBuilder();
     result.append(this.currentClassQualifiedName);
     result.append("#");
-    result.append(
-        removeMethodReturnTypeAndAnnotations(decl.getDeclarationAsString(false, false, false)));
+    result.append(JavaParserUtil.removeMethodReturnTypeAndAnnotations(decl));
     return result.toString().replaceAll("\\s", "");
   }
 
