@@ -9,7 +9,6 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -37,8 +36,6 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedWildcard;
-import com.google.common.base.Splitter;
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -58,15 +55,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
    * spaces remove for ease of comparison.
    */
   private final Set<String> targetMethodNames;
-
-  /**
-   * This boolean tracks whether the element currently being visited is inside a target method. It
-   * is set by {@link #visit(MethodDeclaration, Void)}.
-   */
-  private boolean insideTargetMember = false;
-
-  /** The fully-qualified name of the class currently being visited. */
-  private String classFQName = "";
 
   /** The name of the package currently being visited. */
   private String currentPackage = "";
@@ -108,32 +96,18 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   /**
    * Create a new target method finding visitor.
    *
-   * @param methodNames the names of the target methods, the format
-   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)
-   * @param fieldNames the names of the target fields, the format is
-   *     class.fully.qualified.Name#fieldName
+   * @param previous the previous Specimin visitor
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
-   * @param existingClassesToFilePath map from existing classes to file paths
-   * @param usedTypeElement set of type elements already known to be used by the target methods.
    */
   public TargetMethodFinderVisitor(
-      List<String> methodNames,
-      List<String> fieldNames,
-      Map<String, String> nonPrimaryClassesToPrimaryClass,
-      Map<String, Path> existingClassesToFilePath,
-      Set<String> usedTypeElement) {
-    super(
-        new HashSet<>(),
-        new HashSet<>(fieldNames),
-        new HashSet<>(),
-        usedTypeElement,
-        existingClassesToFilePath);
+      SpeciminStateVisitor previous, Map<String, String> nonPrimaryClassesToPrimaryClass) {
+    super(previous);
     targetMethodNames = new HashSet<>();
-    for (String methodSignature : methodNames) {
+    for (String methodSignature : targetMethods) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
-    unfoundMethods = new HashMap<>(methodNames.size());
+    unfoundMethods = new HashMap<>(targetMethods.size());
     targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
   }
@@ -183,7 +157,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   private void updateUnfoundMethods(String methodAsString) {
     Set<String> targetMethodsInClass =
         targetMethodNames.stream()
-            .filter(t -> t.startsWith(this.classFQName))
+            .filter(t -> t.startsWith(this.currentClassQualifiedName))
             .collect(Collectors.toSet());
 
     for (String targetMethodInClass : targetMethodsInClass) {
@@ -214,70 +188,15 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       }
     }
 
-    manageClassFQNamePreSuper(decl);
-    Visitable result = super.visit(decl, p);
-    manageClassFQNamePostSuper(decl);
-    return result;
-  }
-
-  @Override
-  public Visitable visit(EnumDeclaration decl, Void p) {
-    manageClassFQNamePreSuper(decl);
-    Visitable result = super.visit(decl, p);
-    manageClassFQNamePostSuper(decl);
-    return result;
-  }
-
-  /**
-   * Helper method to share code for managing the {@link #classFQName} field between
-   * classes/interfaces and enums. Call this method before calling super.visit().
-   *
-   * @see #classFQName
-   * @see #manageClassFQNamePostSuper(TypeDeclaration)
-   * @param decl a class, interface, or enum declaration
-   */
-  private void manageClassFQNamePreSuper(TypeDeclaration<?> decl) {
-    if (decl.isNestedType()) {
-      this.classFQName += "." + decl.getName().toString();
-    } else {
-      if (!JavaParserUtil.isLocalClassDecl(decl)) {
-        if (!"".equals(this.classFQName)) {
-          throw new UnsupportedOperationException(
-              "Attempted to enter an unexpected kind of class: "
-                  + decl.getFullyQualifiedName()
-                  + " but already had a set classFQName: "
-                  + classFQName);
-        }
-        // Should always be present.
-        this.classFQName = decl.getFullyQualifiedName().orElseThrow();
-      }
-    }
-  }
-
-  /**
-   * Helper method to share code for managing the {@link #classFQName} field between
-   * classes/interfaces and enums. Call this method after calling super.visit().
-   *
-   * @see #classFQName
-   * @see #manageClassFQNamePreSuper(TypeDeclaration)
-   * @param decl a class, interface, or enum declaration
-   */
-  private void manageClassFQNamePostSuper(TypeDeclaration<?> decl) {
-    if (decl.isNestedType()) {
-      this.classFQName = this.classFQName.substring(0, this.classFQName.lastIndexOf('.'));
-    } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
-      this.classFQName = "";
-    }
+    return super.visit(decl, p);
   }
 
   @Override
   public Visitable visit(ConstructorDeclaration method, Void p) {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
-    String methodName = this.classFQName + "#" + constructorMethodAsString;
-    boolean oldInsideTargetMember = insideTargetMember;
+    String methodName = this.currentClassQualifiedName + "#" + constructorMethodAsString;
     if (this.targetMethodNames.contains(methodName)) {
-      insideTargetMember = true;
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
@@ -290,7 +209,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     }
 
     Visitable result = super.visit(method, p);
-    insideTargetMember = oldInsideTargetMember;
 
     if (method.getParentNode().isEmpty()) {
       return result;
@@ -312,17 +230,12 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(VariableDeclarator node, Void arg) {
-    if (node.getParentNode().isPresent()
+    if (insideTargetMember
+        && node.getParentNode().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
-      if (targetFields.contains(this.classFQName + "#" + node.getNameAsString())) {
-        boolean oldInsideTargetMember = insideTargetMember;
-        insideTargetMember = true;
-        Visitable result = super.visit(node, arg);
-        usedTypeElements.add(this.classFQName);
-        insideTargetMember = oldInsideTargetMember;
-
-        return result;
-      }
+      Visitable result = super.visit(node, arg);
+      usedTypeElements.add(this.currentClassQualifiedName);
+      return result;
     }
     return super.visit(node, arg);
   }
@@ -330,10 +243,10 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   @Override
   public Visitable visit(MethodDeclaration method, Void p) {
     boolean oldInsideTargetMember = insideTargetMember;
-    String methodDeclAsString = method.getDeclarationAsString(false, false, false);
     // TODO: test this with annotations
-    String methodWithoutReturnAndAnnos = removeMethodReturnTypeAndAnnotations(methodDeclAsString);
-    String methodName = this.classFQName + "#" + methodWithoutReturnAndAnnos;
+    String methodWithoutReturnAndAnnos =
+        JavaParserUtil.removeMethodReturnTypeAndAnnotations(method);
+    String methodName = this.currentClassQualifiedName + "#" + methodWithoutReturnAndAnnos;
     // this method belongs to an anonymous class inside the target method
     if (insideTargetMember) {
       Node parentNode = method.getParentNode().get();
@@ -500,7 +413,8 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
             // is no way for us to know which of those classes/interfaces the method belongs to.
             // TODO: write a test for the "super" case and then figure out a better way to handle
             // it.
-            resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+            resolvedYetStuckMethodCall.add(
+                this.currentClassQualifiedName + "." + call.getNameAsString());
           } else {
             // Use the scope instead. There are two cases: the scope is an FQN (e.g., in
             // a call to a fully-qualified static method) or the scope is a simple name.
@@ -516,7 +430,8 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
             }
           }
         } else {
-          resolvedYetStuckMethodCall.add(this.classFQName + "." + call.getNameAsString());
+          resolvedYetStuckMethodCall.add(
+              this.currentClassQualifiedName + "." + call.getNameAsString());
         }
         return super.visit(call, p);
       }
@@ -741,30 +656,6 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Given a method declaration, this method return the declaration of that method without the
-   * return type and any possible annotation.
-   *
-   * @param methodDeclaration the method declaration to be used as input
-   * @return methodDeclaration without the return type and any possible annotation.
-   */
-  public static String removeMethodReturnTypeAndAnnotations(String methodDeclaration) {
-    String methodDeclarationWithoutParen =
-        methodDeclaration.substring(0, methodDeclaration.indexOf("("));
-    List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
-    String methodName = methodParts.get(methodParts.size() - 1);
-    String methodReturnType = methodDeclaration.substring(0, methodDeclaration.indexOf(methodName));
-    String methodWithoutReturnType = methodDeclaration.replace(methodReturnType, "");
-    methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
-    String filteredMethodDeclaration =
-        methodParts.stream()
-            .filter(part -> !part.startsWith("@"))
-            .map(part -> part.indexOf('@') == -1 ? part : part.substring(0, part.indexOf('@')))
-            .collect(Collectors.joining(" "));
-    // sometimes an extra space may occur if an annotation right after a < was removed
-    return filteredMethodDeclaration.replace("< ", "<");
-  }
-
-  /**
    * Resolves unionType parameters one by one and adds them in the usedClass set.
    *
    * @param type unionType parameter
@@ -851,6 +742,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       String qualifiedClassName,
       Set<String> usedTypeElement,
       Map<String, String> nonPrimaryClassesToPrimaryClass) {
+
     // in case of type variables
     if (!qualifiedClassName.contains(".")) {
       return;

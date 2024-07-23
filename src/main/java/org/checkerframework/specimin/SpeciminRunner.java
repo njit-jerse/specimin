@@ -227,7 +227,10 @@ public class SpeciminRunner {
     }
     UnsolvedSymbolVisitor addMissingClass =
         new UnsolvedSymbolVisitor(
-            root, existingClassesToFilePath, targetMethodNames, targetFieldNames);
+            root,
+            existingClassesToFilePath,
+            new HashSet<>(targetMethodNames),
+            new HashSet<>(targetFieldNames));
     addMissingClass.setClassesFromJar(jarPaths);
 
     Map<String, String> typesToChange = new HashMap<>();
@@ -342,7 +345,7 @@ public class SpeciminRunner {
       }
     }
 
-    EnumVisitor enumVisitor = new EnumVisitor(targetMethodNames);
+    EnumVisitor enumVisitor = new EnumVisitor(addMissingClass);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(enumVisitor, null);
     }
@@ -352,12 +355,7 @@ public class SpeciminRunner {
     // and removes all non-used code.
 
     TargetMethodFinderVisitor finder =
-        new TargetMethodFinderVisitor(
-            targetMethodNames,
-            targetFieldNames,
-            nonPrimaryClassesToPrimaryClass,
-            existingClassesToFilePath,
-            enumVisitor.getUsedEnum());
+        new TargetMethodFinderVisitor(enumVisitor, nonPrimaryClassesToPrimaryClass);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
@@ -424,8 +422,7 @@ public class SpeciminRunner {
       inheritancePreserve.emptyAddedClasses();
     }
 
-    Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedTypeElements();
-    updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
+    solveMethodOverridingVisitor.getUsedTypeElements().addAll(totalSetOfAddedInheritedClasses);
 
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
         new MustImplementMethodsVisitor(solveMethodOverridingVisitor);
