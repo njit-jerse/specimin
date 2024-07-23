@@ -18,11 +18,14 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
+import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
 import java.util.AbstractMap;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -86,12 +89,13 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     if (ancestorMethodPreservedAndAbstract(method)
         || (overridden == null && overridesAnInterfaceMethod(method))) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
-      Set<String> returnAndParamTypes = new HashSet<>();
+      Map<String, ResolvedType> returnAndParamTypes = new HashMap<>();
       try {
-        returnAndParamTypes.add(resolvedMethod.getReturnType().describe());
+        returnAndParamTypes.put(
+            resolvedMethod.getReturnType().describe(), resolvedMethod.getReturnType());
         for (int i = 0; i < resolvedMethod.getNumberOfParams(); ++i) {
           ResolvedParameterDeclaration param = resolvedMethod.getParam(i);
-          returnAndParamTypes.add(param.describeType());
+          returnAndParamTypes.put(param.describeType(), param.getType());
         }
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // In this case, don't keep the method (it won't compile anyway,
@@ -100,7 +104,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
         return super.visit(method, p);
       }
       usedMembers.add(resolvedMethod.getQualifiedSignature());
-      for (String type : returnAndParamTypes) {
+      for (String type : returnAndParamTypes.keySet()) {
         type = type.trim();
         if (type.contains("<")) {
           // remove generics, if present, since this type will be used in
@@ -111,6 +115,8 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
         if (type.contains("[]")) {
           type = type.replace("[]", "");
         }
+
+        boolean previouslyIncluded = usedTypeElements.contains(type);
 
         usedTypeElements.add(type);
 
@@ -129,23 +135,15 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
             }
           }
 
-          // Since we are here, this type is not used anywhere else except in this location
-          // Therefore, its inherited types (if solvable) should be preserved since it was
-          // not able to be preserved elsewhere.
-          for (ResolvedReferenceType implementation :
-              getAllImplementations(decl.getImplementedTypes())) {
-            usedTypeElements.add(implementation.getQualifiedName());
-          }
-
-          for (ResolvedReferenceType implementation :
-              getAllImplementations(decl.getExtendedTypes())) {
-            usedTypeElements.add(implementation.getQualifiedName());
-          }
-
           // Revisit the given class declaration so it is not removed
           super.visit(decl, p);
 
           qualifiedNameToUnusedClassDeclarationMap.remove(type);
+        }
+
+        ResolvedType resolvedType = returnAndParamTypes.get(type);
+        if (!previouslyIncluded && resolvedType != null && resolvedType.isReferenceType()) {
+          addAllResolvableAncestors(resolvedType.asReferenceType());
         }
       }
     }
@@ -161,20 +159,30 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
    */
   private boolean ancestorMethodPreservedAndAbstract(MethodDeclaration method) {
     ResolvedMethodDeclaration overridden = getOverriddenMethodInSuperClass(method);
-    if (overridden == null) {
-      return false;
-    }
 
     if (isPreservedAndAbstract(overridden)) {
       return true;
     }
 
+    ResolvedMethodDeclaration resolvedMethod;
+    try {
+      resolvedMethod = method.resolve();
+    } catch (UnsolvedSymbolException ex) {
+      return false;
+    }
+
+    String currentMethodSignature = resolvedMethod.getQualifiedSignature();
+    String currentMethodName =
+        currentMethodSignature.substring(currentMethodSignature.lastIndexOf('.') + 1);
+
     for (ResolvedReferenceType implementation :
-        getAllImplementations(new HashSet<>(overridden.declaringType().getAncestors()))) {
+        getAllImplementations(new HashSet<>(resolvedMethod.declaringType().getAncestors()))) {
       for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
         if (potentialSuperMethod.getDeclaration().isAbstract()) {
           String methodSignature = potentialSuperMethod.getQualifiedSignature();
-          if (!potentialSuperMethod.getQualifiedSignature().equals(methodSignature)) {
+          String potentialSuperMethodName =
+              methodSignature.substring(methodSignature.lastIndexOf('.') + 1);
+          if (!currentMethodName.equals(potentialSuperMethodName)) {
             continue;
           }
           // These classes are beyond our control. It's better to retain the implementations of all
@@ -240,6 +248,23 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     } else {
       throw new RuntimeException(
           "unexpected enclosing structure " + typeElt + " for method " + method);
+    }
+  }
+
+  /**
+   * Adds all resolvable ancestors (interfaces, superclasses) to the usedTypeElements set. It is
+   * intended to be used when the type is not already present in usedTypeElements, but there is no
+   * harm in calling this elsewhere.
+   *
+   * @param resolvedType the reference type to add its ancestors
+   */
+  private void addAllResolvableAncestors(ResolvedReferenceType resolvedType) {
+    // If this method is called, this type is not used anywhere else except in this location
+    // Therefore, its inherited types (if solvable) should be preserved since it was
+    // not able to be preserved elsewhere.
+    for (ResolvedReferenceType implementation :
+        getAllImplementations(new HashSet<>(resolvedType.getAllAncestors()))) {
+      usedTypeElements.add(implementation.getQualifiedName());
     }
   }
 
