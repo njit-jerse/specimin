@@ -23,7 +23,11 @@ import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParame
 import java.util.AbstractMap;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -278,16 +282,10 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
    */
   private boolean overridesAnInterfaceMethodImpl(
       NodeList<ClassOrInterfaceType> implementedTypes, String signature) {
-    for (ClassOrInterfaceType implementedType : implementedTypes) {
-      ResolvedReferenceType resolvedInterface;
-      try {
-        resolvedInterface =
-            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(implementedType);
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        // In this case, we're implementing an interface that we don't control
-        // or that will not be preserved.
-        continue;
-      }
+
+    Collection<ResolvedReferenceType> allImplementedTypes = getAllImplementations(implementedTypes);
+
+    for (ResolvedReferenceType resolvedInterface : allImplementedTypes) {
       // This boolean is important to distinguish between the case of
       // an interface that's in the input/output (and therefore could change)
       // and an interface that's not, such as java.util.Set from the JDK. For

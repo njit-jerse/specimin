@@ -3,14 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -149,86 +142,6 @@ public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Determines if the given Node is a target/used method or class.
-   *
-   * @param node The node to check
-   */
-  private boolean isTargetOrUsed(Node node) {
-    // TODO: create a visitor superclass that contains this method and other common fields
-    String qualifiedName;
-    boolean isClass = false;
-    if (node instanceof ClassOrInterfaceDeclaration) {
-      Optional<String> qualifiedNameOptional =
-          ((ClassOrInterfaceDeclaration) node).getFullyQualifiedName();
-      if (qualifiedNameOptional.isEmpty()) {
-        return false;
-      }
-      qualifiedName = qualifiedNameOptional.get();
-      isClass = true;
-    } else if (node instanceof EnumDeclaration) {
-      Optional<String> qualifiedNameOptional = ((EnumDeclaration) node).getFullyQualifiedName();
-      if (qualifiedNameOptional.isEmpty()) {
-        return false;
-      }
-      qualifiedName = qualifiedNameOptional.get();
-      isClass = true;
-    } else if (node instanceof AnnotationDeclaration) {
-      Optional<String> qualifiedNameOptional =
-          ((AnnotationDeclaration) node).getFullyQualifiedName();
-      if (qualifiedNameOptional.isEmpty()) {
-        return false;
-      }
-      qualifiedName = qualifiedNameOptional.get();
-      isClass = true;
-    } else if (node instanceof ConstructorDeclaration) {
-      try {
-        qualifiedName = ((ConstructorDeclaration) node).resolve().getQualifiedSignature();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
-        // UnsupportedOperationException: type is a type variable
-        // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
-        return false;
-      } catch (RuntimeException e) {
-        // The current class is employed by the target methods, although not all of its members are
-        // utilized. It's not surprising for unused members to remain unresolved.
-        // If this constructor is from the parent of the current class, and it is not resolved, we
-        // will get a RuntimeException, otherwise just a UnsolvedSymbolException.
-        // Copied from PrunerVisitor.visit(ConstructorDeclaration, Void)
-        return false;
-      }
-    } else if (node instanceof MethodDeclaration) {
-      try {
-        qualifiedName = ((MethodDeclaration) node).resolve().getQualifiedSignature();
-      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
-        // UnsupportedOperationException: type is a type variable
-        // See TargetMethodFinderVisitor.visit(MethodDeclaration, Void) for more details
-        return false;
-      }
-    } else if (node instanceof FieldDeclaration) {
-      try {
-        FieldDeclaration decl = (FieldDeclaration) node;
-        for (VariableDeclarator var : decl.getVariables()) {
-          qualifiedName = JavaParserUtil.getEnclosingClassName(decl) + "#" + var.getNameAsString();
-          if (usedMembers.contains(qualifiedName) || targetFields.contains(qualifiedName)) {
-            return true;
-          }
-        }
-      } catch (UnsolvedSymbolException ex) {
-        return false;
-      }
-      return false;
-    } else {
-      return false;
-    }
-
-    if (isClass) {
-      return usedTypeElements.contains(qualifiedName);
-    } else {
-      // fields should already be handled at this point
-      return usedMembers.contains(qualifiedName) || targetMethods.contains(qualifiedName);
-    }
-  }
-
-  /**
    * Helper method to add an annotation to the usedClass set, including the types used in annotation
    * parameters.
    *
@@ -241,7 +154,7 @@ public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
     try {
       String qualifiedName = anno.resolve().getQualifiedName();
       if (anno.resolve() instanceof ReflectionAnnotationDeclaration
-          && !qualifiedName.startsWith("java.lang")) {
+          && !JavaLangUtils.inJdkPackage(qualifiedName)) {
         // This usually means that JavaParser has resolved this through the import, but there
         // is no file/CompilationUnit behind it, so we should discard it to prevent compile errors
         anno.remove();

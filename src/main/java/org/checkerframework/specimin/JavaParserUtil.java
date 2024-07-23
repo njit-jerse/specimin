@@ -10,11 +10,15 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.google.common.base.Splitter;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
@@ -221,5 +225,52 @@ public class JavaParserUtil {
       parent = parent.getParentNode().orElseThrow();
     }
     return parent;
+  }
+
+  /**
+   * Given a method or constructor declaration, this method returns the declaration of that method
+   * without the return type and any possible annotation. Note: the result may have spaces!
+   *
+   * @param decl the declaration to be used as input
+   * @return decl without the return type and any possible annotation.
+   */
+  public static String removeMethodReturnTypeAndAnnotations(NodeWithDeclaration decl) {
+    String declAsString = decl.getDeclarationAsString(false, false, false);
+    return removeMethodReturnTypeAndAnnotationsImpl(declAsString);
+  }
+
+  /**
+   * Given a method or constructor declaration, this method returns the declaration of that method
+   * without the return type, internal spaces, and any possible annotation.
+   *
+   * @param decl the declaration to be used as input
+   * @return decl without the return type and any possible annotation.
+   */
+  public static String removeMethodReturnTypeSpacesAndAnnotations(NodeWithDeclaration decl) {
+    String declAsString = decl.getDeclarationAsString(false, false, false);
+    return removeMethodReturnTypeAndAnnotationsImpl(declAsString).replaceAll("\\s", "");
+  }
+
+  /**
+   * Implementation of {@link #removeMethodReturnTypeAndAnnotations(NodeWithDeclaration)}. Separated
+   * for testing.
+   *
+   * @param declAsString the string form of a declaration
+   * @return the string without the return type and the annotations
+   */
+  static String removeMethodReturnTypeAndAnnotationsImpl(String declAsString) {
+    String methodDeclarationWithoutParen = declAsString.substring(0, declAsString.indexOf("("));
+    List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
+    String methodName = methodParts.get(methodParts.size() - 1);
+    String methodReturnType = declAsString.substring(0, declAsString.indexOf(methodName));
+    String methodWithoutReturnType = declAsString.replace(methodReturnType, "");
+    methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
+    String filteredMethodDeclaration =
+        methodParts.stream()
+            .filter(part -> !part.startsWith("@"))
+            .map(part -> part.indexOf('@') == -1 ? part : part.substring(0, part.indexOf('@')))
+            .collect(Collectors.joining(" "));
+    // sometimes an extra space may occur if an annotation right after a < was removed
+    return filteredMethodDeclaration.replace("< ", "<");
   }
 }

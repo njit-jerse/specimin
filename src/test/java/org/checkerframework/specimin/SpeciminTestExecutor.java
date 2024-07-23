@@ -93,9 +93,14 @@ public class SpeciminTestExecutor {
     if (isWindows) {
       builder.command(
           "check_differences/check_differences.bat",
-          outputDir.toAbsolutePath().toString(),
-          Path.of("src/test/resources/" + testName + "/expected").toAbsolutePath().toString());
-      return;
+          "\"" + outputDir.toAbsolutePath().toString().replace('\\', '/') + "\"",
+          "\""
+              + Path.of("src/test/resources/" + testName + "/expected")
+                  .toAbsolutePath()
+                  .toString()
+                  .replace('\\', '/')
+              + "\"");
+      builder.directory(new File(Path.of(".").toAbsolutePath().toString()));
     } else {
       builder.command(
           "diff",
@@ -105,8 +110,8 @@ public class SpeciminTestExecutor {
           "-B",
           outputDir.toAbsolutePath().toString(),
           Path.of("src/test/resources/" + testName + "/expected").toAbsolutePath().toString());
+      builder.directory(new File(System.getProperty("user.home")));
     }
-    builder.directory(new File(System.getProperty("user.home")));
     Process process;
     try {
       process = builder.start();
