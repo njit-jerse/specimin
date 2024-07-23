@@ -455,8 +455,17 @@ public class UnsolvedClassOrInterface {
     // so we need to add this to prevent them
     if (isAnAnnotation) {
       sb.append(
-          "@java.lang.annotation.Target({java.lang.annotation.ElementType.TYPE_USE,"
-              + " java.lang.annotation.ElementType.METHOD})\n");
+          "@java.lang.annotation.Target({ \n"
+              + "\tjava.lang.annotation.ElementType.TYPE, \n"
+              + "\tjava.lang.annotation.ElementType.FIELD, \n"
+              + "\tjava.lang.annotation.ElementType.METHOD, \n"
+              + "\tjava.lang.annotation.ElementType.PARAMETER, \n"
+              + "\tjava.lang.annotation.ElementType.CONSTRUCTOR, \n"
+              + "\tjava.lang.annotation.ElementType.LOCAL_VARIABLE, \n"
+              + "\tjava.lang.annotation.ElementType.ANNOTATION_TYPE,\n"
+              + "\tjava.lang.annotation.ElementType.PACKAGE,\n"
+              + "\tjava.lang.annotation.ElementType.TYPE_USE \n"
+              + "})");
     }
 
     sb.append("public ");

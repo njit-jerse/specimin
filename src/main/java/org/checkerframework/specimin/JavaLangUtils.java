@@ -287,9 +287,13 @@ public final class JavaLangUtils {
   public static boolean inJdkPackage(String qualifiedName) {
     // TODO: can we get a list of such packages from the JDK instead of using this relatively-coarse
     // heuristic?
+    if (qualifiedName.startsWith("javax.annotation")) {
+      return false;
+    }
+
     return qualifiedName.startsWith("java.")
-            || qualifiedName.startsWith("javax.")
-            || qualifiedName.startsWith("com.sun.")
-            || qualifiedName.startsWith("jdk.");
+        || qualifiedName.startsWith("javax.")
+        || qualifiedName.startsWith("com.sun.")
+        || qualifiedName.startsWith("jdk.");
   }
 }
