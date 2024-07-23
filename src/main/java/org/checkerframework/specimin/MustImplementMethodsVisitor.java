@@ -16,7 +16,11 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -154,16 +158,10 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
    */
   private boolean overridesAnInterfaceMethodImpl(
       NodeList<ClassOrInterfaceType> implementedTypes, String signature) {
-    for (ClassOrInterfaceType implementedType : implementedTypes) {
-      ResolvedReferenceType resolvedInterface;
-      try {
-        resolvedInterface =
-            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(implementedType);
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
-        // In this case, we're implementing an interface that we don't control
-        // or that will not be preserved.
-        continue;
-      }
+
+    Collection<ResolvedReferenceType> allImplementedTypes = getAllImplementations(implementedTypes);
+
+    for (ResolvedReferenceType resolvedInterface : allImplementedTypes) {
       // This boolean is important to distinguish between the case of
       // an interface that's in the input/output (and therefore could change)
       // and an interface that's not, such as java.util.Set from the JDK. For
@@ -210,6 +208,48 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     }
     // if we don't find an overridden method in any of the implemented interfaces, return false.
     return false;
+  }
+
+  /**
+   * Gets all interface implementations of a List of ClassOrInterfaceTypes, including those of
+   * ancestors. This method is intended to be used for interface implementations only (i.e. pass in
+   * ClassOrInterfaceDeclaration.getImplementedTypes()).
+   *
+   * @param types A List of interface types to find all parent interfaces
+   * @return A Collection of ResolvedReferenceTypes containing all parent interfaces
+   */
+  private static Collection<ResolvedReferenceType> getAllImplementations(
+      List<ClassOrInterfaceType> types) {
+    Set<ResolvedReferenceType> toTraverse = new HashSet<>();
+
+    for (ClassOrInterfaceType type : types) {
+      try {
+        ResolvedReferenceType resolved =
+            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type);
+        toTraverse.add(resolved);
+      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+        // In this case, we're implementing an interface that we don't control
+        // or that will not be preserved.
+        continue;
+      }
+    }
+
+    Map<String, ResolvedReferenceType> qualifiedNameToType = new HashMap<>();
+    while (!toTraverse.isEmpty()) {
+      Set<ResolvedReferenceType> newToTraverse = new HashSet<>();
+      for (ResolvedReferenceType type : toTraverse) {
+        if (!qualifiedNameToType.containsKey(type.getQualifiedName())) {
+          qualifiedNameToType.put(type.getQualifiedName(), type);
+          for (ResolvedReferenceType implemented : type.getAllAncestors()) {
+            newToTraverse.add(implemented);
+          }
+        }
+      }
+      toTraverse.clear();
+      toTraverse = newToTraverse;
+    }
+
+    return qualifiedNameToType.values();
   }
 
   /**
