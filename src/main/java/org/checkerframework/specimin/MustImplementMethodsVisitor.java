@@ -1,6 +1,14 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.ast.CompilationUnit;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -9,7 +17,6 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
-import com.github.javaparser.ast.nodeTypes.NodeWithMembers;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.Visitable;
@@ -20,18 +27,6 @@ import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaratio
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
-import java.util.AbstractMap;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * If a used class includes methods that must be implemented (because it extends an abstract class
@@ -39,13 +34,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * run after the list of used classes is finalized.
  */
 public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
-  /**
-   * Keeps unused class declarations (with their corresponding parents for re-insertion) in a
-   * HashMap to re-visit if needed.
-   */
-  private final Map<String, Map.Entry<Node, ClassOrInterfaceDeclaration>>
-      qualifiedNameToUnusedClassDeclarationMap = new HashMap<>();
-
   /**
    * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
    * members, and used classes.
@@ -59,21 +47,9 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
   @Override
   @SuppressWarnings("nullness:return") // ok to return null, because this is a void visitor
   public Visitable visit(ClassOrInterfaceDeclaration type, Void p) {
-    if (type.getFullyQualifiedName().isPresent()) {
-      String fullyQualifiedName = type.getFullyQualifiedName().get();
-      if (usedTypeElements.contains(fullyQualifiedName)) {
-        return super.visit(type, p);
-      } else {
-        // in this case, we do not currently need this type element
-        // however, if we end up needing it again later in visit(MethodDeclaration), we
-        // should keep them so we can re-visit the type so it is not removed.
-        // We also need to store the parent node in case we need to re-insert the node to
-        // prevent an IllegalStateException
-        Node parent = type.getParentNode().orElseThrow();
-        qualifiedNameToUnusedClassDeclarationMap.put(
-            fullyQualifiedName, new AbstractMap.SimpleEntry<>(parent, type));
-        return null;
-      }
+    if (type.getFullyQualifiedName().isPresent()
+        && usedTypeElements.contains(type.getFullyQualifiedName().get())) {
+      return super.visit(type, p);
     } else {
       // the effect of not calling super here is that only used classes
       // will actually be visited by this class
@@ -109,6 +85,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       }
       usedMembers.add(resolvedMethod.getQualifiedSignature());
       for (String type : returnAndParamTypes.keySet()) {
+        String originalType = type;
         type = type.trim();
         if (type.contains("<")) {
           // remove generics, if present, since this type will be used in
@@ -124,28 +101,8 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
 
         usedTypeElements.add(type);
 
-        if (qualifiedNameToUnusedClassDeclarationMap.containsKey(type)) {
-          Map.Entry<Node, ClassOrInterfaceDeclaration> entry =
-              qualifiedNameToUnusedClassDeclarationMap.get(type);
+        ResolvedType resolvedType = returnAndParamTypes.get(originalType);
 
-          Node parent = entry.getKey();
-          ClassOrInterfaceDeclaration decl = entry.getValue();
-          // Re-add to the compilation unit to prevent IllegalStateException
-          if (!parent.getChildNodes().contains(decl)) {
-            if (parent instanceof CompilationUnit) {
-              ((CompilationUnit) parent).addType(decl);
-            } else if (parent instanceof NodeWithMembers<?>) {
-              ((NodeWithMembers<?>) parent).addMember(decl);
-            }
-          }
-
-          // Revisit the given class declaration so it is not removed
-          super.visit(decl, p);
-
-          qualifiedNameToUnusedClassDeclarationMap.remove(type);
-        }
-
-        ResolvedType resolvedType = returnAndParamTypes.get(type);
         if (!previouslyIncluded && resolvedType != null && resolvedType.isReferenceType()) {
           addAllResolvableAncestors(resolvedType.asReferenceType());
         }
