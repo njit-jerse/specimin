@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -8,14 +9,19 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithMembers;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
+import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -26,6 +32,12 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * run after the list of used classes is finalized.
  */
 public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
+  /**
+   * Keeps unused class declarations (with their corresponding parents for re-insertion) in a
+   * HashMap to re-visit if needed.
+   */
+  private final Map<String, Map.Entry<Node, ClassOrInterfaceDeclaration>>
+      qualifiedNameToUnusedClassDeclarationMap = new HashMap<>();
 
   /**
    * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
@@ -40,9 +52,21 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
   @Override
   @SuppressWarnings("nullness:return") // ok to return null, because this is a void visitor
   public Visitable visit(ClassOrInterfaceDeclaration type, Void p) {
-    if (type.getFullyQualifiedName().isPresent()
-        && usedTypeElements.contains(type.getFullyQualifiedName().get())) {
-      return super.visit(type, p);
+    if (type.getFullyQualifiedName().isPresent()) {
+      String fullyQualifiedName = type.getFullyQualifiedName().get();
+      if (usedTypeElements.contains(fullyQualifiedName)) {
+        return super.visit(type, p);
+      } else {
+        // in this case, we do not currently need this type element
+        // however, if we end up needing it again later in visit(MethodDeclaration), we
+        // should keep them so we can re-visit the type so it is not removed.
+        // We also need to store the parent node in case we need to re-insert the node to
+        // prevent an IllegalStateException
+        Node parent = type.getParentNode().orElseThrow();
+        qualifiedNameToUnusedClassDeclarationMap.put(
+            fullyQualifiedName, new AbstractMap.SimpleEntry<>(parent, type));
+        return null;
+      }
     } else {
       // the effect of not calling super here is that only used classes
       // will actually be visited by this class
@@ -59,7 +83,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     // implementing required methods from interfaces in the target code,
     // but unfortunately I think it's the best that we can do here. (@Override
     // is technically optional, but it is widely used.)
-    if (isPreservedAndAbstract(overridden)
+    if (ancestorMethodPreservedAndAbstract(method)
         || (overridden == null && overridesAnInterfaceMethod(method))) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       Set<String> returnAndParamTypes = new HashSet<>();
@@ -87,10 +111,85 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
         if (type.contains("[]")) {
           type = type.replace("[]", "");
         }
+
         usedTypeElements.add(type);
+
+        if (qualifiedNameToUnusedClassDeclarationMap.containsKey(type)) {
+          Map.Entry<Node, ClassOrInterfaceDeclaration> entry =
+              qualifiedNameToUnusedClassDeclarationMap.get(type);
+
+          Node parent = entry.getKey();
+          ClassOrInterfaceDeclaration decl = entry.getValue();
+          // Re-add to the compilation unit to prevent IllegalStateException
+          if (!parent.getChildNodes().contains(decl)) {
+            if (parent instanceof CompilationUnit) {
+              ((CompilationUnit) parent).addType(decl);
+            } else if (parent instanceof NodeWithMembers<?>) {
+              ((NodeWithMembers<?>) parent).addMember(decl);
+            }
+          }
+
+          // Since we are here, this type is not used anywhere else except in this location
+          // Therefore, its inherited types (if solvable) should be preserved since it was
+          // not able to be preserved elsewhere.
+          for (ResolvedReferenceType implementation :
+              getAllImplementations(decl.getImplementedTypes())) {
+            usedTypeElements.add(implementation.getQualifiedName());
+          }
+
+          for (ResolvedReferenceType implementation :
+              getAllImplementations(decl.getExtendedTypes())) {
+            usedTypeElements.add(implementation.getQualifiedName());
+          }
+
+          // Revisit the given class declaration so it is not removed
+          super.visit(decl, p);
+
+          qualifiedNameToUnusedClassDeclarationMap.remove(type);
+        }
       }
     }
     return super.visit(method, p);
+  }
+
+  /**
+   * Returns true iff any parent method is abstract and preserved. Use this method if it is unclear
+   * whether the direct super method will be preserved or not.
+   *
+   * @param method The method declaration to check
+   * @return true iff any parent method is abstract and preserved
+   */
+  private boolean ancestorMethodPreservedAndAbstract(MethodDeclaration method) {
+    ResolvedMethodDeclaration overridden = getOverriddenMethodInSuperClass(method);
+    if (overridden == null) {
+      return false;
+    }
+
+    if (isPreservedAndAbstract(overridden)) {
+      return true;
+    }
+
+    for (ResolvedReferenceType implementation :
+        getAllImplementations(new HashSet<>(overridden.declaringType().getAncestors()))) {
+      for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
+        if (potentialSuperMethod.getDeclaration().isAbstract()) {
+          String methodSignature = potentialSuperMethod.getQualifiedSignature();
+          if (!potentialSuperMethod.getQualifiedSignature().equals(methodSignature)) {
+            continue;
+          }
+          // These classes are beyond our control. It's better to retain the implementations of all
+          // abstract methods to ensure the code remains compilable.
+          if (JavaLangUtils.inJdkPackage(methodSignature)) {
+            return true;
+          }
+          if (usedMembers.contains(methodSignature)) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -210,6 +309,59 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     }
     // if we don't find an overridden method in any of the implemented interfaces, return false.
     return false;
+  }
+
+  /**
+   * Helper method for getAllImplementations(Set<ResolvedReferenceType>)
+   *
+   * @param types A List of interface/class types to find all ancestors
+   * @return A Collection of ResolvedReferenceTypes containing all ancestors
+   */
+  private static Collection<ResolvedReferenceType> getAllImplementations(
+      List<ClassOrInterfaceType> types) {
+    Set<ResolvedReferenceType> toTraverse = new HashSet<>();
+
+    for (ClassOrInterfaceType type : types) {
+      try {
+        ResolvedReferenceType resolved =
+            JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type);
+        toTraverse.add(resolved);
+      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+        // In this case, we're implementing an interface that we don't control
+        // or that will not be preserved.
+        continue;
+      }
+    }
+
+    return getAllImplementations(toTraverse);
+  }
+
+  /**
+   * Gets all interface implementations of a List of ClassOrInterfaceTypes, including those of
+   * ancestors. This method is intended to be used for interface / class implementations only (i.e.
+   * pass in ClassOrInterfaceDeclaration.getImplementedTypes() or getExtendedTypes()).
+   *
+   * @param toTraverse A List of resolved reference types to find all ancestors
+   * @return A Collection of ResolvedReferenceTypes containing all ancestors
+   */
+  private static Collection<ResolvedReferenceType> getAllImplementations(
+      Set<ResolvedReferenceType> toTraverse) {
+    Map<String, ResolvedReferenceType> qualifiedNameToType = new HashMap<>();
+    while (!toTraverse.isEmpty()) {
+      Set<ResolvedReferenceType> newToTraverse = new HashSet<>();
+      for (ResolvedReferenceType type : toTraverse) {
+        if (!qualifiedNameToType.containsKey(type.getQualifiedName())) {
+          qualifiedNameToType.put(type.getQualifiedName(), type);
+          for (ResolvedReferenceType implemented : type.getAllAncestors()) {
+            newToTraverse.add(implemented);
+          }
+        }
+      }
+      toTraverse.clear();
+      toTraverse = newToTraverse;
+    }
+
+    return qualifiedNameToType.values();
   }
 
   /**
