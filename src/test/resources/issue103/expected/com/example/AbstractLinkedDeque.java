@@ -1,19 +1,10 @@
 package com.example;
 
 import java.util.AbstractCollection;
-import java.util.Collection;
 
 public abstract class AbstractLinkedDeque<E> extends AbstractCollection<E> implements LinkedDeque<E> {
 
-    public boolean isEmpty() {
-        throw new Error();
-    }
-
     public int size() {
-        throw new Error();
-    }
-
-    public void clear() {
         throw new Error();
     }
 
@@ -55,10 +46,6 @@ public abstract class AbstractLinkedDeque<E> extends AbstractCollection<E> imple
         throw new Error();
     }
 
-    public boolean add(E e) {
-        throw new Error();
-    }
-
     public void addFirst(E e) {
         throw new Error();
     }
@@ -96,10 +83,6 @@ public abstract class AbstractLinkedDeque<E> extends AbstractCollection<E> imple
     }
 
     public boolean removeLastOccurrence(Object o) {
-        throw new Error();
-    }
-
-    public boolean removeAll(Collection<?> c) {
         throw new Error();
     }
 
