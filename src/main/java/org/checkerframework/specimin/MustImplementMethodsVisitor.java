@@ -1,14 +1,5 @@
 package org.checkerframework.specimin;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.checkerframework.checker.nullness.qual.Nullable;
-
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -26,9 +17,17 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedClassDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * If a used class includes methods that must be implemented (because it extends an abstract class
@@ -169,33 +168,43 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
             currentMethodSignature.lastIndexOf('.', currentMethodSignature.indexOf('(')) + 1);
     for (ResolvedReferenceType implementation :
         getAllImplementations(new HashSet<>(resolvedMethod.declaringType().getAncestors()))) {
-      try {
-        for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
-          String methodSignature = potentialSuperMethod.getQualifiedSignature();
-          String potentialSuperMethodName =
-              methodSignature.substring(
-                  methodSignature.lastIndexOf('.', methodSignature.indexOf('(')) + 1);
-          if (!currentMethodName.equals(potentialSuperMethodName)) {
-            continue;
-          }
-          if (potentialSuperMethod.getDeclaration().isAbstract()) {
-            // These classes are beyond our control. It's better to retain the implementations of
-            // all abstract methods to ensure the code remains compilable.
-            if (usedMembers.contains(methodSignature)) {
-              return true;
+      ResolvedTypeDeclaration implementationDeclaration =
+          implementation.getTypeDeclaration().orElse(null);
+      // Only process classes here because interfaces are dealt with in overridesAnInterfaceMethod
+      if (implementationDeclaration != null && !implementationDeclaration.isInterface()) {
+        try {
+          for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
+            String methodSignature = potentialSuperMethod.getQualifiedSignature();
+            String potentialSuperMethodName =
+                methodSignature.substring(
+                    methodSignature.lastIndexOf('.', methodSignature.indexOf('(')) + 1);
+            if (!currentMethodName.equals(potentialSuperMethodName)) {
+              continue;
             }
-            // If the abstract member is not used, and we're in an interface or abstract class, 
-            // there is no need to preserve it since the original JDK abstract definition will
-            // be inherited
-            if (JavaLangUtils.inJdkPackage(methodSignature)
-                && (!resolvedMethod.isAbstract() || !isInterfaceOrAbstract)) {
-              return true;
+            if (potentialSuperMethod.getDeclaration().isAbstract()) {
+              // These classes are beyond our control. It's better to retain the implementations of
+              // all abstract methods to ensure the code remains compilable.
+              if (usedMembers.contains(methodSignature)) {
+                return true;
+              }
+              // If the abstract member is not used, and we're in an interface or abstract class,
+              // there is no need to preserve it since the original JDK abstract definition will
+              // be inherited
+              if (JavaLangUtils.inJdkPackage(methodSignature)
+                  && (!resolvedMethod.isAbstract() || !isInterfaceOrAbstract)) {
+                return true;
+              }
+            } else if (usedMembers.contains(methodSignature)) {
+              // If any ancestors define the body of a method, and that ancestor definition
+              // is already included, we don't need to preserve any overrides since the method
+              // already has a defined body.
+              return false;
             }
           }
+        } catch (UnsolvedSymbolException ex) {
+          // At least one of the methods can't be solved so we will ignore this type.
+          continue;
         }
-      } catch (UnsolvedSymbolException ex) {
-        // At least one of the methods can't be solved so we will ignore this type.
-        continue;
       }
     }
 
