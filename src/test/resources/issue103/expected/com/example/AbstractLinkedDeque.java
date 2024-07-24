@@ -8,8 +8,6 @@ public abstract class AbstractLinkedDeque<E> extends AbstractCollection<E> imple
         throw new Error();
     }
 
-    public abstract boolean contains(Object o);
-
     public E peek() {
         throw new Error();
     }
