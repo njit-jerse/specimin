@@ -1,5 +1,14 @@
 package org.checkerframework.specimin;
 
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -10,6 +19,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.SuperExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -19,13 +29,6 @@ import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaratio
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * If a used class includes methods that must be implemented (because it extends an abstract class
@@ -68,13 +71,17 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     if (ancestorMethodPreservedAndAbstract(method)
         || (overridden == null && overridesAnInterfaceMethod(method))) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
-      Map<String, ResolvedType> returnAndParamTypes = new HashMap<>();
+      Map<String, ResolvedType> returnAndParamAndThrowTypes = new HashMap<>();
       try {
-        returnAndParamTypes.put(
+        returnAndParamAndThrowTypes.put(
             resolvedMethod.getReturnType().describe(), resolvedMethod.getReturnType());
         for (int i = 0; i < resolvedMethod.getNumberOfParams(); ++i) {
           ResolvedParameterDeclaration param = resolvedMethod.getParam(i);
-          returnAndParamTypes.put(param.describeType(), param.getType());
+          returnAndParamAndThrowTypes.put(param.describeType(), param.getType());
+        }
+        for (ReferenceType thrownException : method.getThrownExceptions()) {
+          ResolvedType resolvedException = thrownException.resolve();
+          returnAndParamAndThrowTypes.put(resolvedException.describe(), resolvedException);
         }
       } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
         // In this case, don't keep the method (it won't compile anyway,
@@ -83,7 +90,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
         return super.visit(method, p);
       }
       usedMembers.add(resolvedMethod.getQualifiedSignature());
-      for (String type : returnAndParamTypes.keySet()) {
+      for (String type : returnAndParamAndThrowTypes.keySet()) {
         String originalType = type;
         type = type.trim();
         if (type.contains("<")) {
@@ -100,7 +107,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
 
         usedTypeElements.add(type);
 
-        ResolvedType resolvedType = returnAndParamTypes.get(originalType);
+        ResolvedType resolvedType = returnAndParamAndThrowTypes.get(originalType);
 
         if (!previouslyIncluded && resolvedType != null && resolvedType.isReferenceType()) {
           addAllResolvableAncestors(resolvedType.asReferenceType());
