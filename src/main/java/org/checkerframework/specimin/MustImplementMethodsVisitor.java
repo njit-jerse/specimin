@@ -184,9 +184,11 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
             if (usedMembers.contains(methodSignature)) {
               return true;
             }
-            // If the member is not used (inherit from JDK), and we're in an interface or
-            // abstract class, no need to preserve it since original JDK definition will persist
-            if (JavaLangUtils.inJdkPackage(methodSignature) && !isInterfaceOrAbstract) {
+            // If the abstract member is not used, and we're in an interface or abstract class, 
+            // there is no need to preserve it since the original JDK abstract definition will
+            // be inherited
+            if (JavaLangUtils.inJdkPackage(methodSignature)
+                && (!resolvedMethod.isAbstract() || !isInterfaceOrAbstract)) {
               return true;
             }
           }
