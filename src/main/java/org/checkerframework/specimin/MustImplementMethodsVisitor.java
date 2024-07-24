@@ -138,22 +138,22 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     }
 
     String currentMethodName =
-        currentMethodSignature.substring(currentMethodSignature.lastIndexOf('.') + 1);
-
+        currentMethodSignature.substring(
+            currentMethodSignature.lastIndexOf('.', currentMethodSignature.indexOf('(')) + 1);
     for (ResolvedReferenceType implementation :
         getAllImplementations(new HashSet<>(resolvedMethod.declaringType().getAncestors()))) {
       try {
         for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
           String methodSignature = potentialSuperMethod.getQualifiedSignature();
           String potentialSuperMethodName =
-              methodSignature.substring(methodSignature.lastIndexOf('.') + 1);
+              methodSignature.substring(
+                  methodSignature.lastIndexOf('.', methodSignature.indexOf('(')) + 1);
           if (!currentMethodName.equals(potentialSuperMethodName)) {
             continue;
           }
           if (potentialSuperMethod.getDeclaration().isAbstract()) {
             // These classes are beyond our control. It's better to retain the implementations of
-            // all
-            // abstract methods to ensure the code remains compilable.
+            // all abstract methods to ensure the code remains compilable.
             if (JavaLangUtils.inJdkPackage(methodSignature)) {
               return true;
             }
