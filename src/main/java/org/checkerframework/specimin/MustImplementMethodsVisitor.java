@@ -13,6 +13,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedClassDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -137,6 +138,25 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       return false;
     }
 
+    boolean isInterfaceOrAbstract = resolvedMethod.declaringType().isInterface();
+
+    if (!isInterfaceOrAbstract && resolvedMethod.declaringType().isClass()) {
+      ResolvedClassDeclaration classDecl = resolvedMethod.declaringType().asClass();
+      // Check to see if an abstract method exists. If it does, then this class is abstract.
+      // getAllMethods() includes inherited methods as well; those should be overridden already
+      // if the class is abstract.
+      try {
+        for (MethodUsage methodUsage : classDecl.getAllMethods()) {
+          if (methodUsage.getDeclaration().isAbstract()) {
+            isInterfaceOrAbstract = true;
+            break;
+          }
+        }
+      } catch (UnsolvedSymbolException ex) {
+        isInterfaceOrAbstract = false;
+      }
+    }
+
     String currentMethodName =
         currentMethodSignature.substring(
             currentMethodSignature.lastIndexOf('.', currentMethodSignature.indexOf('(')) + 1);
@@ -154,10 +174,12 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
           if (potentialSuperMethod.getDeclaration().isAbstract()) {
             // These classes are beyond our control. It's better to retain the implementations of
             // all abstract methods to ensure the code remains compilable.
-            if (JavaLangUtils.inJdkPackage(methodSignature)) {
+            if (usedMembers.contains(methodSignature)) {
               return true;
             }
-            if (usedMembers.contains(methodSignature)) {
+            // If the member is not used (inherit from JDK), and we're in an interface or
+            // abstract class, no need to preserve it since original JDK definition will persist
+            if (JavaLangUtils.inJdkPackage(methodSignature) && !isInterfaceOrAbstract) {
               return true;
             }
           }
