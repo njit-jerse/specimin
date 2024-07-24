@@ -129,13 +129,14 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     // The parent method is abstract, we should continue upwards
 
     ResolvedMethodDeclaration resolvedMethod;
+    String currentMethodSignature;
     try {
       resolvedMethod = method.resolve();
+      currentMethodSignature = resolvedMethod.getQualifiedSignature();
     } catch (UnsolvedSymbolException ex) {
       return false;
     }
 
-    String currentMethodSignature = resolvedMethod.getQualifiedSignature();
     String currentMethodName =
         currentMethodSignature.substring(currentMethodSignature.lastIndexOf('.') + 1);
 
