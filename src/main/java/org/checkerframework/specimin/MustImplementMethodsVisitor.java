@@ -123,6 +123,11 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       return true;
     }
 
+    if (overridden != null) {
+      return false;
+    }
+    // The parent method is abstract, we should continue upwards
+
     ResolvedMethodDeclaration resolvedMethod;
     try {
       resolvedMethod = method.resolve();
@@ -136,23 +141,29 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
 
     for (ResolvedReferenceType implementation :
         getAllImplementations(new HashSet<>(resolvedMethod.declaringType().getAncestors()))) {
-      for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
-        if (potentialSuperMethod.getDeclaration().isAbstract()) {
+      try {
+        for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
           String methodSignature = potentialSuperMethod.getQualifiedSignature();
           String potentialSuperMethodName =
               methodSignature.substring(methodSignature.lastIndexOf('.') + 1);
           if (!currentMethodName.equals(potentialSuperMethodName)) {
             continue;
           }
-          // These classes are beyond our control. It's better to retain the implementations of all
-          // abstract methods to ensure the code remains compilable.
-          if (JavaLangUtils.inJdkPackage(methodSignature)) {
-            return true;
-          }
-          if (usedMembers.contains(methodSignature)) {
-            return true;
+          if (potentialSuperMethod.getDeclaration().isAbstract()) {
+            // These classes are beyond our control. It's better to retain the implementations of
+            // all
+            // abstract methods to ensure the code remains compilable.
+            if (JavaLangUtils.inJdkPackage(methodSignature)) {
+              return true;
+            }
+            if (usedMembers.contains(methodSignature)) {
+              return true;
+            }
           }
         }
+      } catch (UnsolvedSymbolException ex) {
+        // At least one of the methods can't be solved so we will ignore this type.
+        continue;
       }
     }
 
