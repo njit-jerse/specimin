@@ -10,6 +10,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
@@ -240,6 +241,31 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       return result;
     }
     return super.visit(node, arg);
+  }
+
+  @Override
+  public Visitable visit(AssignExpr node, Void p) {
+    if (insideTargetCtor) {
+      // check if the LHS is a field
+      Expression lhs = node.getTarget();
+      if (lhs.isFieldAccessExpr()) {
+        FieldAccessExpr asFieldAccess = lhs.asFieldAccessExpr();
+        Expression scope = asFieldAccess.getScope();
+        if (scope.toString().equals("this")) {
+          fieldsAssignedByTargetCtors.add(
+              currentClassQualifiedName + "#" + asFieldAccess.getNameAsString());
+        }
+      } else if (lhs.isNameExpr()) {
+        // could be a field of "this"
+        NameExpr asName = lhs.asNameExpr();
+        ResolvedValueDeclaration resolved = asName.resolve();
+        if (resolved.isField()) {
+          fieldsAssignedByTargetCtors.add(
+              currentClassQualifiedName + "#" + asName.getNameAsString());
+        }
+      }
+    }
+    return super.visit(node, p);
   }
 
   @Override
