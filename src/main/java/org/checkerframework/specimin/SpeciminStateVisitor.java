@@ -249,9 +249,10 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Determines if the given Node is a target/used method or class.
+   * Determines if the given Node is a target/used member or class.
    *
    * @param node The node to check
+   * @return true iff the given Node is a target/used member or type.
    */
   protected boolean isTargetOrUsed(Node node) {
     String qualifiedName;
