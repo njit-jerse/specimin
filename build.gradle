@@ -64,7 +64,7 @@ task checkExpectedOutputCompilesFor(type: Exec) {
     workingDir("src/test/resources")
     if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
         // TODO: fix this
-        print "checkIfTestCompiles is not supported on Windows"
+        print "checkExpectedOutputCompilesFor is not supported on Windows"
     } else {
         commandLine "sh", "../../../typecheck_one_test.sh", project.property("testName")
     }
