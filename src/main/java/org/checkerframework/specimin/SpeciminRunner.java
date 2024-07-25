@@ -516,7 +516,7 @@ public class SpeciminRunner {
     AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
         new AnnotationParameterTypesVisitor(last);
 
-    Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
+    Set<String> classesToParse = new HashSet<>();
     Set<CompilationUnit> compilationUnitsToSolveAnnotations =
         new HashSet<>(parsedTargetFiles.values());
 
@@ -527,33 +527,58 @@ public class SpeciminRunner {
 
       // add all files related to the target annotations
       for (String annoFullName : annotationParameterTypesVisitor.getClassesToAdd()) {
+        if (annotationParameterTypesVisitor.getUsedTypeElements().contains(annoFullName)) {
+          continue;
+        }
         String directoryOfFile = annoFullName.replace(".", "/") + ".java";
         File thisFile = new File(root + directoryOfFile);
         // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
         // create synthetic files for them
         if (thisFile.exists()) {
-          relatedClass.add(directoryOfFile);
+          classesToParse.add(directoryOfFile);
+        } else {
+          // The given class may be an inner class, so we should find its encapsulating class
+          // Assuming following Java conventions, we will find the first instance of .{capital}
+          // and trim off subsequent .*s.
+          int dot = annoFullName.indexOf('.');
+          while (dot != -1) {
+            if (Character.isUpperCase(annoFullName.charAt(dot + 1))) {
+              dot = annoFullName.indexOf('.', dot + 1);
+              break;
+            }
+            dot = annoFullName.indexOf('.', dot + 1);
+          }
+
+          if (dot != -1) {
+            directoryOfFile = annoFullName.substring(0, dot).replace(".", "/") + ".java";
+            thisFile = new File(root + directoryOfFile);
+            // This inner class was just added, so we should re-parse the file
+            if (thisFile.exists()) {
+              classesToParse.add(directoryOfFile);
+            }
+          }
         }
       }
 
       compilationUnitsToSolveAnnotations.clear();
 
-      for (String directory : relatedClass) {
-        // directories already in parsedTargetFiles are original files in the root directory, we are
-        // not supposed to update them.
-        if (!parsedTargetFiles.containsKey(directory)) {
-          try {
-            // We need to continue solving annotations and parameters in newly added annotation
-            // files
+      for (String directory : classesToParse) {
+        // We need to continue solving annotations and parameters in newly added annotation files
+        try {
+          // directories already in parsedTargetFiles are original files in the root directory, we
+          // are not supposed to update them.
+          if (!parsedTargetFiles.containsKey(directory)) {
             CompilationUnit parsed = parseJavaFile(root, directory);
             parsedTargetFiles.put(directory, parsed);
-            compilationUnitsToSolveAnnotations.add(parsed);
-          } catch (ParseProblemException e) {
-            // TODO: Figure out why the CI is crashing.
-            continue;
           }
+          compilationUnitsToSolveAnnotations.add(parsedTargetFiles.get(directory));
+        } catch (ParseProblemException e) {
+          // TODO: Figure out why the CI is crashing.
+          continue;
         }
       }
+
+      classesToParse.clear();
 
       annotationParameterTypesVisitor
           .getUsedTypeElements()

@@ -12,12 +12,9 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.visitor.Visitable;
-import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
-import com.github.javaparser.resolution.declarations.ResolvedClassDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.parametrization.ResolvedTypeParametersMap;
@@ -67,7 +64,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     // implementing required methods from interfaces in the target code,
     // but unfortunately I think it's the best that we can do here. (@Override
     // is technically optional, but it is widely used.)
-    if (ancestorMethodPreservedAndAbstract(method)
+    if (isPreservedAndAbstract(overridden)
         || (overridden == null && overridesAnInterfaceMethod(method))) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       Map<String, ResolvedType> returnAndParamAndThrowTypes = new HashMap<>();
@@ -117,101 +114,6 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Returns true iff any parent method is abstract and preserved. Use this method if it is unclear
-   * whether the direct super method will be preserved or not.
-   *
-   * @param method The method declaration to check
-   * @return true iff any parent method is abstract and preserved
-   */
-  private boolean ancestorMethodPreservedAndAbstract(MethodDeclaration method) {
-    ResolvedMethodDeclaration overridden = getOverriddenMethodInSuperClass(method);
-
-    if (isPreservedAndAbstract(overridden)) {
-      return true;
-    }
-
-    if (overridden != null) {
-      return false;
-    }
-    // The parent method is abstract, we should continue upwards
-
-    ResolvedMethodDeclaration resolvedMethod;
-    String currentMethodSignature;
-    try {
-      resolvedMethod = method.resolve();
-      currentMethodSignature = resolvedMethod.getQualifiedSignature();
-    } catch (UnsolvedSymbolException ex) {
-      return false;
-    }
-
-    boolean isInterfaceOrAbstract = resolvedMethod.declaringType().isInterface();
-
-    if (!isInterfaceOrAbstract && resolvedMethod.declaringType().isClass()) {
-      ResolvedClassDeclaration classDecl = resolvedMethod.declaringType().asClass();
-      // Check to see if an abstract method exists. If it does, then this class is abstract.
-      // getAllMethods() includes inherited methods as well; those should be overridden already
-      // if the class is abstract.
-      try {
-        for (MethodUsage methodUsage : classDecl.getAllMethods()) {
-          if (methodUsage.getDeclaration().isAbstract()) {
-            isInterfaceOrAbstract = true;
-            break;
-          }
-        }
-      } catch (UnsolvedSymbolException ex) {
-        isInterfaceOrAbstract = false;
-      }
-    }
-
-    String currentMethodName =
-        currentMethodSignature.substring(
-            currentMethodSignature.lastIndexOf('.', currentMethodSignature.indexOf('(')) + 1);
-    for (ResolvedReferenceType implementation :
-        getAllImplementations(new HashSet<>(resolvedMethod.declaringType().getAncestors()))) {
-      ResolvedTypeDeclaration implementationDeclaration =
-          implementation.getTypeDeclaration().orElse(null);
-      // Only process classes here because interfaces are dealt with in overridesAnInterfaceMethod
-      if (implementationDeclaration != null && !implementationDeclaration.isInterface()) {
-        try {
-          for (MethodUsage potentialSuperMethod : implementation.getDeclaredMethods()) {
-            String methodSignature = potentialSuperMethod.getQualifiedSignature();
-            String potentialSuperMethodName =
-                methodSignature.substring(
-                    methodSignature.lastIndexOf('.', methodSignature.indexOf('(')) + 1);
-            if (!currentMethodName.equals(potentialSuperMethodName)) {
-              continue;
-            }
-            if (potentialSuperMethod.getDeclaration().isAbstract()) {
-              // These classes are beyond our control. It's better to retain the implementations of
-              // all abstract methods to ensure the code remains compilable.
-              if (usedMembers.contains(methodSignature)) {
-                return true;
-              }
-              // If the abstract member is not used, and we're in an interface or abstract class,
-              // there is no need to preserve it since the original JDK abstract definition will
-              // be inherited
-              if (JavaLangUtils.inJdkPackage(methodSignature)
-                  && (!resolvedMethod.isAbstract() || !isInterfaceOrAbstract)) {
-                return true;
-              }
-            } else if (usedMembers.contains(methodSignature)) {
-              // If any ancestors define the body of a method, and that ancestor definition
-              // is already included, we don't need to preserve any overrides since the method
-              // already has a defined body.
-              return false;
-            }
-          }
-        } catch (UnsolvedSymbolException ex) {
-          // At least one of the methods can't be solved so we will ignore this type.
-          continue;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
    * Returns true if the given method is abstract.
    *
    * @param method a possibly-null method declaration
@@ -252,10 +154,19 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
 
     if (typeElt instanceof EnumDeclaration) {
       EnumDeclaration asEnum = (EnumDeclaration) typeElt;
-      return overridesAnInterfaceMethodImpl(asEnum.getImplementedTypes(), signature);
+      Set<ResolvedReferenceType> parents =
+          convertToResolvedReferenceTypes(asEnum.getImplementedTypes());
+
+      return overridesAnInterfaceMethodImpl(parents, signature);
     } else if (typeElt instanceof ClassOrInterfaceDeclaration) {
       ClassOrInterfaceDeclaration asClass = (ClassOrInterfaceDeclaration) typeElt;
-      return overridesAnInterfaceMethodImpl(asClass.getImplementedTypes(), signature);
+
+      // Get directly implemented interfaces as well as types implemented through parent classes
+      Set<ResolvedReferenceType> parents =
+          convertToResolvedReferenceTypes(asClass.getImplementedTypes());
+      parents.addAll(convertToResolvedReferenceTypes(asClass.getExtendedTypes()));
+
+      return overridesAnInterfaceMethodImpl(parents, signature);
     } else {
       throw new RuntimeException(
           "unexpected enclosing structure " + typeElt + " for method " + method);
@@ -283,14 +194,17 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
    * Helper method for overridesAnInterfaceMethod, to allow the same code to be shared in the enum
    * and class cases.
    *
-   * @param implementedTypes the types of the implemented interfaces
+   * @param implementedTypes the types of the implemented interfaces/classes
    * @param signature the signature we're looking for
    * @return see {@link #overridesAnInterfaceMethod(MethodDeclaration)}
    */
   private boolean overridesAnInterfaceMethodImpl(
-      NodeList<ClassOrInterfaceType> implementedTypes, String signature) {
-
+      Set<ResolvedReferenceType> implementedTypes, String signature) {
+    // Classes may exist in this collection; their primary purpose is to exclude a method
+    // if a concrete method declaration exists
     Collection<ResolvedReferenceType> allImplementedTypes = getAllImplementations(implementedTypes);
+
+    boolean result = false;
 
     for (ResolvedReferenceType resolvedInterface : allImplementedTypes) {
       // This boolean is important to distinguish between the case of
@@ -328,34 +242,46 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
 
       for (ResolvedMethodDeclaration methodInInterface :
           resolvedInterface.getAllMethodsVisibleToInheritors()) {
-        if (methodInInterface.isAbstract()
-            && erase(methodInInterface.getSignature()).equals(targetSignature)) {
-          // once we've found the correct method, we return to whether we
-          // control it or not. If we don't, it must be preserved. If we do, then we only
-          // preserve it if the PrunerVisitor won't remove it.
-          return !inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature());
+        if (erase(methodInInterface.getSignature()).equals(targetSignature)) {
+          if (methodInInterface.isAbstract()) {
+            // once we've found the correct method, we return to whether we
+            // control it or not. If we don't, it must be preserved. If we do, then we only
+            // preserve it if the PrunerVisitor won't remove it.
+            if (!inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature())) {
+              // Do not immediately return; if two ancestors, unincluded interfaces are present,
+              // one with a method declaration and one without, we need to return false even if
+              // this may be true (depends on which method is traversed first)
+              result = true;
+              continue;
+            }
+          } else if (!inOutput) {
+            // If we can't control the method, and there's a definition provided, we can safely
+            // remove all overridden versions
+            return false;
+          }
         }
       }
     }
     // if we don't find an overridden method in any of the implemented interfaces, return false.
-    return false;
+    // however, if this method only implements abstract methods we can't control, then return true.
+    return result;
   }
 
   /**
-   * Helper method for getAllImplementations(Set<ResolvedReferenceType>)
+   * Helper method to convert ClassOrInterfaceTypes to ResolvedReferenceTypes
    *
-   * @param types A List of interface/class types to find all ancestors
-   * @return A Collection of ResolvedReferenceTypes containing all ancestors
+   * @param types A List of interface/class types to convert
+   * @return A set of ResolvedReferenceTypes representing the resolved input types
    */
-  private static Collection<ResolvedReferenceType> getAllImplementations(
+  private static Set<ResolvedReferenceType> convertToResolvedReferenceTypes(
       List<ClassOrInterfaceType> types) {
-    Set<ResolvedReferenceType> toTraverse = new HashSet<>();
+    Set<ResolvedReferenceType> resolvedTypes = new HashSet<>();
 
     for (ClassOrInterfaceType type : types) {
       try {
         ResolvedReferenceType resolved =
             JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type);
-        toTraverse.add(resolved);
+        resolvedTypes.add(resolved);
       } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
         // In this case, we're implementing an interface that we don't control
         // or that will not be preserved.
@@ -363,7 +289,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       }
     }
 
-    return getAllImplementations(toTraverse);
+    return resolvedTypes;
   }
 
   /**
