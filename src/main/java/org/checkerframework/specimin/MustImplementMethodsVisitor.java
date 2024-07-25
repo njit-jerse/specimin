@@ -265,6 +265,8 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       for (String name : typeParametersMap.getNames()) {
         String interfaceViewpointName = name.substring(name.lastIndexOf('.') + 1);
         String localViewpointName = typeParametersMap.getValueBySignature(name).get().describe();
+        // Escape localViewpointName in case it contains special regex characters like []
+        // if the type is an array, for example
         localViewpointName = Pattern.quote(localViewpointName);
         targetSignature = targetSignature.replaceAll(localViewpointName, interfaceViewpointName);
       }
