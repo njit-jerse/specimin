@@ -4,7 +4,7 @@ import org.example.Resource;
 
 class Simple {
     // Target method.
-    void bar() {
+    void bar() throws Exception {
         try (Resource r = new Resource()) {
             // do something
         }
