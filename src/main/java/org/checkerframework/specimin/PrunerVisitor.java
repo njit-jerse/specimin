@@ -438,9 +438,13 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       if (targetFields.contains(varFullName)) {
         continue;
       } else if (usedMembers.contains(varFullName)) {
-        declarator.removeInitializer();
         if (isFinal) {
-          declarator.setInitializer(getBasicInitializer(declarator.getType()));
+          if (!fieldsAssignedByTargetCtors.contains(varFullName)) {
+            declarator.removeInitializer();
+            declarator.setInitializer(getBasicInitializer(declarator.getType()));
+          }
+        } else {
+          declarator.removeInitializer();
         }
       } else {
         iterator.remove();
