@@ -335,6 +335,14 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return super.visit(methodDecl, p);
     }
 
+    if (insideFunctionalInterface && usedMembers.contains(signature)) {
+      if (methodDecl.getBody().isPresent()) {
+        // avoid introducing unsolved symbols into the final output.
+        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      }
+      return methodDecl;
+    }
+
     if (usedMembers.contains(signature) || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
@@ -344,14 +352,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
         if (isMethodInsideInterface && !methodDecl.isStatic()) {
           methodDecl.setDefault(true);
         }
-      }
-      return methodDecl;
-    }
-
-    if (insideFunctionalInterface && usedMembers.contains(signature)) {
-      if (methodDecl.getBody().isPresent()) {
-        // avoid introducing unsolved symbols into the final output.
-        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       }
       return methodDecl;
     }

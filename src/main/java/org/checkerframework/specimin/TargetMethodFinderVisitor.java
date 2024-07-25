@@ -26,6 +26,7 @@ import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.UnionType;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
@@ -470,6 +471,18 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
         Expression arg = call.getArgument(i);
         if (arg.isLambdaExpr()) {
           updateUsedClassBasedOnType(decl.getParam(i).getType());
+          // We should mark the abstract method for preservation as well
+          if (decl.getParam(i).getType().isReferenceType()) {
+            ResolvedReferenceType functionalInterface =
+                decl.getParam(i).getType().asReferenceType();
+            for (MethodUsage method : functionalInterface.getDeclaredMethods()) {
+              if (method.getDeclaration().isAbstract()) {
+                preserveMethodDecl(method.getDeclaration());
+                // Only one abstract method per functional interface
+                break;
+              }
+            }
+          }
         }
       }
     }
