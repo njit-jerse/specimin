@@ -196,6 +196,8 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     String constructorMethodAsString = method.getDeclarationAsString(false, false, false);
     // the methodName will be something like this: "com.example.Car#Car()"
     String methodName = this.currentClassQualifiedName + "#" + constructorMethodAsString;
+    // remove spaces
+    methodName = methodName.replaceAll("\\s", "");
     if (this.targetMethodNames.contains(methodName)) {
       ResolvedConstructorDeclaration resolvedMethod = method.resolve();
       targetMethods.add(resolvedMethod.getQualifiedSignature());
