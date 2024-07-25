@@ -61,12 +61,14 @@ task expectedTestOutputsMustCompile(type: Exec) {
 
 // run via e.g.: ./gradlew checkExpectedOutputCompilesFor -PtestName="onefilesimple"
 task checkExpectedOutputCompilesFor(type: Exec) {
-    workingDir("src/test/resources")
-    if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
-        // TODO: fix this
-        print "checkExpectedOutputCompilesFor is not supported on Windows"
-    } else {
-        commandLine "sh", "../../../typecheck_one_test.sh", project.property("testName")
+    if (project.hasProperty("testName")) {
+        workingDir("src/test/resources")
+        if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
+            // TODO: fix this
+            print "checkExpectedOutputCompilesFor is not supported on Windows"
+        } else {
+            commandLine "sh", "../../../typecheck_one_test.sh", project.property("testName")
+        }
     }
 }
 
