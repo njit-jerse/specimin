@@ -348,7 +348,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return methodDecl;
     }
 
-    if (insideFunctionalInterface) {
+    if (insideFunctionalInterface && usedMembers.contains(signature)) {
       if (methodDecl.getBody().isPresent()) {
         // avoid introducing unsolved symbols into the final output.
         methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
