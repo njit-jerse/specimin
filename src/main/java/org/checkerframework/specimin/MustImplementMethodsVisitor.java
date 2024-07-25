@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -64,8 +65,12 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     // implementing required methods from interfaces in the target code,
     // but unfortunately I think it's the best that we can do here. (@Override
     // is technically optional, but it is widely used.)
+    // However, if the current method is in a target type and in an interface/abstract class,
+    // we don't need to preserve the method since there are no children that require its definition
     if (isPreservedAndAbstract(overridden)
-        || (overridden == null && overridesAnInterfaceMethod(method))) {
+        || (overridden == null
+            && overridesAnInterfaceMethod(method)
+            && !isParentTargetAndInterfaceOrAbstract(method))) {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       Map<String, ResolvedType> returnAndParamAndThrowTypes = new HashMap<>();
       try {
@@ -130,6 +135,37 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       return true;
     }
     return usedMembers.contains(methodSignature);
+  }
+
+  /**
+   * Returns true iff the parent is an abstract class/interface and if it is a targeted type.
+   *
+   * @param node the Node to check
+   * @return true iff the parent is a target abstract class/interface
+   */
+  private boolean isParentTargetAndInterfaceOrAbstract(Node node) {
+    Node parent = JavaParserUtil.getEnclosingClassLike(node);
+
+    if (parent instanceof ClassOrInterfaceDeclaration
+        && (((ClassOrInterfaceDeclaration) parent).isInterface()
+            || ((ClassOrInterfaceDeclaration) parent).isAbstract())) {
+      String enclosingClassName =
+          ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElse(null);
+
+      if (enclosingClassName != null) {
+        for (String targetMethod : targetMethods) {
+          if (targetMethod.startsWith(enclosingClassName)) {
+            return true;
+          }
+        }
+        for (String targetField : targetFields) {
+          if (targetField.startsWith(enclosingClassName)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -229,6 +265,7 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       for (String name : typeParametersMap.getNames()) {
         String interfaceViewpointName = name.substring(name.lastIndexOf('.') + 1);
         String localViewpointName = typeParametersMap.getValueBySignature(name).get().describe();
+        localViewpointName = Pattern.quote(localViewpointName);
         targetSignature = targetSignature.replaceAll(localViewpointName, interfaceViewpointName);
       }
       // Type parameters in the types are erased (as they would be by javac when doing method
@@ -242,23 +279,30 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
 
       for (ResolvedMethodDeclaration methodInInterface :
           resolvedInterface.getAllMethodsVisibleToInheritors()) {
-        if (erase(methodInInterface.getSignature()).equals(targetSignature)) {
-          if (methodInInterface.isAbstract()) {
-            // once we've found the correct method, we return to whether we
-            // control it or not. If we don't, it must be preserved. If we do, then we only
-            // preserve it if the PrunerVisitor won't remove it.
-            if (!inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature())) {
-              // Do not immediately return; if two ancestors, unincluded interfaces are present,
-              // one with a method declaration and one without, we need to return false even if
-              // this may be true (depends on which method is traversed first)
-              result = true;
-              continue;
+        try {
+          if (erase(methodInInterface.getSignature()).equals(targetSignature)) {
+            if (methodInInterface.isAbstract()) {
+              // once we've found the correct method, we return to whether we
+              // control it or not. If we don't, it must be preserved. If we do, then we only
+              // preserve it if the PrunerVisitor won't remove it.
+              if (!inOutput || usedMembers.contains(methodInInterface.getQualifiedSignature())) {
+                // Do not immediately return; if two ancestors, unincluded interfaces are present,
+                // one with a method declaration and one without, we need to return false even if
+                // this may be true (depends on which method is traversed first)
+                result = true;
+                continue;
+              }
+            } else if (!inOutput) {
+              // If we can't control the method, and there's a definition provided, we can safely
+              // remove all overridden versions
+              return false;
             }
-          } else if (!inOutput) {
-            // If we can't control the method, and there's a definition provided, we can safely
-            // remove all overridden versions
-            return false;
           }
+        } catch (UnsolvedSymbolException ex) {
+          // since we are going through all ancestor interfaces/abstract classes, we should
+          // expect that some method signature cannot be resolved. if this is the case, then
+          // it's definitely not the method we're looking for.
+          continue;
         }
       }
     }
