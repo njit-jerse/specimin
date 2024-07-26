@@ -6,10 +6,10 @@ import org.example.ThirdResource;
 
 class Simple {
 
-    private ThirdResource r;
+    private final ThirdResource r = null;
 
     // Target method.
-    void bar(OtherResource o) throws Exception {
+    void bar(final OtherResource o) throws Exception {
         try (Resource r = new Resource()) {
             // do something
         }
