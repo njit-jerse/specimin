@@ -66,7 +66,7 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
     try {
       typeFullName =
           JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(type).getQualifiedName();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException | IllegalArgumentException e) {
       return super.visit(type, p);
     }
     if (fileAndAssociatedTypes.containsKey(fileDirectory)) {
