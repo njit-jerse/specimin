@@ -371,7 +371,7 @@ public class SpeciminRunner {
     Map<String, Set<String>> unfoundFields = finder.getUnfoundFields();
     if (!unfoundFields.isEmpty()) {
       throw new RuntimeException(
-          "Specimin could not locate the following target methods in the target files:\n"
+          "Specimin could not locate the following target fields in the target files:\n"
               + unfoundMembersTable(unfoundFields, false));
     }
 
