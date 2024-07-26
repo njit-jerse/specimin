@@ -107,10 +107,14 @@ class JavaTypeCorrect {
     // Before returning, purge any entries that are obviously bad according to
     // the following simple heuristic(s):
     // * don't extend known-final classes from the JDK, like java.lang.String.
+    Set<String> toRemove = new HashSet<>(0);
     for (Map.Entry<String, String> entry : extendedTypes.entrySet()) {
       if (entry.getValue().equals("java.lang.String") || entry.getValue().equals("String")) {
-        extendedTypes.remove(entry.getKey());
+        toRemove.add(entry.getKey());
       }
+    }
+    for (String s : toRemove) {
+      extendedTypes.remove(s);
     }
     return extendedTypes;
   }
