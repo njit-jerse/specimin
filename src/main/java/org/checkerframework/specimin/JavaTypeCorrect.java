@@ -104,6 +104,14 @@ class JavaTypeCorrect {
    * @return the map described above.
    */
   public Map<String, String> getExtendedTypes() {
+    // Before returning, purge any entries that are obviously bad according to
+    // the following simple heuristic(s):
+    // * don't extend known-final classes from the JDK, like java.lang.String.
+    for (Map.Entry<String, String> entry : extendedTypes.entrySet()) {
+      if (entry.getValue().equals("java.lang.String") || entry.getValue().equals("String")) {
+        extendedTypes.remove(entry.getKey());
+      }
+    }
     return extendedTypes;
   }
 
