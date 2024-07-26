@@ -47,10 +47,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * The main visitor for Specimin's first phase, which locates the target method(s) and compiles
+ * The main visitor for Specimin's first phase, which locates the target member(s) and compiles
  * information on what specifications they use.
  */
-public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
+public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
   /**
    * The names of the target methods. The format is
    * class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...). All the names will have
@@ -70,6 +70,9 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
    * name/signature of a method actually is.
    */
   private final Map<String, Set<String>> unfoundMethods;
+
+  /** Same as the unfoundMethods set, but for fields */
+  private final Map<String, Set<String>> unfoundFields = new HashMap<>();
 
   /**
    * This map connects the resolved declaration of a method to the interface that contains it, if
@@ -102,7 +105,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
    * @param nonPrimaryClassesToPrimaryClass map connecting non-primary classes with their
    *     corresponding primary classes
    */
-  public TargetMethodFinderVisitor(
+  public TargetMemberFinderVisitor(
       SpeciminStateVisitor previous, Map<String, String> nonPrimaryClassesToPrimaryClass) {
     super(previous);
     targetMethodNames = new HashSet<>();
@@ -111,6 +114,7 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
     }
     unfoundMethods = new HashMap<>(targetMethods.size());
     targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
+    targetFields.forEach(f -> unfoundFields.put(f, new HashSet<>()));
     this.nonPrimaryClassesToPrimaryClass = nonPrimaryClassesToPrimaryClass;
   }
 
@@ -125,6 +129,19 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
    */
   public Map<String, Set<String>> getUnfoundMethods() {
     return unfoundMethods;
+  }
+
+  /**
+   * Returns the fields that so far this visitor has not located from its target list. Usually, this
+   * should be checked after running the visitor to ensure that it is empty. The targets are the
+   * keys in the returned maps; the values are fields in the same class that were considered but
+   * were not the target (useful for issuing error messages).
+   *
+   * @return the fields that so far this visitor has not located from its target list, mapped to the
+   *     candidate fields that were considered
+   */
+  public Map<String, Set<String>> getUnfoundFields() {
+    return unfoundFields;
   }
 
   /**
@@ -167,6 +184,27 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
       // in question has already been removed from unfoundMethods.
       if (unfoundMethods.containsKey(targetMethodInClass)) {
         unfoundMethods.get(targetMethodInClass).add(methodAsString);
+      }
+    }
+  }
+
+  /**
+   * Updates unfoundFields so that the appropriate elements have their set of considered fields
+   * updated to match a field that was not a target field.
+   *
+   * @param fieldAsString the field that wasn't a target field
+   */
+  private void updateUnfoundFields(String fieldAsString) {
+    Set<String> targetFieldsInClass =
+        targetFields.stream()
+            .filter(t -> t.startsWith(this.currentClassQualifiedName))
+            .collect(Collectors.toSet());
+
+    for (String targetFieldInClass : targetFieldsInClass) {
+      // This check is necessary to avoid an NPE if the target field
+      // in question has already been removed from unfoundFields.
+      if (unfoundFields.containsKey(targetFieldInClass)) {
+        unfoundFields.get(targetFieldInClass).add(fieldAsString);
       }
     }
   }
@@ -234,12 +272,20 @@ public class TargetMethodFinderVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(VariableDeclarator node, Void arg) {
-    if (insideTargetMember
-        && node.getParentNode().isPresent()
+    if (node.getParentNode().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
-      Visitable result = super.visit(node, arg);
-      usedTypeElements.add(this.currentClassQualifiedName);
-      return result;
+      String fieldName = this.currentClassQualifiedName + "#" + node.getNameAsString();
+      if (targetFields.contains(fieldName)) {
+        ResolvedFieldDeclaration resolvedField =
+            ((FieldDeclaration) node.getParentNode().get()).resolve();
+        unfoundFields.remove(fieldName);
+        updateUsedClassWithQualifiedClassName(
+            resolvedField.declaringType().getQualifiedName(),
+            usedTypeElements,
+            nonPrimaryClassesToPrimaryClass);
+      } else {
+        updateUnfoundFields(fieldName);
+      }
     }
     return super.visit(node, arg);
   }
