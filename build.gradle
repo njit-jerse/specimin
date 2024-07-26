@@ -52,11 +52,23 @@ task requireJavadoc(type: JavaExec) {
 }
 
 task expectedTestOutputsMustCompile(type: Exec) {
-    // TODO: should this task run in CI, or as part of the regular tests?
     if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
         commandLine "cmd", "/c", "typecheck_test_outputs.bat"
     } else {
         commandLine "sh", "typecheck_test_outputs.sh"
+    }
+}
+
+// run via e.g.: ./gradlew checkExpectedOutputCompilesFor -PtestName="onefilesimple"
+task checkExpectedOutputCompilesFor(type: Exec) {
+    if (project.hasProperty("testName")) {
+        workingDir("src/test/resources")
+        if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
+            // TODO: fix this
+            print "checkExpectedOutputCompilesFor is not supported on Windows"
+        } else {
+            commandLine "sh", "../../../typecheck_one_test.sh", project.property("testName")
+        }
     }
 }
 
