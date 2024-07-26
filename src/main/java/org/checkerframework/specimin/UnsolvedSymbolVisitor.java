@@ -673,14 +673,27 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
           gotException();
           continue;
         }
-        System.out.println("as var type: " + fqn);
         makeClassAutoCloseable(fqn);
       } else if (resource.isNameExpr()) {
         NameExpr asName = resource.asNameExpr();
-        System.out.println("as name: " + asName);
+        String fqn;
+        try {
+          fqn = asName.resolve().getType().describe();
+        } catch (UnsolvedSymbolException e) {
+          gotException();
+          continue;
+        }
+        makeClassAutoCloseable(fqn);
       } else if (resource.isFieldAccessExpr()) {
         FieldAccessExpr asField = resource.asFieldAccessExpr();
-        System.out.println("as field: " + asField);
+        String fqn;
+        try {
+          fqn = asField.resolve().getType().describe();
+        } catch (UnsolvedSymbolException e) {
+          gotException();
+          continue;
+        }
+        makeClassAutoCloseable(fqn);
       } else {
         throw new RuntimeException(
             "unexpected type of node in a try-with-resources expression: "
