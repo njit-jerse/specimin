@@ -1109,6 +1109,10 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
      * We ensure that the caller and its parameters are resolved before solving the method itself.
      * For instance, in a method call like a.b(c, d, e,...), we solve a, c, d, e,... before resolving b.
      */
+    if (method.toString().contains("thenReturn")) {
+      System.out.println("=======");
+      System.out.println(method);
+    }
     if (!insideTargetMember) {
       return super.visit(method, p);
     }
@@ -1163,6 +1167,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
           updateUnsolvedClassOrInterfaceWithMethod(method, parentName, "", false);
         }
       }
+    }
+    if (method.toString().contains("thenReturn")) {
+      System.out.println("===!===");
     }
 
     // Though this structure looks a bit silly, it is intentional
@@ -1974,6 +1981,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     } else {
       returnType = desiredReturnType;
     }
+
     UnsolvedMethod thisMethod =
         new UnsolvedMethod(
             methodName,
