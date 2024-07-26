@@ -8,7 +8,7 @@ public class TargetFieldTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "targetfield",
+        "targetField",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#unsolvedField"});
   }
