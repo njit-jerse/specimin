@@ -25,7 +25,11 @@ if the test input is in a package, there must be a corresponding file structure
 here.
 * the expected test output. It is stored in `src/test/resources/$testname/expected`.
 It must be an independently-compilable Java program; our CI system checks this requirement
-by running the `./gradlew expectedTestOutputsMustCompile` command.
+by running the `./gradlew expectedTestOutputsMustCompile` command. Since this command takes
+some time to complete, you can use `./gradlew checkExpectedOutputCompilesFor -PtestName="x"`
+to run check that some specific test "x" compiles ("x" should be the all-lower-case name of
+the test, since this script uses the test name to find the right "expected" directory). Note
+that the `checkExpectedOutputCompilesFor` Gradle task only works on Unix systems.
 
 You can run all of the tests via `./gradlew test`. When debugging a specific
 test, I usually use a command like this one (replacing `MethodRef2Test` with the
