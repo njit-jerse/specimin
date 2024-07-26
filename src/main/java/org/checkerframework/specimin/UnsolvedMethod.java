@@ -37,6 +37,9 @@ public class UnsolvedMethod {
   /** Access modifer of the current method. The value is set to "public" by default. */
   private final String accessModifier;
 
+  /** The list of the types of the exceptions thrown by the method. */
+  private final List<String> throwsList;
+
   /**
    * Create an instance of UnsolvedMethod
    *
@@ -78,11 +81,39 @@ public class UnsolvedMethod {
       List<String> parameterList,
       boolean isJustMethodSignature,
       String accessModifier) {
+    this(
+        name,
+        returnType,
+        parameterList,
+        isJustMethodSignature,
+        accessModifier,
+        Collections.emptyList());
+  }
+
+  /**
+   * Create an instance of UnsolvedMethod for a synthetic interface.
+   *
+   * @param name the name of the method
+   * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
+   * @param isJustMethodSignature indicates whether this method represents just a method signature
+   *     without a body
+   * @param accessModifier the access modifier of the current method
+   * @param throwsList the list of exceptions thrown by this method
+   */
+  public UnsolvedMethod(
+      String name,
+      String returnType,
+      List<String> parameterList,
+      boolean isJustMethodSignature,
+      String accessModifier,
+      List<String> throwsList) {
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
     this.isJustMethodSignature = isJustMethodSignature;
     this.accessModifier = accessModifier;
+    this.throwsList = throwsList;
   }
 
   /**
@@ -172,6 +203,21 @@ public class UnsolvedMethod {
     signature.append(name).append("(");
     signature.append(arguments);
     signature.append(")");
+
+    if (throwsList.size() > 0) {
+      signature.append(" throws ");
+    }
+
+    StringBuilder exceptions = new StringBuilder();
+    for (int i = 0; i < throwsList.size(); i++) {
+      String exception = throwsList.get(i);
+      exceptions.append(exception);
+      if (i < parameterList.size() - 1) {
+        arguments.append(", ");
+      }
+    }
+    signature.append(exceptions);
+
     if (isJustMethodSignature) {
       return signature.append(";").toString();
     } else {
