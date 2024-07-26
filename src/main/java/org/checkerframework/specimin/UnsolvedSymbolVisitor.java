@@ -1847,6 +1847,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       Node method, String className, String desiredReturnType, boolean updatingInterface) {
     String methodName = "";
     List<String> listOfParameters = new ArrayList<>();
+    List<String> listOfExceptions = new ArrayList<>();
     String accessModifer = "public";
     if (method instanceof MethodCallExpr) {
       methodName = ((MethodCallExpr) method).getNameAsString();
@@ -1855,9 +1856,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     // method is a MethodDeclaration
     else {
-      methodName = ((MethodDeclaration) method).getNameAsString();
-      accessModifer = ((MethodDeclaration) method).getAccessSpecifier().asString();
-      for (Parameter para : ((MethodDeclaration) method).getParameters()) {
+      MethodDeclaration methodDecl = (MethodDeclaration) method;
+
+      methodName = methodDecl.getNameAsString();
+      accessModifer = methodDecl.getAccessSpecifier().asString();
+      for (Parameter para : methodDecl.getParameters()) {
         Type paraType = para.getType();
         String paraTypeAsString = paraType.asString();
         try {
@@ -1870,6 +1873,19 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         }
         listOfParameters.add(paraTypeAsString);
       }
+
+      for (ReferenceType exception : methodDecl.getThrownExceptions()) {
+        String exceptionTypeAsString = exception.asString();
+        try {
+          // if possible, opt for fully-qualified names.
+          exceptionTypeAsString = exception.resolve().describe();
+        } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+          // avoiding ignored catch blocks errors.
+          listOfExceptions.add(exceptionTypeAsString);
+          continue;
+        }
+        listOfExceptions.add(exceptionTypeAsString);
+      }
     }
     String returnType = "";
     if (desiredReturnType.equals("")) {
@@ -1879,7 +1895,12 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     UnsolvedMethod thisMethod =
         new UnsolvedMethod(
-            methodName, returnType, listOfParameters, updatingInterface, accessModifer);
+            methodName,
+            returnType,
+            listOfParameters,
+            updatingInterface,
+            accessModifer,
+            listOfExceptions);
     UnsolvedClassOrInterface missingClass =
         updateUnsolvedClassWithClassName(className, false, false, thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
