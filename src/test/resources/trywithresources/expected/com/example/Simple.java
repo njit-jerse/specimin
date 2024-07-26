@@ -1,11 +1,19 @@
 package com.example;
 
 import org.example.Resource;
+import org.example.OtherResource;
+import org.example.ThirdResource;
 
 class Simple {
 
-    void bar() throws Exception {
+    private ThirdResource r;
+
+    void bar(OtherResource o) throws Exception {
         try (Resource r = new Resource()) {
+        }
+        try (o) {
+        }
+        try (r) {
         }
     }
 }

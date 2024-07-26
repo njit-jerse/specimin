@@ -13,6 +13,6 @@ public class TryWithResourcesTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "trywithresources",
         new String[] {"com/example/Simple.java"},
-        new String[] {"com.example.Simple#bar()"});
+        new String[] {"com.example.Simple#bar(OtherResource)"});
   }
 }
