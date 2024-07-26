@@ -1,8 +1,12 @@
 package org.example;
 
-public class Resource implements AutoCloseable {
+public class Resource implements java.lang.AutoCloseable {
 
-    public void close() throws Exception {
+    public Resource() {
+        throw new Error();
+    }
+
+    public void close() throws java.lang.Exception {
         throw new Error();
     }
 }

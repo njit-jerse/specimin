@@ -1,8 +1,6 @@
 package org.checkerframework.specimin;
 
 import com.google.common.base.Splitter;
-
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -49,7 +47,7 @@ public class UnsolvedClassOrInterface {
   private @Nullable String extendsClause;
 
   /** The implements clauses, if they exist. */
-  private List<String> implementsClauses = new ArrayList<>(0);
+  private Set<String> implementsClauses = new LinkedHashSet<>(0);
 
   /** This field records if the class is an interface */
   private boolean isAnInterface;
@@ -518,9 +516,10 @@ public class UnsolvedClassOrInterface {
         sb.append(", ");
       }
       sb.append(" implements ");
-      for (int i = 0; i < implementsClauses.size(); i++) {
-        sb.append(implementsClauses.get(i));
-        if (i < implementsClauses.size() - 1) {
+      Iterator<String> interfaces = implementsClauses.iterator();
+      while (interfaces.hasNext()) {
+        sb.append(interfaces.next());
+        if (interfaces.hasNext()) {
           sb.append(", ");
         }
       }

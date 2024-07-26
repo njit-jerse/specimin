@@ -692,11 +692,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Makes the synthetic class with the given name implement AutoCloseable,
-   * if such a synthetic class exists. If not, silently does nothing, since that
-   * should only happen when encounting a non-synthetic class, which must already
-   * implement AutoCloseable if it is used in a try-with-resources that compiles
-   * (i.e., this method relies on the assumption that the input compiles).
+   * Makes the synthetic class with the given name implement AutoCloseable, if such a synthetic
+   * class exists. If not, silently does nothing, since that should only happen when encounting a
+   * non-synthetic class, which must already implement AutoCloseable if it is used in a
+   * try-with-resources that compiles (i.e., this method relies on the assumption that the input
+   * compiles).
    *
    * @param fqn a fully-qualified name
    */
@@ -704,7 +704,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     for (UnsolvedClassOrInterface sytheticClass : missingClass) {
       if (sytheticClass.getQualifiedClassName().equals(fqn)) {
         sytheticClass.implement("java.lang.AutoCloseable");
-        // TODO: add the close() method.
+        sytheticClass.addMethod(UnsolvedMethod.CLOSE);
       }
     }
   }

@@ -223,6 +223,12 @@ public class PrunerVisitor extends SpeciminStateVisitor {
         String typeFullName =
             JavaParserUtil.classOrInterfaceTypeToResolvedReferenceType(interfaceType)
                 .getQualifiedName();
+
+        // Never remove java.lang.AutoCloseable, because it will create compilation
+        // errors at try-with-resources statements.
+        if (typeFullName.equals("java.lang.AutoCloseable")) {
+          continue;
+        }
         if (!usedTypeElements.contains(typeFullName)) {
           iterator.remove();
         }
