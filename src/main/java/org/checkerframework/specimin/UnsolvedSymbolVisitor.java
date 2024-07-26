@@ -32,6 +32,7 @@ import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -640,9 +641,85 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   public Visitable visit(TryStmt node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
+    List<Expression> resources = node.getResources();
+    if (resources.size() != 0) {
+      handleSyntheticResources(resources);
+    }
     Visitable result = super.visit(node, p);
     localVariables.removeFirst();
     return result;
+  }
+
+  /**
+   * Ensures that every type used by a try-with-resources statement extends java.lang.AutoCloseable.
+   *
+   * @param resources a list of resource expressions
+   */
+  private void handleSyntheticResources(List<Expression> resources) {
+    // Resource expressions can be:
+    // * names
+    // * field accesses
+    // * a new local variable declaration
+    // In the former two cases, we have to wait to handle the synthetic resources
+    // until the expression can be solved. For the latter, we have to wait until the
+    // declared type is solvable.
+    for (Expression resource : resources) {
+      if (resource.isVariableDeclarationExpr()) {
+        VariableDeclarationExpr asVar = resource.asVariableDeclarationExpr();
+        String fqn;
+        try {
+          fqn = asVar.calculateResolvedType().describe();
+        } catch (UnsolvedSymbolException e) {
+          gotException();
+          continue;
+        }
+        makeClassAutoCloseable(fqn);
+      } else if (resource.isNameExpr()) {
+        NameExpr asName = resource.asNameExpr();
+        String fqn;
+        try {
+          fqn = asName.resolve().getType().describe();
+        } catch (UnsolvedSymbolException e) {
+          gotException();
+          continue;
+        }
+        makeClassAutoCloseable(fqn);
+      } else if (resource.isFieldAccessExpr()) {
+        FieldAccessExpr asField = resource.asFieldAccessExpr();
+        String fqn;
+        try {
+          fqn = asField.resolve().getType().describe();
+        } catch (UnsolvedSymbolException e) {
+          gotException();
+          continue;
+        }
+        makeClassAutoCloseable(fqn);
+      } else {
+        throw new RuntimeException(
+            "unexpected type of node in a try-with-resources expression: "
+                + resource.getClass()
+                + "\nresouce was "
+                + resource);
+      }
+    }
+  }
+
+  /**
+   * Makes the synthetic class with the given name implement AutoCloseable, if such a synthetic
+   * class exists. If not, silently does nothing, since that should only happen when encounting a
+   * non-synthetic class, which must already implement AutoCloseable if it is used in a
+   * try-with-resources that compiles (i.e., this method relies on the assumption that the input
+   * compiles).
+   *
+   * @param fqn a fully-qualified name
+   */
+  private void makeClassAutoCloseable(String fqn) {
+    for (UnsolvedClassOrInterface sytheticClass : missingClass) {
+      if (sytheticClass.getQualifiedClassName().equals(fqn)) {
+        sytheticClass.implement("java.lang.AutoCloseable");
+        sytheticClass.addMethod(UnsolvedMethod.CLOSE);
+      }
+    }
   }
 
   @Override

@@ -43,8 +43,11 @@ public class UnsolvedClassOrInterface {
   /** This field records the name of type variables that we prefer this class to have. */
   private Set<String> preferredTypeVariables = new HashSet<>();
 
-  /** The field records the extends/implements clauses, if one exists. */
+  /** This field records the extends clause, if one exists. */
   private @Nullable String extendsClause;
+
+  /** The implements clauses, if they exist. */
+  private Set<String> implementsClauses = new LinkedHashSet<>(0);
 
   /** This field records if the class is an interface */
   private boolean isAnInterface;
@@ -284,6 +287,15 @@ public class UnsolvedClassOrInterface {
   }
 
   /**
+   * Adds a new interface to the list of implemented interfaces.
+   *
+   * @param interfaceName the fqn of the interface
+   */
+  public void implement(String interfaceName) {
+    implementsClauses.add(interfaceName);
+  }
+
+  /**
    * Adds an extends clause to this class.
    *
    * @param className a fully-qualified class name for the class to be extended
@@ -498,6 +510,19 @@ public class UnsolvedClassOrInterface {
     sb.append(className).append(getTypeVariablesAsString());
     if (extendsClause != null) {
       sb.append(" ").append(extendsClause);
+    }
+    if (implementsClauses.size() > 0) {
+      if (extendsClause != null) {
+        sb.append(", ");
+      }
+      sb.append(" implements ");
+      Iterator<String> interfaces = implementsClauses.iterator();
+      while (interfaces.hasNext()) {
+        sb.append(interfaces.next());
+        if (interfaces.hasNext()) {
+          sb.append(", ");
+        }
+      }
     }
     sb.append(" {\n");
     if (innerClasses != null) {
