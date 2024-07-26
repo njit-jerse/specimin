@@ -82,7 +82,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
    * The fully-qualified names of each field that is assigned by a target constructor. The
    * assignments to these fields will be preserved, so Specimin needs to avoid adding an initializer
    * for them if they are final (as it does for other, non-assigned-by-target final fields). Set by
-   * {@link TargetMethodFinderVisitor} but stored here so that it is easily available later when
+   * {@link TargetMemberFinderVisitor} but stored here so that it is easily available later when
    * pruning.
    */
   protected final Set<String> fieldsAssignedByTargetCtors;

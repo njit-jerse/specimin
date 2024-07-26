@@ -354,8 +354,8 @@ public class SpeciminRunner {
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
 
-    TargetMethodFinderVisitor finder =
-        new TargetMethodFinderVisitor(enumVisitor, nonPrimaryClassesToPrimaryClass);
+    TargetMemberFinderVisitor finder =
+        new TargetMemberFinderVisitor(enumVisitor, nonPrimaryClassesToPrimaryClass);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
@@ -365,8 +365,16 @@ public class SpeciminRunner {
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
           "Specimin could not locate the following target methods in the target files:\n"
-              + unfoundMethodsTable(unfoundMethods));
+              + unfoundMembersTable(unfoundMethods, true));
     }
+
+    Map<String, Set<String>> unfoundFields = finder.getUnfoundFields();
+    if (!unfoundFields.isEmpty()) {
+      throw new RuntimeException(
+          "Specimin could not locate the following target fields in the target files:\n"
+              + unfoundMembersTable(unfoundFields, false));
+    }
+
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
         new SolveMethodOverridingVisitor(finder);
     for (CompilationUnit cu : parsedTargetFiles.values()) {
@@ -589,20 +597,24 @@ public class SpeciminRunner {
   }
 
   /**
-   * Helper method to create a human-readable table of the unfound methods and each method in the
+   * Helper method to create a human-readable table of the unfound members and each member in the
    * same class that was considered.
    *
-   * @param unfoundMethods the unfound methods and the methods that were considered
+   * @param unfoundMembers the unfound members and the members that were considered
+   * @param isMethod true if methods, false if fields
    * @return a human-readable string representation
    */
-  private static String unfoundMethodsTable(Map<String, Set<String>> unfoundMethods) {
+  private static String unfoundMembersTable(
+      Map<String, Set<String>> unfoundMembers, boolean isMethod) {
     StringBuilder sb = new StringBuilder();
-    for (String unfoundMethod : unfoundMethods.keySet()) {
+    for (String unfoundMember : unfoundMembers.keySet()) {
       sb.append("* ")
-          .append(unfoundMethod)
-          .append("\n  Considered these methods from the same class:\n");
-      for (String consideredMethod : unfoundMethods.get(unfoundMethod)) {
-        sb.append("    * ").append(consideredMethod).append("\n");
+          .append(unfoundMember)
+          .append("\n  Considered these ")
+          .append(isMethod ? "methods" : "fields")
+          .append(" from the same class:\n");
+      for (String consideredMember : unfoundMembers.get(unfoundMember)) {
+        sb.append("    * ").append(consideredMember).append("\n");
       }
     }
     return sb.toString();

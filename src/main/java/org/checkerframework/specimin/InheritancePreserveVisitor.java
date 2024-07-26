@@ -69,7 +69,7 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
           for (Type bound : tp.getTypeBound()) {
             String boundDesc = bound.resolve().describe();
             if (visitedBounds.add(boundDesc)) {
-              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+              TargetMemberFinderVisitor.updateUsedClassWithQualifiedClassName(
                   boundDesc, addedClasses, new HashMap<>());
             }
           }
@@ -82,11 +82,11 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
           // especially if the superclass is nested within the current class file, resulting in
           // infinite file visits. The TargetMethodFinderVisitor already addresses the updating job
           // in such cases. (Refer to the SuperClass test for an example.)
-          TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+          TargetMemberFinderVisitor.updateUsedClassWithQualifiedClassName(
               extendedType.resolve().describe(), addedClasses, new HashMap<>());
           if (extendedType.getTypeArguments().isPresent()) {
             for (Type typeArgument : extendedType.getTypeArguments().get()) {
-              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+              TargetMemberFinderVisitor.updateUsedClassWithQualifiedClassName(
                   typeArgument.resolve().describe(), addedClasses, new HashMap<>());
             }
           }
@@ -105,11 +105,11 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
             // in practice. TODO: fix this up
             continue;
           }
-          TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+          TargetMemberFinderVisitor.updateUsedClassWithQualifiedClassName(
               interfacename, addedClasses, new HashMap<>());
           if (implementedType.getTypeArguments().isPresent()) {
             for (Type typeAgrument : implementedType.getTypeArguments().get()) {
-              TargetMethodFinderVisitor.updateUsedClassWithQualifiedClassName(
+              TargetMemberFinderVisitor.updateUsedClassWithQualifiedClassName(
                   typeAgrument.resolve().describe(), addedClasses, new HashMap<>());
             }
           }
