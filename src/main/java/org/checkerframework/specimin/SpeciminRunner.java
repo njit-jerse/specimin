@@ -502,10 +502,20 @@ public class SpeciminRunner {
 
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();
+    Set<String> targetFilesAbsolutePaths = new HashSet<>();
+
+    for (String target : targetFiles) {
+      File targetFile = new File(target);
+      // Convert to absolute path for comparison
+      targetFilesAbsolutePaths.add(targetFile.getAbsolutePath());
+    }
 
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
-      // ignore classes from the Java package.
-      if (target.getKey().startsWith("java/")) {
+      // ignore classes from the Java package, unless we are targeting a JDK file.
+      // However, all related java/ files should not be included (as in used, but not targeted)
+      String absolutePath = new File(target.getKey()).getAbsolutePath();
+      if (!targetFilesAbsolutePaths.contains(absolutePath)
+          && (target.getKey().startsWith("java/") || target.getKey().startsWith("java\\"))) {
         continue;
       }
       // If a compilation output's entire body has been removed and the related class is not used by

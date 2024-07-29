@@ -20,7 +20,7 @@
   "jdk-8319461": "PASS",
   "jdk-8288590": "PASS",
   "na-89": "FAIL",
-  "na-97": "FAIL",
+  "na-97": "PASS",
   "na-102": "PASS",
   "na-103": "PASS",
   "na-176": "FAIL",
