@@ -209,9 +209,11 @@ public final class JavaLangUtils {
     knownFinalJdkTypes.add("StringBuilder");
     knownFinalJdkTypes.add("System");
     knownFinalJdkTypes.add("Void");
+    Set<String> withJavaLang = new HashSet<>(knownFinalJdkTypes.size());
     for (String s : knownFinalJdkTypes) {
-      knownFinalJdkTypes.add("java.lang." + s);
+      withJavaLang.add("java.lang." + s);
     }
+    knownFinalJdkTypes.addAll(withJavaLang);
   }
 
   /** The integral primitives. */
