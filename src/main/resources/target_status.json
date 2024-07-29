@@ -18,5 +18,16 @@
   "cf-6388": "PASS",
   "cf-3025": "PASS",
   "jdk-8319461": "PASS",
-  "jdk-8288590": "PASS"
+  "jdk-8288590": "PASS",
+  "na-89": "PASS",
+  "na-97": "PASS",
+  "na-102": "PASS",
+  "na-103": "PASS",
+  "na-176": "PASS",
+  "na-323": "PASS",
+  "na-347": "PASS",
+  "na-389": "PASS",
+  "na-705": "PASS",
+  "na-791a": "PASS",
+  "na-791b": "PASS"
 }
