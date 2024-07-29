@@ -3565,12 +3565,51 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             new ModifierVisitor<Void>() {
               @Override
               public Visitable visit(ClassOrInterfaceType type, Void p) {
-                if (classAndPackageMap.containsKey(type.asString())) {
-                  return new ClassOrInterfaceType(
-                      classAndPackageMap.get(type.asString()) + "." + type.asString());
-                } else {
+                StringBuilder fullyQualifiedName = new StringBuilder();
+                if (classAndPackageMap.containsKey(JavaParserUtil.erase(type.asString()))) {
+                  fullyQualifiedName.append(classAndPackageMap.get(type.asString()));
+                  fullyQualifiedName.append(".");
+                } else if (!type.getTypeArguments().isPresent()) {
+                  // This type is in the same package and doesn't contain any type parameters
                   return super.visit(type, p);
                 }
+
+                NodeList<Type> typeArguments = type.getTypeArguments().orElse(null);
+
+                if (typeArguments != null) {
+                  fullyQualifiedName.append(
+                      type.asString().substring(0, type.asString().indexOf('<') + 1));
+
+                  for (int i = 0; i < typeArguments.size(); i++) {
+                    Type typeArgument = typeArguments.get(i);
+                    // Erase type parameters from class name to use in classAndPackageMap
+                    String erased = JavaParserUtil.erase(typeArgument.asString());
+                    if (classAndPackageMap.containsKey(erased)) {
+                      fullyQualifiedName
+                          .append(classAndPackageMap.get(erased))
+                          .append(".")
+                          .append(typeArgument.asString());
+                    } else if (JavaLangUtils.isJavaLangName(erased)) {
+                      // Keep java.lang type arguments as is (Integer, String, etc.)
+                      fullyQualifiedName.append(typeArgument.asString());
+                    } else {
+                      // If it's not imported, it's probably in the same package
+                      fullyQualifiedName
+                          .append(currentPackage)
+                          .append(".")
+                          .append(typeArgument.toString());
+                    }
+
+                    if (i < typeArguments.size() - 1) {
+                      fullyQualifiedName.append(", ");
+                    }
+                  }
+                  fullyQualifiedName.append(">");
+                } else {
+                  fullyQualifiedName.append(type.asString());
+                }
+
+                return StaticJavaParser.parseClassOrInterfaceType(fullyQualifiedName.toString());
               }
             },
             null);
