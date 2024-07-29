@@ -91,6 +91,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.modularity.ModularityModel;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
@@ -234,17 +235,20 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
    * @param targetFieldsSignature the list of signatures of target fields as specified by the user.
+   * @param model the modularity model selected by the user
    */
   public UnsolvedSymbolVisitor(
       String rootDirectory,
       Map<String, Path> existingClassesToFilePath,
       Set<String> targetMethodsSignatures,
-      Set<String> targetFieldsSignature) {
+      Set<String> targetFieldsSignature,
+      ModularityModel model) {
     super(
         targetMethodsSignatures,
         targetFieldsSignature,
         new HashSet<>(),
         new HashSet<>(),
+        model,
         existingClassesToFilePath);
     this.rootDirectory = rootDirectory;
     this.gotException = true;

@@ -246,6 +246,16 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
+      if (modularityModel.preserveAllFieldsIfTargetIsConstructor()) {
+        // This cast is safe, because a constructor must be contained in a class declaration.
+        ClassOrInterfaceDeclaration thisClass =
+            (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(method);
+        for (FieldDeclaration field : thisClass.getFields()) {
+          for (VariableDeclarator variable : field.getVariables()) {
+            usedMembers.add(currentClassQualifiedName + "#" + variable.getNameAsString());
+          }
+        }
+      }
     } else {
       updateUnfoundMethods(methodName);
     }

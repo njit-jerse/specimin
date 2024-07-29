@@ -270,7 +270,8 @@ public class SpeciminRunner {
             root,
             existingClassesToFilePath,
             new HashSet<>(targetMethodNames),
-            new HashSet<>(targetFieldNames));
+            new HashSet<>(targetFieldNames),
+            modularityModel);
     addMissingClass.setClassesFromJar(jarPaths);
 
     Map<String, String> typesToChange = new HashMap<>();
