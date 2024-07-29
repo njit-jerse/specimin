@@ -14,6 +14,7 @@ public class ImportAnnoTest {
         "importanno",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar()"},
+        "cf",
         new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
   }
 }
