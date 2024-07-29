@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.specimin.modularity.ModularityModel;
 
 /**
  * This visitor contains shared logic and state for the Specimin's various XVisitor classes. It
@@ -30,6 +31,9 @@ import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
  * additional state tracking in the future.
  */
 public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
+
+  /** The modularity model currently in use. */
+  protected final ModularityModel modularityModel;
 
   /**
    * Set containing the signatures of target methods. The Strings in the set are the fully-qualified
@@ -105,6 +109,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
       Set<String> targetFields,
       Set<String> usedMembers,
       Set<String> usedTypeElements,
+      ModularityModel model,
       Map<String, Path> existingClassesToFilePath) {
     this.targetMethods = new HashSet<>();
     for (String methodSignature : targetMethods) {
@@ -116,6 +121,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
     this.usedTypeElements = usedTypeElements;
     this.existingClassesToFilePath = existingClassesToFilePath;
     this.fieldsAssignedByTargetCtors = new HashSet<>();
+    this.modularityModel = model;
   }
 
   /**
@@ -134,6 +140,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
     this.className = previous.className;
     this.currentClassQualifiedName = previous.currentClassQualifiedName;
     this.fieldsAssignedByTargetCtors = previous.fieldsAssignedByTargetCtors;
+    this.modularityModel = previous.modularityModel;
   }
 
   /**
