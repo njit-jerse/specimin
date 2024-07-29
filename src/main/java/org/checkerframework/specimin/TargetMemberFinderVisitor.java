@@ -497,7 +497,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
               ResolvedType scopeType = scope.calculateResolvedType();
               resolvedYetStuckMethodCall.add(scopeType.describe() + "." + call.getNameAsString());
               usedTypeElements.add(scopeType.describe());
-            } catch (UnsolvedSymbolException e1) {
+            } catch (Exception e1) {
               // There are two fallback cases: the scope is an FQN (e.g., in
               // a call to a fully-qualified static method) or the scope is a simple name.
               // In the simple name case, append the current package to the front, since
