@@ -325,7 +325,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
     String signature;
-    System.out.println("visiting: " + methodDecl);
     try {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
@@ -349,11 +348,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return methodDecl;
     }
 
-    if (signature.contains("thenReturn")) {
-      System.out.println("is a used member? " + usedTypeElements.contains(signature));
-      System.out.println(
-          "is a resolved yet stuck method: " + isAResolvedYetStuckMethod(methodDecl));
-    }
     if (usedMembers.contains(signature) || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
@@ -370,7 +364,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     // if insideTargetMethod is true, this current method declaration belongs to an anonnymous
     // class inside the target method.
     if (!insideTargetMember) {
-      System.out.println("removed for 2");
       methodDecl.remove();
     }
     return methodDecl;
@@ -500,13 +493,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
           return true;
         }
       } else if (methodQualifiedName.startsWith(stuckMethodCall)) {
-        // Return true iff the method's signature only contains resolvable types.
-        try {
-          // check if all the parts are solvable?
-          return true;
-        } catch (UnsolvedSymbolException e) {
-          return false;
-        }
+        return true;
       }
     }
     return false;
