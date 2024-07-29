@@ -114,7 +114,7 @@ class JavaTypeCorrect {
     Set<String> toRemove = new HashSet<>(0);
     for (Map.Entry<String, String> entry : extendedTypes.entrySet()) {
       // String is final
-      if (entry.getValue().equals("java.lang.String") || entry.getValue().equals("String")) {
+      if (JavaLangUtils.isFinalJdkClass(entry.getValue())) {
         toRemove.add(entry.getKey());
       }
       // Don't let errors related sythetic unconstrained types added by Specimin propagate.

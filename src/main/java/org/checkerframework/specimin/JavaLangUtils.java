@@ -296,4 +296,13 @@ public final class JavaLangUtils {
         || qualifiedName.startsWith("com.sun.")
         || qualifiedName.startsWith("jdk.");
   }
+
+  /**
+   * Could the given name be a final class from the JDK, like String?
+   *
+   * @param name a simple or fully-qualified name
+   * @return true if the input might be a final JDK class
+   */
+    public static boolean isFinalJdkClass(String name) {
+    }
 }
