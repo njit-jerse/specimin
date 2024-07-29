@@ -324,10 +324,11 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
+    String signature;
     try {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
-      methodDecl.resolve().getQualifiedSignature();
+      signature = methodDecl.resolve().getQualifiedSignature();
     } catch (UnsolvedSymbolException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
@@ -335,8 +336,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return methodDecl;
     }
 
-    ResolvedMethodDeclaration resolved = methodDecl.resolve();
-    String signature = resolved.getQualifiedSignature();
     if (targetMethods.contains(signature)) {
       return super.visit(methodDecl, p);
     }
@@ -349,6 +348,11 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return methodDecl;
     }
 
+    if (signature.contains("thenReturn")) {
+      System.out.println("is a used member? " + usedTypeElements.contains(signature));
+      System.out.println(
+          "is a resolved yet stuck method: " + isAResolvedYetStuckMethod(methodDecl));
+    }
     if (usedMembers.contains(signature) || isAResolvedYetStuckMethod(methodDecl)) {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
