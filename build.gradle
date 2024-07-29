@@ -88,7 +88,7 @@ tasks.compileTestJava {
 
 checkerFramework {
     // uncomment for testing
-    skipCheckerFramework = true
+    // skipCheckerFramework = true
     checkers = [
             'org.checkerframework.checker.nullness.NullnessChecker',
             'org.checkerframework.checker.resourceleak.ResourceLeakChecker',
