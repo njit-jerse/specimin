@@ -1964,6 +1964,10 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         listOfExceptions.add(exceptionTypeAsString);
       }
     }
+    if (listOfParameters.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+      // return early: this method is an artifact of JavaTypeCorrect and won't be needed.
+      return;
+    }
     String returnType = "";
     if (desiredReturnType.equals("")) {
       returnType = returnNameForMethod(methodName);
@@ -3506,7 +3510,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       String correctTypeName) {
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
-    correctTypeName = lookupFQNs(correctTypeName);
+    if (!correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+      correctTypeName = lookupFQNs(correctTypeName);
+    }
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();

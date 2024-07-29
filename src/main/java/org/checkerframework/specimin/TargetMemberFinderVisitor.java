@@ -473,6 +473,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
         resolvedYetStuckMethodCall.add(call.getNameAsString() + "@" + call.getArguments().size());
         return super.visit(call, p);
       } catch (RuntimeException e) {
+        System.out.println("e: " + e);
         // Handle cases where a method call is resolved but its signature confuses JavaParser,
         // leading to a RuntimeException.
         // Note: this preservation is safe because we are not having an UnsolvedSymbolException.

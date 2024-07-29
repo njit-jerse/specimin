@@ -62,7 +62,7 @@ class JavaTypeCorrect {
   private Map<String, String> classAndUnresolvedInterface = new HashMap<>();
 
   /** The name used for a synthetic, unconstrained type variable. */
-  private final String SYNTHETIC_UNCONSTRAINED_TYPE = "SyntheticUnconstrainedType";
+  public static final String SYNTHETIC_UNCONSTRAINED_TYPE = "SyntheticUnconstrainedType";
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
@@ -476,7 +476,7 @@ class JavaTypeCorrect {
           // continue with our main fix strategy
           return;
         } else {
-          // we require a GLB: that is, this synthetic return type needs to _used_ in
+          // we require a GLB: that is, this synthetic return type needs to be _used_ in
           // two different contexts: one where correctType is required, and another
           // where otherCorrectType is required. Instead of worrying about making a correct GLB,
           // instead just use an unconstrained type variable.

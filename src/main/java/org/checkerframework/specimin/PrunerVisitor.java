@@ -494,7 +494,13 @@ public class PrunerVisitor extends SpeciminStateVisitor {
           return true;
         }
       } else if (methodQualifiedName.startsWith(stuckMethodCall)) {
-        return true;
+        // Return true iff the method's signature only contains resolvable types.
+        try {
+          // check if all the parts are solvable?
+          return true;
+        } catch (UnsolvedSymbolException e) {
+          return false;
+        }
       }
     }
     return false;
