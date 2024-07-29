@@ -253,6 +253,8 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
         for (FieldDeclaration field : thisClass.getFields()) {
           for (VariableDeclarator variable : field.getVariables()) {
             usedMembers.add(currentClassQualifiedName + "#" + variable.getNameAsString());
+            ResolvedType fieldType = variable.resolve().getType();
+            updateUsedClassBasedOnType(fieldType);
           }
         }
       }

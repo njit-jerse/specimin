@@ -997,6 +997,28 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       insidePotentialUsedMember = true;
     }
     addTypeVariableScope(node.getTypeParameters());
+    if (targetMethods.contains(getSignature(node))) {
+      // If this constructor is a target method, and the modularity model
+      // permits reasoning about field assignments in constructors, then
+      // we need to preserve the types of all of the fields declared in the
+      // class.
+      if (modularityModel.preserveAllFieldsIfTargetIsConstructor()) {
+        // This cast is safe, because a constructor must be contained in a class declaration.
+        ClassOrInterfaceDeclaration thisClass =
+            (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(node);
+        for (FieldDeclaration field : thisClass.getFields()) {
+          for (VariableDeclarator variable : field.getVariables()) {
+            if (variable.getType().isClassOrInterfaceType()) {
+              solveSymbolsForClassOrInterfaceType(
+                  variable.getType().asClassOrInterfaceType(), false);
+            } else {
+              throw new RuntimeException(
+                  "fields can also have this type: " + variable.getType().getClass());
+            }
+          }
+        }
+      }
+    }
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
     insidePotentialUsedMember = oldInsidePotentialUsedMember;
