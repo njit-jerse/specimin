@@ -3604,6 +3604,17 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // This one may or may not be present. If it is not, exit early and do nothing.
     UnsolvedClassOrInterface correctType = getMissingClassWithQualifiedName(correctTypeName);
     if (correctType == null) {
+      if (correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+        // Special case: if the new type name is the synthetic unconstrained type name
+        // placeholder, there is one more thing to do: replace any and all parameter types
+        // in synthetic classes that use this (soon to be deleted) synthetic type name
+        // with java.lang.Object.
+        for (UnsolvedClassOrInterface unsolvedClass : missingClass) {
+          for (UnsolvedMethod m : unsolvedClass.getMethods()) {
+            m.replaceParamWithObject(incorrectTypeName);
+          }
+        }
+      }
       return;
     }
 

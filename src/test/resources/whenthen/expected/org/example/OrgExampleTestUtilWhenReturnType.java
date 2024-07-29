@@ -6,7 +6,7 @@ public class OrgExampleTestUtilWhenReturnType {
         throw new Error();
     }
 
-    public ThenReturnType then(int parameter0) {
+    public ThenReturnType then(java.lang.Object parameter0) {
         throw new Error();
     }
 }
