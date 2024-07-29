@@ -16,4 +16,8 @@ public class Simple {
     public Bar<Integer> baz() {
         return Bar.getJavaLang();
     }
+
+    public Bar<com.foo.InOtherPackage2> alreadyQualified() {
+        return Bar.getOtherPackage2();
+    }
 }

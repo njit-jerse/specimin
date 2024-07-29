@@ -3627,6 +3627,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         fullyQualifiedName.append("? extends ");
         lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getExtendedType().get());
       }
+    } else if (isAClassPath(erased)) {
+      // If it's already a fully qualified name, don't do anything
+      fullyQualifiedName.append(typeArgument.asString());
     } else {
       // If it's not imported, it's probably in the same package
       fullyQualifiedName.append(currentPackage).append(".").append(typeArgument.toString());

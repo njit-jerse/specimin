@@ -15,7 +15,10 @@ public class MethodReturnGenericTest {
         "methodreturngeneric",
         new String[] {"com/example/Simple.java"},
         new String[] {
-          "com.example.Simple#foo()", "com.example.Simple#bar()", "com.example.Simple#baz()"
+          "com.example.Simple#foo()",
+          "com.example.Simple#bar()",
+          "com.example.Simple#baz()",
+          "com.example.Simple#alreadyQualified()"
         });
   }
 }
