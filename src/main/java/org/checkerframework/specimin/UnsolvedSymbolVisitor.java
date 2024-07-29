@@ -3582,23 +3582,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
                   for (int i = 0; i < typeArguments.size(); i++) {
                     Type typeArgument = typeArguments.get(i);
-                    // Erase type parameters from class name to use in classAndPackageMap
-                    String erased = JavaParserUtil.erase(typeArgument.asString());
-                    if (classAndPackageMap.containsKey(erased)) {
-                      fullyQualifiedName
-                          .append(classAndPackageMap.get(erased))
-                          .append(".")
-                          .append(typeArgument.asString());
-                    } else if (JavaLangUtils.isJavaLangName(erased)) {
-                      // Keep java.lang type arguments as is (Integer, String, etc.)
-                      fullyQualifiedName.append(typeArgument.asString());
-                    } else {
-                      // If it's not imported, it's probably in the same package
-                      fullyQualifiedName
-                          .append(currentPackage)
-                          .append(".")
-                          .append(typeArgument.toString());
-                    }
+                    lookupTypeArgumentFQN(fullyQualifiedName, typeArgument);
 
                     if (i < typeArguments.size() - 1) {
                       fullyQualifiedName.append(", ");
@@ -3614,6 +3598,39 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             },
             null);
     return typeVarDecl + parsedJavac.toString();
+  }
+
+  /**
+   * Helper method for lookupFQNs which adds the fully qualified type argument to
+   * fullyQualifiedName.
+   *
+   * @param fullyQualifiedName the fully qualified name to build
+   * @param typeArgument the type argument to lookup
+   */
+  private void lookupTypeArgumentFQN(StringBuilder fullyQualifiedName, Type typeArgument) {
+    String erased = JavaParserUtil.erase(typeArgument.asString());
+    if (classAndPackageMap.containsKey(erased)) {
+      fullyQualifiedName
+          .append(classAndPackageMap.get(erased))
+          .append(".")
+          .append(typeArgument.asString());
+    } else if (JavaLangUtils.isJavaLangName(erased)) {
+      // Keep java.lang type arguments as is (Integer, String, etc.)
+      fullyQualifiedName.append(typeArgument.asString());
+    } else if (typeArgument.isWildcardType()) {
+      WildcardType asWildcardType = typeArgument.asWildcardType();
+
+      if (asWildcardType.getSuperType().isPresent()) {
+        fullyQualifiedName.append("? super ");
+        lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getSuperType().get());
+      } else if (asWildcardType.getExtendedType().isPresent()) {
+        fullyQualifiedName.append("? extends ");
+        lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getExtendedType().get());
+      }
+    } else {
+      // If it's not imported, it's probably in the same package
+      fullyQualifiedName.append(currentPackage).append(".").append(typeArgument.toString());
+    }
   }
 
   /**
