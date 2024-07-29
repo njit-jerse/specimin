@@ -113,7 +113,6 @@ class JavaTypeCorrect {
     // * don't add change types to "SyntheticUnconstrainedType"
     Set<String> toRemove = new HashSet<>(0);
     for (Map.Entry<String, String> entry : extendedTypes.entrySet()) {
-      // String is final
       if (JavaLangUtils.isFinalJdkClass(entry.getValue())) {
         toRemove.add(entry.getKey());
       }
