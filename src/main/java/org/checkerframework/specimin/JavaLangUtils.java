@@ -43,6 +43,12 @@ public final class JavaLangUtils {
   /** Internal set for the names of the primitive types. */
   private static final Set<String> primitives = new HashSet<>(8);
 
+  /**
+   * This is an (incomplete) list of classes that we know are final in the JDK. The idea is that
+   * Specimin should never try to extend a class in this list.
+   */
+  private static final Set<String> knownFinalJdkTypes = new HashSet<>();
+
   static {
     primitives.add("int");
     primitives.add("short");
@@ -178,6 +184,34 @@ public final class JavaLangUtils {
     javaLangClassesAndInterfaces.add("VirtualMachineError");
     javaLangClassesAndInterfaces.add("Void");
     javaLangClassesAndInterfaces.add("WrongThreadException");
+
+    // I made this list by going through the members of
+    // java.lang and checking which were final classes. We
+    // can do the same for other packages as needed.
+    knownFinalJdkTypes.add("String");
+    knownFinalJdkTypes.add("Class");
+    knownFinalJdkTypes.add("Integer");
+    knownFinalJdkTypes.add("Byte");
+    knownFinalJdkTypes.add("Short");
+    knownFinalJdkTypes.add("Long");
+    knownFinalJdkTypes.add("Double");
+    knownFinalJdkTypes.add("Float");
+    knownFinalJdkTypes.add("Character");
+    knownFinalJdkTypes.add("Character.UnicodeBlock");
+    knownFinalJdkTypes.add("Boolean");
+    knownFinalJdkTypes.add("Compiler");
+    knownFinalJdkTypes.add("Math");
+    knownFinalJdkTypes.add("ProcessBuilder");
+    knownFinalJdkTypes.add("RuntimePermission");
+    knownFinalJdkTypes.add("StackTraceElement");
+    knownFinalJdkTypes.add("StrictMath");
+    knownFinalJdkTypes.add("StringBuffer");
+    knownFinalJdkTypes.add("StringBuilder");
+    knownFinalJdkTypes.add("System");
+    knownFinalJdkTypes.add("Void");
+    for (String s : knownFinalJdkTypes) {
+      knownFinalJdkTypes.add("java.lang." + s);
+    }
   }
 
   /** The integral primitives. */
@@ -298,47 +332,12 @@ public final class JavaLangUtils {
   }
 
   /**
-   * This is an (incomplete) list of classes that we know are final in the JDK.
-   * The idea is that Specimin should never try to extend a class in this list.
-   */
-  private static final Set<String> knownFinalJdkTypes =
-          new HashSet<>() {{
-            // I made this list by going through the members of
-            // java.lang and checking which were final classes. We
-            // can do the same for other packages as needed.
-            add("String");
-            add("Class");
-            add("Integer");
-            add("Byte");
-            add("Short");
-            add("Long");
-            add("Double");
-            add("Float");
-            add("Character");
-            add("Character.UnicodeBlock");
-            add("Boolean");
-            add("Compiler");
-            add("Math");
-            add("ProcessBuilder");
-            add("RuntimePermission");
-            add("StackTraceElement");
-            add("StrictMath");
-            add("StringBuffer");
-            add("StringBuilder");
-            add("System");
-            add("Void");
-            for (String s : this) {
-              add("java.lang." + s);
-            }
-          }};
-
-  /**
    * Could the given name be a final class from the JDK, like String?
    *
    * @param name a simple or fully-qualified name
    * @return true if the input might be a final JDK class
    */
-    public static boolean isFinalJdkClass(String name) {
-      return knownFinalJdkTypes.contains(name);
-    }
+  public static boolean isFinalJdkClass(String name) {
+    return knownFinalJdkTypes.contains(name);
+  }
 }
