@@ -37,6 +37,7 @@ import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.modularity.ModularityModel;
 import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
@@ -68,6 +69,12 @@ public class SpeciminRunner {
     // class.fully.qualified.Name#fieldName
     OptionSpec<String> targetFieldsOptions = optionParser.accepts("targetField").withRequiredArg();
 
+    // This option is to specify the modularity model. By default, the modularity model is
+    // the model for the javac type system, which is shared by the Checker Framework.
+    // Accepts the arguments: "javac", "cf", "nullaway"
+    OptionSpec<String> modularityModelOption =
+        optionParser.accepts("modularityModel").withOptionalArg().defaultsTo("cf");
+
     // The directory in which to output the results.
     OptionSpec<String> outputDirectoryOption =
         optionParser.accepts("outputDirectory").withRequiredArg();
@@ -86,7 +93,8 @@ public class SpeciminRunner {
         jarFiles,
         options.valuesOf(targetMethodsOption),
         options.valuesOf(targetFieldsOptions),
-        options.valueOf(outputDirectoryOption));
+        options.valueOf(outputDirectoryOption),
+        options.valueOf(modularityModelOption));
   }
 
   /**
@@ -110,6 +118,33 @@ public class SpeciminRunner {
       List<String> targetFieldNames,
       String outputDirectory)
       throws IOException {
+    performMinimization(
+        root, targetFiles, jarPaths, targetMethodNames, targetFieldNames, outputDirectory, "cf");
+  }
+
+  /**
+   * This method acts as an API for users who want to incorporate Specimin as a library into their
+   * projects. It offers an easy way to do the minimization job without needing to directly call
+   * Specimin's main method.
+   *
+   * @param root The root directory of the input files.
+   * @param targetFiles A list of files that contain the target methods.
+   * @param jarPaths Paths to relevant JAR files.
+   * @param targetMethodNames A set of target method names to be preserved.
+   * @param targetFieldNames A set of target field names to be preserved.
+   * @param outputDirectory The directory for the output.
+   * @param modularityModelCode the modularity model to use
+   * @throws IOException if there is an exception
+   */
+  public static void performMinimization(
+      String root,
+      List<String> targetFiles,
+      List<String> jarPaths,
+      List<String> targetMethodNames,
+      List<String> targetFieldNames,
+      String outputDirectory,
+      String modularityModelCode)
+      throws IOException {
     // The set of path of files that have been created by Specimin. We must be careful to delete all
     // those files in the end, because otherwise they can pollute the input directory. To do that,
     // we need to register a shutdown hook with the JVM.
@@ -123,6 +158,8 @@ public class SpeciminRunner {
               }
             });
 
+    ModularityModel model = ModularityModel.createModularityModel(modularityModelCode);
+
     performMinimizationImpl(
         root,
         targetFiles,
@@ -130,6 +167,7 @@ public class SpeciminRunner {
         targetMethodNames,
         targetFieldNames,
         outputDirectory,
+        model,
         createdClass);
   }
 
@@ -144,6 +182,7 @@ public class SpeciminRunner {
    * @param targetMethodNames A set of target method names to be preserved.
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
+   * @param modularityModel the modularity model
    * @throws IOException if there is an exception
    */
   private static void performMinimizationImpl(
@@ -153,6 +192,7 @@ public class SpeciminRunner {
       List<String> targetMethodNames,
       List<String> targetFieldNames,
       String outputDirectory,
+      ModularityModel modularityModel,
       Set<Path> createdClass)
       throws IOException {
     // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a

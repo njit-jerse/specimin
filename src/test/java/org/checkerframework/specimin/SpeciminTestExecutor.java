@@ -40,11 +40,16 @@ public class SpeciminTestExecutor {
    * @param targetMembers the targeted methods or fields, each in the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
    *     class.fully.qualified.Name#fieldName for field.
+   * @param modularityModel the model to use
    * @param jarPaths the path of jar files for Specimin to solve symbols
    * @throws IOException if some operation fails
    */
   public static void runTest(
-      String testName, String[] targetFiles, String[] targetMembers, String[] jarPaths)
+      String testName,
+      String[] targetFiles,
+      String[] targetMembers,
+      String modularityModel,
+      String[] jarPaths)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -79,6 +84,8 @@ public class SpeciminTestExecutor {
         speciminArgs.add(targetMember);
       }
     }
+    speciminArgs.add("--modularityModel");
+    speciminArgs.add(modularityModel);
     for (String jarPath : jarPaths) {
       speciminArgs.add("--jarPath");
       speciminArgs.add(jarPath);
@@ -145,7 +152,8 @@ public class SpeciminTestExecutor {
   }
 
   /**
-   * This method call the method runTest without an array of jar paths.
+   * This method call the method runTest without an array of jar paths. This runs using the CF
+   * modularity model.
    *
    * @param testName the name of the test folder
    * @param targetFiles the targeted files
@@ -156,7 +164,23 @@ public class SpeciminTestExecutor {
    */
   public static void runTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, new String[] {});
+    runTest(testName, targetFiles, targetMembers, "cf", new String[] {});
+  }
+
+  /**
+   * This method call the method runTest without an array of jar paths. Runs with the NullAway
+   * modularity model.
+   *
+   * @param testName the name of the test folder
+   * @param targetFiles the targeted files
+   * @param targetMembers the targeted methods or fields, each in the format
+   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
+   *     class.fully.qualified.Name#fieldName for field.
+   * @throws IOException if some operation fails
+   */
+  public static void runNullAwayTestWithoutJarPaths(
+      String testName, String[] targetFiles, String[] targetMembers) throws IOException {
+    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {});
   }
 
   /** Code borrowed from https://www.baeldung.com/run-shell-command-in-java. */

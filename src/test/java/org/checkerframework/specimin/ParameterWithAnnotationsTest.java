@@ -14,6 +14,7 @@ public class ParameterWithAnnotationsTest {
         "parameterwithannotations",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar(byte[], UnsolvedType)"},
+        "cf",
         new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
   }
 }
