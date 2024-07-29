@@ -324,11 +324,8 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
-<<<<<<< HEAD
     String signature;
-=======
     System.out.println("visiting: " + methodDecl);
->>>>>>> c01027ea (test that doesn't fail correctly)
     try {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
