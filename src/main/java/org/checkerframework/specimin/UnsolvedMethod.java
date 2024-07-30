@@ -164,6 +164,24 @@ public class UnsolvedMethod {
     return Collections.unmodifiableList(parameterList);
   }
 
+  /**
+   * Attempts to replace any parameters with the given name with java.lang.Object. If a parameter is
+   * successfully replaced, returns true. Otherwise, returns false.
+   *
+   * @param incorrectTypeName the type name to replace
+   * @return true if the name was replaced, false if not
+   */
+  public boolean replaceParamWithObject(String incorrectTypeName) {
+    boolean result = false;
+    for (int i = 0; i < parameterList.size(); i++) {
+      if (parameterList.get(i).equals(incorrectTypeName)) {
+        parameterList.set(i, "java.lang.Object");
+        result = true;
+      }
+    }
+    return result;
+  }
+
   /** Set isStatic to true */
   public void setStatic() {
     isStatic = true;

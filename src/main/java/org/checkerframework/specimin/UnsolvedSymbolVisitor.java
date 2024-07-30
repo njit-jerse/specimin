@@ -1990,12 +1990,17 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         listOfExceptions.add(exceptionTypeAsString);
       }
     }
+    if (listOfParameters.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+      // return early: this method is an artifact of JavaTypeCorrect and won't be needed.
+      return;
+    }
     String returnType = "";
     if (desiredReturnType.equals("")) {
       returnType = returnNameForMethod(methodName);
     } else {
       returnType = desiredReturnType;
     }
+
     UnsolvedMethod thisMethod =
         new UnsolvedMethod(
             methodName,
@@ -3532,7 +3537,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       String correctTypeName) {
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
-    correctTypeName = lookupFQNs(correctTypeName);
+    if (!correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+      correctTypeName = lookupFQNs(correctTypeName);
+    }
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
@@ -3616,6 +3623,17 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // This one may or may not be present. If it is not, exit early and do nothing.
     UnsolvedClassOrInterface correctType = getMissingClassWithQualifiedName(correctTypeName);
     if (correctType == null) {
+      if (correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+        // Special case: if the new type name is the synthetic unconstrained type name
+        // placeholder, there is one more thing to do: replace any and all parameter types
+        // in synthetic classes that use this (soon to be deleted) synthetic type name
+        // with java.lang.Object.
+        for (UnsolvedClassOrInterface unsolvedClass : missingClass) {
+          for (UnsolvedMethod m : unsolvedClass.getMethods()) {
+            m.replaceParamWithObject(incorrectTypeName);
+          }
+        }
+      }
       return;
     }
 

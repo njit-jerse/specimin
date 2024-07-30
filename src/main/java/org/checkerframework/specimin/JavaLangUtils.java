@@ -43,6 +43,12 @@ public final class JavaLangUtils {
   /** Internal set for the names of the primitive types. */
   private static final Set<String> primitives = new HashSet<>(8);
 
+  /**
+   * This is an (incomplete) list of classes that we know are final in the JDK. The idea is that
+   * Specimin should never try to extend a class in this list.
+   */
+  private static final Set<String> knownFinalJdkTypes = new HashSet<>();
+
   static {
     primitives.add("int");
     primitives.add("short");
@@ -178,6 +184,36 @@ public final class JavaLangUtils {
     javaLangClassesAndInterfaces.add("VirtualMachineError");
     javaLangClassesAndInterfaces.add("Void");
     javaLangClassesAndInterfaces.add("WrongThreadException");
+
+    // I made this list by going through the members of
+    // java.lang and checking which were final classes. We
+    // can do the same for other packages as needed.
+    knownFinalJdkTypes.add("String");
+    knownFinalJdkTypes.add("Class");
+    knownFinalJdkTypes.add("Integer");
+    knownFinalJdkTypes.add("Byte");
+    knownFinalJdkTypes.add("Short");
+    knownFinalJdkTypes.add("Long");
+    knownFinalJdkTypes.add("Double");
+    knownFinalJdkTypes.add("Float");
+    knownFinalJdkTypes.add("Character");
+    knownFinalJdkTypes.add("Character.UnicodeBlock");
+    knownFinalJdkTypes.add("Boolean");
+    knownFinalJdkTypes.add("Compiler");
+    knownFinalJdkTypes.add("Math");
+    knownFinalJdkTypes.add("ProcessBuilder");
+    knownFinalJdkTypes.add("RuntimePermission");
+    knownFinalJdkTypes.add("StackTraceElement");
+    knownFinalJdkTypes.add("StrictMath");
+    knownFinalJdkTypes.add("StringBuffer");
+    knownFinalJdkTypes.add("StringBuilder");
+    knownFinalJdkTypes.add("System");
+    knownFinalJdkTypes.add("Void");
+    Set<String> withJavaLang = new HashSet<>(knownFinalJdkTypes.size());
+    for (String s : knownFinalJdkTypes) {
+      withJavaLang.add("java.lang." + s);
+    }
+    knownFinalJdkTypes.addAll(withJavaLang);
   }
 
   /** The integral primitives. */
@@ -295,5 +331,15 @@ public final class JavaLangUtils {
         || qualifiedName.startsWith("javax.")
         || qualifiedName.startsWith("com.sun.")
         || qualifiedName.startsWith("jdk.");
+  }
+
+  /**
+   * Could the given name be a final class from the JDK, like String?
+   *
+   * @param name a simple or fully-qualified name
+   * @return true if the input might be a final JDK class
+   */
+  public static boolean isFinalJdkClass(String name) {
+    return knownFinalJdkTypes.contains(name);
   }
 }
