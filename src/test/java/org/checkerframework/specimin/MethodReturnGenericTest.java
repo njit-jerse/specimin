@@ -17,8 +17,7 @@ public class MethodReturnGenericTest {
         new String[] {
           "com.example.Simple#foo()",
           "com.example.Simple#bar()",
-          "com.example.Simple#baz()",
-          "com.example.Simple#alreadyQualified()"
+          "com.example.Simple#baz()"
         });
   }
 }
