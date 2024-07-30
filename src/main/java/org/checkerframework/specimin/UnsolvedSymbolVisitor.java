@@ -3593,16 +3593,81 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             new ModifierVisitor<Void>() {
               @Override
               public Visitable visit(ClassOrInterfaceType type, Void p) {
-                if (classAndPackageMap.containsKey(type.asString())) {
-                  return new ClassOrInterfaceType(
-                      classAndPackageMap.get(type.asString()) + "." + type.asString());
-                } else {
+                StringBuilder fullyQualifiedName = new StringBuilder();
+                if (classAndPackageMap.containsKey(JavaParserUtil.erase(type.asString()))) {
+                  fullyQualifiedName.append(classAndPackageMap.get(type.asString()));
+                  fullyQualifiedName.append(".");
+                } else if (!type.getTypeArguments().isPresent()) {
+                  // This type is in the same package and doesn't contain any type parameters
                   return super.visit(type, p);
                 }
+
+                NodeList<Type> typeArguments = type.getTypeArguments().orElse(null);
+
+                if (typeArguments != null) {
+                  fullyQualifiedName.append(
+                      type.asString().substring(0, type.asString().indexOf('<') + 1));
+
+                  for (int i = 0; i < typeArguments.size(); i++) {
+                    Type typeArgument = typeArguments.get(i);
+                    lookupTypeArgumentFQN(fullyQualifiedName, typeArgument);
+
+                    if (i < typeArguments.size() - 1) {
+                      fullyQualifiedName.append(", ");
+                    }
+                  }
+                  fullyQualifiedName.append(">");
+                } else {
+                  fullyQualifiedName.append(type.asString());
+                }
+
+                return StaticJavaParser.parseClassOrInterfaceType(fullyQualifiedName.toString());
               }
             },
             null);
     return typeVarDecl + parsedJavac.toString();
+  }
+
+  /**
+   * Helper method for lookupFQNs which adds the fully qualified type argument to
+   * fullyQualifiedName.
+   *
+   * @param fullyQualifiedName the fully qualified name to build
+   * @param typeArgument the type argument to lookup
+   */
+  private void lookupTypeArgumentFQN(StringBuilder fullyQualifiedName, Type typeArgument) {
+    String erased = JavaParserUtil.erase(typeArgument.asString());
+    if (classAndPackageMap.containsKey(erased)) {
+      fullyQualifiedName
+          .append(classAndPackageMap.get(erased))
+          .append(".")
+          .append(typeArgument.asString());
+    } else if (JavaLangUtils.isJavaLangName(erased)) {
+      // Keep java.lang type arguments as is (Integer, String, etc.)
+      fullyQualifiedName.append(typeArgument.asString());
+    } else if (typeArgument.isWildcardType()) {
+      WildcardType asWildcardType = typeArgument.asWildcardType();
+
+      if (asWildcardType.getSuperType().isPresent()) {
+        fullyQualifiedName.append("? super ");
+        lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getSuperType().get());
+      } else if (asWildcardType.getExtendedType().isPresent()) {
+        fullyQualifiedName.append("? extends ");
+        lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getExtendedType().get());
+      }
+    } else if (isAClassPath(erased)) {
+      // If it's already a fully qualified name, don't do anything
+      fullyQualifiedName.append(typeArgument.asString());
+    } else {
+      // If it's not imported, it's probably in the same package
+      // TODO: handle already fully qualified generic type arguments. Right now JavaTypeCorrect
+      // only outputs the simple class name, so there is no way to get its fully qualified name
+      // here without ambiguity (i.e. org.example.Foo and com.example.Foo have different signatures)
+      // with the same simple class name
+      // Check MethodReturnFullyQualifiedGenericTest for more details; the current return type in
+      // Bar.java is com.example.InOtherPackage2 rather than com.foo.InOtherPackage2 (expected)
+      fullyQualifiedName.append(currentPackage).append(".").append(typeArgument.toString());
+    }
   }
 
   /**
