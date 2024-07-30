@@ -3665,6 +3665,10 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       fullyQualifiedName.append(typeArgument.asString());
     } else {
       // If it's not imported, it's probably in the same package
+      // TODO: handle already fully qualified generic type arguments. Right now JavaTypeCorrect
+      // only outputs the simple class name, so there is no way to get its fully qualified name
+      // here without ambiguity (i.e. org.example.Foo and com.example.Foo are different signatures)
+      // with the same simple class name
       fullyQualifiedName.append(currentPackage).append(".").append(typeArgument.toString());
     }
   }
