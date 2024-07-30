@@ -11,6 +11,7 @@ public class JarFileTest {
         "jarfile",
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#test()"},
+        "cf",
         new String[] {"src/test/resources/jarfile/input/Book.jar"});
   }
 }

@@ -61,6 +61,9 @@ class JavaTypeCorrect {
    */
   private Map<String, String> classAndUnresolvedInterface = new HashMap<>();
 
+  /** The name used for a synthetic, unconstrained type variable. */
+  public static final String SYNTHETIC_UNCONSTRAINED_TYPE = "SyntheticUnconstrainedType";
+
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to
    * rootDirectory, and rootDirectory is an absolute path
@@ -104,6 +107,23 @@ class JavaTypeCorrect {
    * @return the map described above.
    */
   public Map<String, String> getExtendedTypes() {
+    // Before returning, purge any entries that are obviously bad according to
+    // the following simple heuristic(s):
+    // * don't extend known-final classes from the JDK, like java.lang.String.
+    // * don't add change types to "SyntheticUnconstrainedType"
+    Set<String> toRemove = new HashSet<>(0);
+    for (Map.Entry<String, String> entry : extendedTypes.entrySet()) {
+      if (JavaLangUtils.isFinalJdkClass(entry.getValue())) {
+        toRemove.add(entry.getKey());
+      }
+      // Don't let errors related sythetic unconstrained types added by Specimin propagate.
+      if (entry.getValue().equals(SYNTHETIC_UNCONSTRAINED_TYPE)) {
+        toRemove.add(entry.getKey());
+      }
+    }
+    for (String s : toRemove) {
+      extendedTypes.remove(s);
+    }
     return extendedTypes;
   }
 
@@ -455,12 +475,13 @@ class JavaTypeCorrect {
           // continue with our main fix strategy
           return;
         } else {
-          // we require a GLB: that is, this synthetic return type needs to _used_ in
+          // we require a GLB: that is, this synthetic return type needs to be _used_ in
           // two different contexts: one where correctType is required, and another
           // where otherCorrectType is required. Instead of worrying about making a correct GLB,
           // instead just use an unconstrained type variable.
           typeToChange.put(
-              incorrectType, "<SyntheticUnconstrainedType> SyntheticUnconstrainedType");
+              incorrectType,
+              "<" + SYNTHETIC_UNCONSTRAINED_TYPE + "> " + SYNTHETIC_UNCONSTRAINED_TYPE);
           return;
         }
       }

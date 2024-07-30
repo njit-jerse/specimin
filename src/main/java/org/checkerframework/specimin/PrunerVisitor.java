@@ -324,10 +324,11 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
+    String signature;
     try {
       // resolved() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
-      methodDecl.resolve().getQualifiedSignature();
+      signature = methodDecl.resolve().getQualifiedSignature();
     } catch (UnsolvedSymbolException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
@@ -335,8 +336,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return methodDecl;
     }
 
-    ResolvedMethodDeclaration resolved = methodDecl.resolve();
-    String signature = resolved.getQualifiedSignature();
     if (targetMethods.contains(signature)) {
       return super.visit(methodDecl, p);
     }

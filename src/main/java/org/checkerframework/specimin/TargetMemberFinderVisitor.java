@@ -246,6 +246,18 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
           resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
           usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
+      if (modularityModel.preserveAllFieldsIfTargetIsConstructor()) {
+        // This cast is safe, because a constructor must be contained in a class declaration.
+        ClassOrInterfaceDeclaration thisClass =
+            (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(method);
+        for (FieldDeclaration field : thisClass.getFields()) {
+          for (VariableDeclarator variable : field.getVariables()) {
+            usedMembers.add(currentClassQualifiedName + "#" + variable.getNameAsString());
+            ResolvedType fieldType = variable.resolve().getType();
+            updateUsedClassBasedOnType(fieldType);
+          }
+        }
+      }
     } else {
       updateUnfoundMethods(methodName);
     }
@@ -491,17 +503,25 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
             resolvedYetStuckMethodCall.add(
                 this.currentClassQualifiedName + "." + call.getNameAsString());
           } else {
-            // Use the scope instead. There are two cases: the scope is an FQN (e.g., in
-            // a call to a fully-qualified static method) or the scope is a simple name.
-            // In the simple name case, append the current package to the front, since
-            // if it had been imported we wouldn't be in this situation.
-            if (UnsolvedSymbolVisitor.isAClassPath(scopeAsString)) {
-              resolvedYetStuckMethodCall.add(scopeAsString + "." + call.getNameAsString());
-              usedTypeElements.add(scopeAsString);
-            } else {
-              resolvedYetStuckMethodCall.add(
-                  getCurrentPackage() + "." + scopeAsString + "." + call.getNameAsString());
-              usedTypeElements.add(getCurrentPackage() + "." + scopeAsString);
+            // Use the scope instead. First, check if it's resolvable. If it is, great -
+            // just use that. If not, then we need to use some heuristics as fallbacks.
+            try {
+              ResolvedType scopeType = scope.calculateResolvedType();
+              resolvedYetStuckMethodCall.add(scopeType.describe() + "." + call.getNameAsString());
+              usedTypeElements.add(scopeType.describe());
+            } catch (Exception e1) {
+              // There are two fallback cases: the scope is an FQN (e.g., in
+              // a call to a fully-qualified static method) or the scope is a simple name.
+              // In the simple name case, append the current package to the front, since
+              // if it had been imported we wouldn't be in this situation.
+              if (UnsolvedSymbolVisitor.isAClassPath(scopeAsString)) {
+                resolvedYetStuckMethodCall.add(scopeAsString + "." + call.getNameAsString());
+                usedTypeElements.add(scopeAsString);
+              } else {
+                resolvedYetStuckMethodCall.add(
+                    getCurrentPackage() + "." + scopeAsString + "." + call.getNameAsString());
+                usedTypeElements.add(getCurrentPackage() + "." + scopeAsString);
+              }
             }
           }
         } else {

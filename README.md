@@ -37,6 +37,7 @@ The available options are (required options in **bold**, repeatable options in *
 
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
 * *--jarPath*: a directory path that contains all the jar files for Specimin to take as input.
+* --modularityModel: the name of the modularity model to use. Modularity models are named after the analysis that they represent. Available options: "javac" for the [Javac typechecker](https://en.wikipedia.org/wiki/Javac), "cf" for the [Checker Framework](checkerframework.org), or "nullaway" for [NullAway](https://github.com/uber/NullAway). Default: "cf".
 
 Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
 

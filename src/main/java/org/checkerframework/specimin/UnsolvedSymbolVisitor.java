@@ -91,6 +91,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.checker.signature.qual.DotSeparatedIdentifiers;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.modularity.ModularityModel;
 
 /**
  * The visitor for the preliminary phase of Specimin. This visitor goes through the input files,
@@ -234,17 +235,20 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @param targetMethodsSignatures the list of signatures of target methods as specified by the
    *     user.
    * @param targetFieldsSignature the list of signatures of target fields as specified by the user.
+   * @param model the modularity model selected by the user
    */
   public UnsolvedSymbolVisitor(
       String rootDirectory,
       Map<String, Path> existingClassesToFilePath,
       Set<String> targetMethodsSignatures,
-      Set<String> targetFieldsSignature) {
+      Set<String> targetFieldsSignature,
+      ModularityModel model) {
     super(
         targetMethodsSignatures,
         targetFieldsSignature,
         new HashSet<>(),
         new HashSet<>(),
+        model,
         existingClassesToFilePath);
     this.rootDirectory = rootDirectory;
     this.gotException = true;
@@ -993,6 +997,28 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       insidePotentialUsedMember = true;
     }
     addTypeVariableScope(node.getTypeParameters());
+    if (targetMethods.contains(getSignature(node))) {
+      // If this constructor is a target method, and the modularity model
+      // permits reasoning about field assignments in constructors, then
+      // we need to preserve the types of all of the fields declared in the
+      // class.
+      if (modularityModel.preserveAllFieldsIfTargetIsConstructor()) {
+        // This cast is safe, because a constructor must be contained in a class declaration.
+        ClassOrInterfaceDeclaration thisClass =
+            (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(node);
+        for (FieldDeclaration field : thisClass.getFields()) {
+          for (VariableDeclarator variable : field.getVariables()) {
+            if (variable.getType().isClassOrInterfaceType()) {
+              solveSymbolsForClassOrInterfaceType(
+                  variable.getType().asClassOrInterfaceType(), false);
+            } else {
+              throw new RuntimeException(
+                  "fields can also have this type: " + variable.getType().getClass());
+            }
+          }
+        }
+      }
+    }
     Visitable result = super.visit(node, arg);
     typeVariables.removeFirst();
     insidePotentialUsedMember = oldInsidePotentialUsedMember;
@@ -1964,12 +1990,17 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         listOfExceptions.add(exceptionTypeAsString);
       }
     }
+    if (listOfParameters.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+      // return early: this method is an artifact of JavaTypeCorrect and won't be needed.
+      return;
+    }
     String returnType = "";
     if (desiredReturnType.equals("")) {
       returnType = returnNameForMethod(methodName);
     } else {
       returnType = desiredReturnType;
     }
+
     UnsolvedMethod thisMethod =
         new UnsolvedMethod(
             methodName,
@@ -3506,7 +3537,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       String correctTypeName) {
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
-    correctTypeName = lookupFQNs(correctTypeName);
+    if (!correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+      correctTypeName = lookupFQNs(correctTypeName);
+    }
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
@@ -3649,6 +3682,17 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // This one may or may not be present. If it is not, exit early and do nothing.
     UnsolvedClassOrInterface correctType = getMissingClassWithQualifiedName(correctTypeName);
     if (correctType == null) {
+      if (correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
+        // Special case: if the new type name is the synthetic unconstrained type name
+        // placeholder, there is one more thing to do: replace any and all parameter types
+        // in synthetic classes that use this (soon to be deleted) synthetic type name
+        // with java.lang.Object.
+        for (UnsolvedClassOrInterface unsolvedClass : missingClass) {
+          for (UnsolvedMethod m : unsolvedClass.getMethods()) {
+            m.replaceParamWithObject(incorrectTypeName);
+          }
+        }
+      }
       return;
     }
 
