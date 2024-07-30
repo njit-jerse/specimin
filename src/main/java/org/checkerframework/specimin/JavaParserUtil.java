@@ -86,6 +86,16 @@ public class JavaParserUtil {
   }
 
   /**
+   * Erases type arguments from a method signature string.
+   *
+   * @param signature the signature
+   * @return the same signature without type arguments
+   */
+  public static String erase(String signature) {
+    return signature.replaceAll("<.*>", "");
+  }
+
+  /**
    * Returns the corresponding type name for an Expression within an annotation.
    *
    * @param value The value to evaluate the type of

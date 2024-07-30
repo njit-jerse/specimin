@@ -277,12 +277,12 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
       // (i.e., a raw type). Note though that this doesn't mean there are no type variables in the
       // signature:
       // add(E) is still add(E).
-      targetSignature = erase(targetSignature);
+      targetSignature = JavaParserUtil.erase(targetSignature);
 
       for (ResolvedMethodDeclaration methodInInterface :
           resolvedInterface.getAllMethodsVisibleToInheritors()) {
         try {
-          if (erase(methodInInterface.getSignature()).equals(targetSignature)) {
+          if (JavaParserUtil.erase(methodInInterface.getSignature()).equals(targetSignature)) {
             if (methodInInterface.isAbstract()) {
               // once we've found the correct method, we return to whether we
               // control it or not. If we don't, it must be preserved. If we do, then we only
@@ -364,16 +364,6 @@ public class MustImplementMethodsVisitor extends SpeciminStateVisitor {
     }
 
     return qualifiedNameToType.values();
-  }
-
-  /**
-   * Erases type arguments from a method signature string.
-   *
-   * @param signature the signature
-   * @return the same signature without type arguments
-   */
-  private static String erase(String signature) {
-    return signature.replaceAll("<.*>", "");
   }
 
   /**
