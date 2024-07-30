@@ -5,6 +5,8 @@ class Simple {
 
     private Foo bar;
 
+    private int x;
+
     public Simple() {
     }
 }

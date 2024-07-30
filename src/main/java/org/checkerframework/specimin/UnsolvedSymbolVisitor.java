@@ -1008,13 +1008,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(node);
         for (FieldDeclaration field : thisClass.getFields()) {
           for (VariableDeclarator variable : field.getVariables()) {
-            if (variable.getType().isClassOrInterfaceType()) {
-              solveSymbolsForClassOrInterfaceType(
-                  variable.getType().asClassOrInterfaceType(), false);
-            } else {
-              throw new RuntimeException(
-                  "fields can also have this type: " + variable.getType().getClass());
-            }
+            Type type = variable.getType();
+            resolveTypeExpr(type);
           }
         }
       }
