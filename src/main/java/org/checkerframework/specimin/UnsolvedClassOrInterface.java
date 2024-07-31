@@ -471,18 +471,9 @@ public class UnsolvedClassOrInterface {
       sb.append(
           "@java.lang.annotation.Target({ \n"
               + "\tjava.lang.annotation.ElementType.TYPE, \n"
-              + "\tjava.lang.annotation.ElementType.FIELD, \n"
               + "\tjava.lang.annotation.ElementType.METHOD, \n"
-              + "\tjava.lang.annotation.ElementType.PARAMETER, \n"
-              + "\tjava.lang.annotation.ElementType.CONSTRUCTOR, \n"
-              + "\tjava.lang.annotation.ElementType.LOCAL_VARIABLE, \n"
-              + "\tjava.lang.annotation.ElementType.ANNOTATION_TYPE,\n"
-              + "\tjava.lang.annotation.ElementType.PACKAGE,\n"
               + "\tjava.lang.annotation.ElementType.TYPE_USE \n"
               + "})\n");
-      // We should retain these annotations in runtime (as it includes both CLASS and SOURCE)
-      // in case a type checker like NullAway requires it
-      sb.append("@java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)\n");
     }
 
     sb.append("public ");
