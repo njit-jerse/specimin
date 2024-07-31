@@ -1,15 +1,17 @@
 package org.checkerframework.specimin;
 
-import com.google.common.base.Splitter;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+
+import com.google.common.base.Splitter;
 
 /**
  * An UnsolvedClassOrInterface instance is a representation of a class or an interface that can not
@@ -478,6 +480,9 @@ public class UnsolvedClassOrInterface {
               + "\tjava.lang.annotation.ElementType.PACKAGE,\n"
               + "\tjava.lang.annotation.ElementType.TYPE_USE \n"
               + "})");
+      // We should retain these annotations in runtime (as it includes both CLASS and SOURCE)
+      // in case a type checker like NullAway requires it
+      sb.append("@java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)");
     }
 
     sb.append("public ");
