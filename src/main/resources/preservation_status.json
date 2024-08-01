@@ -28,6 +28,7 @@
   "na-347": "PASS",
   "na-389": "PASS",
   "na-705": "FAIL",
+  "na-705-jar": "PASS",
   "na-791a": "PASS",
   "na-791b": "FAIL"
 }
