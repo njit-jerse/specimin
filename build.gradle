@@ -17,7 +17,7 @@ repositories {
 }
 
 application {
-    mainClass = 'org.checkerframework.specimin.SpeciminRunner'
+    mainClass = 'org.anonymous.specslice.SpecSliceRunner'
 }
 
 dependencies {
@@ -78,7 +78,7 @@ tasks.compileJava {
     options.errorprone.disable(
             // JavaParser's visitor design requires us to regularly violate this rule
             "VoidUsed",
-            // Specimin should compile with Java 11, but this suggestion assumes Java 17
+            // SpecSlice should compile with Java 11, but this suggestion assumes Java 17
             "PatternMatchingInstanceof")
 }
 
@@ -127,7 +127,7 @@ compileJava {
 
 jar {
     manifest {
-        attributes 'Main-Class': 'org.checkerframework.specimin.SpeciminRunner'
+        attributes 'Main-Class': 'org.anonymous.specslice.SpecSliceRunner'
     }
     duplicatesStrategy = 'exclude'
     from {
@@ -143,12 +143,12 @@ java {
     withSourcesJar()
 }
 
-// Run `./gradlew publishToMavenLocal` to publish Specimin to your local Maven repository.
+// Run `./gradlew publishToMavenLocal` to publish SpecSlice to your local Maven repository.
 publishing {
     publications {
         maven(MavenPublication) {
             groupId = 'edu.njit.jerse'
-            artifactId = 'specimin'
+            artifactId = 'specSlice'
             version = '0.1'
 
             from components.java

@@ -1,4 +1,4 @@
-// test case for https://github.com/njit-jerse/specimin/issues/298
+// test case for https://github.com/njit-jerse/specSlice/issues/298
 
 package com.example;
 

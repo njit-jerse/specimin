@@ -7,6 +7,6 @@ public class Baz {
 
     public Baz() {
         System.out.println("This constructor is never used, " +
-                "so this ought to be removed by Specimin.");
+                "so this ought to be removed by SpecSlice.");
     }
 }

@@ -30,36 +30,36 @@ jobs:
         uses: gradle/gradle-build-action@v2
       - name: Run build with Gradle Wrapper
         run: ./gradlew build expectedTestOutputsMustCompile
-      - name: export Specimin PATH
-        run: echo "SPECIMIN=$(pwd)" >> $GITHUB_ENV
+      - name: export SpecSlice PATH
+        run: echo "SpecSlice=$(pwd)" >> $GITHUB_ENV
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
-      - name: Checkout specimin-evaluation repository
+      - name: Checkout specSlice-evaluation repository
         uses: actions/checkout@v3
         with:
-         repository: njit-jerse/specimin-evaluation
-         path: specimin-evaluation
+         repository: njit-jerse/specSlice-evaluation
+         path: specSlice-evaluation
       - name: Run evaluation script
         run: |
-          cd specimin-evaluation
-          echo "specimin path-> $SPECIMIN"
+          cd specSlice-evaluation
+          echo "specSlice path-> $SpecSlice"
           python main.py
       - name: Check evaluation status
-        run: diff -uw src/main/resources/target_status.json specimin-evaluation/ISSUES/target_status.json
+        run: diff -uw src/main/resources/target_status.json specSlice-evaluation/ISSUES/target_status.json
       - name: Compile minimized programs
         run: |
-          cd specimin-evaluation
+          cd specSlice-evaluation
           sh check_compilation.sh 1
       - name: Check targets compile status
         run: |
-          cd specimin-evaluation
+          cd specSlice-evaluation
           sh check_compilation.sh 1
           cd ..
-          diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
+          diff -uw src/main/resources/min_program_compile_status.json specSlice-evaluation/ISSUES/compile_status.json
       - name: Check preservation status
-        run: diff -uw src/main/resources/preservation_status.json specimin-evaluation/ISSUES/preservation_status.json
+        run: diff -uw src/main/resources/preservation_status.json specSlice-evaluation/ISSUES/preservation_status.json
   windows-tester:
     runs-on: windows-latest
     steps:
@@ -88,20 +88,20 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
-      - name: Checkout specimin-evaluation repository
+      - name: Checkout specSlice-evaluation repository
         uses: actions/checkout@v3
         with:
-         repository: njit-jerse/specimin-evaluation
-         path: specimin-evaluation
+         repository: njit-jerse/specSlice-evaluation
+         path: specSlice-evaluation
       - name: Run evaluation script
         # cf-1291: test typical integration test
         # cf-577: download + unzip + rename/file access errors
         # cf-691: download + unzip 2
         # cf-4614: slightly different than expected CF outputs 
         run: |
-          set SPECIMIN=%cd%
-          cd specimin-evaluation
-          echo specimin path-^> %SPECIMIN%
+          set SpecSlice=%cd%
+          cd specSlice-evaluation
+          echo specSlice path-^> %SpecSlice%
           python main.py --debug cf-1291
           python main.py --debug cf-577
           python main.py --debug cf-691
@@ -109,8 +109,8 @@ jobs:
         shell: cmd
       - name: Compile minimized programs
         run: |
-          set SPECIMIN=%cd%
-          cd specimin-evaluation
-          echo specimin path-^> %SPECIMIN%
+          set SpecSlice=%cd%
+          cd specSlice-evaluation
+          echo specSlice path-^> %SpecSlice%
           check_compilation.bat 1
         shell: cmd

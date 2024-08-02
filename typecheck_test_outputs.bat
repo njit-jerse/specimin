@@ -4,7 +4,7 @@ rem This script runs javac on all of the expected test outputs under src/test/re
 rem It returns 2 if any of them fail to compile, 1 if there are any malformed test directories,
 rem and 0 if all of them do compile.
 
-rem It is desirable that all of the expected test outputs compile, because Specimin
+rem It is desirable that all of the expected test outputs compile, because SpecSlice
 rem should produce independently-compilable programs.
 
 setlocal enabledelayedexpansion
@@ -17,8 +17,8 @@ for /d %%t in (*) do (
   if "%%t"=="shared" set continue=1
   rem https://bugs.openjdk.org/browse/JDK-8319461 wasn't actually fixed (this test is based on that bug)
   if "%%t"=="superinterfaceextends" set continue=1
-  rem incomplete handling of method references: https://github.com/njit-jerse/specimin/issues/291
-  rem this test exists to check that no crash occurs, not that Specimin produces the correct output
+  rem incomplete handling of method references: https://github.com/njit-jerse/specSlice/issues/291
+  rem this test exists to check that no crash occurs, not that SpecSlice produces the correct output
   if "%%t"=="methodref2" set continue=1
   rem this test will not compile right now; this is a TODO in UnsolvedSymbolVisitor#lookupTypeArgumentFQN
   if "%%t"=="methodreturnfullyqualifiedgeneric" set continue=1

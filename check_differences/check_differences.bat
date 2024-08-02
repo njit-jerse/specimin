@@ -1,6 +1,6 @@
 @echo off
 
-rem On Windows, instead of using the diff command for SpeciminTestExecutor, we can use this
+rem On Windows, instead of using the diff command for SpecSliceTestExecutor, we can use this
 rem command instead since diff is not included by default. This script outputs 0 if no differences
 rem are found, 1 if a difference in file structure or file content (all whitespace removed) is found
 

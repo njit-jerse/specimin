@@ -11,8 +11,8 @@ testcase=$1
 if [ "${testcase}" = "shared" ]; then exit 0; fi
 # https://bugs.openjdk.org/browse/JDK-8319461 wasn't actually fixed (this test is based on that bug)
 if [ "${testcase}" = "superinterfaceextends" ]; then exit 0; fi
-# incomplete handling of method references: https://github.com/njit-jerse/specimin/issues/291
-# this test exists to check that no crash occurs, not that Specimin produces the correct output
+# incomplete handling of method references: https://github.com/njit-jerse/specSlice/issues/291
+# this test exists to check that no crash occurs, not that SpecSlice produces the correct output
 if [ "${testcase}" = "methodref2" ]; then exit 0; fi
 # this test will not compile right now; this is a TODO in UnsolvedSymbolVisitor#lookupTypeArgumentFQN
 if [ "${testcase}" = "methodreturnfullyqualifiedgeneric" ]; then exit 0; fi
