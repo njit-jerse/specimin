@@ -1,6 +1,6 @@
 # SpecSlice: a specification slicer
 
-This document describes **SpecSlice** (SPECIfication MINimizer).
+This document describes **SpecSlice** (SPECIfication SLICEr).
 SpecSlice's goal is, given a Java Program *P*
 and a set of methods or fields in that program *M*, produce an independently-compilable
 version of *P* that contains (1) the body of each method or initializer of each field in *M*
