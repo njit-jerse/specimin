@@ -45,6 +45,7 @@ cd "%2" || exit /b 1
 set "DIRECTORY_2=%CD%\"
 
 cd "%DIRECTORY_1%"
+echo %cd%
 set DIR_1_STRUCTURE=
 for /r %%i in (*) do (
     rem Convert absolute to relative path
@@ -55,6 +56,7 @@ for /r %%i in (*) do (
 )
 
 cd "%DIRECTORY_2%"
+echo %cd%
 set DIR_2_STRUCTURE=
 for /r %%i in (*) do (
     rem Convert absolute to relative path
@@ -65,7 +67,7 @@ for /r %%i in (*) do (
 )
 
 if "!DIR_1_STRUCTURE!" NEQ "!DIR_2_STRUCTURE!" (
-    echo !DIR_1_STRUCTURE! and !DIR_2_STRUCTURE! are not equal
+    echo %DIRECTORY_1% and %DIRECTORY_2% have different directory structures
     endlocal
     exit /b 1
 )

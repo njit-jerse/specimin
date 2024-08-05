@@ -64,33 +64,16 @@ public class SpeciminTestExecutor {
       return;
     }
 
-    boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
-
     // Construct the list of arguments.
     List<String> speciminArgs = new ArrayList<>();
 
     speciminArgs.add("--outputDirectory");
-    String outputDirectoryAsString = outputDir.toAbsolutePath().toString();
-
-    if (isWindows) {
-      outputDirectoryAsString = outputDirectoryAsString.replace('\\', '/'); 
-    }
-    speciminArgs.add(outputDirectoryAsString);
-
+    speciminArgs.add(outputDir.toAbsolutePath().toString());
     speciminArgs.add("--root");
-    String rootDirectory = Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/";
-
-    if (isWindows) {
-      rootDirectory = rootDirectory.replace('\\', '/');
-    }
-
-    speciminArgs.add(rootDirectory);
+    speciminArgs.add(
+      Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/");
     for (String targetFile : targetFiles) {
       speciminArgs.add("--targetFile");
-      
-      if (isWindows) {
-        targetFile = targetFile.replace('\\', '/');
-      }
       speciminArgs.add(targetFile);
     }
     for (String targetMember : targetMembers) {
@@ -106,15 +89,13 @@ public class SpeciminTestExecutor {
     speciminArgs.add(modularityModel);
     for (String jarPath : jarPaths) {
       speciminArgs.add("--jarPath");
-      if (isWindows) {
-        jarPath = jarPath.replace('\\', '/');
-      }
       speciminArgs.add(jarPath);
     }
 
     // Run specimin on target
     SpeciminRunner.main(speciminArgs.toArray(new String[0]));
 
+    boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
     // Diff the files to ensure that specimin's output is what we expect
     ProcessBuilder builder = new ProcessBuilder();
     if (isWindows) {
