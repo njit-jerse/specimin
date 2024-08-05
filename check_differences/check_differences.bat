@@ -36,18 +36,19 @@ if "%2"=="" (
 
 set "CURRENT_DIRECTORY=%cd%"
 
-cd "%1" || exit /b 1
+rem use /D to handle drive differences (C:\ vs. D:\)
+cd /D "%1" || exit /b 1
 set "DIRECTORY_1=%cd%"
 
-cd "%CURRENT_DIRECTORY%"
+cd /D "%CURRENT_DIRECTORY%"
 
-cd "%2" || exit /b 1
+cd /D "%2" || exit /b 1
 set "DIRECTORY_2=%cd%"
 
 echo %DIRECTORY_1%
 echo %DIRECTORY_2%
 
-cd "%DIRECTORY_1%"
+cd /D "%DIRECTORY_1%"
 set DIR_1_STRUCTURE=
 for /r %%i in (*) do (
     rem Convert absolute to relative path
@@ -57,7 +58,7 @@ for /r %%i in (*) do (
     set "DIR_1_STRUCTURE=!DIR_1_STRUCTURE!;!RELATIVE_PATH!"
 )
 
-cd "%DIRECTORY_2%"
+cd /D "%DIRECTORY_2%"
 set DIR_2_STRUCTURE=
 for /r %%i in (*) do (
     rem Convert absolute to relative path
