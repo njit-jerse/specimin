@@ -69,6 +69,8 @@ for /r %%i in (*) do (
 
 if "!DIR_1_STRUCTURE!" NEQ "!DIR_2_STRUCTURE!" (
     echo Folder structures are different
+    echo Directory 1: !DIR_1_STRUCTURE!
+    echo Directory 2: !DIR_2_STRUCTURE!
     endlocal
     exit /b 1
 )
