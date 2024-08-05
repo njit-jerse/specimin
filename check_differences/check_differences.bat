@@ -34,34 +34,35 @@ if "%2"=="" (
     exit /b 1
 )
 
-set "CURRENT_DIRECTORY=%CD%"
+set "CURRENT_DIRECTORY=%cd%"
 
 cd "%1" || exit /b 1
-set "DIRECTORY_1=%CD%\"
+set "DIRECTORY_1=%cd%"
 
 cd "%CURRENT_DIRECTORY%"
 
 cd "%2" || exit /b 1
-set "DIRECTORY_2=%CD%\"
+set "DIRECTORY_2=%cd%"
+
+echo %DIRECTORY_1%
+echo %DIRECTORY_2%
 
 cd "%DIRECTORY_1%"
-echo %cd%
 set DIR_1_STRUCTURE=
 for /r %%i in (*) do (
     rem Convert absolute to relative path
     set "ABSOLUTE_PATH=%%i"
-    set "RELATIVE_PATH=!ABSOLUTE_PATH:%DIRECTORY_1%=!"
+    set "RELATIVE_PATH=!ABSOLUTE_PATH:%DIRECTORY_1%\=!"
     rem Add each file path to the DIR_1_STRUCTURE list of files
     set "DIR_1_STRUCTURE=!DIR_1_STRUCTURE!;!RELATIVE_PATH!"
 )
 
 cd "%DIRECTORY_2%"
-echo %cd%
 set DIR_2_STRUCTURE=
 for /r %%i in (*) do (
     rem Convert absolute to relative path
     set "ABSOLUTE_PATH=%%i"
-    set "RELATIVE_PATH=!ABSOLUTE_PATH:%DIRECTORY_2%=!"
+    set "RELATIVE_PATH=!ABSOLUTE_PATH:%DIRECTORY_2%\=!"
     rem Add each file path to the DIR_2_STRUCTURE list of files
     set "DIR_2_STRUCTURE=!DIR_2_STRUCTURE!;!RELATIVE_PATH!"
 )
