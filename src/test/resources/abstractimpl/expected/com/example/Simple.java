@@ -5,7 +5,7 @@ import java.util.Collection;
 
 import com.example.WrappedSet;
 
-public class Simply<K, V> {
+public class Simple<K, V> {
     Collection<V> bar(K key, Collection<V> collection) {
         return new WrappedSet(key, (Set<V>) collection);
     }
