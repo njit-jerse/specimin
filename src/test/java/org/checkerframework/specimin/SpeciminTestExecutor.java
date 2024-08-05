@@ -78,7 +78,7 @@ public class SpeciminTestExecutor {
     speciminArgs.add(outputDirectoryAsString);
 
     speciminArgs.add("--root");
-    String rootDirectory = Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/");
+    String rootDirectory = Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/";
 
     if (isWindows) {
       rootDirectory = rootDirectory.replace('\\', '/');
