@@ -34,7 +34,7 @@ endlocal
             if "%%t" NEQ "base" (
                 @echo off
                 rem Redirect to nul because we don't want any output messages
-                call "../../check_differences.bat" "base" "%%t" > nul
+                call "../../check_differences.bat" base %%t > nul
                 set exitcode=!errorlevel!
                 rem "%%t" represents the folder name (i.e. base, 0, 1) since we have changed the directory
                 rem to the test case directory

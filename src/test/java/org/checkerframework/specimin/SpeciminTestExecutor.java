@@ -66,11 +66,12 @@ public class SpeciminTestExecutor {
 
     // Construct the list of arguments.
     List<String> speciminArgs = new ArrayList<>();
+
     speciminArgs.add("--outputDirectory");
     speciminArgs.add(outputDir.toAbsolutePath().toString());
     speciminArgs.add("--root");
     speciminArgs.add(
-        Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/");
+      Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/");
     for (String targetFile : targetFiles) {
       speciminArgs.add("--targetFile");
       speciminArgs.add(targetFile);
@@ -94,9 +95,9 @@ public class SpeciminTestExecutor {
     // Run specimin on target
     SpeciminRunner.main(speciminArgs.toArray(new String[0]));
 
+    boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
     // Diff the files to ensure that specimin's output is what we expect
     ProcessBuilder builder = new ProcessBuilder();
-    boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
     if (isWindows) {
       builder.command(
           "check_differences/check_differences.bat",
