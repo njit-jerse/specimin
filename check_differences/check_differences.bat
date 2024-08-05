@@ -44,9 +44,6 @@ cd "%CURRENT_DIRECTORY%"
 cd "%2" || exit /b 1
 set "DIRECTORY_2=%CD%\"
 
-cd "%CURRENT_DIRECTORY%"
-
-
 cd "%DIRECTORY_1%"
 set DIR_1_STRUCTURE=
 for /r %%i in (*) do (
