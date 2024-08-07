@@ -1,0 +1,200 @@
+name: specimin_evaluation_CI 
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  specimin-evaluation:
+    runs-on: ubuntu-latest
+
+    steps:
+        
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+    
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+
+      - name: Set up Java JDK
+        uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'adopt'
+          architecture: 'x64'
+          server-password: ${{ secrets.GITHUB_TOKEN }}
+          overwrite-settings: true
+          check-latest: false
+
+      - name: Install dependencies
+        run: |
+          set -ex  # Exit immediately if a command exits with a non-zero status and print commands as they are executed
+          python -m pip install --upgrade pip
+
+      - name: Display CSV File Contents loaded in working environment
+        run: |
+          set -ex
+          if [ -f /home/runner/work/specimin/specimin/CI_repository_list.csv ]; then
+            cat /home/runner/work/specimin/specimin/CI_repository_list.csv
+          else
+            echo "File /home/runner/work/specimin/specimin/CI_repository_list.csv does not exist"
+            exit 1
+          fi
+
+      - name: Download git-clone-related script
+        run: |
+         set -ex
+         curl -L -o git-clone-related https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-clone-related
+         chmod +x git-clone-related
+         
+      - name: Clone ASHE Project using git-clone-related
+        run: |
+         set -ex
+         git clone https://github.com/njit-jerse/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
+         ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
+          
+          
+      - name: Verify example.properties exists
+        run: |
+          set -ex
+          if [ -f ASHE/src/main/resources/example.properties ]; then 
+            echo "example.properties found"
+          else 
+            echo "example.properties not found"
+            exit 1
+          fi
+
+      - name: Rename example.properties to config.properties file
+        run: |
+          set -ex
+          mv ASHE/src/main/resources/example.properties ASHE/src/main/resources/config.properties
+          if [ -f ASHE/src/main/resources/config.properties ]; then 
+            echo "config.properties created"
+          else 
+            echo "config.properties not created"
+            exit 1
+          fi
+
+      - name: Give write permissions to config.properties
+        run: |
+          set -ex
+          chmod +w ASHE/src/main/resources/config.properties
+          ls -l ASHE/src/main/resources/config.properties
+
+      - name: Update ASHE Config File to update specimin path
+        run: |
+          set -ex
+          chmod +w ASHE/src/main/resources/config.properties
+          # Update the specimin.tool.path key with the new value
+          sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' ASHE/src/main/resources/config.properties
+          # Display the updated config.properties file for verification
+          cat ASHE/src/main/resources/config.properties
+
+      - name: Display updated config.properties
+        run: |
+          set -ex
+          cat ASHE/src/main/resources/config.properties
+
+      - name: Make all scripts under ashe_scripts executable
+        run: |
+          set -ex
+          chmod +x ashe_scripts/*.py
+
+      - name: List Files in ashe_scripts for Debugging
+        run: |
+          set -ex
+          ls -l ashe_scripts
+
+      - name: Run the script
+        run: |
+          set -ex
+          python3 ashe_scripts/run_ashe_for_stats.py \
+            $(pwd)/ASHE \
+            $(pwd)/CI_repository_list.csv \
+            $(pwd)/ASHE/CI_REPO_CLONE_SPACE \
+            $(pwd)/ASHE/src/main/resources/config.properties
+            
+      - name: Parse accuracy percentage
+        id: parse_accuracy_percentage
+        run: |
+          set -ex
+          grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > current_run_accuracy_percentage.txt
+          cat current_run_accuracy_percentage.txt
+
+
+      - name: Read, update, and set Evaluation Accuracy Secret
+        id: read_update_set_secret
+        run: |
+          set -ex
+          
+          # Install jq and curl
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+          # Read current accuracy
+          current_accuracy=$(cat current_run_accuracy_percentage.txt)
+          echo "Current accuracy: $current_accuracy"
+          
+          # Read previous run accuracy from secrets
+          previous_run_accuracy=${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE }}
+          if [ -z "$previous_run_accuracy" ]; then
+            previous_run_accuracy=0
+          fi
+          echo "Previous run accuracy: $previous_run_accuracy"
+          
+          # Compare and decide whether to update the secret
+          if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
+            echo "Updating LATEST_SPECIMIN_EVAL_PERCENTAGE to $current_accuracy"
+            new_accuracy=$current_accuracy
+            update_needed=true
+          else
+            echo "No update needed previous run accuracy is $previous_run_accuracy"
+            new_accuracy=$previous_run_accuracy
+            update_needed=false
+          fi
+
+          # Save comparison values for later analysis
+          echo "Current accuracy: $current_accuracy" > comparison_values_for_current_run.txt
+          echo "Previous run accuracy: $previous_run_accuracy" >> comparison_values_for_current_run.txt
+
+          # Set outputs for further steps
+          echo "::set-output name=update_needed::$update_needed"
+          echo "::set-output name=new_accuracy::$new_accuracy"
+          
+          # Update the secret if needed
+          if $update_needed && [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            repo_name="${{ github.repository }}"
+            api_url="https://api.github.com"
+            public_key_response=$(curl -s -H "Authorization: token ${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE_PAT }}" $api_url/repos/$repo_name/actions/secrets/public-key)
+            public_key=$(echo $public_key_response | jq -r .key)
+            key_id=$(echo $public_key_response | jq -r .key_id)
+            encrypted_value=$(echo -n "$new_accuracy" | openssl rsautl -encrypt -pubin -inkey <(echo "$public_key") | base64)
+            curl -s \
+              -X PUT \
+              -H "Authorization: token ${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE_PAT }}" \
+              -H "Content-Type: application/json" \
+              "$api_url/repos/$repo_name/actions/secrets/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+              -d "{\"encrypted_value\":\"$encrypted_value\",\"key_id\":\"$key_id\"}"
+          fi
+      - name: Upload comparison values
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: comparison-values
+          path: comparison_values_for_current_run.txt
+
+      - name: Upload current run accuracy percentage
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: current-run-accuracy-percentage
+          path: current_run_accuracy_percentage.txt
