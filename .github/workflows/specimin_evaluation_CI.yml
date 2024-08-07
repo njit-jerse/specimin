@@ -1,230 +1,129 @@
 name: specimin_evaluation_CI
-on:
+
 on:
   push:
-  push:
     branches:
-    branches:
-      - main
       - main
   pull_request:
-  pull_request:
-    branches:
     branches:
       - main
-      - main
-jobs:
+
 jobs:
   specimin-evaluation:
-  specimin-evaluation:
     runs-on: ubuntu-latest
-    runs-on: ubuntu-latest
-    steps:
+
     steps:
       - name: Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v2
         uses: actions/checkout@v2
         with:
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          fetch-depth: 0
-      - name: Set up Python
+
       - name: Set up Python
         uses: actions/setup-python@v2
-        uses: actions/setup-python@v2
-        with:
         with:
           python-version: '3.8'
-          python-version: '3.8'
-      - name: Set up Java JDK
+
       - name: Set up Java JDK
         uses: actions/setup-java@v2
-        uses: actions/setup-java@v2
-        with:
         with:
           java-version: '21'
-          java-version: '21'
-          distribution: 'adopt'
           distribution: 'adopt'
           architecture: 'x64'
-          architecture: 'x64'
-          server-password: ${{ secrets.GITHUB_TOKEN }}
           server-password: ${{ secrets.GITHUB_TOKEN }}
           overwrite-settings: true
-          overwrite-settings: true
           check-latest: false
-          check-latest: false
-      - name: Install dependencies
+
       - name: Install dependencies
         run: |
-        run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade pip
-      - name: Display CSV File Contents
+
       - name: Display CSV File Contents
         run: |
-        run: |
-          if [ -f /home/runner/work/specimin/specimin/CI_repository_list.csv ]; then
           if [ -f /home/runner/work/specimin/specimin/CI_repository_list.csv ]; then
             cat /home/runner/work/specimin/specimin/CI_repository_list.csv
-            cat /home/runner/work/specimin/specimin/CI_repository_list.csv
-          else
           else
             echo "File /home/runner/work/specimin/specimin/CI_repository_list.csv does not exist"
-            echo "File /home/runner/work/specimin/specimin/CI_repository_list.csv does not exist"
-            exit 1
             exit 1
           fi
-          fi
-      - name: Download and clone ASHE Project
+
       - name: Download and clone ASHE Project
         run: |
-        run: |
-          curl -L -o git-clone-related https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-clone-related
           curl -L -o git-clone-related https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-clone-related
           chmod +x git-clone-related
-          chmod +x git-clone-related
-          git clone https://github.com/njit-jerse/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
           git clone https://github.com/njit-jerse/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
           ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
-          ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
+
       - name: Verify and Rename example.properties
-      - name: Verify and Rename example.properties
-        run: |
         run: |
           if [ -f ASHE/src/main/resources/example.properties ]; then
-          if [ -f ASHE/src/main/resources/example.properties ]; then
-            mv ASHE/src/main/resources/example.properties ASHE/src/main/resources/config.properties
             mv ASHE/src/main/resources/example.properties ASHE/src/main/resources/config.properties
             echo "config.properties created"
-            echo "config.properties created"
-          else
           else
             echo "example.properties not found"
-            echo "example.properties not found"
-            exit 1
             exit 1
           fi
-          fi
+
       - name: Update ASHE Config File
-      - name: Update ASHE Config File
-        run: |
         run: |
           chmod +w ASHE/src/main/resources/config.properties
-          chmod +w ASHE/src/main/resources/config.properties
-          sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' ASHE/src/main/resources/config.properties
           sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' ASHE/src/main/resources/config.properties
           cat ASHE/src/main/resources/config.properties
-          cat ASHE/src/main/resources/config.properties
+
       - name: Make scripts executable
-      - name: Make scripts executable
-        run: |
         run: |
           chmod +x ashe_scripts/*.py
-          chmod +x ashe_scripts/*.py
+
       - name: Run ASHE script
-      - name: Run ASHE script
-        run: |
         run: |
           python3 ashe_scripts/run_ashe_for_stats.py \
-          python3 ashe_scripts/run_ashe_for_stats.py \
-            $(pwd)/ASHE \
             $(pwd)/ASHE \
             $(pwd)/CI_repository_list.csv \
-            $(pwd)/CI_repository_list.csv \
-            $(pwd)/ASHE/CI_REPO_CLONE_SPACE \
             $(pwd)/ASHE/CI_REPO_CLONE_SPACE \
             $(pwd)/ASHE/src/main/resources/config.properties
-            $(pwd)/ASHE/src/main/resources/config.properties
-      - name: Parse accuracy percentage
+
       - name: Parse accuracy percentage
         id: parse_accuracy_percentage
-        id: parse_accuracy_percentage
-        run: |
         run: |
           grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > current_run_accuracy_percentage.txt
-          grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > current_run_accuracy_percentage.txt
           cat current_run_accuracy_percentage.txt
-          cat current_run_accuracy_percentage.txt
-      - name: Read, update, and set Evaluation Accuracy Secret
+
       - name: Read, update, and set Evaluation Accuracy Variable
-        id: read_update_set_secret
         id: read_update_set_variable
         run: |
-        run: |
-          sudo apt-get update
           sudo apt-get update
           sudo apt-get install -y jq curl
-          sudo apt-get install -y jq curl
-          current_accuracy=$(cat current_run_accuracy_percentage.txt)
           current_accuracy=$(cat current_run_accuracy_percentage.txt)
           echo "Current accuracy: $current_accuracy"
-          echo "Current accuracy: $current_accuracy"
-          # Retrieve the GitHub variable value
-          previous_run_accuracy=${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE }}
-          previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-            | jq -r '.value')
-          if [ -z "$previous_run_accuracy" ]; then
+          previous_run_accuracy=${{ vars.LATEST_SPECIMIN_EVAL_PERCENTAGE }}
           if [ -z "$previous_run_accuracy" ]; then
             previous_run_accuracy=0
-            previous_run_accuracy=0
           fi
-          fi
-          echo "Previous run accuracy: $previous_run_accuracy"
           echo "Previous run accuracy: $previous_run_accuracy"
           if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
-          if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
-            echo "Updating LATEST_SPECIMIN_EVAL_PERCENTAGE to $current_accuracy"
             echo "Updating LATEST_SPECIMIN_EVAL_PERCENTAGE to $current_accuracy"
             new_accuracy=$current_accuracy
-            new_accuracy=$current_accuracy
-            update_needed=true
             update_needed=true
           else
-          else
-            echo "No update needed, previous run accuracy is $previous_run_accuracy"
             echo "No update needed, previous run accuracy is $previous_run_accuracy"
             new_accuracy=$previous_run_accuracy
-            new_accuracy=$previous_run_accuracy
-            update_needed=false
             update_needed=false
           fi
-          fi
-          echo "Current accuracy: $current_accuracy"
           echo "Current accuracy: $current_accuracy"
           echo "Previous run accuracy: $previous_run_accuracy"
-          echo "Previous run accuracy: $previous_run_accuracy"
-          echo "::set-output name=update_needed::$update_needed"
           echo "::set-output name=update_needed::$update_needed"
           echo "::set-output name=new_accuracy::$new_accuracy"
-          echo "::set-output name=new_accuracy::$new_accuracy"
-          if $update_needed && [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
-          if $update_needed && [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            repo_name="${{ github.repository }}"
+          if [ "$update_needed" = true ] && [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
             repo_name="${{ github.repository }}"
             api_url="https://api.github.com"
-            api_url="https://api.github.com"
-            public_key_response=$(curl -s -H "Authorization: token ${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE_PAT }}" $api_url/repos/$repo_name/actions/secrets/public-key)
-            
+            public_key_response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $api_url/repos/$repo_name/actions/variables/public-key)
             public_key=$(echo $public_key_response | jq -r .key)
-            # Update the GitHub variable
             key_id=$(echo $public_key_response | jq -r .key_id)
             encrypted_value=$(echo -n "$new_accuracy" | openssl rsautl -encrypt -pubin -inkey <(echo "$public_key") | base64)
             curl -s \
-            curl -s \
               -X PUT \
-              -X PATCH \
-              -H "Authorization: token ${{ secrets.LATEST_SPECIMIN_EVAL_PERCENTAGE_PAT }}" \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Content-Type: application/json" \
-              -H "Content-Type: application/json" \
-              "$api_url/repos/$repo_name/actions/secrets/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
               "$api_url/repos/$repo_name/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
               -d "{\"encrypted_value\":\"$encrypted_value\",\"key_id\":\"$key_id\"}"
-              -d "{\"value\":\"$new_accuracy\"}"
-          fi
           fi
