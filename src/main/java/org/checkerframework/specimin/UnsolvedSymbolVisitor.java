@@ -1634,7 +1634,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
           continue;
         }
-        List<String> methodTypesOfArguments = getArgumentTypesFromMethodCall(method, null);
+        List<String> methodTypesOfArguments = getArgumentTypesFromMethodCall(method, currentPackage);
         NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
         List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
         for (Parameter parameter : methodDeclaredParameters) {
