@@ -55,11 +55,6 @@ jobs:
         run: |
           ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
 
-      - name: List Files in ASHE Directory
-        run: |
-          set -ex
-          ls -l ASHE
-
       - name: Check and Rename Properties File
         run: |
           set -ex
