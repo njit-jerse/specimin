@@ -52,9 +52,11 @@ jobs:
 
       - name: Configure ASHE Project
         run: |
+          set -ex
           CONFIG_FILE="ASHE/src/main/resources/config.properties"
-          if [ -f ASHE/src/main/resources/example.properties ]; then 
-            mv ASHE/src/main/resources/example.properties "$CONFIG_FILE"
+          EXAMPLE_FILE="ASHE/src/main/resources/example.properties"
+          if [ -f "$EXAMPLE_FILE" ]; then 
+            mv "$EXAMPLE_FILE" "$CONFIG_FILE"
             echo "config.properties created"
           else 
             echo "example.properties not found"
