@@ -324,7 +324,11 @@ public final class JavaLangUtils {
     return primitives.contains(type);
   }
 
-  /** Converts a primitive to its object wrapper class (i.e. int --> Integer) */
+  /** Converts a primitive to its object wrapper class (i.e. int --> Integer)
+   * 
+   * @param primitive the primitive type (int, boolean, char, etc.)
+   * @return the primitive as an object (int --> Integer, char --> Character)
+  */
   public static String getPrimitiveAsObject(String primitive) {
     String converted = primitivesToObjects.get(primitive);
 
