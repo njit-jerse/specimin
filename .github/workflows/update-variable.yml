@@ -1,0 +1,57 @@
+name: Update Specimin Evaluation Variable
+
+on: [workflow_dispatch]  # Allows manual triggering of the workflow
+
+jobs:
+  update-variable:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up environment
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+          
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl openssl
+
+      - name: Fetch Public Key
+        id: fetch_public_key
+        run: |
+          repo_name="${{ github.repository }}"
+          api_url="https://api.github.com"
+          public_key_response=$(curl -s -H "Authorization: token ${{ secrets.UPDATE_VARIABLE_TOKEN }}" $api_url/repos/$repo_name/actions/variables/public-key)
+          echo "Public key response: $public_key_response"
+          echo "Public key: $(echo $public_key_response | jq -r .key)"
+          echo "Key ID: $(echo $public_key_response | jq -r .key_id)"
+          echo "::set-output name=public_key::$(echo $public_key_response | jq -r .key)"
+          echo "::set-output name=key_id::$(echo $public_key_response | jq -r .key_id)"
+
+      - name: Encrypt New Accuracy Value
+        id: encrypt_value
+        run: |
+          public_key="${{ steps.fetch_public_key.outputs.public_key }}"
+          key_id="${{ steps.fetch_public_key.outputs.key_id }}"
+          new_accuracy="88.61"  # Replace with your actual value
+          encrypted_value=$(echo -n "$new_accuracy" | openssl pkeyutl -encrypt -pubin -inkey <(echo "$public_key") | base64)
+          echo "Encrypted value: $encrypted_value"
+          echo "::set-output name=encrypted_value::$encrypted_value"
+          echo "::set-output name=key_id::$key_id"
+
+      - name: Update Variable
+        run: |
+          repo_name="${{ github.repository }}"
+          api_url="https://api.github.com"
+          encrypted_value="${{ steps.encrypt_value.outputs.encrypted_value }}"
+          key_id="${{ steps.encrypt_value.outputs.key_id }}"
+          curl -s -X PUT \
+            -H "Authorization: token ${{ secrets.UPDATE_VARIABLE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "$api_url/repos/$repo_name/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+            -d "{\"encrypted_value\":\"$encrypted_value\",\"key_id\":\"$key_id\"}"
+          echo "Variable updated successfully."
