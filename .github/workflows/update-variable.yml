@@ -1,60 +1,35 @@
-name: Update LATEST_SPECIMIN_EVAL_PERCENTAGE Variable
+name: Update Variable
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-  pull_request:
     branches:
       - main
 
 jobs:
   update-variable:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up environment
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl openssl
-
-      - name: Fetch Public Key
-        id: fetch_public_key
+      - name: Fetch repository public key
+        id: fetch-key
         run: |
           repo_name="NiharikaJamble/specimin"
           api_url="https://api.github.com"
-          public_key_response=$(curl -s -H "Authorization: token ${{ secrets.UPDATE_VARIABLE_TOKEN }}" $api_url/repos/$repo_name/actions/variables/public-key)
-          echo "Public key response: $public_key_response"
-          echo "::set-output name=public_key::$(echo $public_key_response | jq -r .key)"
-          echo "::set-output name=key_id::$(echo $public_key_response | jq -r .key_id)"
+          public_key_response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$api_url/repos/$repo_name/actions/variables/public-key")
+          public_key=$(echo $public_key_response | jq -r .key)
+          key_id=$(echo $public_key_response | jq -r .key_id)
+          echo "::set-output name=public_key::$public_key"
+          echo "::set-output name=key_id::$key_id"
 
-      - name: Encrypt the New Value
-        id: encrypt_value
+      - name: Encrypt new value
+        id: encrypt-value
         run: |
-          new_value="88.61"  # Replace with the actual value you want to set
-          echo "New value to encrypt: $new_value"
-          public_key="${{ steps.fetch_public_key.outputs.public_key }}"
-          encrypted_value=$(echo -n "$new_value" | openssl pkeyutl -encrypt -pubin -inkey <(echo "$public_key") | base64)
+          echo "new_accuracy='88.61'"
+          echo "public_key='${{ steps.fetch-key.outputs.public_key }}'"
+          encrypted_value=$(echo -n "$new_accuracy" | openssl pkeyutl -encrypt -pubin -inkey <(echo "$public_key") | base64)
           echo "::set-output name=encrypted_value::$encrypted_value"
 
-      - name: Update GitHub Variable
+      - name: Update GitHub Actions Variable
         run: |
           repo_name="NiharikaJamble/specimin"
           api_url="https://api.github.com"
-          encrypted_value="${{ steps.encrypt_value.outputs.encrypted_value }}"
-          key_id="${{ steps.fetch_public_key.outputs.key_id }}"
-          update_response=$(curl -s -X PUT \
-            -H "Authorization: token ${{ secrets.UPDATE_VARIABLE_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            "$api_url/repos/$repo_name/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-            -d "{\"encrypted_value\":\"$encrypted_value\",\"key_id\":\"$key_id\"}")
-          if echo "$update_response" | jq -e '.message' > /dev/null; then
-            echo "Error updating variable: $(echo $update_response | jq -r '.message')"
-            exit 1
-          else
-            echo "Variable updated successfully!"
-          fi
+          encrypted
