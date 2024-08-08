@@ -35,6 +35,15 @@ jobs:
           python -m pip install --upgrade pip
           sudo apt-get update
           sudo apt-get install -y jq curl bc
+          # Fetch previous run accuracy
+          previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+          | jq -r '.value')    
+          if [ -z "$previous_run_accuracy" ] || [ "$previous_run_accuracy" == "null" ]; then
+          previous_run_accuracy=0
+          fi
+          echo "Previous run accuracy: $previous_run_accuracy"
+          
 
       - name: Display CSV File Contents
         run: |
@@ -66,12 +75,6 @@ jobs:
           chmod +w "$CONFIG_FILE"
           sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' "$CONFIG_FILE"
           cat "$CONFIG_FILE"
-
-          # Fetch previous run accuracy
-          previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-          | jq -r '.value')
-          echo "Previous run accuracy: $previous_run_accuracy"
 
       - name: Make scripts executable
         run: chmod +x ashe_scripts/*.py
