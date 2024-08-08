@@ -3893,7 +3893,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             new ModifierVisitor<Void>() {
               @Override
               public Visitable visit(ClassOrInterfaceType type, Void p) {
-                System.out.println(type);
                 StringBuilder fullyQualifiedName = new StringBuilder();
                 if (classAndPackageMap.containsKey(JavaParserUtil.erase(type.asString()))) {
                   fullyQualifiedName.append(
