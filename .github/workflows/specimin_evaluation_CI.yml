@@ -101,6 +101,9 @@ jobs:
     
           # Handle null previous accuracy
           if [ -z "$previous_run_accuracy" ] || [ "$previous_run_accuracy" == "null" ]; then
+           if [ "$previous_run_accuracy" == "null" ]; then
+            echo "Previous accuracy is null"
+           fi 
           previous_run_accuracy=0
           fi
            echo "Previous run accuracy: $previous_run_accuracy"
