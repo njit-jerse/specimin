@@ -182,6 +182,14 @@ public class UnsolvedMethod {
     return result;
   }
 
+  /**
+   * Given a correct method reference type, this method replaces the type at the given index with
+   * the corrected name
+   */
+  public void correctMethodReferenceType(int parameter, String correctName) {
+    parameterList.set(parameter, correctName);
+  }
+
   /** Set isStatic to true */
   public void setStatic() {
     isStatic = true;

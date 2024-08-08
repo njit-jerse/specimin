@@ -531,11 +531,11 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
         return super.visit(call, p);
       }
       preserveMethodDecl(decl);
-      // Special case for lambdas to preserve artificial functional
+      // Special case for lambdas/method references to preserve artificial functional
       // interfaces.
       for (int i = 0; i < call.getArguments().size(); ++i) {
         Expression arg = call.getArgument(i);
-        if (arg.isLambdaExpr()) {
+        if (arg.isLambdaExpr() || arg.isMethodReferenceExpr()) {
           updateUsedClassBasedOnType(decl.getParam(i).getType());
           // We should mark the abstract method for preservation as well
           if (decl.getParam(i).getType().isReferenceType()) {
