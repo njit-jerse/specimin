@@ -19,39 +19,31 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Set up environment
+      - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.8'
 
-      - name: Install Java JDK
+      - name: Set up Java JDK
         uses: actions/setup-java@v2
         with:
           java-version: '21'
           distribution: 'adopt'
+          architecture: 'x64'
+          server-password: ${{ secrets.GITHUB_TOKEN }}
+          overwrite-settings: true
+          check-latest: false
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          sudo apt-get update
-          sudo apt-get install -y jq curl bc
-          # Fetch previous run accuracy
-          previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-          | jq -r '.value')    
-          if [ -z "$previous_run_accuracy" ] || [ "$previous_run_accuracy" == "null" ]; then
-          previous_run_accuracy=0
-          fi
-          echo "Previous run accuracy: $previous_run_accuracy"
-          
 
       - name: Display CSV File Contents
         run: |
-          CSV_PATH="/home/runner/work/specimin/specimin/CI_repository_list.csv"
-          if [ -f "$CSV_PATH" ]; then
-            cat "$CSV_PATH"
+          if [ -f /home/runner/work/specimin/specimin/CI_repository_list.csv ]; then
+            cat /home/runner/work/specimin/specimin/CI_repository_list.csv
           else
-            echo "File $CSV_PATH does not exist"
+            echo "File /home/runner/work/specimin/specimin/CI_repository_list.csv does not exist"
             exit 1
           fi
 
@@ -62,75 +54,77 @@ jobs:
           git clone https://github.com/njit-jerse/ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
           ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
 
-      - name: Configure ASHE Project
+      - name: Verify and Rename example.properties
         run: |
-          CONFIG_FILE="ASHE/src/main/resources/config.properties"
           if [ -f ASHE/src/main/resources/example.properties ]; then 
-            mv ASHE/src/main/resources/example.properties "$CONFIG_FILE"
+            mv ASHE/src/main/resources/example.properties ASHE/src/main/resources/config.properties
             echo "config.properties created"
           else 
             echo "example.properties not found"
             exit 1
           fi
-          chmod +w "$CONFIG_FILE"
-          sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' "$CONFIG_FILE"
-          cat "$CONFIG_FILE"
+
+      - name: Update ASHE Config File
+        run: |
+          chmod +w ASHE/src/main/resources/config.properties
+          sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' ASHE/src/main/resources/config.properties
+          cat ASHE/src/main/resources/config.properties
 
       - name: Make scripts executable
-        run: chmod +x ashe_scripts/*.py
+        run: |
+          chmod +x ashe_scripts/*.py
 
       - name: Run ASHE script
         run: |
           python3 ashe_scripts/run_ashe_for_stats.py \
-            "$(pwd)/ASHE" \
-            "$(pwd)/CI_repository_list.csv" \
-            "$(pwd)/ASHE/CI_REPO_CLONE_SPACE" \
-            "$(pwd)/ASHE/src/main/resources/config.properties"
+            $(pwd)/ASHE \
+            $(pwd)/CI_repository_list.csv \
+            $(pwd)/ASHE/CI_REPO_CLONE_SPACE \
+            $(pwd)/ASHE/src/main/resources/config.properties
 
-      - name: Parse and handle accuracy percentage
-        id: parse_and_handle_accuracy
+      - name: Parse accuracy percentage
+        id: parse_accuracy_percentage
         run: |
-          # Extract and clean current accuracy
-            current_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}' | tr -d '()%')
+          grep 'Fully successful from minimization to compilation' $(pwd)/ASHE/logs/specimin_statistics.txt | awk '{print $NF}' > current_run_accuracy_percentage.txt
+          cat current_run_accuracy_percentage.txt
+
+      - name: Read, update, and set Evaluation Accuracy Variable
+        id: read_update_set_variable
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+          current_accuracy=$(cat current_run_accuracy_percentage.txt)
           echo "Current accuracy: $current_accuracy"
-    
-          # Fetch previous run accuracy
           previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-          | jq -r '.value')
-    
-          # Handle null previous accuracy
-          if [ -z "$previous_run_accuracy" ] || [ "$previous_run_accuracy" == "null" ]; then
-           if [ "$previous_run_accuracy" == "null" ]; then
-            echo "Previous accuracy is null"
-           fi 
-          previous_run_accuracy=0
+            "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+            | jq -r '.value')
+          if [ -z "$previous_run_accuracy" ]; then
+            previous_run_accuracy=0
           fi
-           echo "Previous run accuracy: $previous_run_accuracy"
-    
-           # Compare accuracies and set outputs
-           if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
-            echo "::set-output name=update_needed::true"
-            echo "::set-output name=new_accuracy::$current_accuracy"
-           else
-            echo "::set-output name=update_needed::false"
+          echo "Previous run accuracy: $previous_run_accuracy"
+          if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
+            echo "Updating LATEST_SPECIMIN_EVAL_PERCENTAGE to $current_accuracy"
+            new_accuracy=$current_accuracy
+            update_needed=true
+          else
             echo "Current accuracy is less than or equal to the previous run accuracy. Failing the workflow."
             exit 1
-           fi   
-
-           
-      - name: Update GitHub Action variable
-        if: steps.parse_and_handle_accuracy.outputs.update_needed == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          repo_name="${{ github.repository }}"
-          api_url="https://api.github.com"
-          public_key_response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $api_url/repos/$repo_name/actions/secrets/public-key)
-          public_key=$(echo $public_key_response | jq -r .key)
-          key_id=$(echo $public_key_response | jq -r .key_id)
-          encrypted_value=$(echo -n "${{ steps.parse_and_handle_accuracy.outputs.new_accuracy }}" | openssl rsautl -encrypt -pubin -inkey <(echo "$public_key") | base64)
-          curl -s \
-            -X PUT \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            "$api_url/repos/$repo_name/actions/secrets/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-            -d "{\"encrypted_value\":\"$encrypted_value\",\"key_id\":\"$key_id\"}"
+          fi
+          echo "Current accuracy: $current_accuracy"
+          echo "Previous run accuracy: $previous_run_accuracy"
+          echo "::set-output name=update_needed::$update_needed"
+          echo "::set-output name=new_accuracy::$new_accuracy"
+          if $update_needed && [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            repo_name="${{ github.repository }}"
+            api_url="https://api.github.com"
+            public_key_response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $api_url/repos/$repo_name/actions/secrets/public-key)
+            public_key=$(echo $public_key_response | jq -r .key)
+            key_id=$(echo $public_key_response | jq -r .key_id)
+            encrypted_value=$(echo -n "$new_accuracy" | openssl rsautl -encrypt -pubin -inkey <(echo "$public_key") | base64)
+            curl -s \
+              -X PUT \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              "$api_url/repos/$repo_name/actions/secrets/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+              -d "{\"encrypted_value\":\"$encrypted_value\",\"key_id\":\"$key_id\"}"
+          fi
