@@ -1,4 +1,4 @@
-name: specimin_evaluation_CI
+name: check_compilable_percentage_CI
 
 on:
   push:
