@@ -38,7 +38,7 @@ jobs:
           "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
           | jq -r '.value')
           if [ -z "$previous_run_accuracy" ]; then
-            previous_run_accuracy=0
+            previous_run_accuracy="0%"
           fi
           echo "Previous run accuracy: $previous_run_accuracy"
 
@@ -120,7 +120,7 @@ jobs:
       - name: Parse accuracy percentage
         id: parse_accuracy_percentage
         run: |
-          current_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}')
+          current_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}' | tr -d '()%')
           echo "Current accuracy: $current_accuracy"
           echo "::set-output name=current_accuracy::$current_accuracy"
 
@@ -130,7 +130,7 @@ jobs:
           current_accuracy="${{ steps.parse_accuracy_percentage.outputs.current_accuracy }}"
           previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.UPDATE_VARIABLE_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-            | jq -r '.value')
+            | jq -r '.value' | tr -d '()%')
           if [ -z "$previous_run_accuracy" ]; then
             previous_run_accuracy=0
           fi
