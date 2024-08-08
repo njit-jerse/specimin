@@ -34,14 +34,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq curl bc
 
-          previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.UPDATE_VARIABLE_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-          | jq -r '.value')
-          if [ -z "$previous_run_accuracy" ]; then
-            previous_run_accuracy="0%"
-          fi
-          echo "Previous run accuracy: $previous_run_accuracy"
-
       - name: Display CSV File Contents
         run: |
           CSV_PATH="/home/runner/work/specimin/specimin/CI_repository_list.csv"
