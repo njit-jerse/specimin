@@ -67,6 +67,11 @@ jobs:
           sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' "$CONFIG_FILE"
           cat "$CONFIG_FILE"
 
+          # Fetch previous run accuracy
+          previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+          | jq -r '.value')
+
       - name: Make scripts executable
         run: chmod +x ashe_scripts/*.py
 
@@ -81,26 +86,32 @@ jobs:
       - name: Parse and handle accuracy percentage
         id: parse_and_handle_accuracy
         run: |
-          current_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}')
+          # Extract and clean current accuracy
+            current_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}' | tr -d '()%')
           echo "Current accuracy: $current_accuracy"
-          
+    
+          # Fetch previous run accuracy
           previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
-            | jq -r '.value')
-          
-          if [ -z "$previous_run_accuracy" ]; then
-            previous_run_accuracy=0
+          "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
+          | jq -r '.value')
+    
+          # Handle null previous accuracy
+          if [ -z "$previous_run_accuracy" ] || [ "$previous_run_accuracy" == "null" ]; then
+          previous_run_accuracy=0
           fi
-          echo "Previous run accuracy: $previous_run_accuracy"
-          
-          if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
+           echo "Previous run accuracy: $previous_run_accuracy"
+    
+           # Compare accuracies and set outputs
+           if (( $(echo "$current_accuracy > $previous_run_accuracy" | bc -l) )); then
             echo "::set-output name=update_needed::true"
             echo "::set-output name=new_accuracy::$current_accuracy"
-          else
+           else
             echo "::set-output name=update_needed::false"
             echo "Current accuracy is less than or equal to the previous run accuracy. Failing the workflow."
             exit 1
+           fi   
 
+           
       - name: Update GitHub Action variable
         if: steps.parse_and_handle_accuracy.outputs.update_needed == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
