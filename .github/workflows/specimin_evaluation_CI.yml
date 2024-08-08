@@ -52,10 +52,15 @@ jobs:
             exit 1
           fi
 
-      - name: Download, prepare, and clone ASHE Project using git-clone-related
+      - name: Download git-clone-related and dependencies
         run: |
           curl -L -o git-clone-related https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-clone-related
-          chmod +x git-clone-related
+          curl -L -o git-find-fork https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-find-fork
+          curl -L -o git-find-branch https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-find-branch
+          chmod +x git-clone-related git-find-fork git-find-branch
+
+      - name: Clone ASHE Project using git-clone-related
+        run: |
           ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
 
       - name: List Files in ASHE Directory
