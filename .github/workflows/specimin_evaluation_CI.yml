@@ -71,6 +71,7 @@ jobs:
           previous_run_accuracy=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           "https://api.github.com/repos/${{ github.repository }}/actions/variables/LATEST_SPECIMIN_EVAL_PERCENTAGE" \
           | jq -r '.value')
+          echo "Previous run accuracy: $previous_run_accuracy"
 
       - name: Make scripts executable
         run: chmod +x ashe_scripts/*.py
