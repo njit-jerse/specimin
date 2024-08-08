@@ -55,16 +55,19 @@ jobs:
           fi
 
 
-      - name: Download git-clone-related script
-        run: |
-         set -ex
-         curl -L -o git-clone-related https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-clone-related
-         chmod +x git-clone-related
-         
-      - name: Download and clone ASHE Project
+      - name: Download and prepare git-clone-related script
         run: |
           curl -L -o git-clone-related https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-clone-related
           chmod +x git-clone-related
+
+      - name: Download and prepare additional scripts
+        run: |
+          curl -L -o git-find-fork https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-find-fork
+          curl -L -o git-find-branch https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-find-branch
+          chmod +x git-find-fork git-find-branch
+
+      - name: Clone ASHE Project using git-clone-related
+        run: |
           ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
           
       - name: Verify example.properties exists
