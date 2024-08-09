@@ -1,0 +1,132 @@
+name: check_compilable_percentage_CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  specimin-evaluation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up environment
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+      - uses: actions/setup-java@v2
+        with:
+          java-version: '21'
+          distribution: 'adopt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          sudo apt-get update
+          sudo apt-get install -y jq curl bc
+
+      - name: Display CSV File Contents
+        run: |
+          CSV_PATH="/home/runner/work/specimin/specimin/CI_repository_list.csv"
+          if [ -f "$CSV_PATH" ]; then
+            cat "$CSV_PATH"
+          else
+            echo "File $CSV_PATH does not exist"
+            exit 1
+          fi
+
+      - name: Download git-clone-related and dependencies
+        run: |
+          curl -L -o git-clone-related https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-clone-related
+          curl -L -o git-find-fork https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-find-fork
+          curl -L -o git-find-branch https://raw.githubusercontent.com/plume-lib/git-scripts/main/git-find-branch
+          chmod +x git-clone-related git-find-fork git-find-branch
+
+      - name: Clone ASHE Project using git-clone-related
+        run: |
+          ./git-clone-related njit-jerse ASHE_Automated-Software-Hardening-for-Entrypoints ASHE
+
+      - name: Check and Rename Properties File
+        run: |
+          set -ex
+          CONFIG_PATH="ASHE/src/main/resources/config.properties"
+          EXAMPLE_PATH="ASHE/src/main/resources/example.properties"
+
+          if [ -f "$CONFIG_PATH" ]; then
+            echo "config.properties already exists"
+          elif [ -f "$EXAMPLE_PATH" ]; then
+            echo "example.properties found, renaming to config.properties"
+            mv "$EXAMPLE_PATH" "$CONFIG_PATH"
+            if [ -f "$CONFIG_PATH" ]; then
+              echo "config.properties created successfully"
+            else
+              echo "Failed to create config.properties"
+              exit 1
+            fi
+          else
+            echo "Neither config.properties nor example.properties found"
+            exit 1
+          fi
+
+          chmod +w "$CONFIG_PATH"
+          ls -l "$CONFIG_PATH"
+
+      - name: Update ASHE Config File to update SPECIMIN path
+        run: |
+          set -ex
+          sed -i 's|^specimin.tool.path=.*|specimin.tool.path='$(pwd)'|' ASHE/src/main/resources/config.properties
+
+      - name: Make all scripts under ashe_scripts executable
+        run: |
+          set -ex
+          chmod +x ashe_scripts/*.py
+
+      - name: Run the script
+        run: |
+          set -ex
+          python3 ashe_scripts/run_ashe_for_stats.py \
+            $(pwd)/ASHE \
+            $(pwd)/CI_repository_list.csv \
+            $(pwd)/ASHE/CI_REPO_CLONE_SPACE \
+            $(pwd)/ASHE/src/main/resources/config.properties
+
+      - name: Parse accuracy percentage
+        id: parse_accuracy_percentage
+        run: |
+          current_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}' | tr -d '()%')
+          echo "Current accuracy: $current_accuracy"
+          echo "::set-output name=current_accuracy::$current_accuracy"
+
+      - name: Read latest run percentage from file
+        id: read_latest_run_percentage
+        run: |
+          if [ -f "$(pwd)/CI_Latest_run_percentage.txt" ]; then
+            latest_run_accuracy=$(cat "$(pwd)/CI_Latest_run_percentage.txt" | tr -d '()%')
+            echo "Latest run accuracy: $latest_run_accuracy"
+            echo "::set-output name=latest_run_accuracy::$latest_run_accuracy"
+          else
+            echo "File CI_Latest_run_percentage.txt does not exist"
+            exit 1
+          fi
+
+      - name: Validate accuracy
+        id: validate_accuracy
+        run: |
+          current_accuracy="${{ steps.parse_accuracy_percentage.outputs.current_accuracy }}"
+          latest_run_accuracy="${{ steps.read_latest_run_percentage.outputs.latest_run_accuracy }}"
+          
+          if [ "$current_accuracy" != "$latest_run_accuracy" ]; then
+            echo "Current accuracy ($current_accuracy) does not match latest run accuracy ($latest_run_accuracy)."
+            exit 1
+          else
+            echo "Accuracy validation passed."
+          fi
