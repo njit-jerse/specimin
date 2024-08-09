@@ -102,6 +102,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
    *     class.fully.qualified.Name#fieldName
    * @param usedMembers set containing the signatures of used members
    * @param usedTypeElements set containing the signatures of used classes, enums, annotations, etc.
+   * @param model the modularity model
    * @param existingClassesToFilePath map from existing classes to file paths
    */
   public SpeciminStateVisitor(

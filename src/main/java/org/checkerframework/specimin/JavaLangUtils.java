@@ -1,6 +1,8 @@
 package org.checkerframework.specimin;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /** Utility class for questions related to the java.lang package. */
@@ -49,6 +51,9 @@ public final class JavaLangUtils {
    */
   private static final Set<String> knownFinalJdkTypes = new HashSet<>();
 
+  /** A map of primitive names (int, short, etc.) to their object representations */
+  private static final Map<String, String> primitivesToObjects = new HashMap<>();
+
   static {
     primitives.add("int");
     primitives.add("short");
@@ -58,6 +63,15 @@ public final class JavaLangUtils {
     primitives.add("float");
     primitives.add("double");
     primitives.add("char");
+
+    primitivesToObjects.put("int", "Integer");
+    primitivesToObjects.put("short", "Short");
+    primitivesToObjects.put("byte", "Byte");
+    primitivesToObjects.put("long", "Long");
+    primitivesToObjects.put("boolean", "Boolean");
+    primitivesToObjects.put("float", "Float");
+    primitivesToObjects.put("double", "Double");
+    primitivesToObjects.put("char", "Character");
 
     javaLangClassesAndInterfaces.add("AbstractMethodError");
     javaLangClassesAndInterfaces.add("Appendable");
@@ -299,6 +313,33 @@ public final class JavaLangUtils {
       default:
         throw new IllegalArgumentException("unexpected binary operator: " + binOp);
     }
+  }
+
+  /**
+   * Is a type primitive (int, char, boolean, etc.)? This method returns false for boxed types
+   * (Integer, Character, Boolean, etc.)
+   *
+   * @param type the type to check
+   * @return true iff the type is primitive
+   */
+  public static boolean isPrimitive(String type) {
+    return primitives.contains(type);
+  }
+
+  /**
+   * Converts a primitive to its boxed type (i.e. int --> Integer)
+   *
+   * @param primitive the primitive type (int, boolean, char, etc.)
+   * @return the boxed type (int --> Integer, char --> Character)
+   */
+  public static String getPrimitiveAsBoxedType(String primitive) {
+    String converted = primitivesToObjects.get(primitive);
+
+    if (converted == null) {
+      throw new IllegalArgumentException(primitive + " is not a primitive type");
+    }
+
+    return converted;
   }
 
   /**

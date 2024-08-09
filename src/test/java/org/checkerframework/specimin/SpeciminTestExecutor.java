@@ -71,7 +71,7 @@ public class SpeciminTestExecutor {
     speciminArgs.add(outputDir.toAbsolutePath().toString());
     speciminArgs.add("--root");
     speciminArgs.add(
-      Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/");
+        Path.of("src/test/resources/" + testName + "/input/").toAbsolutePath().toString() + "/");
     for (String targetFile : targetFiles) {
       speciminArgs.add("--targetFile");
       speciminArgs.add(targetFile);

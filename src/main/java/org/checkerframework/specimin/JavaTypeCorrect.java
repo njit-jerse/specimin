@@ -39,7 +39,7 @@ class JavaTypeCorrect {
    * This map is for type correcting. The key is the name of the current incorrect type, and the
    * value is the name of the desired correct type.
    */
-  private Map<String, String> typeToChange;
+  private final Map<String, String> typeToChange;
 
   /**
    * A map that associates the file directory with the set of fully qualified names of types used
@@ -53,13 +53,22 @@ class JavaTypeCorrect {
    * because the worst thing that might happen is that an extra synthetic class might accidentally
    * extend or implement an unnecessary interface.
    */
-  private Map<String, String> extendedTypes = new HashMap<>();
+  private final Map<String, String> extendedTypes = new HashMap<>();
 
   /**
    * This map associates the name of a class with the name of the unresolved interface due to
    * missing method implementations.
    */
-  private Map<String, String> classAndUnresolvedInterface = new HashMap<>();
+  private final Map<String, String> classAndUnresolvedInterface = new HashMap<>();
+
+  /**
+   * This map associates a method reference usage to a map of argument corrections, containing the
+   * method reference and the correct number of arguments
+   */
+  private final Map<String, String> methodRefToCorrectParameters = new HashMap<>();
+
+  /** This map associates a method reference usage to whether its return type is void or not. */
+  private final Map<String, Boolean> methodRefVoidness = new HashMap<>();
 
   /** The name used for a synthetic, unconstrained type variable. */
   public static final String SYNTHETIC_UNCONSTRAINED_TYPE = "SyntheticUnconstrainedType";
@@ -97,6 +106,24 @@ class JavaTypeCorrect {
    */
   public Map<String, String> getClassAndUnresolvedInterface() {
     return classAndUnresolvedInterface;
+  }
+
+  /**
+   * Get the value of methodRefToCorrectParameters.
+   *
+   * @return the value of methodRefToCorrectParameters.
+   */
+  public Map<String, String> getMethodRefToCorrectParameters() {
+    return methodRefToCorrectParameters;
+  }
+
+  /**
+   * Get the value of methodRefVoidness.
+   *
+   * @return the value of methodRefVoidness.
+   */
+  public Map<String, Boolean> getMethodRefVoidness() {
+    return methodRefVoidness;
   }
 
   /**
@@ -178,6 +205,7 @@ class JavaTypeCorrect {
       // * incompatible equality constraints
       // * bad operand types for binary operators
       // * for-each not applicable to expression type
+      // * incompatiable method reference types
 
       // These are temporaries for the equality constraints case.
       String[] firstConstraints = {"equality constraints: "};
@@ -191,6 +219,10 @@ class JavaTypeCorrect {
       // These temporaries are for the for-each case.
       String loopType = null;
       boolean lookingForLoopType = false;
+
+      // These temporaries are for the invalid method reference cases.
+      boolean lookingForInvalidMethodReference = false;
+      String methodReferenceUsage = null;
 
       StringBuilder lines = new StringBuilder("\n");
 
@@ -248,9 +280,67 @@ class JavaTypeCorrect {
           continue;
         }
 
+        if (lookingForInvalidMethodReference) {
+          if (line.contains("::")) {
+            methodReferenceUsage = line;
+          } else if (line.contains("^")) {
+            if (methodReferenceUsage == null) {
+              throw new RuntimeException("Method reference not found");
+            }
+
+            // This is the start of the method reference; travel forwards until we hit a non-
+            // alphanumeric character, except for :
+            int start = line.indexOf("^");
+
+            int end = start;
+            while (end < methodReferenceUsage.length()
+                && (Character.isLetterOrDigit(methodReferenceUsage.charAt(end))
+                    || methodReferenceUsage.charAt(end) == ':')) {
+              end++;
+            }
+
+            methodReferenceUsage = methodReferenceUsage.substring(start, end);
+          }
+          // method x in class y cannot be applied to given types
+          // then, it gives you a line with required: and all the necessary parameters
+          else if (line.contains("required:")) {
+            if (methodReferenceUsage == null) {
+              throw new RuntimeException("Method reference not found");
+            }
+            if (line.contains("no arguments")) {
+              methodRefToCorrectParameters.put(methodReferenceUsage, "");
+            } else {
+              methodRefToCorrectParameters.put(
+                  methodReferenceUsage, line.trim().substring("required:".length()).trim());
+            }
+
+            lookingForInvalidMethodReference = false;
+            methodReferenceUsage = null;
+            continue;
+          }
+          // handle method return type (this is mutually exclusive with
+          // argument types; if argument types are not valid, this error message
+          // will not show up)
+          else if (line.contains("void cannot be converted to")) {
+            if (methodReferenceUsage == null) {
+              throw new RuntimeException("Method reference not found");
+            }
+            methodRefVoidness.put(methodReferenceUsage, true);
+            lookingForInvalidMethodReference = false;
+            methodReferenceUsage = null;
+            continue;
+          }
+        }
+
         if (line.contains("error: incompatible types")
             || line.contains("error: incomparable types")) {
-          updateTypeToChange(line, filePath);
+          if (line.contains("invalid method reference")
+              || line.contains("bad return type in method reference")) {
+            lookingForInvalidMethodReference = true;
+            continue;
+          } else {
+            updateTypeToChange(line, filePath);
+          }
           continue lines;
         }
         if (line.contains("is not compatible with")) {
