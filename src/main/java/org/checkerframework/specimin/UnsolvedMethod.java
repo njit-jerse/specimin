@@ -182,6 +182,16 @@ public class UnsolvedMethod {
     return result;
   }
 
+  /**
+   * Corrects the parameter's type at index {@code parameter}
+   *
+   * @param parameter The parameter (index) to replace
+   * @param correctName The type name to replace the parameter type as
+   */
+  public void correctParameterType(int parameter, String correctName) {
+    parameterList.set(parameter, correctName);
+  }
+
   /** Set isStatic to true */
   public void setStatic() {
     isStatic = true;

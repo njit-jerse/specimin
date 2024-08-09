@@ -276,6 +276,8 @@ public class SpeciminRunner {
 
     Map<String, String> typesToChange = new HashMap<>();
     Map<String, String> classAndUnresolvedInterface = new HashMap<>();
+    Map<String, String> methodRefToCorrectParameters = new HashMap<>();
+    Map<String, Boolean> methodRefToVoidness = new HashMap<>();
 
     // This is a defense against infinite loop bugs. The idea is this:
     // if we encounter the same set of outputs three times, that's a good indication
@@ -363,10 +365,20 @@ public class SpeciminRunner {
         typeCorrecter.correctTypesForAllFiles();
         typesToChange = typeCorrecter.getTypeToChange();
         classAndUnresolvedInterface = typeCorrecter.getClassAndUnresolvedInterface();
+        methodRefToCorrectParameters = typeCorrecter.getMethodRefToCorrectParameters();
+        methodRefToVoidness = typeCorrecter.getMethodRefVoidness();
         boolean changeAtLeastOneType = addMissingClass.updateTypes(typesToChange);
         boolean extendAtLeastOneType =
             addMissingClass.updateTypesWithExtends(typeCorrecter.getExtendedTypes());
-        boolean atLeastOneTypeIsUpdated = changeAtLeastOneType || extendAtLeastOneType;
+        boolean changeAtLeastOneMethodRef =
+            addMissingClass.updateMethodReferenceParameters(methodRefToCorrectParameters);
+        boolean changeAtLeastOneMethodReturn =
+            addMissingClass.updateMethodReferenceVoidness(methodRefToVoidness);
+        boolean atLeastOneTypeIsUpdated =
+            changeAtLeastOneType
+                || extendAtLeastOneType
+                || changeAtLeastOneMethodRef
+                || changeAtLeastOneMethodReturn;
 
         // this is case 2. We will stop addMissingClass. In the next phase,
         // TargetMethodFinderVisitor will give us a meaningful exception message regarding which

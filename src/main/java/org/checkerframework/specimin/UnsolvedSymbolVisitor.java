@@ -214,6 +214,15 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   private final Set<String> potentialUsedMembers = new HashSet<>();
 
   /**
+   * Maps a method reference to all the synthetic method definitions and parameters created from its
+   * usages. The keys are the method references themselves (i.e. Baz::test), the inner key is the
+   * unsolved method definition, and the inner value is a Set of the parameter indices where the
+   * given method reference is used.
+   */
+  private final Map<String, Map<UnsolvedMethod, Set<Integer>>> methodRefUsageToSyntheticMethodDef =
+      new HashMap<>();
+
+  /**
    * Check whether the visitor is inside the declaration of a member that could be used by the
    * target methods. Symbols inside the declarations of potentially-used members will be solved if
    * they have one of the following types: ClassOrInterfaceType, Parameters, and VariableDeclarator.
@@ -562,6 +571,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       UnsolvedClassOrInterface superClass =
           new UnsolvedClassOrInterface(getParentClass(className), pkgName);
       superClass.addMethod(constructorMethod);
+
+      updateUnsolvedMethodsWithMethodReferences(node, constructorMethod);
       updateMissingClass(superClass);
       return super.visit(node, arg);
     }
@@ -1369,6 +1380,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       List<String> argumentsCreation =
           getArgumentTypesFromObjectCreation(newExpr, getPackageFromClassName(type));
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
+      updateUnsolvedMethodsWithMethodReferences(newExpr, creationMethod);
+
       updateUnsolvedClassWithClassName(type, false, false, creationMethod);
     } catch (Exception q) {
       // The exception originates from the call to getArgumentTypesFromObjectCreation within the try
@@ -1621,7 +1634,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
           continue;
         }
-        List<String> methodTypesOfArguments = getArgumentTypesFromMethodCall(method, null);
+        List<String> methodTypesOfArguments =
+            getArgumentTypesFromMethodCall(method, currentPackage);
         NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
         List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
         for (Parameter parameter : methodDeclaredParameters) {
@@ -2004,6 +2018,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             updatingInterface,
             accessModifer,
             listOfExceptions);
+
+    if (method instanceof MethodCallExpr) {
+      updateUnsolvedMethodsWithMethodReferences(method, thisMethod);
+    }
+
     UnsolvedClassOrInterface missingClass =
         updateUnsolvedClassWithClassName(className, false, false, thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
@@ -2167,6 +2186,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     List<String> argumentsList = getArgumentTypesFromMethodCall(expr, packageName);
     UnsolvedClassOrInterface missingClass = new UnsolvedClassOrInterface(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(methodName, returnType, argumentsList);
+
+    updateUnsolvedMethodsWithMethodReferences(expr, thisMethod);
+
     missingClass.addMethod(thisMethod);
     syntheticMethodReturnTypeAndClass.put(returnType, missingClass);
     this.updateMissingClass(missingClass);
@@ -2270,6 +2292,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     List<String> argumentsList = getArgumentTypesFromObjectCreation(expr, packageName);
     UnsolvedClassOrInterface missingClass = new UnsolvedClassOrInterface(className, packageName);
     UnsolvedMethod thisMethod = new UnsolvedMethod(objectName, "", argumentsList);
+
+    updateUnsolvedMethodsWithMethodReferences(expr, thisMethod);
+
     missingClass.addMethod(thisMethod);
     this.updateMissingClass(missingClass);
   }
@@ -2557,12 +2582,31 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
+   * Returns all the method references in an argument list.
+   *
+   * @param args the argument list
+   * @return a map of the parameter index to the method reference.
+   */
+  private Map<Integer, MethodReferenceExpr> getMethodReferencesFromArguments(
+      NodeList<Expression> args) {
+    Map<Integer, MethodReferenceExpr> methodRefs = new HashMap<>();
+    for (int i = 0; i < args.size(); i++) {
+      Expression argument = args.get(i);
+      if (argument.isMethodReferenceExpr()) {
+        methodRefs.put(i, argument.asMethodReferenceExpr());
+      }
+    }
+    return methodRefs;
+  }
+
+  /**
    * Shared implementation for getting argument types from method calls or calls to constructors.
    *
    * @param argList list of arguments
    * @param pkgName the name of the package of the class that contains the method being called. This
-   *     is only used when creating a functional interface if one of the parameters is a lambda. If
-   *     this argument is null, then this method throws if it encounters a lambda
+   *     is only used when creating a functional interface if one of the parameters is a lambda or
+   *     method reference. If this argument is null, then this method throws if it encounters a
+   *     lambda/method reference
    * @return the list of argument types
    */
   private List<String> getArgumentTypesImpl(
@@ -2580,10 +2624,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         parametersList.add(resolveLambdaType(lambda, pkgName));
         continue;
       } else if (arg.isMethodReferenceExpr()) {
-        // TODO: is there a better way to handle this? How should we know
-        // what the type is? The method ref is sometimes not solvable here.
-        // Maybe we will need to handle this in JavaTypeCorrect?
-        parametersList.add("java.util.function.Supplier<?>");
+        if (pkgName == null) {
+          throw new RuntimeException(
+              "encountered a method reference when the package name was unknown");
+        }
+        parametersList.add(resolveMethodExprType(arg.asMethodReferenceExpr(), pkgName));
         continue;
       }
 
@@ -2619,6 +2664,29 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
+   * Returns the correct functional interface for a method reference, or
+   * java.util.function.Supplier<?> if unresolvable.
+   *
+   * @param methodReference the method reference to solve
+   * @param pkgName the package name to create a synthetic functional interface in, if needed
+   * @return the fully qualified name of the corresponding functional interface
+   */
+  private String resolveMethodExprType(MethodReferenceExpr methodReference, String pkgName) {
+    ResolvedMethodDeclaration methodDeclaration;
+    try {
+      methodDeclaration = methodReference.resolve();
+    } catch (UnsolvedSymbolException ex) {
+      // Placeholder value; JavaTypeCorrect will update the return and parameter types
+      return "java.util.function.Supplier<?>";
+    }
+
+    int paramCount = methodDeclaration.getNumberOfParams();
+    boolean isVoid = methodDeclaration.getReturnType().isVoid();
+
+    return resolveFunctionalInterface(paramCount, isVoid, pkgName);
+  }
+
+  /**
    * Resolves a type for a lambda expression, possibly by creating a new functional interface.
    *
    * @param lambda the lambda expression
@@ -2631,29 +2699,64 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     boolean isvoid = isLambdaVoidReturn(lambda);
     // we need to run at least once more to solve the functional interface we're about to create
     this.gotException();
+
+    return resolveFunctionalInterface(cparam, isvoid, pkgName);
+  }
+
+  /**
+   * Determines if a lambda has a void return.
+   *
+   * @param lambda a lambda expression
+   * @return true iff the lambda has a void return
+   */
+  private boolean isLambdaVoidReturn(LambdaExpr lambda) {
+    if (lambda.getExpressionBody().isPresent()) {
+      return false;
+    }
+    BlockStmt body = lambda.getBody().asBlockStmt();
+    return body.stream().noneMatch(node -> node instanceof ReturnStmt);
+  }
+
+  /**
+   * Resolves a functional interface type, given the number of parameters and the presence/absence
+   * of a return type.
+   *
+   * @param numberOfParams the number of parameters
+   * @param isVoid true iff the method is void
+   * @param pkgName the package in which a new functional interface should be created, if necessary
+   * @return the fully-qualified name of a functional interface that is in-scope, matches the
+   *     specified arity, and the specified voidness
+   */
+  private String resolveFunctionalInterface(int numberOfParams, boolean isVoid, String pkgName) {
+    // we need to run at least once more to solve the functional interface we're about to create
+    this.gotException();
     // check arity:
-    if (cparam == 0) {
+    if (numberOfParams == 0 && isVoid) {
+      return "java.lang.Runnable";
+    } else if (numberOfParams == 0 && !isVoid) {
       return "java.util.function.Supplier<?>";
-    } else if (cparam == 1 && isvoid) {
+    } else if (numberOfParams == 1 && isVoid) {
       return "java.util.function.Consumer<?>";
-    } else if (cparam == 1 && !isvoid) {
+    } else if (numberOfParams == 1 && !isVoid) {
       return "java.util.function.Function<?, ?>";
-    } else if (cparam == 2 && !isvoid) {
+    } else if (numberOfParams == 2 && isVoid) {
+      return "java.util.function.BiConsumer<?, ?>";
+    } else if (numberOfParams == 2 && !isVoid) {
       return "java.util.function.BiFunction<?, ?, ?>";
     } else {
       String funcInterfaceName =
-          isvoid ? "SyntheticConsumer" + cparam : "SyntheticFunction" + cparam;
+          isVoid ? "SyntheticConsumer" + numberOfParams : "SyntheticFunction" + numberOfParams;
       UnsolvedClassOrInterface funcInterface =
           new UnsolvedClassOrInterface(funcInterfaceName, pkgName, false, true);
-      int ctypeVars = cparam + (isvoid ? 0 : 1);
+      int ctypeVars = numberOfParams + (isVoid ? 0 : 1);
       funcInterface.setNumberOfTypeVariables(ctypeVars);
       String[] paramArray = funcInterface.getTypeVariablesAsStringWithoutBrackets().split(", ");
       List<String> params = List.of(paramArray);
-      if (!isvoid) {
+      if (!isVoid) {
         // remove the last element of params, because that's the return type, not a parameter
         params = params.subList(0, params.size() - 1);
       }
-      String returnType = isvoid ? "void" : "T" + cparam;
+      String returnType = isVoid ? "void" : "T" + numberOfParams;
       UnsolvedMethod apply = new UnsolvedMethod("apply", returnType, params, true);
       funcInterface.addMethod(apply);
       updateMissingClass(funcInterface);
@@ -2672,17 +2775,76 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Determines if a lambda has a void return.
+   * Resolves a functional interface type, given the paramter types and the presence/absence of a
+   * return type.
    *
-   * @param lambda a lambda expression
-   * @return true iff the lambda has a void return
+   * @param parameters the fully-qualified class names of the parameters
+   * @param isVoid true iff the method is void
+   * @param pkgName the package in which a new functional interface should be created, if necessary
+   * @return the fully-qualified name of a functional interface that is in-scope and is a supertype
+   *     of the given function, according to javac's arity-based typechecking rules for functions
    */
-  private boolean isLambdaVoidReturn(LambdaExpr lambda) {
-    if (lambda.getExpressionBody().isPresent()) {
-      return false;
+  private String resolveFunctionalInterfaceWithFullyQualifiedParameters(
+      List<String> parameters, boolean isVoid, String pkgName) {
+    String resolvedWithWildcards = resolveFunctionalInterface(parameters.size(), isVoid, pkgName);
+
+    if (parameters.isEmpty()) {
+      return resolvedWithWildcards;
     }
-    BlockStmt body = lambda.getBody().asBlockStmt();
-    return body.stream().noneMatch(node -> node instanceof ReturnStmt);
+
+    String withParameters =
+        resolvedWithWildcards.substring(0, resolvedWithWildcards.indexOf('<') + 1);
+
+    withParameters += String.join(", ", parameters);
+
+    if (isVoid) {
+      withParameters += ">";
+      return withParameters;
+    }
+
+    // For method references, ? is sufficient for all return types
+    withParameters += ", ?>";
+    return withParameters;
+  }
+
+  /**
+   * Updates the methodRefUsageToSyntheticMethodDef set with the method references in the method
+   * call's parameters as well as the synthetic definition of the method.
+   */
+  private void updateUnsolvedMethodsWithMethodReferences(
+      Node methodCall, UnsolvedMethod syntheticMethod) {
+    Map<Integer, MethodReferenceExpr> methodRefs;
+    if (methodCall instanceof MethodCallExpr) {
+      MethodCallExpr asMethodCallExpr = (MethodCallExpr) methodCall;
+      methodRefs = getMethodReferencesFromArguments(asMethodCallExpr.getArguments());
+    } else if (methodCall instanceof ObjectCreationExpr) {
+      ObjectCreationExpr asObjectCreationExpr = (ObjectCreationExpr) methodCall;
+      methodRefs = getMethodReferencesFromArguments(asObjectCreationExpr.getArguments());
+    } else if (methodCall instanceof ExplicitConstructorInvocationStmt) {
+      ExplicitConstructorInvocationStmt asConstructorCall =
+          (ExplicitConstructorInvocationStmt) methodCall;
+      methodRefs = getMethodReferencesFromArguments(asConstructorCall.getArguments());
+    } else {
+      throw new RuntimeException("methodCall is not a method or constructor call");
+    }
+
+    for (Map.Entry<Integer, MethodReferenceExpr> methodRef : methodRefs.entrySet()) {
+      // Save the synthetic definition and usage so we can change the method reference
+      // parameter type later, if needed
+      Map<UnsolvedMethod, Set<Integer>> unsolvedMethods =
+          methodRefUsageToSyntheticMethodDef.get(methodRef.getValue().toString());
+      if (unsolvedMethods == null) {
+        unsolvedMethods = new HashMap<>();
+        methodRefUsageToSyntheticMethodDef.put(methodRef.getValue().toString(), unsolvedMethods);
+      }
+
+      Set<Integer> parameters = unsolvedMethods.get(syntheticMethod);
+      if (parameters == null) {
+        parameters = new HashSet<>();
+        unsolvedMethods.put(syntheticMethod, parameters);
+      }
+      parameters.add(methodRef.getKey());
+    }
   }
 
   /**
@@ -3281,7 +3443,12 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       i++;
     }
     List<String> methodArguments = getArgumentTypesFromMethodCall(method, packageName.toString());
-    updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArguments);
+    UnsolvedMethod createdMethod =
+        updateClassSetWithQualifiedStaticMethodCallImpl(methodParts, methodArguments);
+
+    if (createdMethod != null) {
+      updateUnsolvedMethodsWithMethodReferences(method, createdMethod);
+    }
   }
 
   /**
@@ -3291,8 +3458,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    *
    * @param methodParts the parts of the method call
    * @param methodArgTypes the types of the arguments of the method call
+   * @return the created synthetic method or null if none was created
    */
-  private void updateClassSetWithQualifiedStaticMethodCallImpl(
+  private @Nullable UnsolvedMethod updateClassSetWithQualifiedStaticMethodCallImpl(
       List<String> methodParts, List<String> methodArgTypes) {
     // As this code involves complex string operations, we'll use a method call as an example,
     // following its progression through the code.
@@ -3320,7 +3488,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     if (classfileIsInOriginalCodebase(qualifiedName)) {
       addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
       gotException();
-      return;
+      return null;
     }
 
     // At this point, returnTypeClassName will be ComExampleMyClassProcessReturnType
@@ -3342,6 +3510,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     syntheticMethodReturnTypeAndClass.put(thisReturnType, classThatContainMethod);
     this.updateMissingClass(returnClass);
     this.updateMissingClass(classThatContainMethod);
+
+    return newMethod;
   }
 
   /**
@@ -3563,6 +3733,95 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
+   * Corrects synthetic method arguments in which a method call contained a method reference.
+   *
+   * @param methodReferencesToCorrect a Map containing the method reference usage (Bar::method) to
+   *     the correct parameter types
+   * @return true if any method argument was updated
+   */
+  public boolean updateMethodReferenceParameters(Map<String, String> methodReferencesToCorrect) {
+    boolean updated = false;
+    for (String methodReference : methodReferencesToCorrect.keySet()) {
+      if (methodRefUsageToSyntheticMethodDef.containsKey(methodReference)) {
+        Map<UnsolvedMethod, Set<Integer>> unsolvedMethodsToArguments =
+            methodRefUsageToSyntheticMethodDef.get(methodReference);
+        for (UnsolvedMethod method : unsolvedMethodsToArguments.keySet()) {
+          Set<Integer> argumentsToFix = unsolvedMethodsToArguments.get(method);
+
+          String parametersAsString = methodReferencesToCorrect.get(methodReference);
+
+          if (parametersAsString == null) {
+            throw new RuntimeException("Expected corrected parameter types from JavaTypeCorrect");
+          }
+
+          List<String> parameters = new ArrayList<>();
+
+          for (String parameter :
+              JavaParserUtil.getReferenceTypesFromCommaSeparatedString(parametersAsString)) {
+            parameters.add(lookupFQNs(parameter.trim()));
+          }
+
+          // 1st phase: Assume non-void until javac says it is void
+          String fixed =
+              resolveFunctionalInterfaceWithFullyQualifiedParameters(
+                  parameters, false, currentPackage);
+
+          for (Integer argument : argumentsToFix) {
+            method.correctParameterType(argument.intValue(), fixed);
+            updated = true;
+          }
+        }
+      }
+    }
+
+    return updated;
+  }
+
+  /**
+   * Corrects synthetic method voidness in which a method call contained a method reference.
+   *
+   * @param methodReferencesToCorrect a Map containing the method reference usage (Bar::method) to
+   *     the correct voidness (true if void, false if not)
+   * @return true if any method was updated
+   */
+  public boolean updateMethodReferenceVoidness(Map<String, Boolean> methodReferencesToCorrect) {
+    boolean updated = false;
+    for (String methodReference : methodReferencesToCorrect.keySet()) {
+      if (methodRefUsageToSyntheticMethodDef.containsKey(methodReference)) {
+        Map<UnsolvedMethod, Set<Integer>> unsolvedMethodsToArguments =
+            methodRefUsageToSyntheticMethodDef.get(methodReference);
+        for (Map.Entry<UnsolvedMethod, Set<Integer>> method :
+            unsolvedMethodsToArguments.entrySet()) {
+          Set<Integer> argumentsToFix = method.getValue();
+
+          for (Integer argument : argumentsToFix) {
+            // 2nd phase: Since we've already corrected the parameter types, now
+            // we should keep them and update voidness
+            String arg = method.getKey().getParameterList().get(argument.intValue());
+
+            String parametersAsString = arg.substring(arg.indexOf('<') + 1, arg.lastIndexOf('>'));
+            List<String> parameters =
+                JavaParserUtil.getReferenceTypesFromCommaSeparatedString(parametersAsString);
+            // Remove the last element; in updateMethodReferenceParameters we assumed that it was
+            // non-void
+            parameters.remove(parameters.size() - 1);
+
+            String fixed =
+                resolveFunctionalInterfaceWithFullyQualifiedParameters(
+                    parameters, methodReferencesToCorrect.get(methodReference), currentPackage);
+
+            method.getKey().correctParameterType(argument.intValue(), fixed);
+
+            updated = true;
+          }
+        }
+      }
+    }
+
+    return updated;
+  }
+
+  /**
    * Lookup the fully-qualified names of each type in the given string, and replace the simple type
    * names in the given string with their fully-qualified equivalents. Return the result.
    *
@@ -3595,7 +3854,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
               public Visitable visit(ClassOrInterfaceType type, Void p) {
                 StringBuilder fullyQualifiedName = new StringBuilder();
                 if (classAndPackageMap.containsKey(JavaParserUtil.erase(type.asString()))) {
-                  fullyQualifiedName.append(classAndPackageMap.get(type.asString()));
+                  fullyQualifiedName.append(
+                      classAndPackageMap.get(JavaParserUtil.erase(type.asString())));
                   fullyQualifiedName.append(".");
                 } else if (!type.getTypeArguments().isPresent()) {
                   // This type is in the same package and doesn't contain any type parameters
