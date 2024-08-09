@@ -183,13 +183,12 @@ public class UnsolvedMethod {
   }
 
   /**
-   * Given a correct method reference type, this method replaces the type at the given index with
-   * the corrected name
+   * Corrects the parameter's type at index {@code parameter}
    *
    * @param parameter The parameter (index) to replace
-   * @param correctName The type name to replace the parameter as
+   * @param correctName The type name to replace the parameter type as
    */
-  public void correctMethodReferenceType(int parameter, String correctName) {
+  public void correctParameterType(int parameter, String correctName) {
     parameterList.set(parameter, correctName);
   }
 

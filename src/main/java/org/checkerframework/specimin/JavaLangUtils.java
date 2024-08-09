@@ -316,7 +316,8 @@ public final class JavaLangUtils {
   }
 
   /**
-   * Is a type primitive (int, char, boolean, etc.)?
+   * Is a type primitive (int, char, boolean, etc.)? This method returns false for boxed types
+   * (Integer, Character, Boolean, etc.)
    *
    * @param type the type to check
    * @return true iff the type is primitive
@@ -326,12 +327,12 @@ public final class JavaLangUtils {
   }
 
   /**
-   * Converts a primitive to its object wrapper class (i.e. int --> Integer)
+   * Converts a primitive to its boxed type (i.e. int --> Integer)
    *
    * @param primitive the primitive type (int, boolean, char, etc.)
-   * @return the primitive as an object (int --> Integer, char --> Character)
+   * @return the boxed type (int --> Integer, char --> Character)
    */
-  public static String getPrimitiveAsObject(String primitive) {
+  public static String getPrimitiveAsBoxedType(String primitive) {
     String converted = primitivesToObjects.get(primitive);
 
     if (converted == null) {

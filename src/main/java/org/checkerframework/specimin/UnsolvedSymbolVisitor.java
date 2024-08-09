@@ -1634,7 +1634,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         if (!methodDeclared.getName().asString().equals(method.getName().asString())) {
           continue;
         }
-        List<String> methodTypesOfArguments = getArgumentTypesFromMethodCall(method, currentPackage);
+        List<String> methodTypesOfArguments =
+            getArgumentTypesFromMethodCall(method, currentPackage);
         NodeList<Parameter> methodDeclaredParameters = methodDeclared.getParameters();
         List<String> methodDeclaredTypesOfParameters = new ArrayList<>();
         for (Parameter parameter : methodDeclaredParameters) {
@@ -2723,8 +2724,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @param numberOfParams the number of parameters
    * @param isVoid true iff the method is void
    * @param pkgName the package in which a new functional interface should be created, if necessary
-   * @return the fully-qualified name of a functional interface that is in-scope and is a supertype
-   *     of the given function, according to javac's arity-based typechecking rules for functions
+   * @return the fully-qualified name of a functional interface that is in-scope, matches the
+   *     specified arity, and the specified voidness
    */
   private String resolveFunctionalInterface(int numberOfParams, boolean isVoid, String pkgName) {
     // we need to run at least once more to solve the functional interface we're about to create
@@ -3738,8 +3739,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    *     the correct parameter types
    * @return true if any method argument was updated
    */
-  @SuppressWarnings("argument")
-  // found: int, required: @Interned int
   public boolean updateMethodReferenceParameters(Map<String, String> methodReferencesToCorrect) {
     boolean updated = false;
     for (String methodReference : methodReferencesToCorrect.keySet()) {
@@ -3757,7 +3756,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
           List<String> parameters = new ArrayList<>();
 
-          for (String parameter : getReferenceTypesFromCommaSeparatedString(parametersAsString)) {
+          for (String parameter :
+              JavaParserUtil.getReferenceTypesFromCommaSeparatedString(parametersAsString)) {
             parameters.add(lookupFQNs(parameter.trim()));
           }
 
@@ -3766,8 +3766,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
               resolveFunctionalInterfaceWithFullyQualifiedParameters(
                   parameters, false, currentPackage);
 
-          for (int argument : argumentsToFix) {
-            method.correctMethodReferenceType(argument, fixed);
+          for (Integer argument : argumentsToFix) {
+            method.correctParameterType(argument.intValue(), fixed);
             updated = true;
           }
         }
@@ -3784,8 +3784,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    *     the correct voidness (true if void, false if not)
    * @return true if any method was updated
    */
-  @SuppressWarnings("argument")
-  // found: int, required: @Interned int
   public boolean updateMethodReferenceVoidness(Map<String, Boolean> methodReferencesToCorrect) {
     boolean updated = false;
     for (String methodReference : methodReferencesToCorrect.keySet()) {
@@ -3796,13 +3794,14 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             unsolvedMethodsToArguments.entrySet()) {
           Set<Integer> argumentsToFix = method.getValue();
 
-          for (int argument : argumentsToFix) {
+          for (Integer argument : argumentsToFix) {
             // 2nd phase: Since we've already corrected the parameter types, now
             // we should keep them and update voidness
-            String arg = method.getKey().getParameterList().get(argument);
+            String arg = method.getKey().getParameterList().get(argument.intValue());
 
             String parametersAsString = arg.substring(arg.indexOf('<') + 1, arg.lastIndexOf('>'));
-            List<String> parameters = getReferenceTypesFromCommaSeparatedString(parametersAsString);
+            List<String> parameters =
+                JavaParserUtil.getReferenceTypesFromCommaSeparatedString(parametersAsString);
             // Remove the last element; in updateMethodReferenceParameters we assumed that it was
             // non-void
             parameters.remove(parameters.size() - 1);
@@ -3811,7 +3810,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
                 resolveFunctionalInterfaceWithFullyQualifiedParameters(
                     parameters, methodReferencesToCorrect.get(methodReference), currentPackage);
 
-            method.getKey().correctMethodReferenceType(argument, fixed);
+            method.getKey().correctParameterType(argument.intValue(), fixed);
 
             updated = true;
           }
@@ -3820,46 +3819,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
 
     return updated;
-  }
-
-  /**
-   * Given a String of types (separated by commas), return a List of these types, with any
-   * primitives converted to their object counterparts. Use this instead of {@code .split(", ")} to
-   * properly handle generics.
-   *
-   * @param commaSeparatedTypes A string of comma separated types
-   * @return a list of strings representing the types in commaSeparatedTypes
-   */
-  private List<String> getReferenceTypesFromCommaSeparatedString(String commaSeparatedTypes) {
-    if (commaSeparatedTypes == null || commaSeparatedTypes.isBlank()) {
-      return new ArrayList<>();
-    }
-
-    // Splitting them is simply to change primitives to objects so we do not
-    // get an error when parsing in StaticJavaParser (note that this array)
-    // may contain incomplete types like ["Map<String", "Object>"]
-    String[] tokens = commaSeparatedTypes.split(",");
-
-    for (int i = 0; i < tokens.length; i++) {
-      if (JavaLangUtils.isPrimitive(tokens[i].trim())) {
-        tokens[i] = JavaLangUtils.getPrimitiveAsObject(tokens[i].trim());
-      }
-    }
-
-    // Parse as a generic type, then get the type arguments
-    // This way we can properly differentiate between commas within type arguments
-    // versus actual commas in javac error messages
-    Type parsed = StaticJavaParser.parseType("ToParse<" + String.join(", ", tokens) + ">");
-
-    List<String> types = new ArrayList<>();
-    NodeList<Type> typeArguments = parsed.asClassOrInterfaceType().getTypeArguments().orElse(null);
-
-    if (typeArguments != null) {
-      for (Type typeArgument : typeArguments) {
-        types.add(typeArgument.toString());
-      }
-    }
-    return types;
   }
 
   /**
