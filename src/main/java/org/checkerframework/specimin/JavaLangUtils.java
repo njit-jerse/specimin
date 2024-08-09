@@ -51,7 +51,7 @@ public final class JavaLangUtils {
    */
   private static final Set<String> knownFinalJdkTypes = new HashSet<>();
 
-  /** A list of map of primitive names (int, short, etc.) to their object representations */
+  /** A map of primitive names (int, short, etc.) to their object representations */
   private static final Map<String, String> primitivesToObjects = new HashMap<>();
 
   static {
