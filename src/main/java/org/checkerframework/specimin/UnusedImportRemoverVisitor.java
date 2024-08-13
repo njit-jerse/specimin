@@ -34,8 +34,14 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
    */
   private final Map<String, ImportDeclaration> typeNamesToImports = new HashMap<>();
 
+  /** A map of fully qualified imports to their simple import names */
+  private final Map<String, String> fullyQualifiedImportsToSimple = new HashMap<>();
+
   /** A set of all fully qualified type/member names in the current compilation unit */
   private final Set<String> usedImports = new HashSet<>();
+
+  /** A set of unsolvable member names. */
+  private final Set<String> unsolvedMembers = new HashSet<>();
 
   /** The package of the current compilation unit. */
   private String currentPackage = "";
@@ -47,6 +53,16 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   public void removeUnusedImports() {
     for (Map.Entry<String, ImportDeclaration> entry : typeNamesToImports.entrySet()) {
       if (!usedImports.contains(entry.getKey())) {
+        // In special cases (namely with MethodCallExprs containing lambdas), JavaParser can have
+        // trouble resolving it, so we should preserve its imports through approximation by simple
+        // method names.
+        if (!unsolvedMembers.isEmpty()) {
+          String simpleName = fullyQualifiedImportsToSimple.get(entry.getKey());
+
+          if (simpleName != null && unsolvedMembers.contains(simpleName)) {
+            continue;
+          }
+        }
         entry.getValue().remove();
       } else if (!currentPackage.equals("")
           && entry.getKey().startsWith(currentPackage + ".")
@@ -58,6 +74,9 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
     typeNamesToImports.clear();
     usedImports.clear();
+    fullyQualifiedImportsToSimple.clear();
+    unsolvedMembers.clear();
+    currentPackage = "";
   }
 
   @Override
@@ -67,6 +86,10 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     // ImportDeclaration does not contain the asterick by default; we need to add it
     if (decl.isAsterisk()) {
       importName += ".*";
+    } else {
+      String className = importName.substring(0, importName.lastIndexOf("."));
+      String elementName = importName.replace(className + ".", "");
+      fullyQualifiedImportsToSimple.put(importName, elementName);
     }
 
     typeNamesToImports.put(importName, decl);
@@ -158,6 +181,9 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
       resolved = expr.resolve();
     } catch (UnsupportedOperationException ex) {
       // Lambdas can raise an UnsupportedOperationException
+      return super.visit(expr, arg);
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+      unsolvedMembers.add(expr.getNameAsString());
       return super.visit(expr, arg);
     }
 
