@@ -131,14 +131,23 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr expr, Void arg) {
     ResolvedMethodDeclaration resolved = expr.resolve();
 
-    // Only static methods can be statically imported
     if (resolved.isStatic()) {
-      // Handle statically imported methods
-      // import static java.lang.Math.sqrt;
-      // sqrt(1);
-      // Check for both cases: java.lang.Math.sqrt and java.lang.Math.*
-      usedImports.add(JavaParserUtil.erase(resolved.getQualifiedName()));
-      usedImports.add(JavaParserUtil.erase(resolved.declaringType().getQualifiedName()) + ".*");
+      // If it has a scope, the parent class is imported
+      if (expr.hasScope()) {
+        String fullyQualified =
+            JavaParserUtil.erase(expr.getScope().get().calculateResolvedType().describe());
+        String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
+
+        usedImports.add(fullyQualified);
+        usedImports.add(wildcard);
+      } else {
+        // Handle statically imported methods
+        // import static java.lang.Math.sqrt;
+        // sqrt(1);
+        // Check for both cases: java.lang.Math.sqrt and java.lang.Math.*
+        usedImports.add(JavaParserUtil.erase(resolved.getQualifiedName()));
+        usedImports.add(JavaParserUtil.erase(resolved.declaringType().getQualifiedName()) + ".*");
+      }
     }
 
     return super.visit(expr, arg);
