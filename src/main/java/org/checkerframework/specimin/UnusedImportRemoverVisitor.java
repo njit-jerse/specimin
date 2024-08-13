@@ -9,6 +9,7 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -99,7 +100,15 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
       return super.visit(expr, arg);
     }
 
-    ResolvedValueDeclaration resolved = expr.resolve();
+    ResolvedValueDeclaration resolved;
+    try {
+      resolved = expr.resolve();
+    } catch (UnsolvedSymbolException ex) {
+      // In testing, an UnsolvedSymbolException occurs when an invalid type is passed into
+      // NameExpr (for example, ArrayTypeTest passes in Arrays here, when it should really be a
+      // ClassOrInterfaceType)
+      return super.visit(expr, arg);
+    }
     // Handle statically imported fields
     // import static java.lang.Math.PI;
     // double x = PI;
