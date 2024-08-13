@@ -91,11 +91,11 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
     String fullyQualified;
     try {
-        fullyQualified = JavaParserUtil.erase(type.resolve().describe());
+      fullyQualified = JavaParserUtil.erase(type.resolve().describe());
     } catch (UnsolvedSymbolException ex) {
-        // Specimin made an error somewhere if this type is unresolvable;
-        // TODO: fix this once MethodReturnFullyQualifiedGenericTest is fixed
-        return super.visit(type, arg);
+      // Specimin made an error somewhere if this type is unresolvable;
+      // TODO: fix this once MethodReturnFullyQualifiedGenericTest is fixed
+      return super.visit(type, arg);
     }
 
     if (!fullyQualified.contains(".")) {
@@ -121,12 +121,18 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr expr, Void arg) {
-    if (expr.getParentNode().isPresent()
-        && (expr.getParentNode().get() instanceof FieldAccessExpr
-            || expr.getParentNode().get() instanceof MethodCallExpr)) {
+    if (expr.getParentNode().isPresent()) {
       // If it's a field access/method call expression, other methods will handle this
-      // If it's part of a fully qualified name, then we definitely do not need to handle this.
-      return super.visit(expr, arg);
+      if (expr.getParentNode().get() instanceof FieldAccessExpr) {
+        return super.visit(expr, arg);
+      }
+      if (expr.getParentNode().get() instanceof MethodCallExpr) {
+        // visit(MethodCallExpr) only handles it if it's the scope
+        MethodCallExpr parent = (MethodCallExpr) expr.getParentNode().get();
+        if (parent.hasScope() && parent.getScope().get().toString().equals(expr.toString())) {
+          return super.visit(expr, arg);
+        }
+      }
     }
 
     ResolvedValueDeclaration resolved = expr.resolve();
