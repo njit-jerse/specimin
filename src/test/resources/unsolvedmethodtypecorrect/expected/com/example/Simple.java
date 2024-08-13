@@ -1,6 +1,5 @@
 package com.example;
 
-import org.example.LocalVariables;
 import org.example.Foo;
 
 class Simple {
