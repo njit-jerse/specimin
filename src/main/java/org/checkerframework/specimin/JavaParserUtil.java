@@ -55,6 +55,21 @@ public class JavaParserUtil {
   }
 
   /**
+   * This method checks if a string has the form of a class path.
+   *
+   * @param potentialClassPath the string to be checked
+   * @return true if the string is a class path
+   */
+  public static boolean isAClassPath(String potentialClassPath) {
+    List<String> elements = Splitter.onPattern("\\.").splitToList(potentialClassPath);
+    int elementsCount = elements.size();
+    return elementsCount > 1
+        && isCapital(elements.get(elementsCount - 1))
+        // Classpaths cannot contain spaces!
+        && elements.stream().noneMatch(s -> s.contains(" "));
+  }
+
+  /**
    * This method checks if a string is capitalized
    *
    * @param string the string to be checked

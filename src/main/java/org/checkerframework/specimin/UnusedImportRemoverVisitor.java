@@ -14,6 +14,7 @@ import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -82,11 +83,20 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ClassOrInterfaceType type, Void arg) {
     // Workaround for a JavaParser bug: see UnsolvedSymbolVisitor#visit(ClassOrInterfaceType)
-    if (!JavaParserUtil.isCapital(type.getName().asString())) {
+    // Also, if it's already fully qualified, it's not tied to an import
+    if (!JavaParserUtil.isCapital(type.getName().asString())
+        || JavaParserUtil.isAClassPath(type.getName().asString())) {
       return super.visit(type, arg);
     }
 
-    String fullyQualified = JavaParserUtil.erase(type.resolve().describe());
+    String fullyQualified;
+    try {
+        fullyQualified = JavaParserUtil.erase(type.resolve().describe());
+    } catch (UnsolvedSymbolException ex) {
+        // Specimin made an error somewhere if this type is unresolvable;
+        // TODO: fix this once MethodReturnFullyQualifiedGenericTest is fixed
+        return super.visit(type, arg);
+    }
 
     if (!fullyQualified.contains(".")) {
       // Type variable; definitely not imported
@@ -137,7 +147,13 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodCallExpr expr, Void arg) {
-    ResolvedMethodDeclaration resolved = expr.resolve();
+    ResolvedMethodDeclaration resolved;
+    try {
+      resolved = expr.resolve();
+    } catch (UnsupportedOperationException ex) {
+      // Lambdas can raise an UnsupportedOperationException
+      return super.visit(expr, arg);
+    }
 
     if (resolved.isStatic()) {
       // If it has a scope, the parent class is imported

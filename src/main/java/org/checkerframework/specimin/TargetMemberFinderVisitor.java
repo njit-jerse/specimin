@@ -514,7 +514,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
               // a call to a fully-qualified static method) or the scope is a simple name.
               // In the simple name case, append the current package to the front, since
               // if it had been imported we wouldn't be in this situation.
-              if (UnsolvedSymbolVisitor.isAClassPath(scopeAsString)) {
+              if (JavaParserUtil.isAClassPath(scopeAsString)) {
                 resolvedYetStuckMethodCall.add(scopeAsString + "." + call.getNameAsString());
                 usedTypeElements.add(scopeAsString);
               } else {
@@ -869,7 +869,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
 
     String potentialOuterClass =
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
-    if (UnsolvedSymbolVisitor.isAClassPath(potentialOuterClass)) {
+    if (JavaParserUtil.isAClassPath(potentialOuterClass)) {
       updateUsedClassWithQualifiedClassName(
           potentialOuterClass, usedTypeElement, nonPrimaryClassesToPrimaryClass);
     }

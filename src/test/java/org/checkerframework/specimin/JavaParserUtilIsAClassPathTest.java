@@ -5,8 +5,8 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** This class unit tests static methods in UnsolvedSymbolVisitor. */
-public class UnsovledSymbolVisitorStaticTest {
+/** This class unit tests the isAClassPath method in JavaParserUtil. */
+public class JavaParserUtilIsAClassPathTest {
 
   private static final String LONG_CHAIN =
       "BigQueryIO.read(BillingEvent::parseFromRecord)\n"
@@ -42,20 +42,20 @@ public class UnsovledSymbolVisitorStaticTest {
 
   @Test
   public void testIsAClassPath() {
-    assertTrue(UnsolvedSymbolVisitor.isAClassPath("org.checkerframework.javacutil.ElementUtils"));
+    assertTrue(JavaParserUtil.isAClassPath("org.checkerframework.javacutil.ElementUtils"));
 
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath("org"));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath("ElementUtils"));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath("ElementUtils.foo()"));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath("org.ElementUtils.foo()"));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath("MapElements.into(TypeDescriptors.strings())"));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath(LONG_CHAIN));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath("TextIO.write()"));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath("TextIO.<BillingEvent>writeCustomType()"));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath(ENDS_WITH_DOT_CLASS));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath(ANOTHER_LONG_CHAIN));
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath(ANOTHER_LONG_CHAIN_2));
+    assertFalse(JavaParserUtil.isAClassPath("org"));
+    assertFalse(JavaParserUtil.isAClassPath("ElementUtils"));
+    assertFalse(JavaParserUtil.isAClassPath("ElementUtils.foo()"));
+    assertFalse(JavaParserUtil.isAClassPath("org.ElementUtils.foo()"));
+    assertFalse(JavaParserUtil.isAClassPath("MapElements.into(TypeDescriptors.strings())"));
+    assertFalse(JavaParserUtil.isAClassPath(LONG_CHAIN));
+    assertFalse(JavaParserUtil.isAClassPath("TextIO.write()"));
+    assertFalse(JavaParserUtil.isAClassPath("TextIO.<BillingEvent>writeCustomType()"));
+    assertFalse(JavaParserUtil.isAClassPath(ENDS_WITH_DOT_CLASS));
+    assertFalse(JavaParserUtil.isAClassPath(ANOTHER_LONG_CHAIN));
+    assertFalse(JavaParserUtil.isAClassPath(ANOTHER_LONG_CHAIN_2));
     // This is the one that caused https://github.com/kelloggm/specimin/issues/94
-    assertFalse(UnsolvedSymbolVisitor.isAClassPath(ANOTHER_LONG_CHAIN_3));
+    assertFalse(JavaParserUtil.isAClassPath(ANOTHER_LONG_CHAIN_3));
   }
 }

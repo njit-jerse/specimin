@@ -324,7 +324,7 @@ public class UnsolvedClassOrInterface {
           || "java.lang.annotation.Annotation".equals(extendsName)) {
         setIsAnAnnotationToTrue();
       } else {
-        if (!UnsolvedSymbolVisitor.isAClassPath(extendsName)) {
+        if (!JavaParserUtil.isAClassPath(extendsName)) {
           extendsName = visitor.getPackageFromClassName(extendsName) + "." + extendsName;
         }
         extend(extendsName);

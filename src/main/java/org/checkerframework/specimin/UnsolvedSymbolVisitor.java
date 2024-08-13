@@ -1086,7 +1086,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       // for a qualified name field access such as org.sample.MyClass.field, org.sample will also be
       // considered FieldAccessExpr.
-      if (isAClassPath(node.getScope().toString())) {
+      if (JavaParserUtil.isAClassPath(node.getScope().toString())) {
         gotException();
       }
     }
@@ -1101,7 +1101,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (scope.isTypeExpr()) {
         Type scopeAsType = scope.asTypeExpr().getType();
         String scopeAsTypeFQN = scopeAsType.asString();
-        if (!isAClassPath(scopeAsTypeFQN) && scopeAsType.isClassOrInterfaceType()) {
+        if (!JavaParserUtil.isAClassPath(scopeAsTypeFQN) && scopeAsType.isClassOrInterfaceType()) {
           scopeAsTypeFQN =
               getQualifiedNameForClassOrInterfaceType(scopeAsType.asClassOrInterfaceType());
         }
@@ -1416,7 +1416,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
     UnsolvedClassOrInterface unsolvedAnnotation;
 
-    if (isAClassPath(anno.getNameAsString())) {
+    if (JavaParserUtil.isAClassPath(anno.getNameAsString())) {
       @SuppressWarnings("signature") // Already guaranteed to be a FQN here
       @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
       unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
@@ -1463,7 +1463,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
     UnsolvedClassOrInterface unsolvedAnnotation;
 
-    if (isAClassPath(anno.getNameAsString())) {
+    if (JavaParserUtil.isAClassPath(anno.getNameAsString())) {
       @SuppressWarnings("signature") // Already guaranteed to be a FQN here
       @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
       unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
@@ -1520,7 +1520,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
     UnsolvedClassOrInterface unsolvedAnnotation;
 
-    if (isAClassPath(anno.getNameAsString())) {
+    if (JavaParserUtil.isAClassPath(anno.getNameAsString())) {
       @SuppressWarnings("signature") // Already guaranteed to be a FQN here
       @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
       unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
@@ -1712,7 +1712,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
 
     String packageName, className;
-    if (isAClassPath(typeRawName)) {
+    if (JavaParserUtil.isAClassPath(typeRawName)) {
       // Two cases: this could be either an Outer.Inner pair or it could
       // be a fully-qualified name. If it's an Outer.Inner pair, we identify
       // that via the heuristic that there are only two elements if we split on
@@ -3075,21 +3075,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * This method checks if a string has the form of a class path.
-   *
-   * @param potentialClassPath the string to be checked
-   * @return true if the string is a class path
-   */
-  public static boolean isAClassPath(String potentialClassPath) {
-    List<String> elements = Splitter.onPattern("\\.").splitToList(potentialClassPath);
-    int elementsCount = elements.size();
-    return elementsCount > 1
-        && JavaParserUtil.isCapital(elements.get(elementsCount - 1))
-        // Classpaths cannot contain spaces!
-        && elements.stream().noneMatch(s -> s.contains(" "));
-  }
-
-  /**
    * Given the name of a class in the @FullyQualifiedName, this method will create a synthetic class
    * for that class
    *
@@ -3098,9 +3083,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    */
   public static UnsolvedClassOrInterface getSimpleSyntheticClassFromFullyQualifiedName(
       @FullyQualifiedName String fullyName) {
-    if (!isAClassPath(fullyName)) {
+    if (!JavaParserUtil.isAClassPath(fullyName)) {
       throw new RuntimeException(
-          "Check with isAClassPath first before using"
+          "Check with JavaParserUtil.isAClassPath first before using"
               + " getSimpleSyntheticClassFromFullyQualifiedName. Non-classpath-like name: "
               + fullyName);
     }
@@ -3202,7 +3187,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         return false;
       }
       String callerToString = callerExpression.get().toString();
-      return isAClassPath(callerToString);
+      return JavaParserUtil.isAClassPath(callerToString);
     }
   }
 
@@ -3217,7 +3202,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    */
   public boolean isAQualifiedFieldSignature(String field) {
     String caller = field.substring(0, field.lastIndexOf("."));
-    return isAClassPath(caller);
+    return JavaParserUtil.isAClassPath(caller);
   }
 
   /**
@@ -3645,7 +3630,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         fullyQualifiedName.append("? extends ");
         lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getExtendedType().get());
       }
-    } else if (isAClassPath(erased)) {
+    } else if (JavaParserUtil.isAClassPath(erased)) {
       // If it's already a fully qualified name, don't do anything
       fullyQualifiedName.append(typeArgument.asString());
     } else {
