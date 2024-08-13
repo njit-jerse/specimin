@@ -3,9 +3,13 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
@@ -138,5 +142,36 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     }
 
     return super.visit(expr, arg);
+  }
+
+  @Override
+  public Visitable visit(MarkerAnnotationExpr anno, Void arg) {
+    handleAnnotation(anno);
+
+    return super.visit(anno, arg);
+  }
+
+  @Override
+  public Visitable visit(NormalAnnotationExpr anno, Void arg) {
+    handleAnnotation(anno);
+
+    return super.visit(anno, arg);
+  }
+
+  @Override
+  public Visitable visit(SingleMemberAnnotationExpr anno, Void arg) {
+    handleAnnotation(anno);
+
+    return super.visit(anno, arg);
+  }
+
+  /** Helper method to resolve all annotation expressions and add them to usedImports. */
+  private void handleAnnotation(AnnotationExpr anno) {
+    String fullyQualified = JavaParserUtil.erase(anno.resolve().getQualifiedName());
+    String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
+
+    // Check for java.lang.annotation.Target and java.lang.annotation.*
+    usedImports.add(fullyQualified);
+    usedImports.add(wildcard);
   }
 }
