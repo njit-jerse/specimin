@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -41,8 +42,9 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     for (Map.Entry<String, ImportDeclaration> entry : typeNamesToImports.entrySet()) {
       if (!usedImports.contains(entry.getKey())) {
         entry.getValue().remove();
-      } else if (entry.getKey().startsWith(currentPackage + ".")
-          && !entry.getKey().substring(0, currentPackage.length() + 1).contains(".")) {
+      } else if (!currentPackage.equals("")
+          && entry.getKey().startsWith(currentPackage + ".")
+          && !entry.getKey().substring(currentPackage.length() + 1).contains(".")) {
         // If importing a class from the same package, remove the unnecessary import
         entry.getValue().remove();
       }
@@ -91,6 +93,12 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(NameExpr expr, Void arg) {
+    if (expr.getParentNode().isPresent() && expr.getParentNode().get() instanceof FieldAccessExpr) {
+      // If it's a field access expression, visit(ClassOrInterfaceType) will handle this
+      // If it's a fully qualified name, then we definitely do not need to handle this.
+      return super.visit(expr, arg);
+    }
+
     ResolvedValueDeclaration resolved = expr.resolve();
     // Handle statically imported fields
     // import static java.lang.Math.PI;
