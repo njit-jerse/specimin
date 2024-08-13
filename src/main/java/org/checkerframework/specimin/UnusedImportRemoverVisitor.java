@@ -4,6 +4,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MarkerAnnotationExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -13,17 +14,13 @@ import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
-import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
-
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-
-import com.github.javaparser.ast.expr.Expression;
 
 /**
  * Removes all unused import statements from a compilation unit. This visitor should be used after
@@ -107,28 +104,22 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(FieldAccessExpr expr, Void arg) {
     if (expr.hasScope()) {
-        handleScopeExpression(expr.getScope());
+      handleScopeExpression(expr.getScope());
     }
     return super.visit(expr, arg);
   }
 
   @Override
   public Visitable visit(NameExpr expr, Void arg) {
-    if (expr.getParentNode().isPresent() && expr.getParentNode().get() instanceof FieldAccessExpr) {
-      // If it's a field access expression, visit(FieldAccessExpr) will handle this
+    if (expr.getParentNode().isPresent()
+        && (expr.getParentNode().get() instanceof FieldAccessExpr
+            || expr.getParentNode().get() instanceof MethodCallExpr)) {
+      // If it's a field access/method call expression, other methods will handle this
       // If it's part of a fully qualified name, then we definitely do not need to handle this.
       return super.visit(expr, arg);
     }
 
-    ResolvedValueDeclaration resolved;
-    try {
-      resolved = expr.resolve();
-    } catch (UnsolvedSymbolException ex) {
-      // In testing, an UnsolvedSymbolException occurs when an invalid type is passed into
-      // NameExpr (for example, ArrayTypeTest passes in Arrays here, when it should really be a
-      // ClassOrInterfaceType)
-      return super.visit(expr, arg);
-    }
+    ResolvedValueDeclaration resolved = expr.resolve();
 
     // Handle statically imported fields
     // import static java.lang.Math.PI;
@@ -186,17 +177,22 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     return super.visit(anno, arg);
   }
 
+  /**
+   * Helper method to handle the scope type in a FieldAccessExpr or MethodCallExpr.
+   *
+   * @param scope The scope as an Expression
+   */
   private void handleScopeExpression(Expression scope) {
     // Workaround for a JavaParser bug: see UnsolvedSymbolVisitor#visit(ClassOrInterfaceType)
     if (!JavaParserUtil.isCapital(scope.toString())) {
-        return;
+      return;
     }
 
     String fullyQualified = JavaParserUtil.erase(scope.calculateResolvedType().describe());
 
     if (!fullyQualified.contains(".")) {
-        // If there is no ., it is not a class (i.e. this.values.length)
-        return;
+      // If there is no ., it is not a class (i.e. this.values.length)
+      return;
     }
 
     String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
@@ -205,7 +201,11 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     usedImports.add(wildcard);
   }
 
-  /** Helper method to resolve all annotation expressions and add them to usedImports. */
+  /**
+   * Helper method to resolve all annotation expressions and add them to usedImports.
+   *
+   * @param anno The annotation expression to handle
+   */
   private void handleAnnotation(AnnotationExpr anno) {
     String fullyQualified = JavaParserUtil.erase(anno.resolve().getQualifiedName());
     String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
