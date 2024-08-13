@@ -17,10 +17,13 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import com.github.javaparser.ast.expr.Expression;
 
 /**
  * Removes all unused import statements from a compilation unit. This visitor should be used after
@@ -104,12 +107,7 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(FieldAccessExpr expr, Void arg) {
     if (expr.hasScope()) {
-      String fullyQualified =
-          JavaParserUtil.erase(expr.getScope().calculateResolvedType().describe());
-      String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
-
-      usedImports.add(fullyQualified);
-      usedImports.add(wildcard);
+        handleScopeExpression(expr.getScope());
     }
     return super.visit(expr, arg);
   }
@@ -153,12 +151,7 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     if (resolved.isStatic()) {
       // If it has a scope, the parent class is imported
       if (expr.hasScope()) {
-        String fullyQualified =
-            JavaParserUtil.erase(expr.getScope().get().calculateResolvedType().describe());
-        String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
-
-        usedImports.add(fullyQualified);
-        usedImports.add(wildcard);
+        handleScopeExpression(expr.getScope().get());
       } else {
         // Handle statically imported methods
         // import static java.lang.Math.sqrt;
@@ -191,6 +184,25 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     handleAnnotation(anno);
 
     return super.visit(anno, arg);
+  }
+
+  private void handleScopeExpression(Expression scope) {
+    // Workaround for a JavaParser bug: see UnsolvedSymbolVisitor#visit(ClassOrInterfaceType)
+    if (!JavaParserUtil.isCapital(scope.toString())) {
+        return;
+    }
+
+    String fullyQualified = JavaParserUtil.erase(scope.calculateResolvedType().describe());
+
+    if (!fullyQualified.contains(".")) {
+        // If there is no ., it is not a class (i.e. this.values.length)
+        return;
+    }
+
+    String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
+
+    usedImports.add(fullyQualified);
+    usedImports.add(wildcard);
   }
 
   /** Helper method to resolve all annotation expressions and add them to usedImports. */
