@@ -2,6 +2,7 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -29,6 +30,9 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   /** A set of all fully qualified type/member names in the current compilation unit */
   private final Set<String> usedImports = new HashSet<>();
 
+  /** The package of the current compilation unit. */
+  private String currentPackage = "";
+
   /**
    * Removes unused imports from the current compilation unit and resets the state to be used with
    * another compilation unit.
@@ -36,6 +40,10 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   public void removeUnusedImports() {
     for (Map.Entry<String, ImportDeclaration> entry : typeNamesToImports.entrySet()) {
       if (!usedImports.contains(entry.getKey())) {
+        entry.getValue().remove();
+      } else if (entry.getKey().startsWith(currentPackage + ".")
+          && !entry.getKey().substring(0, currentPackage.length() + 1).contains(".")) {
+        // If importing a class from the same package, remove the unnecessary import
         entry.getValue().remove();
       }
     }
@@ -58,8 +66,21 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(PackageDeclaration node, Void arg) {
+    currentPackage = node.getNameAsString();
+
+    return super.visit(node, arg);
+  }
+
+  @Override
   public Visitable visit(ClassOrInterfaceType type, Void arg) {
     String fullyQualified = JavaParserUtil.erase(type.resolve().describe());
+
+    if (!fullyQualified.contains(".")) {
+      // Type variable; definitely not imported
+      return super.visit(type, arg);
+    }
+
     String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
 
     // Check for java.util.List and java.util.*
