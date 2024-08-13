@@ -1219,7 +1219,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // like com.example.Dog dog, JavaParser considers its package components (com and com.example)
     // as types, too. This issue happens even when the source file of the Dog class is present in
     // the codebase.
-    if (!isCapital(typeExpr.getName().asString())) {
+    if (!JavaParserUtil.isCapital(typeExpr.getName().asString())) {
       return super.visit(typeExpr, p);
     }
     // type belonging to a class declaration will be handled by the visit method for
@@ -1717,7 +1717,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       // be a fully-qualified name. If it's an Outer.Inner pair, we identify
       // that via the heuristic that there are only two elements if we split on
       // the dot and that the whole string is capital
-      if (typeRawName.indexOf('.') == typeRawName.lastIndexOf('.') && isCapital(typeRawName)) {
+      if (typeRawName.indexOf('.') == typeRawName.lastIndexOf('.')
+          && JavaParserUtil.isCapital(typeRawName)) {
         className = typeRawName;
         packageName = getPackageFromClassName(typeRawName.substring(0, typeRawName.indexOf('.')));
       } else {
@@ -2529,7 +2530,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (splitType.size() > 2) {
         // if the above conditions are met, this type is probably already in the qualified form.
         return typeAsString;
-      } else if (isCapital(typeAsString)) {
+      } else if (JavaParserUtil.isCapital(typeAsString)) {
         // Heuristic: if the type name has two dot-separated components and
         // the first one is capitalized, then it's probably an inner class.
         // Return the outer class' package.
@@ -2911,7 +2912,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     //    name might be "java.util" and the class name might be "Map.Entry".
     String outerClassName = null, innerClassName = null;
     // First case, looking for "Map.Entry" pattern
-    if (isCapital(qualifiedName)
+    if (JavaParserUtil.isCapital(qualifiedName)
         &&
         // This test checks that it has only one .
         qualifiedName.indexOf('.') == qualifiedName.lastIndexOf('.')) {
@@ -3074,17 +3075,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * This method checks if a string is capitalized
-   *
-   * @param string the string to be checked
-   * @return true if the string is capitalized
-   */
-  public static boolean isCapital(String string) {
-    Character first = string.charAt(0);
-    return Character.isUpperCase(first);
-  }
-
-  /**
    * This method checks if a string has the form of a class path.
    *
    * @param potentialClassPath the string to be checked
@@ -3094,7 +3084,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     List<String> elements = Splitter.onPattern("\\.").splitToList(potentialClassPath);
     int elementsCount = elements.size();
     return elementsCount > 1
-        && isCapital(elements.get(elementsCount - 1))
+        && JavaParserUtil.isCapital(elements.get(elementsCount - 1))
         // Classpaths cannot contain spaces!
         && elements.stream().noneMatch(s -> s.contains(" "));
   }

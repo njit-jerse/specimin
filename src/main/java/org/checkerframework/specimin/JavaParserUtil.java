@@ -55,6 +55,17 @@ public class JavaParserUtil {
   }
 
   /**
+   * This method checks if a string is capitalized
+   *
+   * @param string the string to be checked
+   * @return true if the string is capitalized
+   */
+  public static boolean isCapital(String string) {
+    Character first = string.charAt(0);
+    return Character.isUpperCase(first);
+  }
+
+  /**
    * Utility method to check if the given declaration is a local class declaration.
    *
    * @param decl a class, interface, or enum declaration

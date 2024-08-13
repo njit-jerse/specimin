@@ -81,6 +81,11 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceType type, Void arg) {
+    // Workaround for a JavaParser bug: see UnsolvedSymbolVisitor#visit(ClassOrInterfaceType)
+    if (!JavaParserUtil.isCapital(type.getName().asString())) {
+      return super.visit(type, arg);
+    }
+
     String fullyQualified = JavaParserUtil.erase(type.resolve().describe());
 
     if (!fullyQualified.contains(".")) {
@@ -97,10 +102,23 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   }
 
   @Override
+  public Visitable visit(FieldAccessExpr expr, Void arg) {
+    if (expr.hasScope()) {
+      String fullyQualified =
+          JavaParserUtil.erase(expr.getScope().calculateResolvedType().describe());
+      String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
+
+      usedImports.add(fullyQualified);
+      usedImports.add(wildcard);
+    }
+    return super.visit(expr, arg);
+  }
+
+  @Override
   public Visitable visit(NameExpr expr, Void arg) {
     if (expr.getParentNode().isPresent() && expr.getParentNode().get() instanceof FieldAccessExpr) {
-      // If it's a field access expression, visit(ClassOrInterfaceType) will handle this
-      // If it's a fully qualified name, then we definitely do not need to handle this.
+      // If it's a field access expression, visit(FieldAccessExpr) will handle this
+      // If it's part of a fully qualified name, then we definitely do not need to handle this.
       return super.visit(expr, arg);
     }
 
@@ -113,6 +131,7 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
       // ClassOrInterfaceType)
       return super.visit(expr, arg);
     }
+
     // Handle statically imported fields
     // import static java.lang.Math.PI;
     // double x = PI;
