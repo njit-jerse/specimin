@@ -15,6 +15,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -169,6 +170,13 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
       String declaringType = JavaParserUtil.erase(asField.declaringType().getQualifiedName());
       // Check for both cases: java.lang.Math.PI and java.lang.Math.*
       usedImports.add(declaringType + "." + asField.getName());
+      usedImports.add(declaringType + ".*");
+    } else if (resolved.isEnumConstant()) {
+      ResolvedEnumConstantDeclaration asEnumConstant = resolved.asEnumConstant();
+      String declaringType = JavaParserUtil.erase(asEnumConstant.getType().describe());
+      // com.example.Enum, com.example.Enum.VALUE, com.example.Enum.*
+      usedImports.add(declaringType);
+      usedImports.add(declaringType + "." + asEnumConstant.getName());
       usedImports.add(declaringType + ".*");
     }
     return super.visit(expr, arg);
