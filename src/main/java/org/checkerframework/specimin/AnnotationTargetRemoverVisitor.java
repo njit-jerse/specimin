@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -136,9 +135,8 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
       List<ElementType> sortedElementTypes = new ArrayList<>(elementTypes);
       Collections.sort(sortedElementTypes, (a, b) -> a.name().compareTo(b.name()));
 
-      Iterator<ElementType> iterator = elementTypes.iterator();
-      while (iterator.hasNext()) {
-        ElementType elementType = iterator.next();
+      for (int i = 0; i < sortedElementTypes.size(); i++) {
+        ElementType elementType = sortedElementTypes.get(i);
         if (!staticallyImportedElementTypes.contains(elementType)) {
           if (useFullyQualified) {
             newAnnotation.append("java.lang.annotation.");
@@ -147,7 +145,7 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
         }
         newAnnotation.append(elementType.name());
 
-        if (iterator.hasNext()) {
+        if (i < sortedElementTypes.size() - 1) {
           newAnnotation.append(", ");
         }
       }
