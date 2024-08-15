@@ -25,9 +25,12 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import java.lang.annotation.ElementType;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -129,6 +132,10 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
       newAnnotation.append("Target(");
 
       newAnnotation.append('{');
+
+      List<ElementType> sortedElementTypes = new ArrayList<>(elementTypes);
+      Collections.sort(sortedElementTypes, (a, b) -> a.name().compareTo(b.name()));
+
       Iterator<ElementType> iterator = elementTypes.iterator();
       while (iterator.hasNext()) {
         ElementType elementType = iterator.next();
