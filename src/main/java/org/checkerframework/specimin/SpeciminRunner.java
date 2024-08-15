@@ -512,6 +512,8 @@ public class SpeciminRunner {
       cu.accept(methodPruner, null);
     }
 
+    pruneAnnotationDeclarationTargets(parsedTargetFiles);
+
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();
     Set<String> targetFilesAbsolutePaths = new HashSet<>();
@@ -657,6 +659,17 @@ public class SpeciminRunner {
       annotationParameterTypesVisitor.getClassesToAdd().clear();
     }
     return annotationParameterTypesVisitor;
+  }
+
+  /** Runs AnnotationTargetRemoverVisitor on the target files. Call after PrunerVisitor. */
+  private static void pruneAnnotationDeclarationTargets(
+      Map<String, CompilationUnit> parsedTargetFiles) {
+    AnnotationTargetRemoverVisitor targetPruner = new AnnotationTargetRemoverVisitor();
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(targetPruner, null);
+    }
+
+    targetPruner.removeExtraAnnotationTargets();
   }
 
   /**
