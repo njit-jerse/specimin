@@ -476,6 +476,7 @@ public class UnsolvedClassOrInterface {
               + "\tjava.lang.annotation.ElementType.LOCAL_VARIABLE, \n"
               + "\tjava.lang.annotation.ElementType.ANNOTATION_TYPE,\n"
               + "\tjava.lang.annotation.ElementType.PACKAGE,\n"
+              + "\tjava.lang.annotation.ElementType.TYPE_PARAMETER,\n"
               + "\tjava.lang.annotation.ElementType.TYPE_USE \n"
               + "})");
     }
