@@ -1,22 +1,37 @@
 package com.example;
 
-@Foo
-public class Simple<@Foo T> {
-    @Foo
+import java.lang.annotation.Target;
+import java.util.*;
+
+import static java.lang.annotation.ElementType.*;
+
+@Type
+public class Simple<@TypeParam T> {
+    @Method
     @AnnoDecl
-    public <@Foo U> void baz(@Foo U u) {
-        Simple<@Foo String> simple = new Simple<>();
-        @Foo int x = simple.field;
+    public <@TypeParam U> void baz(@Param U u) {
+        @LocalVariable
+        Simple<@TypeParam String> simple = new Simple<>();
+        @LocalVariable int x = simple.field;
+        EnumTest e = EnumTest.A;
+        List<String> y;
     }
 
-    @Foo
+    @Field
     public int field;
 
-    @Foo
+    @Constructor
     public Simple() { }
 
-    @Foo
+    @AnnotationDeclaration
+    // METHOD should be the only one that remains
+    @Target({METHOD, FIELD, TYPE_USE})
     private @interface AnnoDecl {
 
+    }
+
+    enum EnumTest {
+        @EnumConstantDeclaration
+        A
     }
 }

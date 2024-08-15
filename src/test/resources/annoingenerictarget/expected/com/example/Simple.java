@@ -5,6 +5,7 @@ import org.checkerframework.checker.nullness.qual.*;
 import org.checkerframework.checker.initialization.qual.Initialized;
 
 class Simple {
+
     @Initialized
     @NonNull
     @UnknownKeyFor
