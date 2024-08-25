@@ -44,13 +44,17 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
   /** A Map of fully qualified annotation names to their declarations. */
   private final Map<String, AnnotationDeclaration> annotationToDeclaration = new HashMap<>();
 
+  private static final String TARGET_PACKAGE = "java.lang.annotation";
+  private static final String TARGET_NAME = "Target";
+  private static final String FULLY_QUALIFIED_TARGET =  TARGET_PACKAGE + "." + TARGET_NAME;
+
   /**
    * Updates all annotation declaration {@code @Target} values to match their usages. Only removes
    * {@code ElementType}s, doesn't add them. Call this method once after visiting all files.
    */
   public void removeExtraAnnotationTargets() {
     for (Map.Entry<String, AnnotationDeclaration> pair : annotationToDeclaration.entrySet()) {
-      AnnotationExpr targetAnnotation = pair.getValue().getAnnotationByName("Target").orElse(null);
+      AnnotationExpr targetAnnotation = pair.getValue().getAnnotationByName(TARGET_NAME).orElse(null);
 
       if (targetAnnotation == null) {
         // This is most likely an existing definition. If there is no @Target annotation,
@@ -59,10 +63,10 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
       }
 
       boolean useFullyQualified =
-          targetAnnotation.getNameAsString().equals("java.lang.annotation.Target");
+          targetAnnotation.getNameAsString().equals(FULLY_QUALIFIED_TARGET);
 
       // Only handle java.lang.annotation.Target
-      if (!targetAnnotation.resolve().getQualifiedName().equals("java.lang.annotation.Target")) {
+      if (!targetAnnotation.resolve().getQualifiedName().equals(FULLY_QUALIFIED_TARGET)) {
         continue;
       }
 
@@ -125,10 +129,12 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
       newAnnotation.append("@");
 
       if (useFullyQualified) {
-        newAnnotation.append("java.lang.annotation.");
+        newAnnotation.append(TARGET_PACKAGE);
+        newAnnotation.append(".");
       }
 
-      newAnnotation.append("Target(");
+      newAnnotation.append(TARGET_NAME);
+      newAnnotation.append("(");
 
       newAnnotation.append('{');
 
@@ -139,7 +145,8 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
         ElementType elementType = sortedElementTypes.get(i);
         if (!staticallyImportedElementTypes.contains(elementType)) {
           if (useFullyQualified) {
-            newAnnotation.append("java.lang.annotation.");
+            newAnnotation.append(TARGET_PACKAGE);
+            newAnnotation.append(".");
           }
           newAnnotation.append("ElementType.");
         }
