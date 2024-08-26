@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
@@ -112,6 +113,11 @@ public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(MarkerAnnotationExpr anno, Void p) {
+    // Annotations on packages cause an exception in findClosestParentMemberOrClassLike
+    if (anno.hasParentNode() && anno.getParentNode().get() instanceof PackageDeclaration) {
+      return super.visit(anno, p);
+    }
+
     Node parent = JavaParserUtil.findClosestParentMemberOrClassLike(anno);
 
     if (isTargetOrUsed(parent)) {
@@ -122,6 +128,11 @@ public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(SingleMemberAnnotationExpr anno, Void p) {
+    // Annotations on packages cause an exception in findClosestParentMemberOrClassLike
+    if (anno.hasParentNode() && anno.getParentNode().get() instanceof PackageDeclaration) {
+      return super.visit(anno, p);
+    }
+
     Node parent = JavaParserUtil.findClosestParentMemberOrClassLike(anno);
 
     if (isTargetOrUsed(parent)) {
@@ -132,6 +143,11 @@ public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(NormalAnnotationExpr anno, Void p) {
+    // Annotations on packages cause an exception in findClosestParentMemberOrClassLike
+    if (anno.hasParentNode() && anno.getParentNode().get() instanceof PackageDeclaration) {
+      return super.visit(anno, p);
+    }
+
     Node parent = JavaParserUtil.findClosestParentMemberOrClassLike(anno);
 
     if (isTargetOrUsed(parent)) {

@@ -4,8 +4,8 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks if synthetic annotations used in different locations will compile based
- * on @Target.
+ * This test checks if synthetic annotations used in different locations will contain the proper
+ * ElementTypes in their {@code @Target} annotations
  */
 public class SyntheticAnnotationTargetTest {
   @Test

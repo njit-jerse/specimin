@@ -2885,10 +2885,15 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
           return wildcardPkg;
         }
       }
-      // If none do, then default to the first wildcard import.
+      // If none do, then default to the first wildcard import that is not a JDK package.
       // TODO: log a warning about this once we have a logger
-      String wildcardPkg = wildcardImports.get(0);
-      return wildcardPkg;
+      for (String wildcardPkg : wildcardImports) {
+        if (!JavaLangUtils.inJdkPackage(wildcardPkg)) {
+          return wildcardPkg;
+        }
+      }
+      // If we're here, all wildcard imports are jdk imports; use current package instead
+      return currentPackage;
     }
   }
 

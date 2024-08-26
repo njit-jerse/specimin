@@ -9,7 +9,7 @@ import org.checkerframework.framework.qual.SubtypeOf;
 
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ ElementType.TYPE_USE, ElementType.TYPE_PARAMETER })
 @SubtypeOf({ GTENegativeOne.class })
+@Target({ ElementType.TYPE_USE })
 public @interface NonNegative {
 }
