@@ -84,7 +84,7 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   public Node visit(ImportDeclaration decl, Void arg) {
     String importName = decl.getNameAsString();
 
-    // ImportDeclaration does not contain the asterick by default; we need to add it
+    // ImportDeclaration does not contain the asterisk by default; we need to add it
     if (decl.isAsterisk()) {
       importName += ".*";
     } else {
@@ -129,7 +129,8 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
     String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
 
-    // Check for java.util.List and java.util.*
+    // Check include both the fully qualified name and the wildcard to match a potential import
+    // e.g. java.util.List and java.util.*
     usedImports.add(fullyQualified);
     usedImports.add(wildcard);
     return super.visit(type, arg);
@@ -162,18 +163,22 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     ResolvedValueDeclaration resolved = expr.resolve();
 
     // Handle statically imported fields
+    // e.g.
     // import static java.lang.Math.PI;
     // double x = PI;
     //            ^^
     if (resolved.isField()) {
       ResolvedFieldDeclaration asField = resolved.asField();
       String declaringType = JavaParserUtil.erase(asField.declaringType().getQualifiedName());
-      // Check for both cases: java.lang.Math.PI and java.lang.Math.*
+      // Check for both cases, e.g.: java.lang.Math.PI and java.lang.Math.*
       usedImports.add(declaringType + "." + asField.getName());
       usedImports.add(declaringType + ".*");
     } else if (resolved.isEnumConstant()) {
       ResolvedEnumConstantDeclaration asEnumConstant = resolved.asEnumConstant();
       String declaringType = JavaParserUtil.erase(asEnumConstant.getType().describe());
+      // Importing the enum itself, a static import of a specific enum value, or a wildcard
+      // for all values of the enum
+      // e.g.
       // com.example.Enum, com.example.Enum.VALUE, com.example.Enum.*
       usedImports.add(declaringType);
       usedImports.add(declaringType + "." + asEnumConstant.getName());
@@ -201,9 +206,10 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
         handleScopeExpression(expr.getScope().get());
       } else {
         // Handle statically imported methods
+        // e.g.
         // import static java.lang.Math.sqrt;
         // sqrt(1);
-        // Check for both cases: java.lang.Math.sqrt and java.lang.Math.*
+        // Check for qualified name and the wildcard, e.g.: java.lang.Math.sqrt and java.lang.Math.*
         usedImports.add(JavaParserUtil.erase(resolved.getQualifiedName()));
         usedImports.add(JavaParserUtil.erase(resolved.declaringType().getQualifiedName()) + ".*");
       }
@@ -247,11 +253,11 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     String fullyQualified = JavaParserUtil.erase(scope.calculateResolvedType().describe());
 
     if (!fullyQualified.contains(".")) {
-      // If there is no ., it is not a class (i.e. this.values.length)
+      // If there is no ., it is not a class (e.g. this.values.length)
       return;
     }
 
-    String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
+    String wildcard = getWildcardFromClassOrMemberName(fullyQualified);
 
     usedImports.add(fullyQualified);
     usedImports.add(wildcard);
@@ -264,10 +270,23 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
    */
   private void handleAnnotation(AnnotationExpr anno) {
     String fullyQualified = JavaParserUtil.erase(anno.resolve().getQualifiedName());
-    String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
+    String wildcard = getWildcardFromClassOrMemberName(fullyQualified);
 
-    // Check for java.lang.annotation.Target and java.lang.annotation.*
+    // Check for the fully qualified class name, or a wildcard import of the annotation's package
+    // e.g. java.lang.annotation.Target and java.lang.annotation.*
     usedImports.add(fullyQualified);
     usedImports.add(wildcard);
+  }
+  
+  /**
+   * Helper method to convert a fully qualified class/member name into a wildcard
+   * e.g. {@code java.lang.Math.sqrt} --> {@code java.lang.Math.*}
+   * 
+   * @param fullyQualified The fully qualified name
+   * 
+   * @return {@code fullyQualified} with the text after the last dot replaced with an asterisk ({@code *})
+   */
+  private static String getWildcardFromClassOrMemberName(String fullyQualified) {
+    return fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
   }
 }
