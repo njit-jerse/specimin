@@ -29,8 +29,7 @@ import java.util.Set;
  */
 public class AnnotationParameterTypesVisitor extends SpeciminStateVisitor {
   /**
-   * Constructs a new SolveMethodOverridingVisitor with the provided sets of target methods, used
-   * members, and used classes.
+   * Constructs a new AnnotationParameterTypesVisitor with the previous visitor
    *
    * @param previousVisitor the last visitor to run before this one
    */

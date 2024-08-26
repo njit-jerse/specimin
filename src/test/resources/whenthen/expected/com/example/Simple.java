@@ -3,8 +3,6 @@ package com.example;
 import static org.example.TestUtil.when;
 import static org.example.TestUtil.mock;
 
-import com.example.Banana;
-
 class Simple {
 
     void bar() {
