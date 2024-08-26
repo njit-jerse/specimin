@@ -277,14 +277,14 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
     usedImports.add(fullyQualified);
     usedImports.add(wildcard);
   }
-  
+
   /**
-   * Helper method to convert a fully qualified class/member name into a wildcard
-   * e.g. {@code java.lang.Math.sqrt} --> {@code java.lang.Math.*}
-   * 
+   * Helper method to convert a fully qualified class/member name into a wildcard e.g.
+   * {@code java.lang.Math.sqrt} --> {@code java.lang.Math.*}
+   *
    * @param fullyQualified The fully qualified name
-   * 
-   * @return {@code fullyQualified} with the text after the last dot replaced with an asterisk ({@code *})
+   * @return {@code fullyQualified} with the text after the last dot replaced with an
+   * asterisk ({@code *})
    */
   private static String getWildcardFromClassOrMemberName(String fullyQualified) {
     return fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
