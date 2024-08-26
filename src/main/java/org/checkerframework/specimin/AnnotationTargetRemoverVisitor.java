@@ -44,9 +44,14 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
   /** A Map of fully qualified annotation names to their declarations. */
   private final Map<String, AnnotationDeclaration> annotationToDeclaration = new HashMap<>();
 
+  /** Constant for the package of {@code @Target} ({@code java.lang.annotation}) */
   private static final String TARGET_PACKAGE = "java.lang.annotation";
+
+  /** Constant for {@code @Target}'s name (does not include the {@code @}) */
   private static final String TARGET_NAME = "Target";
-  private static final String FULLY_QUALIFIED_TARGET =  TARGET_PACKAGE + "." + TARGET_NAME;
+
+  /** Constant for {@code @Target}'s fully qualified name */
+  private static final String FULLY_QUALIFIED_TARGET = TARGET_PACKAGE + "." + TARGET_NAME;
 
   /**
    * Updates all annotation declaration {@code @Target} values to match their usages. Only removes
@@ -54,7 +59,8 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
    */
   public void removeExtraAnnotationTargets() {
     for (Map.Entry<String, AnnotationDeclaration> pair : annotationToDeclaration.entrySet()) {
-      AnnotationExpr targetAnnotation = pair.getValue().getAnnotationByName(TARGET_NAME).orElse(null);
+      AnnotationExpr targetAnnotation =
+          pair.getValue().getAnnotationByName(TARGET_NAME).orElse(null);
 
       if (targetAnnotation == null) {
         // This is most likely an existing definition. If there is no @Target annotation,
@@ -62,8 +68,7 @@ public class AnnotationTargetRemoverVisitor extends ModifierVisitor<Void> {
         continue;
       }
 
-      boolean useFullyQualified =
-          targetAnnotation.getNameAsString().equals(FULLY_QUALIFIED_TARGET);
+      boolean useFullyQualified = targetAnnotation.getNameAsString().equals(FULLY_QUALIFIED_TARGET);
 
       // Only handle java.lang.annotation.Target
       if (!targetAnnotation.resolve().getQualifiedName().equals(FULLY_QUALIFIED_TARGET)) {
