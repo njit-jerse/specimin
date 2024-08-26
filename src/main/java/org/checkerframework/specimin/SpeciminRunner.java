@@ -512,6 +512,8 @@ public class SpeciminRunner {
       cu.accept(methodPruner, null);
     }
 
+    removeUnusedImports(parsedTargetFiles);
+
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();
     Set<String> targetFilesAbsolutePaths = new HashSet<>();
@@ -657,6 +659,20 @@ public class SpeciminRunner {
       annotationParameterTypesVisitor.getClassesToAdd().clear();
     }
     return annotationParameterTypesVisitor;
+  }
+
+  /**
+   * Removes all unused imports in each output file through {@code UnusedImportRemoverVisitor}.
+   *
+   * @param parsedTargetFiles the files to remove unused imports
+   */
+  private static void removeUnusedImports(Map<String, CompilationUnit> parsedTargetFiles) {
+    UnusedImportRemoverVisitor unusedImportRemover = new UnusedImportRemoverVisitor();
+
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(unusedImportRemover, null);
+      unusedImportRemover.removeUnusedImports();
+    }
   }
 
   /**

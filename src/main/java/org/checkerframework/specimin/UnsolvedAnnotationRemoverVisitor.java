@@ -114,7 +114,7 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
       isResolved = false;
     }
 
-    if (!UnsolvedSymbolVisitor.isAClassPath(annotationName)) {
+    if (!JavaParserUtil.isAClassPath(annotationName)) {
       if (!classToFullClassName.containsKey(annotationName)) {
         // An annotation not imported and from the java.lang package is not our concern.
         if (!JavaLangUtils.isJavaLangName(annotationName)) {
