@@ -786,17 +786,17 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     //
     // This visit method uses this fact to add extends clauses to classes created by
     // UnsolvedSymbolVisitor.
-    ReferenceType referenceType;
+    Type type;
     if (node.getPattern().isPresent()) {
       PatternExpr patternExpr = node.getPattern().get();
-      referenceType = patternExpr.getType();
+      type = patternExpr.getType();
     } else {
-      referenceType = node.getType();
+      type = node.getType();
     }
     Expression relationalExpr = node.getExpression();
     String relationalExprFQN, referenceTypeFQN;
     try {
-      referenceTypeFQN = referenceType.resolve().describe();
+      referenceTypeFQN = type.resolve().describe();
       relationalExprFQN = relationalExpr.calculateResolvedType().describe();
     } catch (UnsolvedSymbolException e) {
       // Try again next time.
