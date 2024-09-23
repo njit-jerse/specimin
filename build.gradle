@@ -28,7 +28,7 @@ dependencies {
 
     implementation "org.vineflower:vineflower:1.10.1"
 
-    implementation 'commons-io:commons-io:2.16.1'
+    implementation 'commons-io:commons-io:2.17.0'
 
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
