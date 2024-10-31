@@ -1,10 +1,11 @@
-# TypeSlice: a specification slicer
+# TypeSlice: a type-directed slicer
 
-This document describes **TypeSlice** (SPECIfication SLICEr).
-TypeSlice's goal is, given a Java Program *P*
+This document describes **TypeSlice**, a "type-directed" slicer that is designed to preserve the compile-time semantics
+of a program, from the point of view of a typechecker.
+That is, TypeSlice's goal is, given a Java Program *P*
 and a set of methods or fields in that program *M*, produce an independently-compilable
 version of *P* that contains (1) the body of each method or initializer of each field in *M*
-and (2) as little else as possible while preserving the specifications
+and (2) as little else as possible while preserving the types
 (i.e., the signatures of methods, the structure of classes, etc.) used
 by anything in *M*.
 
@@ -13,7 +14,7 @@ system that does *modular* program analysis, such as a [Checker Framework](check
 checker or the type system of Java itself. TypeSlice's output should preserve the output
 of a type-system-like analysis (such as a crash, false positive, or false negative).
 
-TypeSlice supports two *modes*: exact and approximate specification slicing. Exact mode
+TypeSlice supports two *modes*: exact and approximate type-directed slicing. Exact mode
 is automatically used if all relevant source or class files are provided to TypeSlice. If
 a relevant source or class file is used but missing, TypeSlice will enter approximate mode
 and create synthetic Java code based on the context in which that missing source or class
