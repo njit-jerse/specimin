@@ -1,14 +1,14 @@
 ## Developer documentation
 
 This document contains information that might be useful if you want to
-contribute to SpecSlice. We welcome improvements, bug fixes, new test
+contribute to TypeSlice. We welcome improvements, bug fixes, new test
 cases, and any other contributions that you'd like to make. To suggest
-a change to SpecSlice, please open a [GitHub pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request).
+a change to TypeSlice, please open a [GitHub pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request).
 
 ### Testing infrastructure
 
-Even SpecSlice's "unit tests" are actually full system tests: each
-runs SpecSlice on a (small) input program and checks that it produces
+Even TypeSlice's "unit tests" are actually full system tests: each
+runs TypeSlice on a (small) input program and checks that it produces
 an expected output program; note that the test cases themselves are
 also Java programs (this sometimes confuses IDEs).
 
@@ -17,7 +17,7 @@ Each test case has a name (e.g., "onefilesimple") and three parts:
 `src/test/java/org/checkerframework/specSlice`. The name of a new
 test runner should always be the test name in CamelCase plus the word
 "Test" (e.g., `OneFileSimpleTest.java`).
-* the test input. This is the program that SpecSlice should minimize.
+* the test input. This is the program that TypeSlice should minimize.
 It is stored under `src/test/resources/$testname/input`, where `$testname`
 is the name of the test. Note that this must be a Java program,
 and therefore must also respect the usual Java conventions - for example,
@@ -61,20 +61,20 @@ must have the expected outcomes (which may not always be passing). More on this 
 
 ### Integration Tests
 
-SpecSlice's integration tests come from a set of 20 historical typechecker
+TypeSlice's integration tests come from a set of 20 historical typechecker
 bugs from the javac and Checker Framework issue trackers. Ideally,
-SpecSlice would reproduce the typechecker's output on all 20 of these bugs.
-However, due to SpecSlice's approximation, that isn't true for all of the historical
+TypeSlice would reproduce the typechecker's output on all 20 of these bugs.
+However, due to TypeSlice's approximation, that isn't true for all of the historical
 bugs. The repo therefore has a set of files that indicate the expected status for
 each of these bugs along three axes:
 * `./src/main/resources/target_status.json` records which bugs do and do not
-trigger a crash in SpecSlice
+trigger a crash in TypeSlice
 * `./src/main/resources/min_program_compile_status.json` records for which bugs
-SpecSlice produces an independently-compilable program
+TypeSlice produces an independently-compilable program
 * `./src/main/resources/min_program_compile_status.json` records for which bugs
-SpecSlice successfully preserves the typechecker's behavior
+TypeSlice successfully preserves the typechecker's behavior
 
-If you fix a bug in SpecSlice, and CI fails because one of these changes from
+If you fix a bug in TypeSlice, and CI fails because one of these changes from
 "FAIL" to "PASS", then congratulations---the bug you fixed also fixed that
 integration test! Just change the appropriate `.json` file(s) to record the new
 status and re-run CI.
@@ -84,7 +84,7 @@ able to merge the PR until that integration test is fixed. You can reproduce the
 failure locally by checking out the [specSlice-evaluation repo](https://github.com/njit-jerse/specSlice-evaluation)
 and running a command like this:
 ```
-export SpecSlice=/path/to/your/copy/of/specSlice/with/your/changes
+export TypeSlice=/path/to/your/copy/of/specSlice/with/your/changes
 python3 main.py --debug cf-691
 ```
 

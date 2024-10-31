@@ -4,7 +4,7 @@
 # It returns 1 if any of them fail to compile, 2 if there are any malformed test directories,
 # and 0 if all of them do compile.
 #
-# It is desirable that all of the expected test outputs compile, because SpecSlice
+# It is desirable that all of the expected test outputs compile, because TypeSlice
 # should produce independently-compilable programs.
 
 returnval=0

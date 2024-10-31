@@ -1,23 +1,23 @@
-# SpecSlice: a specification slicer
+# TypeSlice: a specification slicer
 
-This document describes **SpecSlice** (SPECIfication SLICEr).
-SpecSlice's goal is, given a Java Program *P*
+This document describes **TypeSlice** (SPECIfication SLICEr).
+TypeSlice's goal is, given a Java Program *P*
 and a set of methods or fields in that program *M*, produce an independently-compilable
 version of *P* that contains (1) the body of each method or initializer of each field in *M*
 and (2) as little else as possible while preserving the specifications
 (i.e., the signatures of methods, the structure of classes, etc.) used
 by anything in *M*.
 
-SpecSlice is useful as a static program reduction tool when debugging a compiler or type
+TypeSlice is useful as a static program reduction tool when debugging a compiler or type
 system that does *modular* program analysis, such as a [Checker Framework](checkerframework.org)
-checker or the type system of Java itself. SpecSlice's output should preserve the output
+checker or the type system of Java itself. TypeSlice's output should preserve the output
 of a type-system-like analysis (such as a crash, false positive, or false negative).
 
-SpecSlice supports two *modes*: exact and approximate specification slicing. Exact mode
-is automatically used if all relevant source or class files are provided to SpecSlice. If
-a relevant source or class file is used but missing, SpecSlice will enter approximate mode
+TypeSlice supports two *modes*: exact and approximate specification slicing. Exact mode
+is automatically used if all relevant source or class files are provided to TypeSlice. If
+a relevant source or class file is used but missing, TypeSlice will enter approximate mode
 and create synthetic Java code based on the context in which that missing source or class
-file is used. In approximate mode, ambiguity in the context may cause SpecSlice to fail
+file is used. In approximate mode, ambiguity in the context may cause TypeSlice to fail
 to preserve the behavior of an analysis tool. However, approximate mode is very useful
 for analysis debugging (when it works), because the user need not supply the classpath
 of the target program. When debugging crashes or false positives reported by users, this
@@ -33,10 +33,10 @@ The available options are (required options in **bold**, repeatable options in *
 * **--root**: specifies the root directory of the target project.
 * ***--targetFile***: a source file in which to search for target methods
 * *--targetMethod*: a target method that must be preserved, and whose dependencies should be stubbed out. Use the format `class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)`. Note: If a target method has a receiver parameter, i.e., (.. this), exclude that parameter from the signature. Check this [documentation](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-ReceiverParameter) for more info.
-* *--targetField*: a target field that must be preserved (including its initializer). Uses the same format as `--targetMethod`, but without the parameter list. The `--targetMethod` and `--targetField` options can be freely combined, but if at least one of the two is not provided then SpecSlice will always produce empty output.
+* *--targetField*: a target field that must be preserved (including its initializer). Uses the same format as `--targetMethod`, but without the parameter list. The `--targetMethod` and `--targetField` options can be freely combined, but if at least one of the two is not provided then TypeSlice will always produce empty output.
 
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
-* *--jarPath*: a directory path that contains all the jar files for SpecSlice to take as input.
+* *--jarPath*: a directory path that contains all the jar files for TypeSlice to take as input.
 * --modularityModel: the name of the modularity model to use. Modularity models are named after the analysis that they represent. Available options: "javac" for the [Javac typechecker](https://en.wikipedia.org/wiki/Javac), "cf" for the [Checker Framework](checkerframework.org), or "nullaway" for [NullAway](https://github.com/uber/NullAway). Default: "cf".
 
 Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
@@ -51,13 +51,13 @@ follow Java convention:
 * class names always begin with an uppercase letter
 * package names always begin with a lowercase letter
 
-SpecSlice will likely produce incorrect output if the input program does not follow this convention
+TypeSlice will likely produce incorrect output if the input program does not follow this convention
 when the program's full classpath is not provided as a `--jarPath` input.
 
 # Input/output examples
 
-The following examples illustrate the kinds of programs that SpecSlice
-produces. You can find (many) more such examples in SpecSlice's
+The following examples illustrate the kinds of programs that TypeSlice
+produces. You can find (many) more such examples in TypeSlice's
 [test suite](https://github.com/kelloggm/specSlice/tree/main/src/test/resources).
 
 ## A very simple example
@@ -77,7 +77,7 @@ class Foo {
 }
 ```
 
-Suppose that the user asks SpecSlice to target the method `bar()`.
+Suppose that the user asks TypeSlice to target the method `bar()`.
 The result should be the following program:
 
 ```
@@ -94,11 +94,11 @@ class Foo {
 ```
 
 Note how `baz()`’s body has been replaced with `throw new Error()` -
-this is the sort of transformation that SpecSlice should do to any
+this is the sort of transformation that TypeSlice should do to any
 method that isn’t a target, but is used. The result of this change
 has an identical specification to the original - annotations and types
 will be preserved - but its behavior is empty. This illustrates that
-SpecSlice is not intended to produce runnable output: its output is only
+TypeSlice is not intended to produce runnable output: its output is only
 usefule for static analysis.
 
 If the target had been `baz()` instead of `bar()`, then `bar()` would
@@ -145,9 +145,9 @@ class Baz extends Object {
 ```
 
 This should be the result, regardless of whether `Baz` was originally
-defined in the original program or in a library, because SpecSlice is
+defined in the original program or in a library, because TypeSlice is
 supposed to generate a dependency-free version of the target
-program. That said, SpecSlice does need to respect the specification of
+program. That said, TypeSlice does need to respect the specification of
 `Baz` - for example, if `Baz` has a superclass other than `Object`, that
 superclass needs to be included, too. For example, the result could
 have replaced the contents of `Baz.java` with the following, if that had
@@ -198,7 +198,7 @@ at the specification level - including types, generics, superclasses,
 implemented interfaces, annotations, etc. - the resulting program should
 be the same as the original (with “dead” code that isn’t used by the
 target method(s) removed, of course). But, at the implementation level,
-nothing has to work - recall that SpecSlice’s goal is basically to
+nothing has to work - recall that TypeSlice’s goal is basically to
 “stub out” everything that’s used by the target method.
 
 ## Annotations
@@ -218,7 +218,7 @@ class Foo {
 }
 ```
 
-It is required that SpecSlice preserves annotations (especially type
+It is required that TypeSlice preserves annotations (especially type
 annotations, but all annotations are supposed to be preserved) on
 elements of the target program that will appear in the output.
 
@@ -239,11 +239,11 @@ class Foo {
  }
  ```
 
-SpecSlice usually produces programs that have no dependencies.
+TypeSlice usually produces programs that have no dependencies.
 In a case like this one, though, should the generated program
 include a (synthetic) implementation for `java.util.List`? This question is
 tricky to answer. On the one hand, doing so is (1) more consistent
-with SpecSlice’s treatment of other libraries, and (2) will make the
+with TypeSlice’s treatment of other libraries, and (2) will make the
 resulting programs self-contained, which will make them easier to
 annotate later, if desired. On the other hand, generating stubbed
 variants of standard library methods and classes might be problematic:
@@ -254,16 +254,16 @@ with unusual options, (i.e. `-Xbootclasspath=` the empty set or some
 such nonsense), which would limit its suitability for generating test
 cases.
 
-In cases like these, SpecSlice chooses the latter: it assumes that the JDK
-is available. If you want to target part of the JDK itself with SpecSlice,
+In cases like these, TypeSlice chooses the latter: it assumes that the JDK
+is available. If you want to target part of the JDK itself with TypeSlice,
 this means that it's necessary to *relocate* JDK classes (into a non `java.*`
 package); see the CF-577 test in the integration tests for an example.
 
 ### Reporting issues and contributing
 
 We welcome bug reports. Please make a GitHub issue with the command
-that you used to run SpecSlice and describe what went wrong, and we'll
+that you used to run TypeSlice and describe what went wrong, and we'll
 look into it as soon as we can.
 
-If you'd like to contribute to SpecSlice, we have a separate document
+If you'd like to contribute to TypeSlice, we have a separate document
 with [developer documentation](https://github.com/njit-jerse/specSlice/DEVELOPERS.md).

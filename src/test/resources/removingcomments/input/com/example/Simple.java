@@ -9,7 +9,7 @@ class Simple {
     }
 
     /**
-     * This method is used to test if the comments (including Javadoc) are all removed by SpecSlice
+     * This method is used to test if the comments (including Javadoc) are all removed by TypeSlice
      */
     static void test() {
         // the comment here should be removed

@@ -1,0 +1,13 @@
+package org.anonymous.typeslice;
+
+import java.io.IOException;
+import org.junit.Test;
+
+/** This test checks if TypeSlice can work for methods that have type parameters themselves. */
+public class TypeVarCollisionTest {
+  @Test
+  public void runTest() throws IOException {
+    TypeSliceTestExecutor.runTestWithoutJarPaths(
+        "typevar-collision", new String[] {"org/Foo.java"}, new String[] {"org.Foo#useT(T)"});
+  }
+}

@@ -2,8 +2,8 @@
 
 rem Test script to check if check_differences.bat outputs the correct exit code under different file conditions.
 rem We do not need to explicitly test Java code since running ./gradlew test already verifies that
-rem check_differences.bat correctly handles all SpecSlice test cases. These test cases are to verify that
-rem the script works as expected under conditions not tested in SpecSlice.
+rem check_differences.bat correctly handles all TypeSlice test cases. These test cases are to verify that
+rem the script works as expected under conditions not tested in TypeSlice.
 
 setlocal enabledelayedexpansion
 
