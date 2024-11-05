@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ParseProblemException;
+import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
@@ -236,7 +237,10 @@ public class SpeciminRunner {
     Map<String, String> nonPrimaryClassesToPrimaryClass = new HashMap<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
-    for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
+    //getCompilationUnits does not seem to include all files, causing some to be deleted
+    for (ParseResult<CompilationUnit> res : sourceRoot.getCache()) {
+      CompilationUnit compilationUnit =
+          res.getResult().orElseThrow(() -> new RuntimeException("" + res.getProblems()));
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
       String primaryTypeQualifiedName = "";
