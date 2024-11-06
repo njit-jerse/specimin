@@ -1589,7 +1589,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     if (resolved.isEnumConstant()) {
       if (JavaLangUtils.inJdkPackage(resolved.getType().describe())) {
-        return true;
+        return false;
       }
       String filePathName = qualifiedNameToFilePath(resolved.getType().describe());
       if (!addedTargetFiles.contains(filePathName)) {

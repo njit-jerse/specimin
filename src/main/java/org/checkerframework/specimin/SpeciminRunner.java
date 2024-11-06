@@ -237,10 +237,10 @@ public class SpeciminRunner {
     Map<String, String> nonPrimaryClassesToPrimaryClass = new HashMap<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
-    //getCompilationUnits does not seem to include all files, causing some to be deleted
+    // getCompilationUnits does not seem to include all files, causing some to be deleted
     for (ParseResult<CompilationUnit> res : sourceRoot.getCache()) {
       CompilationUnit compilationUnit =
-          res.getResult().orElseThrow(() -> new RuntimeException("" + res.getProblems()));
+          res.getResult().orElseThrow(() -> new RuntimeException(res.getProblems().toString()));
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
       String primaryTypeQualifiedName = "";
