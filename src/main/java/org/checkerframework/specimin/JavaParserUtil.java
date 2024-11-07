@@ -16,6 +16,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
@@ -269,6 +270,18 @@ public class JavaParserUtil {
       }
     }
     return types;
+  }
+
+  /**
+   * Returns a package prefix that can be prepended to a class name, for a given method or
+   * constructor declaration.
+   *
+   * @param decl declaration to extract a package prefix from(using getPackageName)
+   * @return empty string if default package, otherwise package name followed by "."
+   */
+  public static String packagePrefix(ResolvedMethodLikeDeclaration decl) {
+    String packageName = decl.getPackageName();
+    return packageName.isEmpty() ? "" : packageName + ".";
   }
 
   /**

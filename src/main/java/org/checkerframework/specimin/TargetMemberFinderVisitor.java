@@ -243,7 +243,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
       targetMethods.add(resolvedMethod.getQualifiedSignature());
       unfoundMethods.remove(methodName);
       updateUsedClassWithQualifiedClassName(
-          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
+          JavaParserUtil.packagePrefix(resolvedMethod) + resolvedMethod.getClassName(),
           usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
       if (modularityModel.preserveAllFieldsIfTargetIsConstructor()) {
@@ -341,11 +341,11 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
       if (parentNode instanceof ObjectCreationExpr) {
         ObjectCreationExpr parentExpression = (ObjectCreationExpr) parentNode;
         ResolvedConstructorDeclaration resolved = parentExpression.resolve();
-        String methodPackage = resolved.getPackageName();
+        String methodPackagePrefix = JavaParserUtil.packagePrefix(resolved);
         String methodClass = resolved.getClassName();
-        usedMembers.add(methodPackage + "." + methodClass + "." + method.getNameAsString() + "()");
+        usedMembers.add(methodPackagePrefix + methodClass + "." + method.getNameAsString() + "()");
         updateUsedClassWithQualifiedClassName(
-            methodPackage + "." + methodClass, usedTypeElements, nonPrimaryClassesToPrimaryClass);
+            methodPackagePrefix + methodClass, usedTypeElements, nonPrimaryClassesToPrimaryClass);
       }
     }
     String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
@@ -353,7 +353,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
       ResolvedMethodDeclaration resolvedMethod = method.resolve();
       updateUsedClassesForInterface(resolvedMethod);
       updateUsedClassWithQualifiedClassName(
-          resolvedMethod.getPackageName() + "." + resolvedMethod.getClassName(),
+          JavaParserUtil.packagePrefix(resolvedMethod) + resolvedMethod.getClassName(),
           usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
 
@@ -518,9 +518,11 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
                 resolvedYetStuckMethodCall.add(scopeAsString + "." + call.getNameAsString());
                 usedTypeElements.add(scopeAsString);
               } else {
+                String packagePrefix =
+                    getCurrentPackage().isEmpty() ? "" : getCurrentPackage() + ".";
                 resolvedYetStuckMethodCall.add(
-                    getCurrentPackage() + "." + scopeAsString + "." + call.getNameAsString());
-                usedTypeElements.add(getCurrentPackage() + "." + scopeAsString);
+                    packagePrefix + scopeAsString + "." + call.getNameAsString());
+                usedTypeElements.add(packagePrefix + scopeAsString);
               }
             }
           }
@@ -564,7 +566,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
   private void preserveMethodDecl(ResolvedMethodDeclaration decl) {
     usedMembers.add(decl.getQualifiedSignature());
     updateUsedClassWithQualifiedClassName(
-        decl.getPackageName() + "." + decl.getClassName(),
+        JavaParserUtil.packagePrefix(decl) + decl.getClassName(),
         usedTypeElements,
         nonPrimaryClassesToPrimaryClass);
     try {
@@ -624,7 +626,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
         ResolvedConstructorDeclaration resolved = newExpr.resolve();
         usedMembers.add(resolved.getQualifiedSignature());
         updateUsedClassWithQualifiedClassName(
-            resolved.getPackageName() + "." + resolved.getClassName(),
+            JavaParserUtil.packagePrefix(resolved) + resolved.getClassName(),
             usedTypeElements,
             nonPrimaryClassesToPrimaryClass);
         for (int i = 0; i < resolved.getNumberOfParams(); ++i) {
@@ -646,7 +648,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
       ResolvedConstructorDeclaration resolved = expr.resolve();
       usedMembers.add(resolved.getQualifiedSignature());
       updateUsedClassWithQualifiedClassName(
-          resolved.getPackageName() + "." + resolved.getClassName(),
+          JavaParserUtil.packagePrefix(resolved) + resolved.getClassName(),
           usedTypeElements,
           nonPrimaryClassesToPrimaryClass);
     }
@@ -850,10 +852,6 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
       Set<String> usedTypeElement,
       Map<String, String> nonPrimaryClassesToPrimaryClass) {
 
-    // in case of type variables
-    if (!qualifiedClassName.contains(".")) {
-      return;
-    }
     // strip type variables, if they're present
     if (qualifiedClassName.contains("<")) {
       qualifiedClassName = qualifiedClassName.substring(0, qualifiedClassName.indexOf("<"));
@@ -867,6 +865,10 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
           nonPrimaryClassesToPrimaryClass);
     }
 
+    // in case of type variables TODO:investigate side effects of having moved this from earlier
+    if (!qualifiedClassName.contains(".")) {
+      return;
+    }
     String potentialOuterClass =
         qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf("."));
     if (JavaParserUtil.isAClassPath(potentialOuterClass)) {

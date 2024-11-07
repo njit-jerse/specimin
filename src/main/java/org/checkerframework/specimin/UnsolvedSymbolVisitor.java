@@ -1588,6 +1588,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       return false;
     }
     if (resolved.isEnumConstant()) {
+      if (JavaLangUtils.inJdkPackage(resolved.getType().describe())) {
+        return false;
+      }
       String filePathName = qualifiedNameToFilePath(resolved.getType().describe());
       if (!addedTargetFiles.contains(filePathName)) {
         gotException();
@@ -3257,7 +3260,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
               + fullyName);
     }
     String className = fullyQualifiedToSimple(fullyName);
-    String packageName = fullyName.replace("." + className, "");
+    String packageName =
+        fullyName.contains("." + className) ? fullyName.replace("." + className, "") : "";
     return new UnsolvedClassOrInterface(className, packageName);
   }
 
