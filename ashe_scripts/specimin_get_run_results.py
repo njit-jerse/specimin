@@ -3,37 +3,41 @@ import os
 import re
 
 def print_repo_specifics(file_path: str):
-    with open(file_path, 'r') as file:
-        lines: list[str] = file.readlines()
+    directory: str = os.path.dirname(file_path)
+    output_file_path: str = os.path.join(directory, 'specimin_run_results.txt')
+    with open(output_file_path, 'a') as output_file:
+        with open(file_path, 'r') as file:
+            lines: list[str] = file.readlines()
 
-    repo_name: str = ""
-    branch_name: str = ""
-    repo_branch_holder = "", ""
-    for line in lines:
-        line: str = line.strip()
-    
-        repo_branch_holder = __extract_case(line)
-        if repo_branch_holder != ("", ""):
-            repo_name = repo_branch_holder[0]
-            branch_name = repo_branch_holder[1]
+        repo_name: str = ""
+        branch_name: str = ""
+        repo_branch_holder = "", ""
+        for line in lines:
+            line: str = line.strip()
+        
+            repo_branch_holder = "",""
+            repo_branch_holder = __extract_case(line)
+            if repo_branch_holder != ("", ""):
+                repo_name = repo_branch_holder[0]
+                branch_name = repo_branch_holder[1]
 
-        if "Minimizing source file..." in line:
-            print("'minimization_attempts'  	" + repo_name + " " + branch_name)
-        if "BUILD SUCCESSFUL" in line:
-            print("'successful_minimization'	"+repo_name + " " + branch_name)
-        if "BUILD FAILED" in line:
-            print("'failed_minimization'	"+repo_name + " " + branch_name)
-        if "Compiling Java files" in line:
-                print("'compilation_attempts'   	"+repo_name + " " + branch_name)
-        if "Minimized files compiled successfully." in line:
-            print("'successful_compilation'	"+repo_name + " " + branch_name)
-            print("'full_success'          	"+repo_name + " " + branch_name)
-        if "Minimized files failed to compile." in line:
-            print("'failed_compilation'           	"+repo_name + " " + branch_name)
+            if "Minimizing source file..." in line:
+                output_file.write("'new minimization attempt'\n")
+            if "BUILD SUCCESSFUL" in line:
+                output_file.write("'successful_minimization'	"+repo_name + " " + branch_name + "\n")
+            if "BUILD FAILED" in line:
+                output_file.write("'failed_minimization'	"+repo_name + " " + branch_name + "\n")
+            if "Compiling Java files" in line:
+                output_file.write("'compilation_attempts'   	"+repo_name + " " + branch_name + "\n")
+            if "Minimized files compiled successfully." in line:
+                output_file.write("'successful_compilation'	"+repo_name + " " + branch_name + "\n")
+                output_file.write("'full_success'          	"+repo_name + " " + branch_name + "\n")
+            if "Minimized files failed to compile." in line:
+                output_file.write("'failed_compilation'        "+repo_name + " " + branch_name + "\n")
 
 def __extract_case(log_line: str):
     """
-    Extracts the repository path and branch name from a log line.
+    Extracts the java source file name and method name from a log line.
 
     Parameters:
     - log_line (str): A string from the log file containing repository and branch information.
