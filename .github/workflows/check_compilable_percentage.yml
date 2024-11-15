@@ -134,7 +134,7 @@ jobs:
         id: validate_accuracy
         run: |
           current_run_accuracy="${{ steps.parse_accuracy_percentage.outputs.current_run_accuracy }}"
-          constant_saved_run_percentage="${{ steps.constant_saved_run_percentage.outputs.latest_run_accuracy }}"
+          constant_saved_run_percentage="${{ steps.constant_saved_run_percentage.outputs.constant_saved_run_percentage }}"
           
           if [ "$current_run_accuracy" != "$constant_saved_run_percentage" ]; then
             echo "Current accuracy ($current_run_accuracy) does not match latest run accuracy ($constant_saved_run_percentage)."
