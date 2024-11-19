@@ -124,7 +124,7 @@ jobs:
           if [ -f "$(pwd)/CI_constant_saved_run_percentage.txt" ]; then
             constant_saved_run_percentage=$(cat "$(pwd)/CI_constant_saved_run_percentage.txt" | tr -d '()%')
             echo "Constant saved run accuracy: $constant_saved_run_percentage"
-            echo "::set-output name=constant_saved_run_percentage::$latest_run_accuracy"
+            echo "::set-output name=constant_saved_run_percentage::$constant_saved_run_percentage"
           else
             echo "File CI_constant_saved_run_percentage.txt does not exist"
             exit 1
