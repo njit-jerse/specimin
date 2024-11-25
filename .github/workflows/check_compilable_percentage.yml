@@ -104,7 +104,7 @@ jobs:
         run: |
           current_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}' | tr -d '()%')
           echo "Current accuracy: $current_accuracy"
-          echo "::set-output name=current_accuracy::$current_accuracy"
+          echo "current_accuracy=$current_accuracy" >> $GITHUB_OUTPUT
 
       - name: Read latest run percentage from file
         id: read_latest_run_percentage
@@ -112,7 +112,7 @@ jobs:
           if [ -f "$(pwd)/CI_Latest_run_percentage.txt" ]; then
             latest_run_accuracy=$(cat "$(pwd)/CI_Latest_run_percentage.txt" | tr -d '()%')
             echo "Latest run accuracy: $latest_run_accuracy"
-            echo "::set-output name=latest_run_accuracy::$latest_run_accuracy"
+            echo "latest_run_accuracy=$latest_run_accuracy" >> $GITHUB_OUTPUT
           else
             echo "File CI_Latest_run_percentage.txt does not exist"
             exit 1
