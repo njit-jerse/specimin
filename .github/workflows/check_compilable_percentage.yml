@@ -120,10 +120,7 @@ jobs:
 
       - name: Validate accuracy
         id: validate_accuracy
-        run: |
-          current_accuracy="${{ steps.parse_accuracy_percentage.outputs.current_accuracy }}"
-          latest_run_accuracy="${{ steps.read_latest_run_percentage.outputs.latest_run_accuracy }}"
-          
+        run: | 
           if [ "$current_accuracy" != "$latest_run_accuracy" ]; then
             echo "Current accuracy ($current_accuracy) does not match latest run accuracy ($latest_run_accuracy)."
             exit 1
