@@ -116,7 +116,7 @@ jobs:
         run: |
           current_run_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}' | tr -d '()%')
           echo "Current run accuracy: $current_run_accuracy"
-          echo "current_run_accuracy=$current_run_accuracy" >> "$GITHUB_ENV"
+          echo "current_run_accuracy=$current_run_accuracy" >> "$GITHUB_OUTPUT"
 
       - name: Read latest run percentage from file
         id: constant_saved_run_percentage
@@ -124,7 +124,7 @@ jobs:
           if [ -f "$(pwd)/CI_constant_saved_run_percentage.txt" ]; then
             constant_saved_run_percentage=$(cat "$(pwd)/CI_constant_saved_run_percentage.txt" | tr -d '()%')
             echo "Constant saved run accuracy: $constant_saved_run_percentage"
-            echo "constant_saved_run_percentage=$constant_saved_run_percentage" >> "$GITHUB_ENV"
+            echo "constant_saved_run_percentage=$constant_saved_run_percentage" >> "$GITHUB_OUTPUT"
           else
             echo "File CI_constant_saved_run_percentage.txt does not exist"
             exit 1
@@ -133,6 +133,8 @@ jobs:
       - name: Validate accuracy
         id: validate_accuracy
         run: |
+          current_run_accuracy="${{ steps.parse_accuracy_percentage.outputs.current_run_accuracy }}"
+          constant_saved_run_percentage="${{ steps.constant_saved_run_percentage.outputs.constant_saved_run_percentage }}"
           
           if [ "$current_run_accuracy" != "$constant_saved_run_percentage" ]; then
             echo "Current accuracy ($current_run_accuracy) does not match latest run accuracy ($constant_saved_run_percentage)."
