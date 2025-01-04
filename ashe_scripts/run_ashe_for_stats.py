@@ -26,7 +26,7 @@ def run(ashe_path: str, csv_path: str, clone_path: str, props_file_path: str):
         props_file_path: absolute path to the directory containing the config.properties files for ASHE
     """
 
-    ashe_url: str = "https://github.com/jonathan-m-phillips/ASHE_Automated-Software-Hardening-for-Entrypoints"
+    ashe_url: str = "https://github.com/njit-jerse/ASHE_Automated-Software-Hardening-for-Entrypoints"
     # clone or update repository
     __git_clone_or_update(ashe_url, ashe_path)
 
