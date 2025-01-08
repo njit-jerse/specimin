@@ -104,7 +104,7 @@ jobs:
       - name: Translate results
         run: |
           python3 ashe_scripts/specimin_get_run_results.py ASHE/logs/deinterleaved-log.txt
-          cat ASHE/logs/deinterleaved-log.log
+          cat ASHE/logs/deinterleaved-log.txt
       - name: Show only successful minimizations
         run: |
           grep 'full_success' ASHE/logs/specimin_run_results.txt | sort
