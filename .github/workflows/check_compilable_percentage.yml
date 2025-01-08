@@ -98,19 +98,22 @@ jobs:
             $(pwd)/CI_repository_list.csv \
             $(pwd)/ASHE/CI_REPO_CLONE_SPACE \
             $(pwd)/ASHE/src/main/resources/config.properties
+      - name: De-Interleave Multithreaded Log
+        run: |
+          python3 ashe_scripts/de-interleave-ashe-log.py ASHE/logs/app.log
       - name: Translate results
         run: |
-          python3 ashe_scripts/specimin_get_run_results.py ASHE/logs/app.log
-          cat ASHE/logs/app.log
+          python3 ashe_scripts/specimin_get_run_results.py ASHE/logs/deinterleaved-log.txt
+          cat ASHE/logs/deinterleaved-log.log
       - name: Show only successful minimizations
         run: |
-          grep 'full_success' ASHE/logs/specimin_run_results.txt
+          grep 'full_success' ASHE/logs/specimin_run_results.txt | sort
       - name: Show only failed minimizations
         run: |
-          grep 'failed_minimization' ASHE/logs/specimin_run_results.txt
+          grep 'failed_minimization' ASHE/logs/specimin_run_results.txt | sort
       - name: Show only failed compilations
         run: |
-          grep 'failed_compilation' ASHE/logs/specimin_run_results.txt
+          grep 'failed_compilation' ASHE/logs/specimin_run_results.txt | sort
       - name: Parse accuracy percentage
         id: parse_accuracy_percentage
         run: |
