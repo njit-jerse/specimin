@@ -13,13 +13,18 @@ def deinterleave(file_path: str):
             #13:40:26.262 [ForkJoinPool-1-worker-9]
             #\[ForkJoinPool-1-worker-\([0-9]\+\)]
             pattern = re.compile(r"\[ForkJoinPool-1-worker-([0-9]+)]")
+            fallbackPattern = re.compile(r"\[main]")
             #pattern = re.compile(r"ForkJoinPool")
+            thread = "main"
             with open(file_path, "r") as infile:
                 for line in infile:
                     match = pattern.search(line)
+                    fallbackMatch = fallbackPattern.search(line)
                     if match:
                         thread = match.group(1)
-                        thread_logs[thread].append(line.strip())
+                    if fallbackMatch:
+                        thread = "main"
+                    thread_logs[thread].append(line.strip())
                 break
 
     with open(output_file, "w") as outfile:
