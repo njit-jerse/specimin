@@ -98,9 +98,6 @@ jobs:
             $(pwd)/CI_repository_list.csv \
             $(pwd)/ASHE/CI_REPO_CLONE_SPACE \
             $(pwd)/ASHE/src/main/resources/config.properties
-      - name: De-Interleave Multithreaded Log
-        run: |
-          python3 ashe_scripts/de-interleave-ashe-log.py ASHE/logs/app.log
       - name: Translate results
         run: |
           python3 ashe_scripts/specimin_get_run_results.py ASHE/logs/deinterleaved-log.txt
