@@ -46,7 +46,7 @@ def run(ashe_path: str, csv_path: str, clone_path: str, props_file_path: str):
     print(f"Statistics script path: {stats_script}")
     print(f"Exception rank script path: {rank_script}")
     
-    #__build_and_run_ashe(csv_path, clone_path, props_file_path, working_dir=ashe_path)
+    __build_and_run_ashe(csv_path, clone_path, props_file_path, working_dir=ashe_path)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     print(f"Current directory path: {current_dir}")
