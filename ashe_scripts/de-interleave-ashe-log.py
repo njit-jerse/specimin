@@ -4,35 +4,61 @@ import re
 import os
 import sys
 
-def deinterleave(file_path: str):
+def deinterleave(infile):
     thread_logs = defaultdict(list)
-    
-    with open(file_path, "r") as infile:
-        for line in infile:
-            #log format is like this:
-            #13:40:26.262 [ForkJoinPool-1-worker-9]
-            #\[ForkJoinPool-1-worker-\([0-9]\+\)]
-            pattern = re.compile(r"\[ForkJoinPool-1-worker-([0-9]+)]")
-            fallbackPattern = re.compile(r"\[main]")
-            #pattern = re.compile(r"ForkJoinPool")
-            thread = "main"
-            with open(file_path, "r") as infile:
-                for line in infile:
-                    match = pattern.search(line)
-                    fallbackMatch = fallbackPattern.search(line)
-                    if match:
-                        thread = match.group(1)
-                    if fallbackMatch:
-                        thread = "main"
-                    thread_logs[thread].append(line.strip())
-                break
 
-    with open(output_file, "w") as outfile:
+    #log format is like this:
+    #13:40:26.262 [ForkJoinPool-1-worker-9]
+    #\[ForkJoinPool-1-worker-\([0-9]\+\)]
+    pattern = re.compile(r"\[ForkJoinPool-[0-9]+-worker-([0-9]+)]")
+    multiThreadEndPattern = re.compile(r"\[main]")
+    
+    for line in infile:
+        match = pattern.search(line)
+        multiThreadEndMatch = multiThreadEndPattern.search(line)
+        if match:
+            thread = match.group(1)
+        if multiThreadEndMatch:
+            break
+        print(line)
+        thread_logs[thread].append(line.strip())
+
+    with open(output_file, "a") as outfile:
         for thread_id, messages in thread_logs.items():
             outfile.write(f"Logs for {thread_id}:\n")
             for message in messages:
-                outfile.write(f"{thread_id}: {message}\n")
+                outfile.write(f"{message}\n")
             outfile.write("\n")
+            outfile.write(line)
+        
+#continues switching between reading the "main" thread and de-interleaving the
+#multithreaded section until there are no more lines
+def parseLog(file_path: str):
+    with open(file_path, "r") as infile:
+        moreLines = True
+        while moreLines:
+            moreLines = parseMainThread(infile)
+            deinterleave(infile)
+
+
+def parseMainThread(infile) -> bool:
+    mainEndPattern = re.compile(r"Dry run with [0-9]+ threads")
+    logBuffer:list[str] = []
+    #if there isn't another run in the log file, then this will run until the
+    #end of file.
+    moreLines = False
+    for line in infile:
+        match = mainEndPattern.search(line)
+        logBuffer.append(line)
+        if match:
+            moreLines = True
+            break
+    with open(output_file, "a") as outfile:
+                for line in logBuffer:
+                    outfile.write(line)
+    return moreLines
+
+
 
 
 if __name__ == '__main__':
@@ -42,5 +68,5 @@ if __name__ == '__main__':
     log_file_path = sys.argv[1]
     directory: str = os.path.dirname(log_file_path)
     output_file = os.path.join(directory, 'deinterleaved-log.txt')
-    deinterleave(log_file_path)
+    parseLog(log_file_path)
     print(f"De-interleaved log written to: {output_file}")
