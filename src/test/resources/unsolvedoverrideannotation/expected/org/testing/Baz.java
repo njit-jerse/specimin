@@ -3,6 +3,6 @@ package org.testing;
 public class Baz {
 
  void bar() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

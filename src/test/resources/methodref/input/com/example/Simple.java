@@ -13,6 +13,6 @@ class Simple {
     /** Transforms a list, applying a function to each element. */
     public static <F, T> List<T> transform(List<? extends F> list,
                                            java.util.function.Function<? super F, ? extends T> function) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

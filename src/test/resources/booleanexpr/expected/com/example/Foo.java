@@ -7,26 +7,26 @@ public class Foo {
     public boolean isBaz;
 
     public boolean isBar() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public int qux() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public double razz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public int getX() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public long getLong() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public Long getBigLong() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

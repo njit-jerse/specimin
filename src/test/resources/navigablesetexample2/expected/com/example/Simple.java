@@ -18,7 +18,7 @@ public class Simple {
     static class UnmodifiableNavigableSet<E> extends UnmodifiableSortedSet<E> implements NavigableSet<E> {
 
         UnmodifiableNavigableSet(NavigableSet<E> s) {
-            throw new Error();
+            throw new java.lang.Error();
         }
     }
 }

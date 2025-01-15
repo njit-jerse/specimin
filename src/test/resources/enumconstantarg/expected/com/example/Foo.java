@@ -9,7 +9,7 @@ class Foo {
         PREFIX(Op.EQ);
 
         Mode(Op op) {
-            throw new Error();
+            throw new java.lang.Error();
         }
     }
 

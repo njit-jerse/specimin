@@ -10,6 +10,6 @@ class Simple {
     }
 
     Object baz(Calculator obj) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

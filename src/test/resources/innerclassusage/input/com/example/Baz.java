@@ -5,7 +5,7 @@ public class Baz {
     public static class InnerBaz {
 
         public void toBeRemovedToo() {
-            throw new Error();
+            throw new java.lang.Error();
         }
 
         public static class NestedInnerBaz {
@@ -14,7 +14,7 @@ public class Baz {
             }
 
             public void toBeRemoved() {
-                throw new Error();
+                throw new java.lang.Error();
             }
         }
     }

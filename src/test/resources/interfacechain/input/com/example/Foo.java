@@ -7,7 +7,7 @@ public class Foo<E> {
         return new AbstractLinkedIterator() {
             @Override
             E computeNext() {
-                throw new Error();
+                throw new java.lang.Error();
             }
         };
     }
@@ -17,12 +17,12 @@ public class Foo<E> {
 
         @Override
         public E next() {
-            throw new Error();
+            throw new java.lang.Error();
         }
 
         @Override
         public boolean hasNext() {
-            throw new Error();
+            throw new java.lang.Error();
         }
     }
 

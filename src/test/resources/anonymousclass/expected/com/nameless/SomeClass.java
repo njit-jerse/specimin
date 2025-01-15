@@ -3,9 +3,9 @@ package com.nameless;
 public class SomeClass {
 
     public SomeClass() {
-        throw new Error();
+        throw new java.lang.Error();
     }
     public int getLocalVar() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

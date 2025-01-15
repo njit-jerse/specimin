@@ -7,6 +7,6 @@ public interface Analysis {
     }
 
     default Direction getDirection() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

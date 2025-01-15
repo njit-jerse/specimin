@@ -3,10 +3,10 @@ package org.testing;
 public class Baz {
 
     public Baz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public void remove() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

@@ -6,6 +6,6 @@ class Baz {
 class NonPrimary {
 
     static void printMessage() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

@@ -2,7 +2,7 @@ package com.example;
 
 public class Simple<K> {
     AccessOrderDeque<K> bar() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     // Target method

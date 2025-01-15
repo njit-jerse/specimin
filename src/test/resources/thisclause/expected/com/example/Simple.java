@@ -7,6 +7,6 @@ public class Simple {
     }
 
     Simple(int a, int b) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

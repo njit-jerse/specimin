@@ -4,6 +4,6 @@ import org.testing.Parent;
 
 class Simple<T> extends Parent<T> {
     public void bar() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

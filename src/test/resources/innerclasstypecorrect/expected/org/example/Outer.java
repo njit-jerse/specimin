@@ -7,6 +7,6 @@ public class Outer {
     }
 
     public static org.example.Outer.Inner getInner() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

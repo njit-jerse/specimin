@@ -9,7 +9,7 @@ public class Simple {
         PRECONDITION(PreconditionAnnotation.class), POSTCONDITION(PostconditionAnnotation.class);
 
         Kind(Class<? extends Annotation> metaAnnotation) {
-            throw new Error();
+            throw new java.lang.Error();
         }
     }
 

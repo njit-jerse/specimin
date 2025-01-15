@@ -8,6 +8,6 @@ class Simple {
     }
 
     void baz(Type[] types) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

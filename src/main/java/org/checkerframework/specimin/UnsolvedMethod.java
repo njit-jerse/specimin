@@ -260,7 +260,7 @@ public class UnsolvedMethod {
     if (isJustMethodSignature) {
       return signature.append(";").toString();
     } else {
-      return "\n    " + signature + " {\n        throw new Error();\n    }\n";
+      return "\n    " + signature + " {\n        throw new java.lang.Error();\n    }\n";
     }
   }
 }

@@ -2,7 +2,7 @@ package com.example;
 
 class BigSimple {
     public void printMessage() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }
 
