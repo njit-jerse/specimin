@@ -3227,7 +3227,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
           new BufferedWriter(new FileWriter(filePath.toFile(), StandardCharsets.UTF_8))) {
         writer.write(fileContent.toString());
       } catch (Exception e) {
-        throw new java.lang.Error(e.getMessage());
+        throw new Error(e.getMessage());
       }
     } catch (IOException e) {
       System.out.println("Error creating Java file: " + e.getMessage());
