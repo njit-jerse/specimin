@@ -7,7 +7,7 @@ class Simple<I extends Simple<I>.Dog> {
     }
     class Dog extends Animal {
         void walk() {
-            throw new Error();
+            throw new java.lang.Error();
         }
     }
 }

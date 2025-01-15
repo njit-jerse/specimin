@@ -3,6 +3,6 @@ package org.math;
 public class Calculator {
 
     public int doMultiplication(int parameter0, int parameter1) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

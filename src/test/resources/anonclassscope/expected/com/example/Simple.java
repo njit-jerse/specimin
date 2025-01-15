@@ -17,6 +17,6 @@ public final class Simple {
     }
 
     private static void cast(Object value) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

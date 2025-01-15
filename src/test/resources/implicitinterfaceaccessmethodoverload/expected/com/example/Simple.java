@@ -13,6 +13,6 @@ abstract class Simple implements B {
     }
 
     int foo(int x) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

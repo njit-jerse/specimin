@@ -5,6 +5,6 @@ public class Baz {
     public OrgSamplingBazCalSyntheticType cal;
 
     public Baz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

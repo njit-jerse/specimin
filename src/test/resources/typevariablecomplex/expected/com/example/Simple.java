@@ -15,6 +15,6 @@ class Simple<I extends Simple<I>.Dog> {
 class Animal {
 
     public void sound() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

@@ -7,10 +7,10 @@ public class Foo {
     public long qux;
 
     public int baz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public double razz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

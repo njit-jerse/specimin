@@ -10,6 +10,6 @@ class Simple {
     }
 
     void baz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

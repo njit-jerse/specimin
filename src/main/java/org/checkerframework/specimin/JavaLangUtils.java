@@ -32,7 +32,7 @@ public final class JavaLangUtils {
 
   /** Don't call this. */
   private JavaLangUtils() {
-    throw new Error("cannot be instantiated");
+    throw new java.lang.Error("cannot be instantiated");
   }
 
   /**

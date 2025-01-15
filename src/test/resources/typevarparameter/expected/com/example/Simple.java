@@ -5,7 +5,7 @@ public class Simple<T> {
     T field;
 
     void foo(T input) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     void bar() {

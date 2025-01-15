@@ -9,6 +9,6 @@ class Simple {
     }
 
     public static <F, T> List<T> transform(List<? extends F> list, java.util.function.Function<? super F, ? extends T> function) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

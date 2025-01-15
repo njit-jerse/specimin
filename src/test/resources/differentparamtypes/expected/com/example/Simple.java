@@ -9,6 +9,6 @@ class Simple {
     }
 
     void foo(List<?> baz) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

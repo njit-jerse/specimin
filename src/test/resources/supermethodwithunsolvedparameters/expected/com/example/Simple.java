@@ -10,6 +10,6 @@ class Simple extends SuperSimple {
     }
 
     public Unsolved baz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

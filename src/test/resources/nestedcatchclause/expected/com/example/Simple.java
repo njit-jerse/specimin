@@ -15,6 +15,6 @@ public class Simple {
     }
 
     private void handleException(CustomException e) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }
