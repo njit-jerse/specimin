@@ -17,6 +17,6 @@ public class Simple {
     }
 
     public void baz() throws VerifierConstraintViolatedException {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

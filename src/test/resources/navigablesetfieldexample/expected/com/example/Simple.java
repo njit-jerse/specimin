@@ -16,7 +16,7 @@ public class Simple {
         private static class EmptyNavigableSet<E> extends UnmodifiableNavigableSet<E> {
 
             public EmptyNavigableSet() {
-                throw new Error();
+                throw new java.lang.Error();
             }
         }
 

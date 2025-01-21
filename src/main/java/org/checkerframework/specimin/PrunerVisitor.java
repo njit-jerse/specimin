@@ -44,7 +44,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
  * #targetMethods} set or {@link #usedMembers} set. It also deletes the bodies of all methods and
- * replaces them with "throw new Error();" or remove the initializers of fields (minimized if the
+ * replaces them with "throw new java.lang.Error();" or remove the initializers of fields (minimized if the
  * field is final) within the {@link #usedMembers} set.
  */
 public class PrunerVisitor extends SpeciminStateVisitor {
@@ -343,7 +343,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     if (insideFunctionalInterface && usedMembers.contains(signature)) {
       if (methodDecl.getBody().isPresent()) {
         // avoid introducing unsolved symbols into the final output.
-        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new java.lang.Error(); }"));
       }
       return methodDecl;
     }
@@ -352,7 +352,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       boolean isMethodInsideInterface = isInsideInterface(methodDecl);
       // do nothing if methodDecl is just a method signature in a class.
       if (methodDecl.getBody().isPresent() || isMethodInsideInterface) {
-        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+        methodDecl.setBody(StaticJavaParser.parseBlock("{ throw new java.lang.Error(); }"));
         // static and default keywords can not be together.
         if (isMethodInsideInterface && !methodDecl.isStatic()) {
           methodDecl.setDefault(true);
@@ -394,7 +394,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     // we need to preserve all constructors to retain compilability.
     if (usedMembers.contains(qualifiedSignature) || JavaParserUtil.isInEnum(constructorDecl)) {
       if (!needToPreserveSuperOrThisCall(constructorDecl.resolve())) {
-        constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+        constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new java.lang.Error(); }"));
         return constructorDecl;
       }
 
@@ -411,7 +411,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       }
 
       // not sure if we will ever get to this line. So this line is merely for the peace of mind.
-      constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
+      constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new java.lang.Error(); }"));
       return constructorDecl;
     }
 

@@ -3,6 +3,6 @@ package com.example;
 public class CustomException extends Exception {
 
     public CustomException(String msg) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

@@ -7,6 +7,6 @@ public class VerificationResult {
     public static org.example.VerificationResult OK;
 
     public VerificationResult(org.example.OrgExampleVerificationResultVERIFIED_REJECTEDSyntheticType parameter0, java.lang.String parameter1) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

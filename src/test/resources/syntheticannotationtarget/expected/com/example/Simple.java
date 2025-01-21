@@ -23,7 +23,7 @@ public class Simple<@TypeParam T> {
 
     @Constructor
     public Simple() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     @AnnotationDeclaration

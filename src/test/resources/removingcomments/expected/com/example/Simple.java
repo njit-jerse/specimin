@@ -3,7 +3,7 @@ package com.example;
 class Simple {
 
     static int returnTen() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     static void test() {

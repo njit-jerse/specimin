@@ -3,6 +3,6 @@ package org.testing;
 public interface D {
 
     public default int baz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

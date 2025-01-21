@@ -5,6 +5,6 @@ public class Foo {
     public boolean good;
 
     public boolean isGood() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }
