@@ -87,6 +87,8 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Node visit(ImportDeclaration decl, Void arg) {
+    System.out.println("visiting an import declaration: " + decl);
+
     String importName = decl.getNameAsString();
 
     // ImportDeclaration does not contain the asterisk by default; we need to add it
