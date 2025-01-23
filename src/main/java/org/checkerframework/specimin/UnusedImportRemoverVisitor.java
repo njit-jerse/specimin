@@ -19,8 +19,10 @@ import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclara
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.google.common.base.Splitter;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -52,7 +54,10 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
    * another compilation unit.
    */
   public void removeUnusedImports() {
+    System.out.println("removing used imports");
+    System.out.println("used imports: " + usedImports);
     for (Map.Entry<String, ImportDeclaration> entry : typeNamesToImports.entrySet()) {
+      System.out.println("deciding whether to remove: " + entry.getKey());
       if (!usedImports.contains(entry.getKey())) {
         // In special cases (namely with MethodCallExprs containing lambdas), JavaParser can have
         // trouble resolving it, so we should preserve its imports through approximation by simple
@@ -106,11 +111,20 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceType type, Void arg) {
+    String typeAsString = type.getName().asString();
     // Workaround for a JavaParser bug: see UnsolvedSymbolVisitor#visit(ClassOrInterfaceType)
-    // Also, if it's already fully qualified, it's not tied to an import
-    if (!JavaParserUtil.isCapital(type.getName().asString())
-        || JavaParserUtil.isAClassPath(type.getName().asString())) {
+    if (!JavaParserUtil.isCapital(typeAsString)) {
       return super.visit(type, arg);
+    }
+    // Also, if it's already fully qualified, it's not tied to an import
+    if (JavaParserUtil.isAClassPath(typeAsString)) {
+      List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
+      // Heuristic for FQNs: the second-to-last element is a package name, and so starts with
+      // a lower-case letter. This is important to avoid returning too early when encountering
+      // e.g., "Map.Entry".
+      if (!JavaParserUtil.isCapital(elements.get(elements.size() - 2))) {
+        return super.visit(type, arg);
+      }
     }
 
     String fullyQualified;
@@ -127,12 +141,21 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
       return super.visit(type, arg);
     }
 
-    String wildcard = fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
-
-    // Check include both the fully qualified name and the wildcard to match a potential import
-    // e.g. java.util.List and java.util.*
-    usedImports.add(fullyQualified);
-    usedImports.add(wildcard);
+    // Check must include both the fully qualified name and the wildcard to match a potential import
+    // e.g. java.util.List and java.util.*. Moreover, we need to do this check recursively for all
+    // the classes in the name until we encounter a package: for example,
+    // if the code uses "Map.Entry" and imports "java.util.Map", we need to preserve that import.
+    // We do this heuristically here by assuming class names start with a capital and package names
+    // do not.
+    String lastElement = fullyQualified.substring(fullyQualified.lastIndexOf('.') + 1);
+    while (JavaParserUtil.isCapital(lastElement)) {
+      String withoutLast = fullyQualified.substring(0, fullyQualified.lastIndexOf('.'));
+      String wildcard = withoutLast + ".*";
+      usedImports.add(fullyQualified);
+      usedImports.add(wildcard);
+      fullyQualified = withoutLast;
+      lastElement = fullyQualified.substring(fullyQualified.lastIndexOf('.') + 1);
+    }
     return super.visit(type, arg);
   }
 
@@ -279,12 +302,12 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * Helper method to convert a fully qualified class/member name into a wildcard e.g.
-   * {@code java.lang.Math.sqrt} --> {@code java.lang.Math.*}
+   * Helper method to convert a fully qualified class/member name into a wildcard e.g. {@code
+   * java.lang.Math.sqrt} --> {@code java.lang.Math.*}
    *
    * @param fullyQualified The fully qualified name
-   * @return {@code fullyQualified} with the text after the last dot replaced with an
-   * asterisk ({@code *})
+   * @return {@code fullyQualified} with the text after the last dot replaced with an asterisk
+   *     ({@code *})
    */
   private static String getWildcardFromClassOrMemberName(String fullyQualified) {
     return fullyQualified.substring(0, fullyQualified.lastIndexOf('.')) + ".*";
