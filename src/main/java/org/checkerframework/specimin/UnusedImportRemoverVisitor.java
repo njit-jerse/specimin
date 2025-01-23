@@ -54,10 +54,7 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
    * another compilation unit.
    */
   public void removeUnusedImports() {
-    System.out.println("removing used imports");
-    System.out.println("used imports: " + usedImports);
     for (Map.Entry<String, ImportDeclaration> entry : typeNamesToImports.entrySet()) {
-      System.out.println("deciding whether to remove: " + entry.getKey());
       if (!usedImports.contains(entry.getKey())) {
         // In special cases (namely with MethodCallExprs containing lambdas), JavaParser can have
         // trouble resolving it, so we should preserve its imports through approximation by simple
@@ -87,8 +84,6 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Node visit(ImportDeclaration decl, Void arg) {
-    System.out.println("visiting an import declaration: " + decl);
-
     String importName = decl.getNameAsString();
 
     // ImportDeclaration does not contain the asterisk by default; we need to add it
