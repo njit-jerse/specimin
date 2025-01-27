@@ -1,13 +1,11 @@
 package com.example;
 
-class Simple {
+import java.util.Set;
+import org.checkerframework.checker.nullness.KeyFor;
 
-    void bar() {
-        Object obj = new Object();
-        obj = baz(obj);
-    }
+class Simple<K> {
 
-    Object baz(Object obj) {
-        throw new java.lang.Error();
+    public Set<@KeyFor("this") K> bar() {
+        return null;
     }
 }
