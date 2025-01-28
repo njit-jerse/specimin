@@ -366,9 +366,11 @@ public class JavaParserUtil {
             .splitToList(
                 filteredMethodDeclaration.substring(0, filteredMethodDeclaration.indexOf('(')));
     String methodName = methodParts.get(methodParts.size() - 1);
-    String methodReturnType = declAsString.substring(0, declAsString.indexOf(methodName));
-    String methodWithoutReturnType = declAsString.replace(methodReturnType, "");
+    String methodReturnType =
+        filteredMethodDeclaration.substring(0, filteredMethodDeclaration.indexOf(methodName));
+    String methodWithoutReturnType = filteredMethodDeclaration.replace(methodReturnType, "");
     // sometimes an extra space may occur if an annotation right after a < was removed
-    return methodWithoutReturnType.replace("< ", "<");
+    String result = methodWithoutReturnType.replace("< ", "<");
+    return result;
   }
 }
