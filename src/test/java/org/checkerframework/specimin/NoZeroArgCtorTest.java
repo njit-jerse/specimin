@@ -1,12 +1,11 @@
-src/test/java/org/checkerframework/specimin/NoZeroArgCtorTest.javapackage org.checkerframework.specimin;
-
-import org.junit.Test;
+package org.checkerframework.specimin;
 
 import java.io.IOException;
+import org.junit.Test;
 
 /**
- * This test checks that when extending a non-JDK class with only constructors that take more than zero
- * arguments, at least one constructor gets preserved so that the result compiles.
+ * This test checks that when extending a non-JDK class with only constructors that take more than
+ * zero arguments, at least one constructor gets preserved so that the result compiles.
  */
 public class NoZeroArgCtorTest {
   @Test

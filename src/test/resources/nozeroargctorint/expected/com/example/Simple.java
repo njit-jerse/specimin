@@ -1,13 +1,7 @@
 package com.example;
 
-import java.io.LineNumberReader;
-
-class Simple extends LineNumberReader {
+class Simple extends SomeOtherClass {
     void bar() {
 
-    }
-
-    public Simple() {
-        super(5);
     }
 }
