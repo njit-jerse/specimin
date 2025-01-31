@@ -10,6 +10,9 @@ class Simple extends LineNumberReader {
 
     // This needs to be preserved, because otherwise the class won't compile.
     public Simple() {
-        super(null);
+        // Note that this input won't compile (String <: Reader is obviously false), but
+        // that's okay. This is just here to test that Specimin will replace any argument
+        // with a null literal.
+        super("bananas");
     }
 }

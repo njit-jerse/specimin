@@ -36,6 +36,7 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -44,8 +45,8 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 /**
  * This visitor removes every member in the compilation unit that is not a member of its {@link
  * #targetMethods} set or {@link #usedMembers} set. It also deletes the bodies of all methods and
- * replaces them with "throw new java.lang.Error();" or remove the initializers of fields (minimized if the
- * field is final) within the {@link #usedMembers} set.
+ * replaces them with "throw new java.lang.Error();" or remove the initializers of fields (minimized
+ * if the field is final) within the {@link #usedMembers} set.
  */
 public class PrunerVisitor extends SpeciminStateVisitor {
 
@@ -371,11 +372,14 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(ConstructorDeclaration constructorDecl, Void p) {
+    ResolvedConstructorDeclaration resolved;
     String qualifiedSignature;
+
     try {
-      // resolved() will only check if the return type is solvable
+      // resolve() will only check if the return type is solvable
       // getQualifiedSignature() will also check if the parameters are solvable
-      qualifiedSignature = constructorDecl.resolve().getQualifiedSignature();
+      resolved = constructorDecl.resolve();
+      qualifiedSignature = resolved.getQualifiedSignature();
     } catch (RuntimeException e) {
       // The current class is employed by the target methods, although not all of its members are
       // utilized. It's not surprising for unused members to remain unresolved.
@@ -389,11 +393,17 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       return super.visit(constructorDecl, p);
     }
 
+    // Need to avoid "no zero-argument constructor" compilation problems that are caused
+    // by removing constructors from classes which extend a class in the JDK.
+    boolean mustPreserveToAvoidZeroArgProblem = enclosingClassExtendsJDKClass(resolved);
+
     // TODO: we should be cleverer about whether to preserve the constructors of
     // enums, but right now we don't remove any enum constants in related classes, so
     // we need to preserve all constructors to retain compilability.
-    if (usedMembers.contains(qualifiedSignature) || JavaParserUtil.isInEnum(constructorDecl)) {
-      if (!needToPreserveSuperOrThisCall(constructorDecl.resolve())) {
+    if (mustPreserveToAvoidZeroArgProblem
+        || usedMembers.contains(qualifiedSignature)
+        || JavaParserUtil.isInEnum(constructorDecl)) {
+      if (!mustPreserveToAvoidZeroArgProblem && !needToPreserveSuperOrThisCall(resolved)) {
         constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new java.lang.Error(); }"));
         return constructorDecl;
       }
@@ -405,6 +415,10 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       Statement firstStatement = bodyStatement.get(0);
       if (firstStatement.isExplicitConstructorInvocationStmt()) {
         BlockStmt minimized = new BlockStmt();
+        firstStatement
+            .asExplicitConstructorInvocationStmt()
+            .getArguments()
+            .replaceAll(x -> new NullLiteralExpr());
         minimized.addStatement(firstStatement);
         constructorDecl.setBody(minimized);
         return constructorDecl;
@@ -417,6 +431,23 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
     constructorDecl.remove();
     return constructorDecl;
+  }
+
+  /**
+   * TODO write this javadoc
+   *
+   * @param resolved a
+   * @return b
+   */
+  private boolean enclosingClassExtendsJDKClass(ResolvedConstructorDeclaration resolved) {
+    ResolvedReferenceTypeDeclaration enclosingClass = resolved.declaringType();
+    List<ResolvedReferenceType> ancestors = enclosingClass.getAllAncestors();
+    if (ancestors.isEmpty()) {
+      return false;
+    }
+    ResolvedReferenceType superClass = ancestors.get(0);
+    String superClassFQN = superClass.getQualifiedName();
+    return JavaLangUtils.inJdkPackage(superClassFQN);
   }
 
   @Override
