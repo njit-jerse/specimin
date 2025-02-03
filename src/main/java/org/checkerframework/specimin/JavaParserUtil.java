@@ -353,18 +353,24 @@ public class JavaParserUtil {
    * @return the string without the return type and the annotations
    */
   static String removeMethodReturnTypeAndAnnotationsImpl(String declAsString) {
-    String methodDeclarationWithoutParen = declAsString.substring(0, declAsString.indexOf("("));
-    List<String> methodParts = Splitter.onPattern(" ").splitToList(methodDeclarationWithoutParen);
-    String methodName = methodParts.get(methodParts.size() - 1);
-    String methodReturnType = declAsString.substring(0, declAsString.indexOf(methodName));
-    String methodWithoutReturnType = declAsString.replace(methodReturnType, "");
-    methodParts = Splitter.onPattern(" ").splitToList(methodWithoutReturnType);
+    List<String> methodParts = Splitter.onPattern(" ").splitToList(declAsString);
+    // remove all annotations
     String filteredMethodDeclaration =
         methodParts.stream()
             .filter(part -> !part.startsWith("@"))
             .map(part -> part.indexOf('@') == -1 ? part : part.substring(0, part.indexOf('@')))
             .collect(Collectors.joining(" "));
+    // remove everything but the name and the return type
+    methodParts =
+        Splitter.onPattern(" ")
+            .splitToList(
+                filteredMethodDeclaration.substring(0, filteredMethodDeclaration.indexOf('(')));
+    String methodName = methodParts.get(methodParts.size() - 1);
+    String methodReturnType =
+        filteredMethodDeclaration.substring(0, filteredMethodDeclaration.indexOf(methodName));
+    String methodWithoutReturnType = filteredMethodDeclaration.replace(methodReturnType, "");
     // sometimes an extra space may occur if an annotation right after a < was removed
-    return filteredMethodDeclaration.replace("< ", "<");
+    String result = methodWithoutReturnType.replace("< ", "<");
+    return result;
   }
 }
