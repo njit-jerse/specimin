@@ -1,7 +1,6 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -95,44 +94,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     this.resolvedYetStuckMethodCall = resolvedYetStuckMethodCall;
   }
 
-  @Override
-  public Node visit(ImportDeclaration decl, Void p) {
-    String classFullName = decl.getNameAsString();
-    if (decl.isAsterisk()) {
-      // This looks weird, but in testing I found that iff decl represents a wildcard,
-      // the result of getNameAsString is actually the package name. This renaming is just to
-      // make the code less confusing.
-      String importedPackage = classFullName;
-      boolean isUsedAtLeastOnce = false;
-      for (String usedClassFQN : usedTypeElements) {
-        if (usedClassFQN.startsWith(importedPackage)) {
-          isUsedAtLeastOnce = true;
-        }
-      }
-      if (!isUsedAtLeastOnce) {
-        decl.remove();
-      }
-      return decl;
-    }
-
-    if (decl.isStatic() && isUsedMethod(classFullName)) {
-      // if it's a static import, classFullName will actually be a method name
-      return super.visit(decl, p);
-    }
-
-    if (usedTypeElements.contains(classFullName)) {
-      return super.visit(decl, p);
-    }
-
-    // Check to see if import is used in a separate method used by the target method(s)
-    if (isUsedMethodParameterType(classFullName)) {
-      return super.visit(decl, p);
-    }
-
-    decl.remove();
-    return decl;
-  }
-
   /**
    * Helper method to check if the given fully-qualified class name is used as a parameter type by
    * any of the methods in {@link #usedMembers}.
@@ -176,33 +137,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Checks if the given static import of a method or field is a used method or field
-   *
-   * @param staticImport a fully-qualified static name of a method or field, dot-separated
-   * @return true if a method with this name will be preserved
-   */
-  private boolean isUsedMethod(String staticImport) {
-    for (String methodSignature : targetMethods) {
-      if (methodSignature.startsWith(staticImport)) {
-        return true;
-      }
-    }
-    int lastDotIndex = staticImport.lastIndexOf('.');
-    StringBuilder asFieldNameBuilder = new StringBuilder(staticImport);
-    asFieldNameBuilder.setCharAt(lastDotIndex, '#');
-    String asFieldName = asFieldNameBuilder.toString();
-    for (String member : usedMembers) {
-      if (member.startsWith(staticImport)) {
-        return true;
-      }
-      if (member.equals(asFieldName)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
    * This method removes any implemented interfaces that are not used and therefore shouldn't be
    * preserved from the declaration of a class, interface, or enum. The argument should be produced
    * by calling the appropriate {@code getImplementedTypes()} method on the declaration, and after
@@ -232,6 +166,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
         }
         if (!usedTypeElements.contains(typeFullName)) {
           iterator.remove();
+          continue;
         }
         // all unresolvable interfaces that need to be removed belong to the Java package.
         if (!JavaLangUtils.inJdkPackage(typeFullName)) {
@@ -246,6 +181,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
               // This code assumes that the likelihood of two different classes with the same
               // simple name implementing the same interface is low.
               iterator.remove();
+              continue;
             }
           }
         }
