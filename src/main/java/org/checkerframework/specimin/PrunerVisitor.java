@@ -10,6 +10,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.BooleanLiteralExpr;
@@ -35,7 +36,6 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -331,7 +331,8 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
     // Need to avoid "no zero-argument constructor" compilation problems that are caused
     // by removing constructors from classes which extend a class in the JDK.
-    boolean mustPreserveToAvoidZeroArgProblem = JavaParserUtil.enclosingClassExtendsJDKClass(resolved);
+    boolean mustPreserveToAvoidZeroArgProblem =
+        JavaParserUtil.enclosingClassExtendsJDKClass(resolved);
 
     // TODO: we should be cleverer about whether to preserve the constructors of
     // enums, but right now we don't remove any enum constants in related classes, so
@@ -361,10 +362,17 @@ public class PrunerVisitor extends SpeciminStateVisitor {
         firstStatement
             .asExplicitConstructorInvocationStmt()
             .getArguments()
-            .replaceAll(
-                x -> nullOrPrimitive(x));
+            .replaceAll(x -> nullOrPrimitive(x));
         minimized.addStatement(firstStatement);
         constructorDecl.setBody(minimized);
+        // Also need to remove annotations from parameters in this case, since
+        // they won't be preserved (and this isn't a target method).
+        if (mustPreserveToAvoidZeroArgProblem) {
+          for (Parameter param : constructorDecl.getParameters()) {
+            param.setAnnotations(NodeList.nodeList());
+          }
+        }
+
         return constructorDecl;
       }
 
@@ -378,16 +386,26 @@ public class PrunerVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Helper to get either a new null literal expression
-   * or the incoming expression itself, if that expression has
-   * a primitive type.
+   * Helper to get either a new null literal expression or the incoming expression itself, if that
+   * expression has a primitive type.
    *
    * @param expr an expression
-   * @return the expression itself, iff it is of a primitive type, or a new null literal expression otherwise
+   * @return the expression itself, iff it is of a primitive type, or a new null literal expression
+   *     otherwise
    */
   private static Expression nullOrPrimitive(Expression expr) {
-    return JavaLangUtils.isPrimitive(expr.calculateResolvedType().describe())
-            ? expr : new NullLiteralExpr();
+    Expression result;
+    try {
+      result =
+          JavaLangUtils.isPrimitive(expr.calculateResolvedType().describe())
+              ? expr
+              : new NullLiteralExpr();
+    } catch (UnsolvedSymbolException e) {
+      // Can happen when the parameter is e.g., a field that has already
+      // been removed. Default to a null literal.
+      result = new NullLiteralExpr();
+    }
+    return result;
   }
 
   @Override

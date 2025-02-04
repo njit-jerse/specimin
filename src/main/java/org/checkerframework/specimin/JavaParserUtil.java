@@ -348,14 +348,13 @@ public class JavaParserUtil {
   }
 
   /**
-   * Checks if the enclosing class of the given constructor's
-   * superclass is a JDK class other than Object. Useful for e.g.,
-   * keeping constructors that are necessary for compilation when
-   * extending a class in the JDK.
+   * Checks if the enclosing class of the given constructor's superclass is a JDK class other than
+   * Object. Useful for e.g., keeping constructors that are necessary for compilation when extending
+   * a class in the JDK.
    *
    * @param resolved the resolved declaration of a constructor
-   * @return true iff the superclass of the class constructed by the given constructor
-   *         is in the JDK but is not java.lang.Object
+   * @return true iff the superclass of the class constructed by the given constructor is in the JDK
+   *     but is not java.lang.Object
    */
   public static boolean enclosingClassExtendsJDKClass(ResolvedConstructorDeclaration resolved) {
     ResolvedReferenceTypeDeclaration enclosingClass = resolved.declaringType();
