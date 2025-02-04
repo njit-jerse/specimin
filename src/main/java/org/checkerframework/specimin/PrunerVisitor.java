@@ -370,6 +370,11 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     return methodDecl;
   }
 
+  /**
+   * Cache to avoid adding the same constructor twice.
+   */
+  private Set<String> fqnsOfClassesThatExtendAJDKClassWithASuperCtor = new HashSet<>();
+
   @Override
   public Visitable visit(ConstructorDeclaration constructorDecl, Void p) {
     ResolvedConstructorDeclaration resolved;
@@ -413,7 +418,14 @@ public class PrunerVisitor extends SpeciminStateVisitor {
         return constructorDecl;
       }
       Statement firstStatement = bodyStatement.get(0);
+
       if (firstStatement.isExplicitConstructorInvocationStmt()) {
+        if (mustPreserveToAvoidZeroArgProblem
+            && firstStatement.asExplicitConstructorInvocationStmt().isThis()) {
+          // In this case, we only care about constructors which call super().
+          constructorDecl.remove();
+          return constructorDecl;
+        }
         BlockStmt minimized = new BlockStmt();
         firstStatement
             .asExplicitConstructorInvocationStmt()
