@@ -306,11 +306,6 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     return methodDecl;
   }
 
-  /**
-   * Cache to avoid adding the same constructor twice.
-   */
-  private Set<String> fqnsOfClassesThatExtendAJDKClassWithASuperCtor = new HashSet<>();
-
   @Override
   public Visitable visit(ConstructorDeclaration constructorDecl, Void p) {
     ResolvedConstructorDeclaration resolved;
@@ -366,7 +361,11 @@ public class PrunerVisitor extends SpeciminStateVisitor {
         firstStatement
             .asExplicitConstructorInvocationStmt()
             .getArguments()
-            .replaceAll(x -> new NullLiteralExpr());
+            .replaceAll(
+                x ->
+                    JavaLangUtils.isPrimitive(x.calculateResolvedType().describe())
+                        ? x
+                        : new NullLiteralExpr());
         minimized.addStatement(firstStatement);
         constructorDecl.setBody(minimized);
         return constructorDecl;
@@ -395,7 +394,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     }
     ResolvedReferenceType superClass = ancestors.get(0);
     String superClassFQN = superClass.getQualifiedName();
-    return JavaLangUtils.inJdkPackage(superClassFQN);
+    return !"java.lang.Object".equals(superClassFQN) && JavaLangUtils.inJdkPackage(superClassFQN);
   }
 
   @Override

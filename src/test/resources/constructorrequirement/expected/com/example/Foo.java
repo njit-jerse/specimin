@@ -3,7 +3,7 @@ package com.example;
 class BazChild extends Baz {
 
     BazChild(String args) {
-        super(args);
+        super(null);
     }
 }
 
