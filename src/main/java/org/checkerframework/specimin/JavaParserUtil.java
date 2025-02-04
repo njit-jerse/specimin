@@ -16,7 +16,9 @@ import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
@@ -343,6 +345,27 @@ public class JavaParserUtil {
   public static String removeMethodReturnTypeSpacesAndAnnotations(NodeWithDeclaration decl) {
     String declAsString = decl.getDeclarationAsString(false, false, false);
     return removeMethodReturnTypeAndAnnotationsImpl(declAsString).replaceAll("\\s", "");
+  }
+
+  /**
+   * Checks if the enclosing class of the given constructor's
+   * superclass is a JDK class other than Object. Useful for e.g.,
+   * keeping constructors that are necessary for compilation when
+   * extending a class in the JDK.
+   *
+   * @param resolved the resolved declaration of a constructor
+   * @return true iff the superclass of the class constructed by the given constructor
+   *         is in the JDK but is not java.lang.Object
+   */
+  public static boolean enclosingClassExtendsJDKClass(ResolvedConstructorDeclaration resolved) {
+    ResolvedReferenceTypeDeclaration enclosingClass = resolved.declaringType();
+    List<ResolvedReferenceType> ancestors = enclosingClass.getAllAncestors();
+    if (ancestors.isEmpty()) {
+      return false;
+    }
+    ResolvedReferenceType superClass = ancestors.get(0);
+    String superClassFQN = superClass.getQualifiedName();
+    return !"java.lang.Object".equals(superClassFQN) && JavaLangUtils.inJdkPackage(superClassFQN);
   }
 
   /**

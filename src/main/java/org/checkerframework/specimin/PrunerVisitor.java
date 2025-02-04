@@ -331,7 +331,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
 
     // Need to avoid "no zero-argument constructor" compilation problems that are caused
     // by removing constructors from classes which extend a class in the JDK.
-    boolean mustPreserveToAvoidZeroArgProblem = enclosingClassExtendsJDKClass(resolved);
+    boolean mustPreserveToAvoidZeroArgProblem = JavaParserUtil.enclosingClassExtendsJDKClass(resolved);
 
     // TODO: we should be cleverer about whether to preserve the constructors of
     // enums, but right now we don't remove any enum constants in related classes, so
@@ -362,10 +362,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
             .asExplicitConstructorInvocationStmt()
             .getArguments()
             .replaceAll(
-                x ->
-                    JavaLangUtils.isPrimitive(x.calculateResolvedType().describe())
-                        ? x
-                        : new NullLiteralExpr());
+                x -> nullOrPrimitive(x));
         minimized.addStatement(firstStatement);
         constructorDecl.setBody(minimized);
         return constructorDecl;
@@ -381,20 +378,16 @@ public class PrunerVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * TODO write this javadoc
+   * Helper to get either a new null literal expression
+   * or the incoming expression itself, if that expression has
+   * a primitive type.
    *
-   * @param resolved a
-   * @return b
+   * @param expr an expression
+   * @return the expression itself, iff it is of a primitive type, or a new null literal expression otherwise
    */
-  private boolean enclosingClassExtendsJDKClass(ResolvedConstructorDeclaration resolved) {
-    ResolvedReferenceTypeDeclaration enclosingClass = resolved.declaringType();
-    List<ResolvedReferenceType> ancestors = enclosingClass.getAllAncestors();
-    if (ancestors.isEmpty()) {
-      return false;
-    }
-    ResolvedReferenceType superClass = ancestors.get(0);
-    String superClassFQN = superClass.getQualifiedName();
-    return !"java.lang.Object".equals(superClassFQN) && JavaLangUtils.inJdkPackage(superClassFQN);
+  private static Expression nullOrPrimitive(Expression expr) {
+    return JavaLangUtils.isPrimitive(expr.calculateResolvedType().describe())
+            ? expr : new NullLiteralExpr();
   }
 
   @Override
