@@ -6,7 +6,7 @@ public class MyList<T> {
         throw new java.lang.Error();
     }
 
-    public AddReturnType add(T parameter0) {
+    public AddReturnType add(java.lang.Object parameter0) {
         throw new java.lang.Error();
     }
 }
