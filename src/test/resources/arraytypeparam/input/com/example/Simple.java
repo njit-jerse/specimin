@@ -8,6 +8,6 @@ class Simple {
 
     // Target method.
     void bar(Object[] args) {
-        toHoldTheArgs = List.of(args);
+        toHoldTheArgs = List.<Object[]>of(args);
     }
 }

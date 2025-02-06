@@ -7,6 +7,6 @@ class Simple {
     List<Object[]> toHoldTheArgs;
 
     void bar(Object[] args) {
-        toHoldTheArgs = List.of(args);
+        toHoldTheArgs = List.<Object[]>of(args);
     }
 }
