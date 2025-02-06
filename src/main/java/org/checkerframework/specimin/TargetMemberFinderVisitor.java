@@ -878,7 +878,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Updates the list of used classes based on the resolved type of a used element, where a element
+   * Updates the list of used classes based on the resolved type of a used element, where an element
    * can be a method, a field, a variable, or a parameter. Also updates the set of used classes
    * based on component types, wildcard bounds, etc., as needed: any type that is used in the type
    * will be included.
@@ -920,6 +920,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
         }
         continue;
       }
+      // TODO: also handle arrays
       updateUsedClassWithQualifiedClassName(
           typePara.asReferenceType().getQualifiedName(),
           usedTypeElements,
