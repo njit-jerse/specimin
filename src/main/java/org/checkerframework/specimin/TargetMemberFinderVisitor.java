@@ -920,7 +920,11 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
         }
         continue;
       }
-      // TODO: also handle arrays
+      if (typePara.isArray()) {
+        ResolvedType componentType = typePara.asArrayType().getComponentType();
+        updateUsedClassBasedOnType(componentType);
+        continue;
+      }
       updateUsedClassWithQualifiedClassName(
           typePara.asReferenceType().getQualifiedName(),
           usedTypeElements,
