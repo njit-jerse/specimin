@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -1981,7 +1982,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         String paraTypeAsString = paraType.asString();
         try {
           // if possible, opt for fully-qualified names.
-          paraTypeAsString = paraType.resolve().describe();
+          ResolvedType resolvedType = paraType.resolve();
+          paraTypeAsString = resolvedType.describe();
         } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
           // avoiding ignored catch blocks errors.
           listOfParameters.add(paraTypeAsString);
@@ -2641,6 +2643,19 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       // import statements.
       if (type.isReferenceType()) {
         ResolvedReferenceType rrType = type.asReferenceType();
+        // check if the type isn't public, in which case we shouldn't use
+        // it as a parameter (it will cause compilation problems)
+        Optional<ResolvedReferenceTypeDeclaration> maybeDecl = rrType.getTypeDeclaration();
+        if (maybeDecl.isPresent()) {
+          ResolvedReferenceTypeDeclaration decl = maybeDecl.get();
+          if (decl.isClass()) {
+            AccessSpecifier access = decl.asClass().accessSpecifier();
+            if (access != AccessSpecifier.PUBLIC) {
+              parametersList.add("java.lang.Object");
+              continue;
+            }
+          }
+        }
         // avoid creating methods with raw parameter types
         int ctypevar = rrType.getTypeParametersMap().size();
         String typevars = "";
