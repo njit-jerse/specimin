@@ -3845,6 +3845,41 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       typeVarDecl = "";
       rest = javacType;
     }
+    
+    // need to also remove annotations before parsing, because they aren't in the right
+    // format. E.g., the string might look like this:
+    // WeakReference<@org.checkerframework.checker.nullness.qual.Nullable,@org.checkerframework.checker.interning.qual.Interned String []>
+    int indexOfAt = rest.indexOf('@');
+    while (indexOfAt != -1) {
+      // need to find the next comma or space, disregarding
+      // any that don't occur when parens are balanced
+      int idx = indexOfAt;
+      int endIdx = -1;
+      int parens = 0;
+      while (endIdx == -1) {
+        idx += 1;
+        char atIdx = rest.charAt(idx);
+        switch (atIdx) {
+          case '(':
+            parens++;
+            break;
+          case ')':
+            parens--;
+            break;
+          case ',':
+          case ' ':
+            if (parens == 0) {
+              endIdx = idx;
+            }
+            break;
+          default:
+            // do nothing
+        }
+      }
+      rest = rest.substring(0, indexOfAt) + rest.substring(endIdx + 1);
+      indexOfAt = rest.indexOf('@');
+    }
+
     Visitable parsedJavac = StaticJavaParser.parseType(rest);
     parsedJavac =
         parsedJavac.accept(
