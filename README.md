@@ -99,7 +99,7 @@ method that isn’t a target, but is used. The result of this change
 has an identical specification to the original - annotations and types
 will be preserved - but its behavior is empty. This illustrates that
 Specimin is not intended to produce runnable output: its output is only
-usefule for static analysis.
+useful for static analysis.
 
 If the target had been `baz()` instead of `bar()`, then `bar()` would
 be removed entirely: it is not referenced from `baz()`.
