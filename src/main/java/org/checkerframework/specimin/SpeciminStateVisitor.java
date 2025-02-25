@@ -7,6 +7,7 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.SimpleName;
@@ -212,6 +213,14 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration node, Void arg) {
+    maintainDataStructuresPreSuper(node);
+    Visitable result = super.visit(node, arg);
+    maintainDataStructuresPostSuper(node);
+    return result;
+  }
+
+  @Override
+  public Visitable visit(RecordDeclaration node, Void arg) {
     maintainDataStructuresPreSuper(node);
     Visitable result = super.visit(node, arg);
     maintainDataStructuresPostSuper(node);

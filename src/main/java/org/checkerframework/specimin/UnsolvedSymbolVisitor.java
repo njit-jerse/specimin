@@ -13,6 +13,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
@@ -434,11 +435,23 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     super.maintainDataStructuresPreSuper(decl);
     if (decl.isEnumDeclaration()) {
       // Enums cannot extend other classes (they always extend Enum) and cannot have type
-      // parameters, o it's not necessary to do any maintenance on the data structures that
+      // parameters, so it's not necessary to do any maintenance on the data structures that
       // track superclasses or type parameters in the enum case (only implemented interfaces).
       NodeList<ClassOrInterfaceType> implementedTypes =
           decl.asEnumDeclaration().getImplementedTypes();
       updateForExtendedAndImplementedTypes(implementedTypes, implementedTypes, false);
+    } else if (decl.isRecordDeclaration()) {
+      // Records also cannot extend any classes, but they can both have type parameters and
+      // implement interfaces.
+
+      // Handle interfaces
+      NodeList<ClassOrInterfaceType> implementedTypes =
+          decl.asRecordDeclaration().getImplementedTypes();
+      updateForExtendedAndImplementedTypes(implementedTypes, implementedTypes, false);
+
+      // Maintenance of type parameters
+      addTypeVariableScope(decl.asRecordDeclaration().getTypeParameters());
+
     } else if (decl.isClassOrInterfaceDeclaration()) {
       ClassOrInterfaceDeclaration asClassOrInterface = decl.asClassOrInterfaceDeclaration();
 
@@ -878,7 +891,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     try {
       declType.resolve();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException | IllegalArgumentException e) {
       String typeAsString = declType.asString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
       // There could be three cases here: a type variable, a fully-qualified class name, or a simple
@@ -1894,6 +1907,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (parent instanceof EnumDeclaration) {
         return false;
       }
+      if (parent instanceof RecordDeclaration) {
+        return false;
+      }
       node = parent;
     }
     throw new RuntimeException("Got a node with no containing class!");
@@ -2498,6 +2514,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       classNodeSimpleName = ((EnumDeclaration) parentNode).getName();
     } else if (parentNode instanceof ClassOrInterfaceDeclaration) {
       classNodeSimpleName = ((ClassOrInterfaceDeclaration) parentNode).getName();
+    } else if (parentNode instanceof RecordDeclaration) {
+      classNodeSimpleName = ((RecordDeclaration) parentNode).getName();
     } else {
       throw new RuntimeException("Unexpected parent node: " + parentNode);
     }
@@ -2949,11 +2967,16 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // itself. Consequently, JavaParser does not actively search for constructor declarations within
     // the class. While this approach suffices for compilable input, it is inadequate for handling
     // incomplete synthetic classes, such as in our case.
+    //
+    // Note also that we need to catch IllegalArgumentException, because whenever we try to solve
+    // a record Java Parser throws that...
     if (expr instanceof ObjectCreationExpr) {
       try {
         expr.asObjectCreationExpr().resolve();
         return true;
-      } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
+      } catch (UnsolvedSymbolException
+          | UnsupportedOperationException
+          | IllegalArgumentException e) {
         return false;
       }
     }

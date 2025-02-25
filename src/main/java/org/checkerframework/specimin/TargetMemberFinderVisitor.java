@@ -9,6 +9,7 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -338,6 +339,7 @@ public class TargetMemberFinderVisitor extends SpeciminStateVisitor {
     if (insideTargetMember) {
       Node parentNode = method.getParentNode().get();
       // it could also be an enum declaration, but those are handled separately
+      // TODO: is this the place where my record problems are coming from
       if (parentNode instanceof ObjectCreationExpr) {
         ObjectCreationExpr parentExpression = (ObjectCreationExpr) parentNode;
         ResolvedConstructorDeclaration resolved = parentExpression.resolve();
