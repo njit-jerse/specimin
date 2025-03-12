@@ -7,8 +7,11 @@ public class stringindexoob {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "StringIndexOutOfBounds",
-        new String[] {"com/example/BasicBeanDescription.java"},
-        new String[] {"BasicBeanDescription#getConstructorsWithMode()"});
+        "stringindexoob",
+        new String[] {"com/example/BasicDeserializerFactory.java"},
+        new String[] {
+          "com.example.BasicDeserializerFactory#createArrayDeserializer(DeserializationContext,"
+              + " ArrayType, BeanDescription)"
+        });
   }
 }
