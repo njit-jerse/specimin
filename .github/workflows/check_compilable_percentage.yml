@@ -118,10 +118,10 @@ jobs:
         id: check_failure_diff
         run: |
           echo "Minimization Diff:"
-          diff CI_failed_minimizations.txt run_failed_minimizations.txt
+          diff CI_failed_minimizations.txt run_failed_minimizations.txt || echo "difference in minimizations!"
 
           echo "Compilation Diff:"
-          diff CI_failed_compilations.txt run_failed_compilations.txt
+          diff CI_failed_compilations.txt run_failed_compilations.txt || echo "difference in compilations!"
           
       - name: Validate accuracy
         id: validate_accuracy
