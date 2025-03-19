@@ -881,9 +881,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       String typeAsString = declType.asString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
-      // There could be three cases here: a type variable, a fully-qualified class name, or a simple
-      // class name.
-      // This is the fully-qualified case.
+      // There could be four cases here: a type variable, a fully-qualified class name, or a simple
+      // class name (this last case has two sub-cases: one for inner classes and one for true simple
+      // names).
+      // This is the fully-qualified case; it's necessary to carefully distinguish it from the inner
+      // class case, which looks similar.
       if (elements.size() > 1) {
         int typeParamIndex = typeAsString.indexOf('<');
         int typeParamCount = -1;
@@ -897,7 +899,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             "signature") // since this type is in a fully-qualified form, or we make it
         // fully-qualified
         @FullyQualifiedName String qualifiedTypeName =
-            typeAsString.contains(".")
+            typeAsString.contains(".") && !JavaParserUtil.isCapital(typeAsString)
                 ? typeAsString
                 : getPackageFromClassName(typeAsString) + "." + typeAsString;
         UnsolvedClassOrInterface unsolved =
@@ -2873,6 +2875,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @return the package of that class.
    */
   public String getPackageFromClassName(String className) {
+    // System.out.println("class and package map: " + classAndPackageMap);
     if (className.contains("<")) {
       className = className.substring(0, className.indexOf("<"));
     }
@@ -2884,22 +2887,26 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     String pkg = classAndPackageMap.get(className);
     if (pkg != null) {
+      //      System.out.println("0: " + pkg);
       return pkg;
     } else {
       // Check if there is a wildcard import. If there isn't always use
       // currentPackage.
       if (wildcardImports.size() == 0) {
+        //        System.out.println("1: " + currentPackage);
         return currentPackage;
       }
       // If there is a wildcard import, check if there is a matching class
       // in the original codebase in the current package. If so, use that.
       if (classfileIsInOriginalCodebase(currentPackage + "." + className)) {
+        //        System.out.println("2: " + currentPackage);
         return currentPackage;
       }
       // If not, then check for each wildcard import if the original codebase
       // contains an appropriate class. If so, use it.
       for (String wildcardPkg : wildcardImports) {
         if (classfileIsInOriginalCodebase(wildcardPkg + "." + className)) {
+          //          System.out.println("3: " + wildcardPkg);
           return wildcardPkg;
         }
       }
@@ -2907,9 +2914,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       // TODO: log a warning about this once we have a logger
       for (String wildcardPkg : wildcardImports) {
         if (!JavaLangUtils.inJdkPackage(wildcardPkg)) {
+          //          System.out.println("4: " + wildcardPkg);
           return wildcardPkg;
         }
       }
+      //      System.out.println("5: " + currentPackage);
       // If we're here, all wildcard imports are jdk imports; use current package instead
       return currentPackage;
     }
@@ -3125,6 +3134,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       UnsolvedClassOrInterface outerClass =
           new UnsolvedClassOrInterface(
               outerClassName, missedClass.getPackageName(), false, missedClass.isAnInterface());
+      //      if (outerClass.getQualifiedClassName().contains("JsonInclude")) {
+      //        throw new RuntimeException("oops");
+      //      }
       UnsolvedClassOrInterface innerClass =
           new UnsolvedClassOrInterface.UnsolvedInnerClass(
               innerClassName, missedClass.getPackageName());
@@ -3845,7 +3857,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       typeVarDecl = "";
       rest = javacType;
     }
-    
+
     // need to also remove annotations before parsing, because they aren't in the right
     // format. E.g., the string might look like this:
     // WeakReference<@org.checkerframework.checker.nullness.qual.Nullable,@org.checkerframework.checker.interning.qual.Interned String []>

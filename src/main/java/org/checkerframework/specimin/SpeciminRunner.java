@@ -292,8 +292,15 @@ public class SpeciminRunner {
     // we break the loop below early.
     Set<UnsolvedSymbolVisitorProgress> previousIterations = new HashSet<>();
     UnsolvedSymbolVisitorProgress problematicIteration = null;
+    int iteration = 0;
 
     while (addMissingClass.gettingException()) {
+      System.out.println("iteration " + iteration);
+      for (UnsolvedSymbolVisitorProgress it : previousIterations) {
+        System.out.println(it);
+        System.out.println("----------------------------");
+      }
+      System.out.println("============================");
       addMissingClass.setExceptionToFalse();
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
