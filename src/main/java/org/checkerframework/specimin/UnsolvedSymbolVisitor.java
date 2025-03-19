@@ -1229,19 +1229,23 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
+    System.out.println("visiting this type: " + typeExpr);
     // Workaround for a JavaParser bug: When a type is referenced using its fully-qualified name,
     // like com.example.Dog dog, JavaParser considers its package components (com and com.example)
     // as types, too. This issue happens even when the source file of the Dog class is present in
     // the codebase.
     if (!JavaParserUtil.isCapital(typeExpr.getName().asString())) {
+      System.out.println("skipping because I think it's a package");
       return super.visit(typeExpr, p);
     }
     // type belonging to a class declaration will be handled by the visit method for
     // ClassOrInterfaceDeclaration
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
+      System.out.println("skipping because I think it'll be handled elsewhere");
       return super.visit(typeExpr, p);
     }
     if (!insideTargetMember && !insidePotentialUsedMember) {
+      System.out.println("skipping because I think it's unused");
       return super.visit(typeExpr, p);
     }
     resolveTypeExpr(typeExpr);

@@ -26,6 +26,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -290,12 +291,12 @@ public class SpeciminRunner {
     // solved). So, we track all previous iterations, and if we ever see the same
     // outputs we set "problematicIteration" to that one. If we see that output again,
     // we break the loop below early.
-    Set<UnsolvedSymbolVisitorProgress> previousIterations = new HashSet<>();
+    Set<UnsolvedSymbolVisitorProgress> previousIterations = new LinkedHashSet<>();
     UnsolvedSymbolVisitorProgress problematicIteration = null;
     int iteration = 0;
 
     while (addMissingClass.gettingException()) {
-      System.out.println("iteration " + iteration);
+      System.out.println("iteration " + ++iteration);
       for (UnsolvedSymbolVisitorProgress it : previousIterations) {
         System.out.println(it);
         System.out.println("----------------------------");
