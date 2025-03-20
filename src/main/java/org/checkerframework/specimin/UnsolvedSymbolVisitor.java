@@ -1239,9 +1239,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
       return super.visit(typeExpr, p);
     }
-    if (!insideTargetMember && !insidePotentialUsedMember) {
-      return super.visit(typeExpr, p);
-    }
     resolveTypeExpr(typeExpr);
 
     return super.visit(typeExpr, p);
@@ -3845,7 +3842,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       typeVarDecl = "";
       rest = javacType;
     }
-    
+
     // need to also remove annotations before parsing, because they aren't in the right
     // format. E.g., the string might look like this:
     // WeakReference<@org.checkerframework.checker.nullness.qual.Nullable,@org.checkerframework.checker.interning.qual.Interned String []>
