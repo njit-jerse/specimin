@@ -2,7 +2,7 @@ package org.testing;
 
 public class Baz {
 
-    public void bazMethod() {
+    public BazMethodReturnType bazMethod() {
         throw new java.lang.Error();
     }
 }

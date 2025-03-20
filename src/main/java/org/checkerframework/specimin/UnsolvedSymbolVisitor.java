@@ -1244,10 +1244,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       System.out.println("skipping because I think it'll be handled elsewhere");
       return super.visit(typeExpr, p);
     }
-    if (!insideTargetMember && !insidePotentialUsedMember) {
-      System.out.println("skipping because I think it's unused");
-      return super.visit(typeExpr, p);
-    }
     resolveTypeExpr(typeExpr);
 
     return super.visit(typeExpr, p);
