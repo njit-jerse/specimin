@@ -461,11 +461,18 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       extendedAndImplementedTypes.addAll(implementedTypes);
 
       // Also include the bounds of the class' type parameters.
-      NodeList<ClassOrInterfaceType> typeParamBounds = new NodeList<>();
       for (TypeParameter t : asClassOrInterface.getTypeParameters()) {
-        typeParamBounds.addAll(t.getTypeBound());
+        NodeList<ClassOrInterfaceType> bounds = t.getTypeBound();
+        for (int i = 0; i < bounds.size(); i++) {
+          // In Java, only the first bound may be a class; subsequent bounds _must_ be
+          // interfaces. Therefore, we have to add bounds later than the first to both
+          // the extended and the implemented types.
+          extendedAndImplementedTypes.add(bounds.get(i));
+          if (i > 0) {
+            implementedTypes.add(bounds.get(i));
+          }
+        }
       }
-      extendedAndImplementedTypes.addAll(typeParamBounds);
 
       updateForExtendedAndImplementedTypes(
           extendedAndImplementedTypes, implementedTypes, asClassOrInterface.isInterface());
