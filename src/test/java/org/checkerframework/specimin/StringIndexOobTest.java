@@ -3,7 +3,7 @@ package org.checkerframework.specimin;
 import java.io.IOException;
 import org.junit.Test;
 
-public class stringindexoob {
+public class StringIndexOobTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(

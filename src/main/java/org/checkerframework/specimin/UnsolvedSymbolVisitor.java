@@ -3454,6 +3454,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       methodCall = toFullyQualifiedCall(method);
     }
     List<String> methodParts = methodParts(methodCall);
+    System.out.println("method parts: " + methodParts);
     StringBuilder packageName = new StringBuilder(methodParts.get(0));
     int i = 1;
     while (Character.isLowerCase(methodParts.get(i).charAt(0))) {
