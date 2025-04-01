@@ -3725,6 +3725,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       boolean updateAField,
       String incorrectTypeName,
       String correctTypeName) {
+
+    System.out.println(
+        "JavaTypeCorrect has asked us to fix: " + incorrectTypeName + " to " + correctTypeName);
+    System.out.println("in the class " + className + " in package " + packageName);
+
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
     if (!correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
@@ -3732,6 +3737,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
+    System.out.println("classToSearch: " + classToSearch);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClassOrInterface missedClass = iterator.next();

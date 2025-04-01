@@ -368,6 +368,15 @@ public class UnsolvedClassOrInterface {
         successfullyUpdated = true;
       }
     }
+    if (innerClasses != null) {
+      for (UnsolvedClassOrInterface innerClass : innerClasses) {
+        boolean foundInInnerClass =
+            innerClass.updateMethodByReturnType(currentReturnType, desiredReturnType);
+        if (foundInInnerClass) {
+          successfullyUpdated = true;
+        }
+      }
+    }
     return successfullyUpdated;
   }
 
@@ -413,8 +422,17 @@ public class UnsolvedClassOrInterface {
                 correctType, staticKeyword + finalKeyword + correctType + " " + fieldName));
       }
     }
-
     classFields.addAll(newFields);
+
+    if (innerClasses != null) {
+      for (UnsolvedClassOrInterface innerClass : innerClasses) {
+        boolean foundInInnerClass = innerClass.updateFieldByType(currentType, correctType);
+        if (foundInInnerClass) {
+          successfullyUpdated = true;
+        }
+      }
+    }
+
     return successfullyUpdated;
   }
 
