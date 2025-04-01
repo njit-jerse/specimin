@@ -428,6 +428,12 @@ public class UnsolvedClassOrInterface {
       // LinkedHashSet to make the iteration order deterministic.
       this.innerClasses = new LinkedHashSet<>(1);
     }
+    if (this.innerClasses.contains(innerClass)) {
+      // replace the old version with the new one (e.g., if a method has been added; the
+      // number of methods is not included in the equality check for the set...)
+      // TODO: I think this data structure isn't quite right for what this is doing
+      this.innerClasses.remove(innerClass);
+    }
     this.innerClasses.add(innerClass);
   }
 

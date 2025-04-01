@@ -121,9 +121,6 @@ public class UnsolvedMethod {
       List<String> throwsList) {
     this.name = name;
     this.returnType = returnType;
-    if (returnType.contains("annotation.Value")) {
-      throw new RuntimeException("bad specimin");
-    }
     this.parameterList = parameterList;
     this.isJustMethodSignature = isJustMethodSignature;
     this.accessModifier = accessModifier;
