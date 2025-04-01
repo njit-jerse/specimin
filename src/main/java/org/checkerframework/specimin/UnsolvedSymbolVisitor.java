@@ -1957,6 +1957,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    */
   @SuppressWarnings("signature")
   public @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
+    if ("void".equals(className)) {
+      return "void";
+    }
     Pair<String, String> pkgAndClass = splitName(className);
     return (@ClassGetSimpleName String) pkgAndClass.b;
   }
@@ -2123,6 +2126,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       // resolved type at once. If any ancestor remains unresolved, we end up with a not very useful
       // exception.
       if (!classfileIsInOriginalCodebase(parentClassName)) {
+        System.out.println("nodetypesimpleform: " + nodeTypeSimpleForm);
         if (nodeType.isReferenceType()) {
           updateUnsolvedClassOrInterfaceWithMethod(
               node,
