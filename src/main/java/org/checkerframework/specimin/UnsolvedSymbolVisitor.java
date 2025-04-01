@@ -910,6 +910,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             typeAsString.contains(".") && !JavaParserUtil.isCapital(typeAsString)
                 ? typeAsString
                 : getPackageFromClassName(typeAsString) + "." + typeAsString;
+        System.out.println("making a simple synthetic class from this FQN: " + qualifiedTypeName);
         UnsolvedClassOrInterface unsolved =
             getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
         if (typeParamCount != -1) {
@@ -1237,19 +1238,16 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
 
   @Override
   public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
-    System.out.println("visiting this type: " + typeExpr);
     // Workaround for a JavaParser bug: When a type is referenced using its fully-qualified name,
     // like com.example.Dog dog, JavaParser considers its package components (com and com.example)
     // as types, too. This issue happens even when the source file of the Dog class is present in
     // the codebase.
     if (!JavaParserUtil.isCapital(typeExpr.getName().asString())) {
-      System.out.println("skipping because I think it's a package");
       return super.visit(typeExpr, p);
     }
     // type belonging to a class declaration will be handled by the visit method for
     // ClassOrInterfaceDeclaration
     if (typeExpr.getParentNode().get() instanceof ClassOrInterfaceDeclaration) {
-      System.out.println("skipping because I think it'll be handled elsewhere");
       return super.visit(typeExpr, p);
     }
     if (!insideTargetMember && !insidePotentialUsedMember) {
@@ -1748,6 +1746,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       // be a fully-qualified name. If it's an Outer.Inner pair, we identify
       // that via the heuristic that there are only two elements if we split on
       // the dot and that the whole string is capital
+      // TODO: add handling for FQN w/ inner class?
       if (typeRawName.indexOf('.') == typeRawName.lastIndexOf('.')
           && JavaParserUtil.isCapital(typeRawName)) {
         className = typeRawName;
@@ -3063,17 +3062,16 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * This method converts a @FullyQualifiedName classname to a @ClassGetSimpleName classname. Note
-   * that there is warning suppression here. It is safe to claim that if we split
-   * a @FullyQualifiedName name by dot ([.]), then the last part is the @ClassGetSimpleName part.
+   * This method converts a @FullyQualifiedName name to a @ClassGetSimpleName name.
    *
-   * @param fullyQualifiedName a @FullyQualifiedName classname
+   * @param fullyQualifiedName a @FullyQualifiedName class name
    * @return the @ClassGetSimpleName version of that class
    */
-  public static @ClassGetSimpleName String fullyQualifiedToSimple(
+  public @ClassGetSimpleName String fullyQualifiedToSimple(
       @FullyQualifiedName String fullyQualifiedName) {
+    Pair<String, String> pkgAndClass = splitName(fullyQualifiedName);
     @SuppressWarnings("signature")
-    @ClassGetSimpleName String simpleName = fullyQualifiedName.substring(fullyQualifiedName.lastIndexOf(".") + 1);
+    @ClassGetSimpleName String simpleName = pkgAndClass.b;
     return simpleName;
   }
 
@@ -3289,7 +3287,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @param fullyName the fully-qualified name of the class
    * @return the corresponding instance of UnsolvedClass
    */
-  public static UnsolvedClassOrInterface getSimpleSyntheticClassFromFullyQualifiedName(
+  public UnsolvedClassOrInterface getSimpleSyntheticClassFromFullyQualifiedName(
       @FullyQualifiedName String fullyName) {
     if (!JavaParserUtil.isAClassPath(fullyName)) {
       throw new RuntimeException(
