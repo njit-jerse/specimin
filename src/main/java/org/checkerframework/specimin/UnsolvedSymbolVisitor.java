@@ -3725,6 +3725,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     if (!correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
       correctTypeName = lookupFQNs(correctTypeName);
     }
+
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
@@ -3973,6 +3974,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       } else if (asWildcardType.getExtendedType().isPresent()) {
         fullyQualifiedName.append("? extends ");
         lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getExtendedType().get());
+      } else {
+        fullyQualifiedName.append("?");
       }
     } else if (JavaParserUtil.isAClassPath(erased)) {
       // If it's already a fully qualified name, don't do anything
