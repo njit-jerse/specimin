@@ -2885,7 +2885,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @return the package of that class.
    */
   public String getPackageFromClassName(String className) {
-    // System.out.println("class and package map: " + classAndPackageMap);
     if (className.contains("<")) {
       className = className.substring(0, className.indexOf("<"));
     }
@@ -2897,26 +2896,22 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     String pkg = classAndPackageMap.get(className);
     if (pkg != null) {
-      //      System.out.println("0: " + pkg);
       return pkg;
     } else {
       // Check if there is a wildcard import. If there isn't always use
       // currentPackage.
       if (wildcardImports.size() == 0) {
-        //        System.out.println("1: " + currentPackage);
         return currentPackage;
       }
       // If there is a wildcard import, check if there is a matching class
       // in the original codebase in the current package. If so, use that.
       if (classfileIsInOriginalCodebase(currentPackage + "." + className)) {
-        //        System.out.println("2: " + currentPackage);
         return currentPackage;
       }
       // If not, then check for each wildcard import if the original codebase
       // contains an appropriate class. If so, use it.
       for (String wildcardPkg : wildcardImports) {
         if (classfileIsInOriginalCodebase(wildcardPkg + "." + className)) {
-          //          System.out.println("3: " + wildcardPkg);
           return wildcardPkg;
         }
       }
@@ -2924,11 +2919,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       // TODO: log a warning about this once we have a logger
       for (String wildcardPkg : wildcardImports) {
         if (!JavaLangUtils.inJdkPackage(wildcardPkg)) {
-          //          System.out.println("4: " + wildcardPkg);
           return wildcardPkg;
         }
       }
-      //      System.out.println("5: " + currentPackage);
       // If we're here, all wildcard imports are jdk imports; use current package instead
       return currentPackage;
     }
@@ -3626,9 +3619,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         continue;
       }
       UnsolvedClassOrInterface relatedClass = syntheticMethodReturnTypeAndClass.get(incorrectType);
-      if (incorrectType.contains("WithOverrides")) {
-        System.out.println("related Class: " + relatedClass);
-      }
       if (relatedClass != null) {
         atLeastOneTypeIsUpdated |=
             updateTypeForSyntheticClasses(
@@ -3726,10 +3716,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       String incorrectTypeName,
       String correctTypeName) {
 
-    System.out.println(
-        "JavaTypeCorrect has asked us to fix: " + incorrectTypeName + " to " + correctTypeName);
-    System.out.println("in the class " + className + " in package " + packageName);
-
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
     if (!correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
@@ -3737,7 +3723,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
-    System.out.println("classToSearch: " + classToSearch);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
     while (iterator.hasNext()) {
       UnsolvedClassOrInterface missedClass = iterator.next();
