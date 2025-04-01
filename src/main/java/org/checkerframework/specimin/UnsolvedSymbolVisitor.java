@@ -305,7 +305,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (importParts.size() > 0) {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
-        if (!"*".equals(className)) {
+        // Avoids accidentally adding the last package name in a wildcard import.
+        if (JavaParserUtil.isCapital(className)) {
           this.classAndPackageMap.put(className, packageName);
         }
       }
@@ -3454,7 +3455,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       methodCall = toFullyQualifiedCall(method);
     }
     List<String> methodParts = methodParts(methodCall);
-    System.out.println("method parts: " + methodParts);
     StringBuilder packageName = new StringBuilder(methodParts.get(0));
     int i = 1;
     while (Character.isLowerCase(methodParts.get(i).charAt(0))) {
