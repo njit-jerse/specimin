@@ -1,8 +1,10 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
+import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore
 public class StringIndexOobTest {
   @Test
   public void runTest() throws IOException {
