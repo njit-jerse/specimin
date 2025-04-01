@@ -1747,13 +1747,13 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
     }
 
+    // TODO: why doesn't this work: Pair<String, String> pkgAndClass = splitName(typeRawName);
     String packageName, className;
     if (JavaParserUtil.isAClassPath(typeRawName)) {
       // Two cases: this could be either an Outer.Inner pair or it could
       // be a fully-qualified name. If it's an Outer.Inner pair, we identify
       // that via the heuristic that there are only two elements if we split on
       // the dot and that the whole string is capital
-      // TODO: add handling for FQN w/ inner class?
       if (typeRawName.indexOf('.') == typeRawName.lastIndexOf('.')
           && JavaParserUtil.isCapital(typeRawName)) {
         className = typeRawName;
@@ -1959,12 +1959,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   // We can have certainty that this method is true as the last element of a class name is the
   // simple form of that name
   @SuppressWarnings("signature")
-  public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    List<String> elements = Splitter.onPattern("[.]").splitToList(className);
-    if (elements.size() < 2) {
-      return className;
-    }
-    return elements.get(elements.size() - 1);
+  public @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
+    Pair<String, String> pkgAndClass = splitName(className);
+    return (@ClassGetSimpleName String) pkgAndClass.b;
   }
 
   /**
