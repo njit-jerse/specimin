@@ -688,10 +688,32 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   public Visitable visit(SwitchEntry node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    // TODO: need to save and then restore whatever state we were using in the methods above,
-    // to defend against the lousy visit order, I think. Maybe? Or maybe just when visiting
-    // the RHS of the entry? We may need to rewrite the superclass method :(
-    Visitable result = super.visit(node, p);
+
+    // The following code is copied from super.visit(SwitchEntry, ...),
+    // because we need to differentiate between the expressions in the "labels"
+    // (which may be unqualified enum constants) and the "statements", which may not be.
+    SwitchEntry n = node;
+    Void arg = p;
+    Expression guard = n.getGuard().map(s -> (Expression) s.accept(this, arg)).orElse(null);
+    NodeList<Expression> labels = (NodeList<Expression>) n.getLabels().accept(this, arg);
+
+    // Here, we need to remove the special enum switch handling temporarily.
+    String oldEnumSwitchSelectorFQN = enumSwitchSelectorFQN;
+    enumSwitchSelectorFQN = null;
+    inSwitch = false;
+
+    NodeList<Statement> statements = (NodeList<Statement>) n.getStatements().accept(this, arg);
+    Comment comment = n.getComment().map(s -> (Comment) s.accept(this, arg)).orElse(null);
+    n.setGuard(guard);
+    n.setLabels(labels);
+    n.setStatements(statements);
+    n.setComment(comment);
+    Visitable result = n;
+
+    // and then restore it
+    enumSwitchSelectorFQN = oldEnumSwitchSelectorFQN;
+    inSwitch = true;
+
     localVariables.removeFirst();
     return result;
   }
@@ -1018,11 +1040,10 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (parentNode.isEmpty()
           || !(parentNode.get() instanceof MethodCallExpr
               || parentNode.get() instanceof FieldAccessExpr)) {
-        if (!isALocalVar(name) && !inSwitch) {
-          updateSyntheticClassForSuperCall(node);
-        }
         if (inSwitch && enumSwitchSelectorFQN != null) {
           updateSyntheticEnumWithNewConstant(enumSwitchSelectorFQN, name);
+        } else if (!isALocalVar(name) && !inSwitch) {
+          updateSyntheticClassForSuperCall(node);
         }
       }
     }
