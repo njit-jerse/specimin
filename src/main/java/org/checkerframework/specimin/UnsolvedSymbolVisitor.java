@@ -636,7 +636,13 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     return result;
   }
 
+  /**
+   * The name of the enum type used as a switch selector, if
+   * one is currently in scope.
+   */
   private @Nullable String enumSwitchSelectorFQN = null;
+
+  /** True iff we are visiting a switch control structure (a label, guard, or selector). */
   private boolean inSwitch = false;
 
   @Override
