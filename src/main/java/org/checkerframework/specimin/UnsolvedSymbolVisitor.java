@@ -43,6 +43,7 @@ import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.ArrayType;
@@ -635,11 +636,39 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     return result;
   }
 
+  // private @Nullable UnsolvedClassOrInterface enumSwitchSelector = null;
+  private boolean inSwitch = false;
+
   @Override
   public Visitable visit(SwitchExpr node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
+    // workaround JavaParser visit order bug: we should visit the
+    // selector expression first, but JavaParser for some reason
+    // visits the _entries_ (i.e., the expression in the cases) first!
+    node.getSelector().accept(this, p);
+    inSwitch = true;
+    // TODO: same problem as the next method
     Visitable result = super.visit(node, p);
+    inSwitch = false;
+    localVariables.removeFirst();
+    return result;
+  }
+
+  @Override
+  public Visitable visit(SwitchStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.addFirst(currentLocalVariables);
+    // workaround JavaParser visit order bug: we should visit the
+    // selector expression first, but JavaParser for some reason
+    // visits the _entries_ (i.e., the expression in the cases) first!
+    node.getSelector().accept(this, p);
+    inSwitch = true;
+    // TODO: need to store the name of the enum's type here (ideally, an FQN?),
+    // so that we can look it up in the list of synthetic classes later. Or,
+    // maybe we should just create it as an enum here? Hard to say, hard to say.
+    Visitable result = super.visit(node, p);
+    inSwitch = false;
     localVariables.removeFirst();
     return result;
   }
@@ -648,6 +677,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   public Visitable visit(SwitchEntry node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
+    // TODO: need to save and then restore whatever state we were using in the methods above,
+    // to defend against the lousy visit order, I think. Maybe? Or maybe just when visiting
+    // the RHS of the entry? We may need to rewrite the superclass method :(
     Visitable result = super.visit(node, p);
     localVariables.removeFirst();
     return result;
@@ -975,9 +1007,13 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (parentNode.isEmpty()
           || !(parentNode.get() instanceof MethodCallExpr
               || parentNode.get() instanceof FieldAccessExpr)) {
-        if (!isALocalVar(name)) {
+        if (!isALocalVar(name) && !inSwitch) {
           updateSyntheticClassForSuperCall(node);
         }
+        // TODO after lunch: if inSwitch, need to create a synthetic enum constant here
+        // How would we know the correct enum type to use? Need to store that elsewhere
+        // (when visiting the switch?) and then write an updateSyntheticEnumWithNewConstant
+        // method.
       }
     }
     return super.visit(node, arg);
@@ -2376,6 +2412,10 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     // If we're inside an object creation, this is an anonymous class. Locate any super things
     // in the class that's being extended.
+
+    System.out.println("updating sythetic class based on a super call");
+    System.out.println("expr: " + expr);
+    System.out.println("className: " + className);
 
     String parentClassName;
     try {
@@ -3845,7 +3885,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       typeVarDecl = "";
       rest = javacType;
     }
-    
+
     // need to also remove annotations before parsing, because they aren't in the right
     // format. E.g., the string might look like this:
     // WeakReference<@org.checkerframework.checker.nullness.qual.Nullable,@org.checkerframework.checker.interning.qual.Interned String []>
@@ -4017,8 +4057,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Given the name of a class, this method will based on the map classAndItsParent to find the name
-   * of the super class of the input class
+   * Given the name of a class, this method look up the name in the map classAndItsParent to find
+   * the name of the super class of the input class. Otherwise, a RunTime exception is thrown.
    *
    * @param className the name of the class to be taken as the input
    * @return the name of the super class of the input class
