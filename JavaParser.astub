@@ -37,3 +37,13 @@ package com.github.javaparser.ast.stmt;
 class IfStmt {
    IfStmt setElseStmt(@Nullable Statement elseStmt);
 }
+
+class SwitchEntry {
+    public SwitchEntry setGuard(@Nullable Expression guard);
+}
+
+package com.github.javaparser.ast;
+
+class Node {
+    public Node setComment(@Nullable Comment comment);
+}
