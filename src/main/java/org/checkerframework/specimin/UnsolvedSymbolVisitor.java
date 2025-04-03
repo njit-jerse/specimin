@@ -636,7 +636,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     return result;
   }
 
-  // private @Nullable UnsolvedClassOrInterface enumSwitchSelector = null;
+  private @Nullable String enumSwitchSelectorFQN = null;
   private boolean inSwitch = false;
 
   @Override
@@ -648,7 +648,13 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // visits the _entries_ (i.e., the expression in the cases) first!
     node.getSelector().accept(this, p);
     inSwitch = true;
-    // TODO: same problem as the next method
+    try {
+      ResolvedType resolved = node.getSelector().calculateResolvedType();
+      enumSwitchSelectorFQN = resolved.describe();
+    } catch (UnsolvedSymbolException e) {
+      // We'll deal with this next time.
+      gotException();
+    }
     Visitable result = super.visit(node, p);
     inSwitch = false;
     localVariables.removeFirst();
@@ -664,11 +670,16 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // visits the _entries_ (i.e., the expression in the cases) first!
     node.getSelector().accept(this, p);
     inSwitch = true;
-    // TODO: need to store the name of the enum's type here (ideally, an FQN?),
-    // so that we can look it up in the list of synthetic classes later. Or,
-    // maybe we should just create it as an enum here? Hard to say, hard to say.
+    try {
+      ResolvedType resolved = node.getSelector().calculateResolvedType();
+      enumSwitchSelectorFQN = resolved.describe();
+    } catch (UnsolvedSymbolException e) {
+      // We'll deal with this next time.
+      gotException();
+    }
     Visitable result = super.visit(node, p);
     inSwitch = false;
+    enumSwitchSelectorFQN = null;
     localVariables.removeFirst();
     return result;
   }
@@ -1010,10 +1021,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         if (!isALocalVar(name) && !inSwitch) {
           updateSyntheticClassForSuperCall(node);
         }
-        // TODO after lunch: if inSwitch, need to create a synthetic enum constant here
-        // How would we know the correct enum type to use? Need to store that elsewhere
-        // (when visiting the switch?) and then write an updateSyntheticEnumWithNewConstant
-        // method.
+        if (inSwitch && enumSwitchSelectorFQN != null) {
+          updateSyntheticEnumWithNewConstant(enumSwitchSelectorFQN, name);
+        }
       }
     }
     return super.visit(node, arg);
@@ -2398,6 +2408,25 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     String fieldQualifedSignature = fullyQualifiedClassName + "." + field.getNameAsString();
     updateClassSetWithQualifiedFieldSignature(fieldQualifedSignature, false, false);
+  }
+
+  /**
+   * Updates the synthetic enum with the given FQN by adding a new enum constant with the given
+   * name. This method is idempotent, and the enum may not yet exist (but if not, this will trigger
+   * another round of unsolved symbol visiting).
+   *
+   * @param enumFQN the fully-qualified name of a synthetic enum
+   * @param constantName the name of one of the enum constants of that enum
+   */
+  public void updateSyntheticEnumWithNewConstant(String enumFQN, String constantName) {
+    for (UnsolvedClassOrInterface synthEnum : missingClass) {
+      if (!synthEnum.getQualifiedClassName().equals(enumFQN)) {
+        continue;
+      }
+      synthEnum.setIsAnEnumToTrue();
+      synthEnum.addEnumConstant(constantName);
+      return;
+    }
   }
 
   /**

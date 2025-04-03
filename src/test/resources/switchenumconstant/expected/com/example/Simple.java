@@ -13,9 +13,12 @@ class Simple {
                 break;
         }
         int z = switch (m) {
-            case CONSTANT3 -> 5;
-            case CONSTANT4 -> 6;
-            default -> 0;
+            case CONSTANT3 ->
+                    5;
+            case CONSTANT4 ->
+                    6;
+            default ->
+                    0;
         };
     }
 }
