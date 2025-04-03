@@ -2463,10 +2463,6 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     // If we're inside an object creation, this is an anonymous class. Locate any super things
     // in the class that's being extended.
 
-    System.out.println("updating sythetic class based on a super call");
-    System.out.println("expr: " + expr);
-    System.out.println("className: " + className);
-
     String parentClassName;
     try {
       parentClassName = insideAnObjectCreation(expr) ? className : getParentClass(className);

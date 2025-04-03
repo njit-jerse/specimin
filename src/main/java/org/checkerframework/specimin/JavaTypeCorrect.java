@@ -333,7 +333,8 @@ class JavaTypeCorrect {
         }
 
         if (line.contains("error: incompatible types")
-            || line.contains("error: incomparable types")) {
+            || line.contains("error: incomparable types")
+            || line.contains("cannot be converted to")) {
           if (line.contains("invalid method reference")
               || line.contains("bad return type in method reference")) {
             lookingForInvalidMethodReference = true;
@@ -478,7 +479,15 @@ class JavaTypeCorrect {
      * 1. error: incompatible types: <type1> cannot be converted to <type2>
      */
     if (errorMessage.contains("cannot be converted to")) {
-      String rhs = getTypeFrom(splitErrorMessage, 4, "cannot");
+      // There are two forms of this error message: the typical one (detailed above) and a
+      // special version from bad switch expressions, in which case this part appears on its
+      // own line, like this:
+      // com/example/Simple.java:18: error: incompatible types: bad type in switch expression
+      //                CONSTANT6;
+      //                ^
+      //    SyntheticTypeForCONSTANT6 cannot be converted to int
+      int startIndex = errorMessage.contains("error:") ? 4 : 0;
+      String rhs = getTypeFrom(splitErrorMessage, startIndex, "cannot");
       int toIndex = splitErrorMessage.indexOf("to");
       String lhs = getTypeFrom(splitErrorMessage, toIndex + 1, null);
       if ("Throwable".equals(lhs)) {
