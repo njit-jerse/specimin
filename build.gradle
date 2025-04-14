@@ -4,7 +4,7 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'signing'
-    id 'com.diffplug.spotless' version '6.25.0'
+    id 'com.diffplug.spotless' version '7.0.3'
     id 'org.checkerframework' version '0.6.49'
     id("net.ltgt.errorprone") version "4.1.0"
     id 'com.adarshr.test-logger' version '4.0.0'
