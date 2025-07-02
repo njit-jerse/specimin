@@ -251,8 +251,8 @@ public class UnsolvedMethod {
     for (int i = 0; i < throwsList.size(); i++) {
       String exception = throwsList.get(i);
       exceptions.append(exception);
-      if (i < parameterList.size() - 1) {
-        arguments.append(", ");
+      if (i < throwsList.size() - 1 ) {
+        exceptions.append(", ");
       }
     }
     signature.append(exceptions);

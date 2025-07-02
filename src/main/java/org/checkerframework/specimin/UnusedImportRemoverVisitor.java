@@ -55,41 +55,31 @@ public class UnusedImportRemoverVisitor extends ModifierVisitor<Void> {
    */
   public void removeUnusedImports() {
     for (Map.Entry<String, ImportDeclaration> entry : typeNamesToImports.entrySet()) {
-      String importedFQN = entry.getKey();
-      ImportDeclaration decl = entry.getValue();
-
-      if (!usedImports.contains(importedFQN)) {
-        // ... (existing logic for unsolvedMembers for method calls) ...
+      if (!usedImports.contains(entry.getKey())) {
+        // In special cases (namely with MethodCallExprs containing lambdas), JavaParser can have
+        // trouble resolving it, so we should preserve its imports through approximation by simple
+        // method names.
         if (!unsolvedMembers.isEmpty()) {
-          String simpleName = fullyQualifiedImportsToSimple.get(importedFQN);
+          String simpleName = fullyQualifiedImportsToSimple.get(entry.getKey());
+
           if (simpleName != null && unsolvedMembers.contains(simpleName)) {
             continue;
           }
         }
-        decl.remove();
-      } else if (!currentPackage.equals("") && importedFQN.startsWith(currentPackage + ".")) {
-
-        String relativeName = importedFQN.substring(currentPackage.length() + 1);
-
-        // This heuristic is more robust for nested classes in the same package.
-        List<String> parts = Splitter.on(".").splitToList(relativeName);
-        if (parts.size() > 0 && JavaParserUtil.isCapital(parts.get(0))) {
-          decl.remove();
-        }
+        entry.getValue().remove();
+      } else if (!currentPackage.equals("")
+          && entry.getKey().startsWith(currentPackage + ".")
+          && !entry.getKey().substring(currentPackage.length() + 1).contains(".")) {
+        // If importing a class from the same package, remove the unnecessary import
+        entry.getValue().remove();
       }
-      // Previous code:
-      // else if (!currentPackage.equals("")
-      //     && entry.getKey().startsWith(currentPackage + ".")
-      //     && !entry.getKey().substring(currentPackage.length() + 1).contains(".")) {
-      //   // If importing a class from the same package, remove the unnecessary import
-      //   entry.getValue().remove();
-      // }
     }
-    // typeNamesToImports.clear();
-    // usedImports.clear();
-    // fullyQualifiedImportsToSimple.clear();
-    // unsolvedMembers.clear();
-    // currentPackage = "";
+
+    typeNamesToImports.clear();
+    usedImports.clear();
+    fullyQualifiedImportsToSimple.clear();
+    unsolvedMembers.clear();
+    currentPackage = "";
   }
 
   @Override
