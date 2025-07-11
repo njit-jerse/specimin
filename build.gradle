@@ -4,9 +4,9 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'signing'
-    id 'com.diffplug.spotless' version '6.25.0'
-    id 'org.checkerframework' version '0.6.49'
-    id("net.ltgt.errorprone") version "4.1.0"
+    id 'com.diffplug.spotless' version '7.1.0'
+    id 'org.checkerframework' version '0.6.56'
+    id 'net.ltgt.errorprone' version '4.3.0'
     id 'com.adarshr.test-logger' version '4.0.0'
 }
 
@@ -22,18 +22,18 @@ application {
 
 dependencies {
 
-    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.26.1'
+    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.27.0'
 
     implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
 
-    implementation "org.vineflower:vineflower:1.11.0"
+    implementation "org.vineflower:vineflower:1.11.1"
 
-    implementation 'commons-io:commons-io:2.18.0'
+    implementation 'commons-io:commons-io:2.19.0'
 
     // Use JUnit test framework.
     testImplementation 'junit:junit:4.13.2'
 
-    errorprone("com.google.errorprone:error_prone_core:2.35.1")
+    errorprone("com.google.errorprone:error_prone_core:2.40.0")
 }
 
 // Use require-javadoc. From https://github.com/plume-lib/require-javadoc.
@@ -41,7 +41,7 @@ configurations {
     requireJavadoc
 }
 dependencies {
-    requireJavadoc "org.plumelib:require-javadoc:1.0.9"
+    requireJavadoc "org.plumelib:require-javadoc:2.0.0"
 }
 task requireJavadoc(type: JavaExec) {
     group = 'Documentation'
