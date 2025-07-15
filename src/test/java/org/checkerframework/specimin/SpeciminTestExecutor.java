@@ -85,8 +85,8 @@ public class SpeciminTestExecutor {
         speciminArgs.add(targetMember);
       }
     }
-    speciminArgs.add("--modularityModel");
-    speciminArgs.add(modularityModel);
+    // speciminArgs.add("--modularityModel");
+    // speciminArgs.add(modularityModel);
     for (String jarPath : jarPaths) {
       speciminArgs.add("--jarPath");
       speciminArgs.add(jarPath);
@@ -140,7 +140,7 @@ public class SpeciminTestExecutor {
     }
     Assert.assertEquals(
         "Diff failed with the following output: "
-            + processOutput
+            + (isWindows ? processOutput.toString().replace('\\', '/') : processOutput)
             + "\n Output directory: "
             + outputDir
             + "\n diff command: "

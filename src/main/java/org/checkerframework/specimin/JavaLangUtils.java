@@ -273,46 +273,34 @@ public final class JavaLangUtils {
    * @return the set of compatible types, such as ["boolean", "Boolean"]
    */
   public static String[] getTypesForOp(String binOp) {
-    switch (binOp) {
-      case "*":
-      case "/":
-      case "%":
-        // JLS 15.17
-        return NUMERIC_PRIMITIVES;
-      case "-":
-        // JLS 15.18
-        return NUMERIC_PRIMITIVES;
-      case "+":
-        // JLS 15.18 (see note about "+", which can also mean string concatenation!)
-        return NUMERIC_PRIMITIVES_AND_STRING;
-      case ">>":
-      case ">>>":
-      case "<<":
-        // JSL 15.19
-        return INTEGRAL_PRIMITIVES;
-      case "<":
-      case "<=":
-      case ">":
-      case ">=":
-        // JLS 15.20.1
-        return NUMERIC_PRIMITIVES;
-      case "==":
-      case "!=":
-        // JLS 15.21 says that it's an error if one of the sides of an == or != is a boolean or
-        // numeric type, but the other is not. This return value is based on that error condition.
-        return NUMERIC_PRIMITIVES_AND_BOOLEANS;
-      case "^":
-      case "&":
-      case "|":
-        // JLS 15.22
-        return NUMERIC_PRIMITIVES_AND_BOOLEANS;
-      case "||":
-      case "&&":
-        // JLS 15.23 and 15.24
-        return BOOLEANS;
-      default:
-        throw new IllegalArgumentException("unexpected binary operator: " + binOp);
-    }
+    return switch (binOp) {
+      // JLS 15.17
+      case "*", "/", "%" -> NUMERIC_PRIMITIVES;
+
+      // JLS 15.18
+      case "-" -> NUMERIC_PRIMITIVES;
+
+      // JLS 15.18 (see note about "+", which can also mean string concatenation!)
+      case "+" -> NUMERIC_PRIMITIVES_AND_STRING;
+
+      // JSL 15.19
+      case ">>", ">>>", "<<" -> INTEGRAL_PRIMITIVES;
+
+      // JLS 15.20.1
+      case "<", "<=", ">", ">=" -> NUMERIC_PRIMITIVES;
+
+      // JLS 15.21 says that it's an error if one of the sides of an == or != is a boolean or
+      // numeric type, but the other is not. This return value is based on that error condition.
+      case "==", "!=" -> NUMERIC_PRIMITIVES_AND_BOOLEANS;
+
+      // JLS 15.22
+      case "^", "&", "|" -> NUMERIC_PRIMITIVES_AND_BOOLEANS;
+
+      // JLS 15.23 and 15.24
+      case "||", "&&" -> BOOLEANS;
+
+      default -> throw new IllegalArgumentException("unexpected binary operator: " + binOp);
+    };
   }
 
   /**

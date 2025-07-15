@@ -25,6 +25,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
 /**
@@ -196,21 +198,7 @@ public class JavaParserUtil {
    */
   @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
   public static @FullyQualifiedName String getEnclosingClassName(Node node) {
-    Node parent = getEnclosingClassLike(node);
-
-    if (parent instanceof ClassOrInterfaceDeclaration) {
-      return ((ClassOrInterfaceDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    }
-
-    if (parent instanceof EnumDeclaration) {
-      return ((EnumDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    }
-
-    if (parent instanceof AnnotationDeclaration) {
-      return ((AnnotationDeclaration) parent).getFullyQualifiedName().orElseThrow();
-    }
-
-    throw new RuntimeException("unexpected kind of node: " + parent.getClass());
+    return getEnclosingClassLike(node).getFullyQualifiedName().orElseThrow();
   }
 
   /**
@@ -222,14 +210,31 @@ public class JavaParserUtil {
    * @param node a node that is contained in a class-like structure
    * @return the nearest enclosing class-like node
    */
-  public static Node getEnclosingClassLike(Node node) {
+  public static TypeDeclaration<?> getEnclosingClassLike(Node node) {
     Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration
-        || parent instanceof EnumDeclaration
-        || parent instanceof AnnotationDeclaration)) {
+    while (!(parent instanceof TypeDeclaration<?>)) {
       parent = parent.getParentNode().orElseThrow();
     }
-    return parent;
+    return (TypeDeclaration<?>) parent;
+  }
+
+  /**
+   * See {@code getEnclosingClassLike(Node)} for more details. This does not throw if a parent is
+   * not found; instead, it returns null.
+   *
+   * @param node a node that is contained in a class-like structure
+   * @return the nearest enclosing class-like node
+   */
+  public static @Nullable TypeDeclaration<?> getEnclosingClassLikeOptional(Node node) {
+    Optional<Node> parent = node.getParentNode();
+    while (parent.isPresent() && !(parent.get() instanceof TypeDeclaration<?>)) {
+      parent = parent.get().getParentNode();
+    }
+
+    if (parent.isPresent()) {
+      return (TypeDeclaration<?>) parent.get();
+    }
+    return null;
   }
 
   /**
