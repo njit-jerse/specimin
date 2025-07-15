@@ -4,6 +4,8 @@ import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -222,25 +224,12 @@ public class SpeciminRunner {
           res.getResult().orElseThrow(() -> new RuntimeException(res.getProblems().toString()));
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
-      String primaryTypeQualifiedName = "";
-      if (compilationUnit.getPrimaryType().isPresent()) {
-        // the get() is safe because primary type here is definitely not a local declaration,
-        // which does not have a fully-qualified name.
-        primaryTypeQualifiedName =
-            compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
-      }
       for (ClassOrInterfaceDeclaration declaredClass :
           compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
           String declaredClassQualifiedName =
               declaredClass.getFullyQualifiedName().get().toString();
           existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
-          // which means this class is not a primary class, and there is a primary class.
-          if (!"".equals(primaryTypeQualifiedName)
-              && !declaredClassQualifiedName.equals(primaryTypeQualifiedName)) {
-            nonPrimaryClassesToPrimaryClass.put(
-                declaredClassQualifiedName, primaryTypeQualifiedName);
-          }
         }
       }
       for (EnumDeclaration enumDeclaration : compilationUnit.findAll(EnumDeclaration.class)) {
