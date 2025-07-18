@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayDeque;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Queue;
@@ -24,11 +23,8 @@ public class Slicer {
   /** The slice of nodes. */
   private final Set<Node> slice = new HashSet<>();
 
-  /**
-   * The slice of unsolved symbol definitions. These values need not be unique; the map is provided
-   * for simple lookups when adding new symbols.
-   */
-  private final Map<String, UnsolvedSymbolAlternates<?>> unsolvedSlice = new HashMap<>();
+  /** The slice of generated symbols. */
+  private final Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice = new HashSet<>();
 
   /** The Nodes that need to be processed in the main algorithm. */
   private final Queue<Node> worklist = new ArrayDeque<>();
@@ -36,6 +32,8 @@ public class Slicer {
   private final Map<String, Path> existingClassesToFilePath;
   private final String rootDirectory;
   private final Map<String, CompilationUnit> toSlice;
+
+  private final UnsolvedSymbolGenerator unsolvedSymbolGenerator = new UnsolvedSymbolGenerator();
 
   public Slicer(
       Map<String, Path> existingClassesToFilePath,
@@ -58,7 +56,8 @@ public class Slicer {
     // Step 2: add all used types
     for (String used : usedTypes) {
       toSlice.put(
-          used, StaticJavaParser.parse(Path.of(rootDirectory, qualifiedNameToFilePath(used))));
+          used,
+          StaticJavaParser.parse(Path.of(rootDirectory, qualifiedNameToFilePath(used))));
     }
 
     // Step 3: remove all nodes except the ones marked for keeping OR package/import declarations
@@ -91,6 +90,7 @@ public class Slicer {
         slice.add(node);
       } catch (UnsolvedSymbolException ex) {
         // Generate a synthetic type
+        generatedSymbolSlice.addAll(unsolvedSymbolGenerator.inferContext(node));
       }
     } else {
       // If it's not a resolvable node, it's going to be:
