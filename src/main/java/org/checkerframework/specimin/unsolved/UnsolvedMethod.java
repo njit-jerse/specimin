@@ -34,6 +34,9 @@ public class UnsolvedMethod {
   /** The list of the types of the exceptions thrown by the method. */
   private final List<MemberType> throwsList;
 
+  /** This field records the number of type variables for this class */
+  private int numberOfTypeVariables = 0;
+
   /**
    * Create an instance of UnsolvedMethod
    *
@@ -96,6 +99,15 @@ public class UnsolvedMethod {
     isStatic = true;
   }
 
+  /**
+   * This method sets the number of type variables for the current class
+   *
+   * @param numberOfTypeVariables number of type variable in this class.
+   */
+  public void setNumberOfTypeVariables(int numberOfTypeVariables) {
+    this.numberOfTypeVariables = numberOfTypeVariables;
+  }
+
   @Override
   public boolean equals(@Nullable Object o) {
     if (!(o instanceof UnsolvedMethod)) {
@@ -135,7 +147,14 @@ public class UnsolvedMethod {
     if (isStatic) {
       signature.append("static ");
     }
-    if (!"".equals(returnType)) {
+
+    String typeVariables = getTypeVariablesAsString();
+
+    if (!typeVariables.equals("")) {
+      signature.append(getTypeVariablesAsString()).append(" ");
+    }
+
+    if (returnType.isUnsolved() || !"".equals(returnType.getSolvedType())) {
       signature.append(returnType).append(" ");
     }
     signature.append(name).append("(");
@@ -161,5 +180,36 @@ public class UnsolvedMethod {
     } else {
       return "\n    " + signature + " {\n        throw new java.lang.Error();\n    }\n";
     }
+  }
+
+  /**
+   * Return a synthetic representation for type variables of the current class.
+   *
+   * @return the synthetic representation for type variables
+   */
+  private String getTypeVariablesAsString() {
+    if (numberOfTypeVariables == 0) {
+      return "";
+    }
+    StringBuilder result = new StringBuilder();
+    // if class A has three type variables, the expression will be A<T, T1, T2>
+    result.append("<");
+    getTypeVariablesImpl(result);
+    result.append(">");
+    return result.toString();
+  }
+
+  /**
+   * Helper method for {@link #getTypeVariablesAsStringWithoutBrackets} and {@link
+   * #getTypeVariablesAsString()}.
+   *
+   * @param result a string builder. Will be side-effected.
+   */
+  private void getTypeVariablesImpl(StringBuilder result) {
+    for (int i = 0; i < numberOfTypeVariables; i++) {
+      String typeExpression = "T" + ((i > 0) ? i : "");
+      result.append(typeExpression).append(", ");
+    }
+    result.delete(result.length() - 2, result.length());
   }
 }

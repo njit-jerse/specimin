@@ -19,7 +19,6 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -96,7 +95,8 @@ public class UnsolvedSymbolGenerator {
     // Also ignore nodes like ArrayType or IntersectionType because the type rule dependency map
     // will also break down its types.
 
-    // Since this method is called recursively, we may encounter cases where a node is resolvable. In this case,
+    // Since this method is called recursively, we may encounter cases where a node is resolvable.
+    // In this case,
     // return early since we do not want to generate a synthetic type for it.
     // This could occur when a MethodCallExpr is not resolvable, but its arguments could be.
 
@@ -106,7 +106,8 @@ public class UnsolvedSymbolGenerator {
         ((Resolvable<?>) node).resolve();
         resolvable = true;
 
-        // MethodReferenceExprs are special: we also need to generate its functional interface for later use
+        // MethodReferenceExprs are special: we also need to generate its functional interface for
+        // later use
         if (!(node instanceof MethodReferenceExpr)) {
           return;
         }
@@ -125,7 +126,14 @@ public class UnsolvedSymbolGenerator {
       UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
 
       if (generated == null) {
-        generated = UnsolvedClassOrInterfaceAlternates.create(potentialFQNs);
+        UnsolvedClassOrInterfaceAlternates newlyGenerated =
+            UnsolvedClassOrInterfaceAlternates.create(potentialFQNs);
+
+        if (asType.getTypeArguments().isPresent()) {
+          newlyGenerated.setNumberOfTypeVariables(asType.getTypeArguments().get().size());
+        }
+
+        generated = newlyGenerated;
       }
 
       result.add(generated);
@@ -339,6 +347,8 @@ public class UnsolvedSymbolGenerator {
       Collection<Set<String>> potentialScopeFQNs = null;
       boolean isStaticImport = false;
 
+      String erasedMethodName = JavaParserUtil.erase(methodCall.getNameAsString());
+
       // Static import
       if (!methodCall.hasScope()) {
         CompilationUnit cu = node.findCompilationUnit().get();
@@ -348,7 +358,7 @@ public class UnsolvedSymbolGenerator {
         for (ImportDeclaration importDecl : cu.getImports()) {
           if (!importDecl.isStatic()) continue;
 
-          if (importDecl.getNameAsString().endsWith("." + methodCall.getNameAsString())) {
+          if (importDecl.getNameAsString().endsWith("." + erasedMethodName)) {
             staticImport = importDecl;
           }
         }
@@ -386,7 +396,7 @@ public class UnsolvedSymbolGenerator {
           potentialFQNs.add(
               potentialScopeFQN
                   + "#"
-                  + methodCall.getNameAsString()
+                  + erasedMethodName
                   + "("
                   + String.join(",", simpleNameToParameterPotentialFQNs.keySet())
                   + ")");
@@ -420,7 +430,11 @@ public class UnsolvedSymbolGenerator {
 
         generatedMethod =
             UnsolvedMethodAlternates.create(
-                methodCall.getNameAsString(), returnType, potentialParents, parameters);
+                erasedMethodName, returnType, potentialParents, parameters);
+
+        if (methodCall.getTypeArguments().isPresent()) {
+          generatedMethod.setNumberOfTypeVariables(methodCall.getTypeArguments().get().size());
+        }
       }
 
       if (isStaticImport) {
@@ -428,21 +442,27 @@ public class UnsolvedSymbolGenerator {
       }
 
       result.add(generatedMethod);
-    } else if (node instanceof ObjectCreationExpr || node instanceof ExplicitConstructorInvocationStmt) {
+    } else if (node instanceof ObjectCreationExpr
+        || node instanceof ExplicitConstructorInvocationStmt) {
       UnsolvedClassOrInterfaceAlternates scope;
       String constructorName;
       List<Expression> arguments;
+      int numberOfTypeParams = 0;
 
       // Calling inferContextButDoNotAddInformation on a ClassOrInterfaceType always returns a list
       // of length 1 with the generated/found type
       if (node instanceof ObjectCreationExpr) {
         ObjectCreationExpr constructor = (ObjectCreationExpr) node;
         scope =
-          (UnsolvedClassOrInterfaceAlternates)
-              inferContextButDoNotAddInformation(constructor.getType()).get(0);
-        
+            (UnsolvedClassOrInterfaceAlternates)
+                inferContextButDoNotAddInformation(constructor.getType()).get(0);
+
         constructorName = constructor.getTypeAsString();
         arguments = constructor.getArguments();
+
+        if (constructor.getTypeArguments().isPresent()) {
+          numberOfTypeParams = constructor.getTypeArguments().get().size();
+        }
       } else {
         ExplicitConstructorInvocationStmt constructor = (ExplicitConstructorInvocationStmt) node;
 
@@ -453,11 +473,15 @@ public class UnsolvedSymbolGenerator {
           ClassOrInterfaceType superClass = ((NodeWithExtends<?>) decl).getExtendedTypes(0);
 
           scope =
-            (UnsolvedClassOrInterfaceAlternates)
-                inferContextButDoNotAddInformation(superClass).get(0);
-            
+              (UnsolvedClassOrInterfaceAlternates)
+                  inferContextButDoNotAddInformation(superClass).get(0);
+
           constructorName = superClass.getNameAsString();
           arguments = constructor.getArguments();
+
+          if (constructor.getTypeArguments().isPresent()) {
+            numberOfTypeParams = constructor.getTypeArguments().get().size();
+          }
         } else {
           // We should never reach this case unless the user inputted a bad program (i.e.
           // this(...) constructor call when a definition is not there, or super() without a parent
@@ -507,25 +531,32 @@ public class UnsolvedSymbolGenerator {
         generatedMethod =
             UnsolvedMethodAlternates.create(
                 constructorName, MemberType.of(""), List.of(scope), parameters);
+
+        generatedMethod.setNumberOfTypeVariables(numberOfTypeParams);
       }
 
       result.add(generatedMethod);
     }
     // Method references
-    // In practice, MethodReferenceExpr may never resolve. JavaParser resolve on MethodReferenceExprs only 
+    // In practice, MethodReferenceExpr may never resolve. JavaParser resolve on
+    // MethodReferenceExprs only
     // resolves if the LHS is also resolvable, which is often not the case in this method.
     // Instead, we'll need to rely on JavaTypeCorrect to give us the correct functional interface.
     else if (node instanceof MethodReferenceExpr && !resolvable) {
       MethodReferenceExpr methodRef = (MethodReferenceExpr) node;
 
-      Map<String, Set<String>> potentialScopeFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodRef);
-      // A method ref has a scope, so its location is known to be a single type; therefore, it's safe to do this.
+      Map<String, Set<String>> potentialScopeFQNs =
+          FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodRef);
+      // A method ref has a scope, so its location is known to be a single type; therefore, it's
+      // safe to do this.
       String simpleClassName = potentialScopeFQNs.keySet().iterator().next();
       Set<String> scopeFQNs = potentialScopeFQNs.get(simpleClassName);
 
       Set<String> potentialFQNs = new HashSet<>();
 
-      boolean isConstructor = methodRef.getIdentifier().equals("new");
+      String methodName = JavaParserUtil.erase(methodRef.getIdentifier());
+
+      boolean isConstructor = methodName.equals("new");
 
       List<UnsolvedClassOrInterfaceAlternates> scope = new ArrayList<>();
       // Unsolvable method ref: default to parameterless
@@ -535,7 +566,7 @@ public class UnsolvedSymbolGenerator {
         }
       } else {
         for (String fqn : scopeFQNs) {
-          potentialFQNs.add(fqn + "#" + methodRef.getIdentifier() + "()");
+          potentialFQNs.add(fqn + "#" + methodName + "()");
         }
       }
 
@@ -549,7 +580,14 @@ public class UnsolvedSymbolGenerator {
 
         generatedMethod =
             UnsolvedMethodAlternates.create(
-                isConstructor ? simpleClassName : methodRef.getIdentifier(), MemberType.of(isConstructor ? "" : "void"), scope, parameters);
+                isConstructor ? simpleClassName : methodName,
+                MemberType.of(isConstructor ? "" : "void"),
+                scope,
+                parameters);
+
+        if (methodRef.getTypeArguments().isPresent()) {
+          generatedMethod.setNumberOfTypeVariables(methodRef.getTypeArguments().get().size());
+        }
       }
 
       result.add(generatedMethod);
@@ -591,18 +629,21 @@ public class UnsolvedSymbolGenerator {
         }
       }
 
-      Set<String> unerasedPotentialFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType((Expression) node);
+      Set<String> unerasedPotentialFQNs =
+          FullyQualifiedNameGenerator.getFQNsForExpressionType((Expression) node);
       Set<String> erasedPotentialFQNs = new HashSet<>();
 
       for (String unerased : unerasedPotentialFQNs) {
         erasedPotentialFQNs.add(JavaParserUtil.erase(unerased));
       }
 
-      UnsolvedClassOrInterfaceAlternates functionalInterface = UnsolvedClassOrInterfaceAlternates.create(erasedPotentialFQNs);
+      UnsolvedClassOrInterfaceAlternates functionalInterface =
+          UnsolvedClassOrInterfaceAlternates.create(erasedPotentialFQNs);
       functionalInterface.setNumberOfTypeVariables(arity + (isVoid ? 1 : 0));
       result.add(functionalInterface);
-      
-      String[] paramArray = functionalInterface.getTypeVariablesAsStringWithoutBrackets().split(", ");
+
+      String[] paramArray =
+          functionalInterface.getTypeVariablesAsStringWithoutBrackets().split(", ");
       List<MemberType> params = new ArrayList<>();
 
       // remove the last element of params, because that's the return type, not a parameter
@@ -611,7 +652,10 @@ public class UnsolvedSymbolGenerator {
       }
 
       String returnType = isVoid ? "void" : "T" + arity;
-      UnsolvedMethodAlternates apply = UnsolvedMethodAlternates.create("apply", MemberType.of(returnType), List.of(functionalInterface), params);
+      UnsolvedMethodAlternates apply =
+          UnsolvedMethodAlternates.create(
+              "apply", MemberType.of(returnType), List.of(functionalInterface), params);
+
       result.add(apply);
     }
   }

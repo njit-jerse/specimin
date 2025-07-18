@@ -59,4 +59,10 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       method.setStatic();
     }
   }
+
+  public void setNumberOfTypeVariables(int number) {
+    for (UnsolvedMethod method : getAlternates()) {
+      method.setNumberOfTypeVariables(number);
+    }
+  }
 }
