@@ -4,11 +4,13 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -16,6 +18,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -24,10 +27,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
-
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.unsolved.FullyQualifiedNameGenerator;
 
 /**
  * A class containing useful static functions using JavaParser.
@@ -226,15 +230,36 @@ public class JavaParserUtil {
    * @return the nearest enclosing class-like node
    */
   public static @Nullable TypeDeclaration<?> getEnclosingClassLikeOptional(Node node) {
-    Optional<Node> parent = node.getParentNode();
-    while (parent.isPresent() && !(parent.get() instanceof TypeDeclaration<?>)) {
-      parent = parent.get().getParentNode();
+    try {
+      return getEnclosingClassLike(node);
+    } catch (Exception ex) {
+      return null;
     }
+  }
 
-    if (parent.isPresent()) {
-      return (TypeDeclaration<?>) parent.get();
-    }
-    return null;
+  /**
+   * Gets the super class of a node. If one does not exist, this method will throw.
+   *
+   * @param node The node to find the super class of
+   * @return The super class
+   */
+  public static ClassOrInterfaceType getSuperClass(Node node) {
+    TypeDeclaration<?> decl = JavaParserUtil.getEnclosingClassLike(node);
+
+    return decl.asClassOrInterfaceDeclaration().getExtendedTypes().get(0);
+  }
+
+  /**
+   * Given a qualified class name, return the simple name. i.e., org.example.ClassName -->
+   * ClassName.
+   *
+   * <p>This is also safe to call on non qualified names as well; it simply returns the input.
+   *
+   * @param qualified The qualified class name
+   * @return The simple class name
+   */
+  public static String getSimpleNameFromQualifiedName(String qualified) {
+    return qualified.substring(qualified.lastIndexOf('.') + 1);
   }
 
   /**
