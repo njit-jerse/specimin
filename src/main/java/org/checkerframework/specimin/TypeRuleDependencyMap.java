@@ -7,6 +7,8 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.EnclosedExpr;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -27,11 +29,11 @@ import com.github.javaparser.ast.nodeTypes.NodeWithTypeArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithTypeParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithVariables;
 import com.github.javaparser.ast.type.ArrayType;
+import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnionType;
+import com.github.javaparser.ast.type.WildcardType;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
-import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
-
 import java.util.Optional;
 
 /**
@@ -73,7 +75,7 @@ public class TypeRuleDependencyMap {
       elements.add(withType.getType());
     }
 
-    // Types
+    // Type declarations
     if (node instanceof NodeWithImplements) {
       NodeWithImplements<?> withImplements = (NodeWithImplements<?>) node;
 
@@ -164,7 +166,7 @@ public class TypeRuleDependencyMap {
 
       elements.add(withCondition.getCondition());
     }
-    // i.e., casts, instanceof, synchronized, throw, unary expressions
+    // i.e., casts, instanceof, synchronized, throw, unary expressions, lambda body
     if (node instanceof NodeWithExpression) {
       NodeWithExpression<?> withExpression = (NodeWithExpression<?>) node;
 
@@ -185,7 +187,7 @@ public class TypeRuleDependencyMap {
 
       elements.add(withScope.getScope());
     }
-    // i.e., switch entry
+    // i.e., switch entry / lambda body
     if (node instanceof NodeWithStatements) {
       NodeWithStatements<?> withStatements = (NodeWithStatements<?>) node;
 
@@ -216,14 +218,43 @@ public class TypeRuleDependencyMap {
       elements.addAll(typeParam.getTypeBound());
     }
 
+    if (node instanceof IntersectionType) {
+      IntersectionType intersection = (IntersectionType) node;
+
+      elements.addAll(intersection.getElements());
+    }
+
+    if (node instanceof WildcardType) {
+      WildcardType wildcard = (WildcardType) node;
+
+      if (wildcard.getSuperType().isPresent()) {
+        elements.add(wildcard.getSuperType().get());
+      }
+      if (wildcard.getExtendedType().isPresent()) {
+        elements.add(wildcard.getExtendedType().get());
+      }
+    }
+
+    if (node instanceof LambdaExpr) {
+      LambdaExpr lambda = (LambdaExpr) node;
+
+      elements.add(lambda.getBody());
+    }
+
+    if (node instanceof EnclosedExpr) {
+      EnclosedExpr enclosed = (EnclosedExpr) node;
+
+      elements.add(enclosed.getInner());
+    }
+
     return elements;
   }
 
   public static NodeList<Node> getRelevantElements(Object resolved) {
     NodeList<Node> elements = new NodeList<>();
 
-    // ResolvedAnnotationDeclaration, ResolvedClassDeclaration, ResolvedConstructorDeclaration, ResolvedFieldDeclaration,
-    // ResolvedInterfaceDeclaration, ResolvedMethodDeclaration
+    // See
+    // https://javadoc.io/doc/com.github.javaparser/javaparser-core/latest/com/github/javaparser/resolution/declarations/AssociableToAST.html
     if (resolved instanceof AssociableToAST) {
       Optional<Node> potentialNode = ((AssociableToAST) resolved).toAst();
 
@@ -232,7 +263,10 @@ public class TypeRuleDependencyMap {
 
         // If the current resolved declaration is a member, we also need to include its
         // parent class in the slice.
-        if (node instanceof FieldDeclaration || node instanceof ConstructorDeclaration || node instanceof MethodDeclaration) {
+        // TODO: make this check more comprehensive
+        if (node instanceof FieldDeclaration
+            || node instanceof ConstructorDeclaration
+            || node instanceof MethodDeclaration) {
           elements.addAll(getRelevantElements(JavaParserUtil.getEnclosingClassLike(node)));
         }
 

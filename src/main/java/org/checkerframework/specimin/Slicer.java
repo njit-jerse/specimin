@@ -56,8 +56,7 @@ public class Slicer {
     // Step 2: add all used types
     for (String used : usedTypes) {
       toSlice.put(
-          used,
-          StaticJavaParser.parse(Path.of(rootDirectory, qualifiedNameToFilePath(used))));
+          used, StaticJavaParser.parse(Path.of(rootDirectory, qualifiedNameToFilePath(used))));
     }
 
     // Step 3: remove all nodes except the ones marked for keeping OR package/import declarations

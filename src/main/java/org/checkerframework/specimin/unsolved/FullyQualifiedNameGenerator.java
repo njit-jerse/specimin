@@ -11,12 +11,15 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
+import com.github.javaparser.ast.nodeTypes.NodeWithCondition;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
@@ -392,6 +395,53 @@ public class FullyQualifiedNameGenerator {
           return getFQNsForExpressionType(assignment.getValue());
         } else if (assignment.getValue().equals(expr)) {
           return getFQNsForExpressionType(assignment.getTarget());
+        }
+      }
+      // Check if it's the conditional of an if, while, do, ?:; if so, its type is boolean
+      else if (parentNode instanceof NodeWithCondition) {
+        NodeWithCondition<?> withCondition = (NodeWithCondition<?>) parentNode;
+
+        if (withCondition.getCondition().equals(expr)) {
+          return Set.of("boolean");
+        }
+      }
+      // If it's in a binary expression (i.e., + - / * == != etc.), then set it to the type of the
+      // other side,
+      // if known
+      else if (parentNode instanceof BinaryExpr) {
+        BinaryExpr binary = (BinaryExpr) parentNode;
+        Operator operator = binary.getOperator();
+
+        Expression other;
+
+        if (binary.getLeft().equals(expr)) {
+          other = binary.getRight();
+        } else {
+          other = binary.getLeft();
+        }
+
+        // Boolean
+        if (operator.equals(BinaryExpr.Operator.AND) || operator.equals(BinaryExpr.Operator.OR)) {
+          return Set.of("boolean");
+        }
+        // ==, !=; we don't know the type, since the types on either side are not necessarily equal
+        else if (!operator.equals(BinaryExpr.Operator.EQUALS)
+            && !operator.equals(BinaryExpr.Operator.NOT_EQUALS)) {
+          // Treat all other cases; type on one side is equal to the other
+          Set<String> otherType = getFQNsForExpressionType(other);
+
+          // No type known for sure, synthetic; these only work with Java built-in types
+          if (otherType.size() > 1) {
+            // Try getting the type of the LHS; i.e. if looking at getA() + getB() in String x =
+            // getA() + getB();
+            otherType = getFQNsForExpressionType(binary);
+
+            if (otherType.size() > 1) {
+              // int is safe for all the remaining operators
+              return Set.of("int");
+            }
+          }
+          return otherType;
         }
       }
     }
