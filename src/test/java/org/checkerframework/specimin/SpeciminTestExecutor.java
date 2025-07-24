@@ -142,7 +142,7 @@ public class SpeciminTestExecutor {
         "Diff failed with the following output: "
             + (isWindows ? processOutput.toString().replace('\\', '/') : processOutput)
             + "\n Output directory: "
-            + outputDir
+            + (isWindows ? outputDir.toString().replace('\\', '/') : outputDir)
             + "\n diff command: "
             + builder.command().stream()
                 .filter(s -> !"-q".equals(s))

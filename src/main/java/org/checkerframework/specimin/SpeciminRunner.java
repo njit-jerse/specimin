@@ -4,6 +4,9 @@ import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.comments.Comment;
@@ -14,6 +17,8 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeS
 import com.github.javaparser.utils.SourceRoot;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -22,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -209,44 +215,57 @@ public class SpeciminRunner {
       root = root + "/";
     }
 
-    updateStaticSolver(root, jarPaths);
+    ParserConfiguration config = updateStaticSolver(root, jarPaths);
     decompileJarFiles(root, jarPaths, createdClass);
 
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
+    sourceRoot.setParserConfiguration(config);
     sourceRoot.tryToParse();
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
-    sourceRoot.tryToParse();
+    Map<String, CompilationUnit> fqnToCompilationUnits = new HashMap<>();
+
+    // Keys are paths to files, values are parsed ASTs
+    Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
+
     // getCompilationUnits does not seem to include all files, causing some to be deleted
     for (ParseResult<CompilationUnit> res : sourceRoot.getCache()) {
       CompilationUnit compilationUnit =
           res.getResult().orElseThrow(() -> new RuntimeException(res.getProblems().toString()));
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
+
+      for (String targetFile : targetFiles) {
+        if (Path.of(root, targetFile).equals(pathOfCurrentJavaFile)) {
+          parsedTargetFiles.put(targetFile.replace('\\', '/'), compilationUnit);
+        }
+      }
+
       for (ClassOrInterfaceDeclaration declaredClass :
           compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
           String declaredClassQualifiedName =
               declaredClass.getFullyQualifiedName().get().toString();
           existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
+          fqnToCompilationUnits.put(declaredClassQualifiedName, compilationUnit);
         }
       }
       for (EnumDeclaration enumDeclaration : compilationUnit.findAll(EnumDeclaration.class)) {
         existingClassesToFilePath.put(
             enumDeclaration.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
+        fqnToCompilationUnits.put(enumDeclaration.getFullyQualifiedName().get(), compilationUnit);
       }
     }
 
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
 
-    // Keys are paths to files, values are parsed ASTs
-    Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
-    for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-    }
-
-    Slicer slicer = new Slicer(existingClassesToFilePath, root, parsedTargetFiles);
+    Slicer slicer =
+        new Slicer(
+            existingClassesToFilePath,
+            root,
+            parsedTargetFiles,
+            new StandardTypeRuleDependencyMap(fqnToCompilationUnits));
 
     // Step 1: Find the target members
     TargetMemberFinderVisitor finder =
@@ -271,6 +290,80 @@ public class SpeciminRunner {
     }
 
     slicer.slice();
+
+    // cache to avoid called Files.createDirectories repeatedly with the same arguments
+    Set<Path> createdDirectories = new HashSet<>();
+    Set<String> targetFilesAbsolutePaths = new HashSet<>();
+
+    for (String target : targetFiles) {
+      File targetFile = new File(target);
+      // Convert to absolute path for comparison
+      targetFilesAbsolutePaths.add(targetFile.getAbsolutePath());
+    }
+
+    // Solvable types must all be outputted
+    for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
+      if (isEmptyCompilationUnit(target.getValue())) {
+        continue;
+      }
+
+      // ignore classes from the Java package, unless we are targeting a JDK file.
+      // However, all related java/ files should not be included (as in used, but not targeted)
+      String absolutePath = new File(target.getKey()).getAbsolutePath();
+      if (!targetFilesAbsolutePaths.contains(absolutePath)
+          && (target.getKey().startsWith("java/") || target.getKey().startsWith("java\\"))) {
+        continue;
+      }
+      Path targetOutputPath = Path.of(outputDirectory, target.getKey());
+      // Create any parts of the directory structure that don't already exist.
+      Path dirContainingOutputFile = targetOutputPath.getParent();
+      // This null test is very defensive and might not be required? I think getParent can
+      // only return null if its input was a single element path, which targetOutputPath
+      // should not be unless the user made an error.
+      if (dirContainingOutputFile != null
+          && !createdDirectories.contains(dirContainingOutputFile)) {
+        Files.createDirectories(dirContainingOutputFile);
+        createdDirectories.add(dirContainingOutputFile);
+      }
+      // Write the string representation of CompilationUnit to the file
+      try {
+        PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
+        writer.print(getCompilationUnitWithCommentsTrimmed(target.getValue()));
+        writer.close();
+      } catch (IOException e) {
+        System.out.println("failed to write output file " + targetOutputPath);
+        System.out.println("with error: " + e);
+      }
+    }
+
+    UnsolvedSymbolEnumerator alternateOutput =
+        new UnsolvedSymbolEnumerator(slicer.getGeneratedSymbolSlice());
+
+    Map<String, String> alternates = alternateOutput.getBestEffort();
+
+    for (Entry<String, String> alternate : alternates.entrySet()) {
+      Path targetOutputPath =
+          Path.of(outputDirectory, alternate.getKey().replace('.', '/') + ".java");
+      // Create any parts of the directory structure that don't already exist.
+      Path dirContainingOutputFile = targetOutputPath.getParent();
+      // This null test is very defensive and might not be required? I think getParent can
+      // only return null if its input was a single element path, which targetOutputPath
+      // should not be unless the user made an error.
+      if (dirContainingOutputFile != null
+          && !createdDirectories.contains(dirContainingOutputFile)) {
+        Files.createDirectories(dirContainingOutputFile);
+        createdDirectories.add(dirContainingOutputFile);
+      }
+      // Write the string representation of CompilationUnit to the file
+      try {
+        PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
+        writer.print(alternate.getValue());
+        writer.close();
+      } catch (IOException e) {
+        System.out.println("failed to write output file " + targetOutputPath);
+        System.out.println("with error: " + e);
+      }
+    }
   }
 
   private static void decompileJarFiles(
@@ -327,17 +420,26 @@ public class SpeciminRunner {
    * @param jarPaths the list of jar files to be used as input.
    * @throws IOException if something went wrong.
    */
-  private static void updateStaticSolver(String root, List<String> jarPaths) throws IOException {
+  private static ParserConfiguration updateStaticSolver(String root, List<String> jarPaths)
+      throws IOException {
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
         new CombinedTypeSolver(new JdkTypeSolver(), new JavaParserTypeSolver(new File(root)));
+
     for (String path : jarPaths) {
       typeSolver.add(new JarTypeSolver(path));
     }
+
     JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
-    StaticJavaParser.getParserConfiguration().setSymbolResolver(symbolSolver);
-    StaticJavaParser.getParserConfiguration()
-        .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
+
+    ParserConfiguration config =
+        new ParserConfiguration()
+            .setSymbolResolver(symbolSolver)
+            .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
+
+    StaticJavaParser.setConfiguration(config);
+
+    return config;
   }
 
   /**
@@ -359,15 +461,31 @@ public class SpeciminRunner {
   }
 
   /**
-   * Use JavaParser to parse a single Java files.
+   * Checks whether the given compilation unit contains nothing. Should conservatively return false
+   * by default if unsure.
    *
-   * @param root the absolute path to the root of the source tree
-   * @param path the path of the file to be parsed, relative to the root
-   * @return the compilation unit representing the code in the file at the path, or exit with an
-   *     error
+   * @param cu any compilation unit
+   * @return true iff this compilation unit is totally empty and can therefore be safely removed
+   *     entirely
    */
-  private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
-    return StaticJavaParser.parse(Path.of(root, path));
+  private static boolean isEmptyCompilationUnit(CompilationUnit cu) {
+    for (Node child : cu.getChildNodes()) {
+      if (child instanceof PackageDeclaration
+          || child instanceof ImportDeclaration
+          || child instanceof Comment) {
+        // Package declarations, imports, and comments don't count for the purposes of
+        // deciding whether to entirely remove a compilation unit.
+      } else if (child instanceof ClassOrInterfaceDeclaration) {
+        ClassOrInterfaceDeclaration cdecl =
+            ((ClassOrInterfaceDeclaration) child).asClassOrInterfaceDeclaration();
+        if (!cdecl.getMembers().isEmpty()) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -405,7 +523,6 @@ public class SpeciminRunner {
   private static void deleteFiles(Set<Path> fileList) {
     for (Path filePath : fileList) {
       try {
-        System.out.println(filePath);
         Files.delete(filePath);
         File classFile = new File(filePath.toString().replace(".java", ".class"));
         // since javac might leave some .class files

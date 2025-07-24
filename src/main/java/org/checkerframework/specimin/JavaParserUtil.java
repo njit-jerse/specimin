@@ -1,8 +1,6 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -14,14 +12,11 @@ import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -218,7 +213,7 @@ public class JavaParserUtil {
   }
 
   /**
-   * See {@code getEnclosingClassLike(Node)} for more details. This does not throw if a parent is
+   * See {@link #getEnclosingClassLike(Node)} for more details. This does not throw if a parent is
    * not found; instead, it returns null.
    *
    * @param node a node that is contained in a class-like structure
@@ -255,46 +250,6 @@ public class JavaParserUtil {
    */
   public static String getSimpleNameFromQualifiedName(String qualified) {
     return qualified.substring(qualified.lastIndexOf('.') + 1);
-  }
-
-  /**
-   * Given a String of types (separated by commas), return a List of these types, with any
-   * primitives converted to their object counterparts. Use this instead of {@code .split(", ")} to
-   * properly handle generics.
-   *
-   * @param commaSeparatedTypes A string of comma separated types
-   * @return a list of strings representing the types in commaSeparatedTypes
-   */
-  public static List<String> getReferenceTypesFromCommaSeparatedString(String commaSeparatedTypes) {
-    if (commaSeparatedTypes == null || commaSeparatedTypes.isBlank()) {
-      return Collections.EMPTY_LIST;
-    }
-
-    // Splitting them is simply to change primitives to objects so we do not
-    // get an error when parsing in StaticJavaParser (note that this array)
-    // may contain incomplete types like ["Map<String", "Object>"]
-    String[] tokens = commaSeparatedTypes.split(",");
-
-    for (int i = 0; i < tokens.length; i++) {
-      if (JavaLangUtils.isPrimitive(tokens[i].trim())) {
-        tokens[i] = JavaLangUtils.getPrimitiveAsBoxedType(tokens[i].trim());
-      }
-    }
-
-    // Parse as a generic type, then get the type arguments
-    // This way we can properly differentiate between commas within type arguments
-    // versus actual commas in javac error messages
-    Type parsed = StaticJavaParser.parseType("ToParse<" + String.join(", ", tokens) + ">");
-
-    List<String> types = new ArrayList<>();
-    NodeList<Type> typeArguments = parsed.asClassOrInterfaceType().getTypeArguments().orElse(null);
-
-    if (typeArguments != null) {
-      for (Type typeArgument : typeArguments) {
-        types.add(typeArgument.toString());
-      }
-    }
-    return types;
   }
 
   /**

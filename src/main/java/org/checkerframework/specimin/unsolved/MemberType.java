@@ -1,31 +1,30 @@
 package org.checkerframework.specimin.unsolved;
 
+import java.util.Objects;
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 /**
  * Class to represent the type of an unsolved field, the return type of an unsolved method, or the
  * types of an unsolved method's parameters.
  *
- * <p>Use this class instead of hardcoding a string into {@code UnsolvedMethod} or {@code
+ * <p>Use this class instead of hardcoding a string into {@link UnsolvedMethod} or {@link
  * UnsolvedField} to ensure proper types when alternates are generated.
  */
 public class MemberType {
-  private UnsolvedSymbolAlternates<?> unsolvedType;
-  private String solvedType;
+  private @Nullable UnsolvedClassOrInterfaceAlternates unsolvedType;
+  private @Nullable String solvedType;
 
-  private MemberType() {}
-
-  public static MemberType of(UnsolvedSymbolAlternates<?> symbol) {
-    MemberType instance = new MemberType();
-    instance.unsolvedType = symbol;
-    return instance;
+  public MemberType(UnsolvedClassOrInterfaceAlternates unsolvedType) {
+    this.unsolvedType = unsolvedType;
+    this.solvedType = null;
   }
 
-  public static MemberType of(String symbol) {
-    MemberType instance = new MemberType();
-    instance.solvedType = symbol;
-    return instance;
+  public MemberType(String solvedType) {
+    this.unsolvedType = null;
+    this.solvedType = solvedType;
   }
 
-  public void setUnsolvedType(UnsolvedSymbolAlternates<?> symbol) {
+  public void setUnsolvedType(UnsolvedClassOrInterfaceAlternates symbol) {
     unsolvedType = symbol;
     solvedType = null;
   }
@@ -36,10 +35,10 @@ public class MemberType {
   }
 
   public boolean isUnsolved() {
-    return unsolvedType != null;
+    return unsolvedType != null && solvedType == null;
   }
 
-  public UnsolvedSymbolAlternates<?> getUnsolvedType() {
+  public UnsolvedClassOrInterfaceAlternates getUnsolvedType() {
     if (unsolvedType == null) {
       throw new RuntimeException(
           "Attempting to get unsolved type when type is solved. Use isUnsolved() before to check"
@@ -55,5 +54,20 @@ public class MemberType {
               + " which type you should be looking for.");
     }
     return solvedType;
+  }
+
+  @Override
+  public boolean equals(@Nullable Object other) {
+    if (other instanceof MemberType type) {
+      return Objects.equals(type.solvedType, solvedType)
+          && Objects.equals(type.unsolvedType, unsolvedType);
+    }
+
+    return false;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(solvedType, unsolvedType);
   }
 }

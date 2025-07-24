@@ -1,6 +1,5 @@
 package org.checkerframework.specimin.unsolved;
 
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -23,29 +22,32 @@ import java.util.Set;
  * UnsolvedMethodAlternates} depends on encapsulating classes for alternate definitions.
  */
 public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedMethod> {
-  private UnsolvedMethodAlternates() {}
-
-  private Collection<UnsolvedClassOrInterfaceAlternates> potentialEncapsulations;
+  private UnsolvedMethodAlternates(
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes) {
+    super(alternateDeclaringTypes);
+  }
 
   public static UnsolvedMethodAlternates create(
       String name,
       MemberType type,
-      Collection<UnsolvedClassOrInterfaceAlternates> potentialEncapsulations,
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       List<MemberType> parameters) {
-    UnsolvedMethodAlternates result = new UnsolvedMethodAlternates();
+    if (alternateDeclaringTypes.isEmpty()) {
+      throw new RuntimeException("Unsolved field must have at least one potential declaring type.");
+    }
+    UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
 
     UnsolvedMethod method = new UnsolvedMethod(name, type, parameters);
-
-    result.potentialEncapsulations = potentialEncapsulations;
     result.addAlternate(method);
 
     return result;
   }
 
+  @Override
   public Set<String> getFullyQualifiedNames() {
     Set<String> fqns = new HashSet<>();
 
-    for (UnsolvedClassOrInterfaceAlternates alternate : potentialEncapsulations) {
+    for (UnsolvedClassOrInterfaceAlternates alternate : getAlternateDeclaringTypes()) {
       for (String fqn : alternate.getFullyQualifiedNames()) {
         fqns.add(fqn + "#" + getAlternates().get(0).getName());
       }

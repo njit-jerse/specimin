@@ -14,7 +14,9 @@ import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.NameExpr;
@@ -45,24 +47,22 @@ import com.google.common.base.Splitter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
 
-/**
- * Helper class for {@code UnsolvedSymbolGenerator}. This class runs under the assumption that the
- * root nodes are not solvable.
- */
+/** Helper class for {@link UnsolvedSymbolGenerator}. */
 public class FullyQualifiedNameGenerator {
   /**
    * When evaluating an expression, there is only one possible type. However, the location of an
    * expression could vary, depending on the parent classes/interfaces of the class which holds the
-   * expression. When determining the location of a {@code FieldAccessExpr}, {@code MethodCallExpr},
-   * or {@code NameExpr}, use this method instead of {@code getFQNsForExpressionType} because it
+   * expression. When determining the location of a {@link FieldAccessExpr}, {@link MethodCallExpr},
+   * or {@link NameExpr}, use this method instead of {@link #getFQNsForExpressionType} because it
    * doesn't differentiate between different classes, while this method does.
    *
    * <p>For example, take expression a.b where a is of type A. A implements interface B, and
@@ -88,6 +88,7 @@ public class FullyQualifiedNameGenerator {
 
         if (importDecl.getNameAsString().endsWith("." + name)) {
           staticImport = importDecl;
+          break;
         }
       }
 
@@ -117,7 +118,7 @@ public class FullyQualifiedNameGenerator {
       return Map.of();
     }
 
-    if (scope.isSuperExpr()) {
+    if (scope.isSuperExpr() || scope.isThisExpr()) {
       return getFQNsOfAllUnresolvableParents(JavaParserUtil.getEnclosingClassLike(expr), expr);
     }
 
@@ -148,12 +149,12 @@ public class FullyQualifiedNameGenerator {
                 if (potentialFQNs.containsKey(key)) {
                   potentialFQNs.get(key).addAll(toAdd.get(key));
                 } else {
-                  potentialFQNs.put(key, new HashSet<>(toAdd.get(key)));
+                  potentialFQNs.put(key, new LinkedHashSet<>(toAdd.get(key)));
                 }
               }
             }
           } catch (UnsolvedSymbolException ex) {
-
+            // Type not resolvable
           }
 
           String simpleClassName = JavaParserUtil.erase(type.getNameAsString());
@@ -161,8 +162,7 @@ public class FullyQualifiedNameGenerator {
           if (potentialFQNs.containsKey(simpleClassName)) {
             potentialFQNs.get(simpleClassName).addAll(getFQNsFromClassOrInterfaceType(type));
           } else {
-            potentialFQNs.put(
-                simpleClassName, new HashSet<>(getFQNsFromClassOrInterfaceType(type)));
+            potentialFQNs.put(simpleClassName, getFQNsFromClassOrInterfaceType(type));
           }
         }
 
@@ -170,7 +170,7 @@ public class FullyQualifiedNameGenerator {
       }
 
     } catch (UnsolvedSymbolException ex) {
-
+      // Type not resolvable
     }
 
     // After these cases, we've handled all exceptions where the scope could be various different
@@ -195,7 +195,7 @@ public class FullyQualifiedNameGenerator {
     if (expr.isSuperExpr()) {
       return getFQNsFromClassOrInterfaceType(JavaParserUtil.getSuperClass(expr));
     }
-    // static class
+    // static field/method
     else if (JavaParserUtil.isAClassPath(expr.toString())) {
       Expression scoped = expr;
 
@@ -315,6 +315,8 @@ public class FullyQualifiedNameGenerator {
       // java.____ or a simple synthetic class name, we know it's never required to import.
       return getFQNsFromClassName(
           "java", functionalInterface, lambda.findCompilationUnit().get(), lambda);
+    } else if (expr.isLiteralExpr()) {
+      return Set.of(expr.asLiteralExpr().calculateResolvedType().describe());
     }
 
     // local variable / field / method call / object creation expression / any other case
@@ -364,22 +366,35 @@ public class FullyQualifiedNameGenerator {
       if (parentNode instanceof NodeWithArguments<?>) {
         NodeWithArguments<?> methodCall = (NodeWithArguments<?>) parentNode;
 
-        int param = methodCall.getArgumentPosition(expr);
-
-        try {
-          // All NodeWithArguments<?> are resolvable, aside from EnumConstantDeclaration,
-          // but we won't encounter a situation where EnumConstantDeclaration is on the RHS
-
-          // Constructors and methods both are ResolvedMethodLikeDeclaration
-          ResolvedMethodLikeDeclaration resolved =
-              (ResolvedMethodLikeDeclaration) ((Resolvable<?>) methodCall).resolve();
-
-          ResolvedType paramType = resolved.getParam(param).getType();
-
-          return Set.of(paramType.describe());
-        } catch (UnsolvedSymbolException ex) {
-          // Argument type is not resolvable; i.e., method is unsolvable
+        int param = -1;
+        for (int i = 0; i < methodCall.getArguments().size(); i++) {
+          if (methodCall.getArgument(i).equals(expr)) {
+            param = i;
+          }
         }
+
+        if (param != -1) {
+          try {
+            // All NodeWithArguments<?> are resolvable, aside from EnumConstantDeclaration,
+            // but we won't encounter a situation where EnumConstantDeclaration is on the RHS
+
+            // Constructors and methods both are ResolvedMethodLikeDeclaration
+            ResolvedMethodLikeDeclaration resolved =
+                (ResolvedMethodLikeDeclaration) ((Resolvable<?>) methodCall).resolve();
+
+            if (resolved == null) {
+              throw new RuntimeException("Unexpected null resolve() value");
+            }
+
+            ResolvedType paramType = resolved.getParam(param).getType();
+
+            return Set.of(paramType.describe());
+          } catch (UnsolvedSymbolException ex) {
+            // Argument type is not resolvable; i.e., method is unsolvable
+          }
+        }
+        // scope of the method call, not an argument, continue
+
       } else if (parentNode instanceof VariableDeclarator) {
         VariableDeclarator declarator = (VariableDeclarator) parentNode;
 
@@ -391,9 +406,10 @@ public class FullyQualifiedNameGenerator {
 
         // We could be on either side of the assignment operator
         // In that case, take the type of the other side
-        if (assignment.getTarget().equals(expr)) {
+        if (assignment.getTarget().equals(expr) && !assignment.getValue().isNullLiteralExpr()) {
           return getFQNsForExpressionType(assignment.getValue());
-        } else if (assignment.getValue().equals(expr)) {
+        } else if (assignment.getValue().equals(expr)
+            && !assignment.getTarget().isNullLiteralExpr()) {
           return getFQNsForExpressionType(assignment.getTarget());
         }
       }
@@ -421,12 +437,12 @@ public class FullyQualifiedNameGenerator {
         }
 
         // Boolean
-        if (operator.equals(BinaryExpr.Operator.AND) || operator.equals(BinaryExpr.Operator.OR)) {
+        if (operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR) {
           return Set.of("boolean");
         }
         // ==, !=; we don't know the type, since the types on either side are not necessarily equal
-        else if (!operator.equals(BinaryExpr.Operator.EQUALS)
-            && !operator.equals(BinaryExpr.Operator.NOT_EQUALS)) {
+        else if (operator != BinaryExpr.Operator.EQUALS
+            && operator != BinaryExpr.Operator.NOT_EQUALS) {
           // Treat all other cases; type on one side is equal to the other
           Set<String> otherType = getFQNsForExpressionType(other);
 
@@ -452,7 +468,7 @@ public class FullyQualifiedNameGenerator {
     // Most likely, this is a field/method of a field/method
     if (expr.isNameExpr()) {
       // It could also be a static field
-      NameExpr nameExpr = expr.asNameExpr();
+      String name = expr.asNameExpr().getNameAsString();
 
       CompilationUnit cu = expr.findCompilationUnit().get();
 
@@ -461,16 +477,17 @@ public class FullyQualifiedNameGenerator {
       for (ImportDeclaration importDecl : cu.getImports()) {
         if (!importDecl.isStatic()) continue;
 
-        if (importDecl.getNameAsString().endsWith("." + nameExpr.getNameAsString())) {
+        if (importDecl.getNameAsString().endsWith("." + name)) {
           staticImport = importDecl;
+          break;
         }
       }
 
       if (staticImport != null) {
-        return Set.of(getFQNOfStaticallyImportedFieldType(staticImport.getNameAsString()));
+        return Set.of(getFQNOfStaticallyImportedMemberType(staticImport.getNameAsString(), false));
       }
 
-      String exprTypeName = "SyntheticTypeFor" + toCapital(expr.asNameExpr().getNameAsString());
+      String exprTypeName = "SyntheticTypeFor" + toCapital(name);
       return getFQNsFromClassName(
           exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
     } else if (expr.isFieldAccessExpr()) {
@@ -479,6 +496,26 @@ public class FullyQualifiedNameGenerator {
       return getFQNsFromClassName(
           exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
     } else if (expr.isMethodCallExpr()) {
+      // It could also be a static field
+      String name = expr.asMethodCallExpr().getNameAsString();
+
+      CompilationUnit cu = expr.findCompilationUnit().get();
+
+      ImportDeclaration staticImport = null;
+
+      for (ImportDeclaration importDecl : cu.getImports()) {
+        if (!importDecl.isStatic()) continue;
+
+        if (importDecl.getNameAsString().endsWith("." + name)) {
+          staticImport = importDecl;
+          break;
+        }
+      }
+
+      if (staticImport != null) {
+        return Set.of(getFQNOfStaticallyImportedMemberType(staticImport.getNameAsString(), true));
+      }
+
       String exprTypeName = toCapital(expr.asMethodCallExpr().getNameAsString()) + "ReturnType";
       return getFQNsFromClassName(
           exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
@@ -488,7 +525,7 @@ public class FullyQualifiedNameGenerator {
 
     // Theoretically, we should not be hitting this point, but we may have forgotten to account
     // for a specific case
-    throw new RuntimeException("Unknown expression scope type. Please contact developers.");
+    throw new RuntimeException("Unknown expression scope type.");
   }
 
   private static Set<String> getFQNsFromType(Type type) {
@@ -571,42 +608,45 @@ public class FullyQualifiedNameGenerator {
    * @return A set of potential FQNs
    */
   private static Set<String> getFQNsFromClassName(
-      String firstIdentifier, String fullName, CompilationUnit compilationUnit, Node node) {
-    Set<String> fqns = new HashSet<>();
+      String firstIdentifier,
+      String fullName,
+      CompilationUnit compilationUnit,
+      @Nullable Node node) {
+    Set<String> fqns = new LinkedHashSet<>();
 
     // If a class or interface type is unresolvable, it must be imported or be in the same package.
     for (ImportDeclaration importDecl : compilationUnit.getImports()) {
       if (importDecl.getNameAsString().endsWith("." + firstIdentifier)) {
-        fqns.add(importDecl.getNameAsString());
+        return Set.of(importDecl.getNameAsString());
+      } else if (importDecl.isAsterisk()) {
+        fqns.add(importDecl.getNameAsString() + "." + firstIdentifier);
       }
     }
 
-    if (fqns.isEmpty()) {
-      // Not imported
-      if (JavaParserUtil.isAClassPath(fullName)) {
-        // 1) fully qualified name
-        fqns.add(fullName);
+    // Not imported
+    if (JavaParserUtil.isAClassPath(fullName)) {
+      // 1) fully qualified name
+      fqns.add(fullName);
 
-        // 2) inner class of a parent class (i.e. Map.Entry), which could then fall under 3) and 4)
-      }
+      // 2) inner class of a parent class (i.e. Map.Entry), which could then fall under 3) and 4)
+    }
 
-      // 3) in current package
-      Optional<PackageDeclaration> packageDecl = compilationUnit.getPackageDeclaration();
-      if (packageDecl.isPresent()) {
-        fqns.add(packageDecl.get().getNameAsString() + "." + fullName);
-      } else {
-        fqns.add(fullName);
-      }
+    // 3) in current package
+    Optional<PackageDeclaration> packageDecl = compilationUnit.getPackageDeclaration();
+    if (packageDecl.isPresent()) {
+      fqns.add(packageDecl.get().getNameAsString() + "." + fullName);
+    } else {
+      fqns.add(fullName);
+    }
 
-      if (node != null) {
-        // 4) inner class of a parent class of the enclosing class
-        TypeDeclaration<?> enclosingType = JavaParserUtil.getEnclosingClassLike(node);
+    if (node != null) {
+      // 4) inner class of a parent class of the enclosing class
+      TypeDeclaration<?> enclosingType = JavaParserUtil.getEnclosingClassLike(node);
 
-        // Flatten the map: we only care about the value sets
-        for (Set<String> set : getFQNsOfAllUnresolvableParents(enclosingType, node).values()) {
-          for (String fqn : set) {
-            fqns.add(fqn + "." + fullName);
-          }
+      // Flatten the map: we only care about the value sets
+      for (Set<String> set : getFQNsOfAllUnresolvableParents(enclosingType, node).values()) {
+        for (String fqn : set) {
+          fqns.add(fqn + "." + fullName);
         }
       }
     }
@@ -614,16 +654,16 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
-   * Gets the FQN of the type of a statically imported field.
+   * Gets the FQN of the type of a statically imported field/method.
    *
-   * @param fieldExpr the field access expression to be used as input. This field access expression
-   *     must be in the form of a qualified class name
+   * @param expr the field access/method call expression to be used as input. Must be in the form of
+   *     a qualified class name.
    */
-  public static String getFQNOfStaticallyImportedFieldType(String fieldExpr) {
+  public static String getFQNOfStaticallyImportedMemberType(String expr, boolean isMethod) {
     // As this code involves complex string operations, we'll use a field access expression as an
     // example, following its progression through the code.
     // Suppose this is our field access expression: com.example.MyClass.myField
-    List<String> fieldParts = Splitter.onPattern("[.]").splitToList(fieldExpr);
+    List<String> fieldParts = Splitter.onPattern("[.]").splitToList(expr);
     int numOfFieldParts = fieldParts.size();
     if (numOfFieldParts <= 2) {
       throw new RuntimeException("Not in the form of a statically imported field.");
@@ -646,7 +686,7 @@ public class FullyQualifiedNameGenerator {
     fieldTypeClassName
         .append(toCapital(className))
         .append(toCapital(fieldName))
-        .append("SyntheticType");
+        .append(isMethod ? "ReturnType" : "SyntheticType");
 
     return packageName.toString() + "." + fieldTypeClassName.toString();
   }

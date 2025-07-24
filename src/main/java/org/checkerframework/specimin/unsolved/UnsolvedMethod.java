@@ -15,9 +15,9 @@ public class UnsolvedMethod {
   public static final UnsolvedMethod CLOSE =
       new UnsolvedMethod(
           "close",
-          MemberType.of("void"),
+          new MemberType("void"),
           Collections.emptyList(),
-          List.of(MemberType.of("java.lang.Exception")));
+          List.of(new MemberType("java.lang.Exception")));
 
   /** The name of the method */
   private final String name;
@@ -136,11 +136,18 @@ public class UnsolvedMethod {
     StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
       MemberType parameter = parameterList.get(i);
-      arguments.append(parameter).append(" ").append("parameter").append(i);
+
+      // TODO: parameter type should not be limited to first alternate
+      if (parameter.isUnsolved()) {
+        arguments.append(parameter.getUnsolvedType().getFullyQualifiedNames().iterator().next());
+      } else {
+        arguments.append(parameter.getSolvedType());
+      }
+
+      arguments.append(" ").append("parameter").append(i);
       if (i < parameterList.size() - 1) {
         arguments.append(", ");
       }
-      throw new RuntimeException("didn't implement; please also see below at throws");
     }
     StringBuilder signature = new StringBuilder();
     signature.append("public ");
@@ -168,9 +175,14 @@ public class UnsolvedMethod {
     StringBuilder exceptions = new StringBuilder();
     for (int i = 0; i < throwsList.size(); i++) {
       MemberType exception = throwsList.get(i);
-      exceptions.append(exception);
-      if (i < parameterList.size() - 1) {
-        arguments.append(", ");
+      // TODO: exception type should not be limited to first alternate
+      if (exception.isUnsolved()) {
+        exceptions.append(exception.getUnsolvedType().getFullyQualifiedNames().iterator().next());
+      } else {
+        exceptions.append(exception.getSolvedType());
+      }
+      if (i < throwsList.size() - 1) {
+        exceptions.append(", ");
       }
     }
     signature.append(exceptions);
@@ -200,8 +212,7 @@ public class UnsolvedMethod {
   }
 
   /**
-   * Helper method for {@link #getTypeVariablesAsStringWithoutBrackets} and {@link
-   * #getTypeVariablesAsString()}.
+   * Helper method for {@link #getTypeVariablesAsString()}.
    *
    * @param result a string builder. Will be side-effected.
    */

@@ -8,10 +8,10 @@ public class UnsolvedField {
   private final MemberType type;
 
   /** This is set to true if this field is a static field */
-  private final boolean isStatic = false;
+  private boolean isStatic = false;
 
   /** This is set to true if this field is a final field */
-  private final boolean isFinal = false;
+  private boolean isFinal = false;
 
   /**
    * Create an instance of UnsolvedField.
@@ -51,8 +51,8 @@ public class UnsolvedField {
     String typeAsString;
 
     if (type.isUnsolved()) {
-      typeAsString = type.getUnsolvedType().toString();
-      throw new RuntimeException("You haven't implemented this part yet");
+      typeAsString = type.getUnsolvedType().getFullyQualifiedNames().iterator().next();
+      // TODO: handle multiple potential FQNs
     } else {
       typeAsString = type.getSolvedType();
     }

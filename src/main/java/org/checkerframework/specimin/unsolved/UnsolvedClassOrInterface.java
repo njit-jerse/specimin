@@ -1,12 +1,13 @@
 package org.checkerframework.specimin.unsolved;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
@@ -28,7 +29,7 @@ public class UnsolvedClassOrInterface {
   private Set<String> preferredTypeVariables = new HashSet<>();
 
   /** This field records the extends clause, if one exists. */
-  private @Nullable String extendsClause;
+  private @Nullable MemberType extendsClause;
 
   /** The implements clauses, if they exist. */
   private Set<String> implementsClauses = new LinkedHashSet<>(0);
@@ -36,13 +37,8 @@ public class UnsolvedClassOrInterface {
   /** This field records if the class is an interface */
   private boolean isAnInterface;
 
-  /** This class' inner classes. */
-  private @MonotonicNonNull Set<UnsolvedClassOrInterface> innerClasses = null;
-
   /** Is this class an annotation? */
   private boolean isAnAnnotation = false;
-
-  private boolean isInnerClass = false;
 
   private Set<String> annotations = new HashSet<>();
 
@@ -52,40 +48,8 @@ public class UnsolvedClassOrInterface {
    *
    * @param className the name of the class, possibly followed by a set of type arguments
    * @param packageName the name of the package
-   * @param isInnerClass if the class is an inner class or not
    */
-  public UnsolvedClassOrInterface(String className, String packageName, boolean isInnerClass) {
-    this(className, packageName, isInnerClass, false);
-  }
-
-  /**
-   * Create an instance of UnsolvedClass
-   *
-   * @param className the simple name of the class, possibly followed by a set of type arguments
-   * @param packageName the name of the package
-   * @param isInnerClass if the class is an inner class or not
-   * @param isException does the class represents an exception?
-   */
-  public UnsolvedClassOrInterface(
-      String className, String packageName, boolean isInnerClass, boolean isException) {
-    this(className, packageName, isInnerClass, isException, false);
-  }
-
-  /**
-   * Create an instance of an unsolved interface or unsolved class.
-   *
-   * @param className the simple name of the interface, possibly followed by a set of type arguments
-   * @param packageName the name of the package
-   * @param isInnerClass if the class is an inner class or not
-   * @param isException does the interface represents an exception?
-   * @param isAnInterface check whether this is an interface or a class
-   */
-  public UnsolvedClassOrInterface(
-      String className,
-      String packageName,
-      boolean isInnerClass,
-      boolean isException,
-      boolean isAnInterface) {
+  public UnsolvedClassOrInterface(String className, String packageName) {
     if (className.contains("<")) {
       @SuppressWarnings("signature") // removing the <> makes this a true simple name
       @ClassGetSimpleName String classNameWithoutAngleBrackets = className.substring(0, className.indexOf('<'));
@@ -96,11 +60,6 @@ public class UnsolvedClassOrInterface {
       this.className = classNameWithoutAngleBrackets;
     }
     this.packageName = packageName;
-    if (isException) {
-      this.extendsClause = " extends Exception";
-    }
-    this.isAnInterface = isAnInterface;
-    this.isInnerClass = isInnerClass;
   }
 
   /**
@@ -202,76 +161,41 @@ public class UnsolvedClassOrInterface {
   }
 
   /**
+   * Checks if an interface is implemented or not.
+   *
+   * @param interfaceName the fqn of the interface
+   */
+  public boolean doesImplement(String interfaceName) {
+    return implementsClauses.contains(interfaceName);
+  }
+
+  /**
    * Adds an extends clause to this class.
    *
-   * @param className a fully-qualified class name for the class to be extended
+   * @param extendsType a {@link MemberType} of the extended type, represented with fully qualified
+   *     names.
    */
-  public void extend(String className) {
-    this.extendsClause = "extends " + className;
+  public void extend(MemberType extendsType) {
+    this.extendsClause = extendsType;
+  }
+
+  /**
+   * Checks if the extended class is equal to the input.
+   *
+   * @param extendsType a fully-qualified class name for the extended class
+   * @return whether {@code className} is the extended class of this
+   */
+  public boolean doesExtend(MemberType extendsType) {
+    return this.extendsClause != null && this.extendsClause.equals(extendsType);
   }
 
   /**
    * Adds an annotation to this class.
    *
-   * @param className a fully-qualified annotation to apply
+   * @param annotation a fully-qualified annotation to apply
    */
   public void addAnnotation(String annotation) {
     this.annotations.add(annotation);
-  }
-
-  /**
-   * Attempts to add an extends clause to this class or (recursively) to one of its inner classes.
-   * An extends clause will only be added if the name of this class matches the target type name.
-   * The name of the class in the extends clause is extendsName.
-   *
-   * @param targetTypeName the name of the class to be extended. This may be a fully-qualified name,
-   *     a simple name, or a dot-separated identifier.
-   * @param extendsName the name of the class to extend. Always fully-qualified.
-   * @return true if an extends clause was added, false otherwise
-   */
-  public boolean extend(String targetTypeName, String extendsName) {
-    if (targetTypeName.equals(this.getFullyQualifiedName())
-        || targetTypeName.equals(this.getClassName())) {
-      // Special case: if the type to extend is "Annotation", then change the
-      // target class to an @interface declaration.
-      if (!"Annotation".equals(extendsName)
-          && !"java.lang.annotation.Annotation".equals(extendsName)) {
-        extend(extendsName);
-      }
-      return true;
-    }
-    if (innerClasses == null) {
-      return false;
-    }
-    // Two possibilities, depending on how Javac's error message looks:
-    // 1. Javac provides the whole class name in the form Outer.Inner
-    // 2. Javac provides only the inner class name
-    if (targetTypeName.indexOf('.') != -1) {
-      String outerName = targetTypeName.substring(0, targetTypeName.indexOf('.'));
-      if (!outerName.equals(this.className)) {
-        return false;
-      }
-      // set the targetTypeName to the name of the inner class
-      targetTypeName = targetTypeName.substring(targetTypeName.indexOf('.') + 1);
-    }
-    boolean result = false;
-    for (UnsolvedClassOrInterface unsolvedInnerClass : innerClasses) {
-      result |= unsolvedInnerClass.extend(targetTypeName, extendsName);
-    }
-    return result;
-  }
-
-  /**
-   * Add the given class as an inner class to this class.
-   *
-   * @param innerClass the inner class to add
-   */
-  public void addInnerClass(UnsolvedClassOrInterface innerClass) {
-    if (this.innerClasses == null) {
-      // LinkedHashSet to make the iteration order deterministic.
-      this.innerClasses = new LinkedHashSet<>(1);
-    }
-    this.innerClasses.add(innerClass);
   }
 
   @Override
@@ -293,15 +217,10 @@ public class UnsolvedClassOrInterface {
   }
 
   public UnsolvedClassOrInterface copy() {
-    UnsolvedClassOrInterface copy =
-        new UnsolvedClassOrInterface(className, packageName, isInnerClass, false, isAnInterface);
+    UnsolvedClassOrInterface copy = new UnsolvedClassOrInterface(className, packageName);
 
     copy.extendsClause = this.extendsClause;
     copy.implementsClauses = new LinkedHashSet<>(this.implementsClauses);
-    copy.innerClasses = new HashSet<>();
-    for (UnsolvedClassOrInterface inner : this.innerClasses) {
-      copy.innerClasses.add(inner.copy());
-    }
     copy.isAnAnnotation = this.isAnAnnotation;
     copy.numberOfTypeVariables = this.numberOfTypeVariables;
     copy.preferredTypeVariables = new HashSet<>(this.preferredTypeVariables);
@@ -310,32 +229,25 @@ public class UnsolvedClassOrInterface {
     return copy;
   }
 
+  @Override
+  public String toString() {
+    return toString(
+        Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), false);
+  }
+
   /**
    * Return the content of the class as a compilable Java file.
    *
    * @return the content of the class
    */
-  public String toString(List<UnsolvedMethod> methods, List<UnsolvedField> fields) {
+  public String toString(
+      Collection<UnsolvedMethod> methods,
+      Collection<UnsolvedField> fields,
+      Collection<UnsolvedClassOrInterface> innerClasses,
+      boolean isInnerClass) {
     StringBuilder sb = new StringBuilder();
-    if (!this.isInnerClass) {
+    if (!isInnerClass) {
       sb.append("package ").append(packageName).append(";\n");
-    }
-
-    if (!annotations.isEmpty()) {
-
-      sb.append(
-          "@java.lang.annotation.Target({ \n"
-              + "\tjava.lang.annotation.ElementType.TYPE, \n"
-              + "\tjava.lang.annotation.ElementType.FIELD, \n"
-              + "\tjava.lang.annotation.ElementType.METHOD, \n"
-              + "\tjava.lang.annotation.ElementType.PARAMETER, \n"
-              + "\tjava.lang.annotation.ElementType.CONSTRUCTOR, \n"
-              + "\tjava.lang.annotation.ElementType.LOCAL_VARIABLE, \n"
-              + "\tjava.lang.annotation.ElementType.ANNOTATION_TYPE,\n"
-              + "\tjava.lang.annotation.ElementType.PACKAGE,\n"
-              + "\tjava.lang.annotation.ElementType.TYPE_PARAMETER,\n"
-              + "\tjava.lang.annotation.ElementType.TYPE_USE \n"
-              + "})");
     }
 
     for (String annotation : annotations) {
@@ -343,7 +255,7 @@ public class UnsolvedClassOrInterface {
     }
 
     sb.append("public ");
-    if (this.isInnerClass) {
+    if (isInnerClass) {
       // Nested classes that are visible outside their parent class
       // are usually static. There is no downside to making them static
       // (it imposes no additional requirements), but there is a downside
@@ -371,7 +283,15 @@ public class UnsolvedClassOrInterface {
     }
     sb.append(className).append(getTypeVariablesAsString());
     if (extendsClause != null) {
-      sb.append(" ").append(extendsClause);
+      @NonNull MemberType nonNullExtends = extendsClause;
+      sb.append(" extends ");
+      if (nonNullExtends.isUnsolved()) {
+        sb.append(nonNullExtends.getUnsolvedType().getFullyQualifiedNames().iterator().next());
+        // TODO: handle more than one alternate
+      } else {
+        sb.append(nonNullExtends.getSolvedType());
+      }
+      sb.append(" ");
     }
     if (implementsClauses.size() > 0) {
       if (extendsClause != null) {

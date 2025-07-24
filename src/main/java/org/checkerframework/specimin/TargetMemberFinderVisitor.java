@@ -1,16 +1,12 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.SimpleName;
 import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import java.util.HashMap;
@@ -36,9 +32,6 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
 
   /** The names of the target fields. The format is class.fully.qualified.Name#fieldName. */
   private final Set<String> targetFields;
-
-  /** The name of the package currently being visited. */
-  private String currentPackage = "";
 
   /** The simple name of the class currently visited */
   protected @ClassGetSimpleName String className = "";
@@ -153,20 +146,12 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
     }
   }
 
-  @Override
-  public Visitable visit(PackageDeclaration decl, Void p) {
-    this.currentPackage = decl.getNameAsString();
-    return super.visit(decl, p);
-  }
-
   /*
    * The purpose of this method is to help find the fully qualified name, not to do any modification
    * to the worklist/slice.
    */
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
-    SimpleName nodeName = decl.getName();
-    className = nodeName.asString();
     if (decl.isNestedType()) {
       this.currentClassQualifiedName += "." + decl.getName().asString();
     } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
@@ -230,22 +215,15 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
     slicer.addToWorklist(method);
 
     // Add body to the worklist
-    NodeList<Statement> statements;
 
-    if (method instanceof ConstructorDeclaration) {
-      statements = ((ConstructorDeclaration) method).getBody().getStatements();
+    if (method instanceof ConstructorDeclaration constructor) {
+      slicer.addToWorklist(constructor.getBody());
     } else {
       Optional<BlockStmt> body = ((MethodDeclaration) method).getBody();
 
       if (body.isPresent()) {
-        statements = body.get().getStatements();
-      } else {
-        statements = new NodeList<>();
+        slicer.addToWorklist(body.get());
       }
-    }
-
-    for (Statement statement : statements) {
-      slicer.addToWorklist(statement);
     }
   }
 
