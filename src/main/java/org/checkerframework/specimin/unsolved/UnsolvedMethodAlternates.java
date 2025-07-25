@@ -1,8 +1,9 @@
 package org.checkerframework.specimin.unsolved;
 
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import org.checkerframework.specimin.JavaParserUtil;
 
 /**
  * /** Given a name, return type, a set of parameters and a set of potential encapsulating classes,
@@ -32,12 +33,21 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       MemberType type,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       List<MemberType> parameters) {
+    return create(name, type, alternateDeclaringTypes, parameters, List.of());
+  }
+
+  public static UnsolvedMethodAlternates create(
+      String name,
+      MemberType type,
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
+      List<MemberType> parameters,
+      List<MemberType> exceptions) {
     if (alternateDeclaringTypes.isEmpty()) {
       throw new RuntimeException("Unsolved field must have at least one potential declaring type.");
     }
     UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
 
-    UnsolvedMethod method = new UnsolvedMethod(name, type, parameters);
+    UnsolvedMethod method = new UnsolvedMethod(name, type, parameters, exceptions);
     result.addAlternate(method);
 
     return result;
@@ -45,11 +55,38 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
 
   @Override
   public Set<String> getFullyQualifiedNames() {
-    Set<String> fqns = new HashSet<>();
+    Set<String> fqns = new LinkedHashSet<>();
 
-    for (UnsolvedClassOrInterfaceAlternates alternate : getAlternateDeclaringTypes()) {
-      for (String fqn : alternate.getFullyQualifiedNames()) {
-        fqns.add(fqn + "#" + getAlternates().get(0).getName());
+    for (UnsolvedMethod methodAlternate : getAlternates()) {
+      StringBuilder methodSignature = new StringBuilder();
+
+      methodSignature.append(methodAlternate.getName()).append('(');
+
+      List<MemberType> parameterList = methodAlternate.getParameterList();
+      for (int i = 0; i < parameterList.size(); i++) {
+        MemberType param = parameterList.get(i);
+
+        if (param.isUnsolved()) {
+          // All simple names are the same for unsolved types
+          methodSignature.append(
+              JavaParserUtil.getSimpleNameFromQualifiedName(
+                  param.getUnsolvedType().getFullyQualifiedNames().iterator().next()));
+        } else {
+          methodSignature.append(
+              JavaParserUtil.getSimpleNameFromQualifiedName(param.getSolvedType()));
+        }
+
+        if (i + 1 < parameterList.size()) {
+          methodSignature.append(", ");
+        }
+      }
+
+      methodSignature.append(')');
+
+      for (UnsolvedClassOrInterfaceAlternates alternate : getAlternateDeclaringTypes()) {
+        for (String fqn : alternate.getFullyQualifiedNames()) {
+          fqns.add(fqn + "#" + methodSignature.toString());
+        }
       }
     }
 
@@ -66,5 +103,9 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     for (UnsolvedMethod method : getAlternates()) {
       method.setNumberOfTypeVariables(number);
     }
+  }
+
+  public MemberType getReturnType() {
+    return getAlternates().get(0).getReturnType();
   }
 }

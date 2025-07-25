@@ -1,5 +1,7 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -7,13 +9,18 @@ import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
@@ -352,5 +359,102 @@ public class JavaParserUtil {
     // sometimes an extra space may occur if an annotation right after a < was removed
     String result = methodWithoutReturnType.replace("< ", "<");
     return result;
+  }
+
+  /**
+   * Checks to see if an expression (usually a field or method) is static.
+   *
+   * @param expr The expression
+   * @return Whether it is static or not
+   */
+  public static boolean isAStaticMember(Expression expr) {
+    CompilationUnit cu = expr.findCompilationUnit().get();
+
+    String nameOfExpr;
+    String nameOfScope = null;
+    Expression scope = null;
+
+    if (expr.isNameExpr()) {
+      nameOfScope = nameOfExpr = expr.asNameExpr().getNameAsString();
+    } else if (expr.isMethodCallExpr()) {
+      nameOfExpr = expr.asMethodCallExpr().getNameAsString();
+      if (expr.asMethodCallExpr().hasScope()) {
+        scope = expr.asMethodCallExpr().getScope().get();
+      } else {
+        nameOfScope = nameOfExpr;
+      }
+    } else if (expr.isFieldAccessExpr()) {
+      nameOfExpr = expr.asFieldAccessExpr().getNameAsString();
+      scope = expr.asFieldAccessExpr().getScope();
+    } else {
+      return false;
+    }
+
+    if (scope != null) {
+      if (scope.isNameExpr()) {
+        nameOfScope = scope.asNameExpr().getNameAsString();
+      } else if (scope.isFieldAccessExpr()) {
+        nameOfScope = scope.asFieldAccessExpr().getNameAsString();
+        if (isAClassPath(nameOfScope)) {
+          return true;
+        }
+      } else {
+        return false;
+      }
+    }
+
+    if (nameOfScope == null) {
+      return false;
+    }
+
+    for (ImportDeclaration importDecl : cu.getImports()) {
+      if (importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfExpr)) {
+        return true;
+      }
+
+      if (!importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfScope)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Returns true if the expression type is resolvable; i.e., {@code calculateResolvedType()} runs
+   * without an {@code UnsolvedSymbolException}.
+   *
+   * @param expr The expression
+   * @return True if the expression is resolvable
+   */
+  public static boolean isExprTypeResolvable(Expression expr) {
+    try {
+      expr.calculateResolvedType();
+      return true;
+    } catch (UnsolvedSymbolException ex) {
+      return false;
+    }
+  }
+
+  /**
+   * Gets the type from a {@code ResolvedValueDeclaration}. Returns null if unable to be found.
+   *
+   * @param resolved The resolved value declaration
+   * @return The Type of the resolved value declaration
+   */
+  public static @Nullable Type getTypeFromResolvedValueDeclaration(
+      ResolvedValueDeclaration resolved) {
+    if (resolved.toAst().isPresent()) {
+      Node toAst = resolved.toAst().get();
+      if (toAst instanceof VariableDeclarationExpr varDecl) {
+        return varDecl.getElementType();
+      } else if (toAst instanceof VariableDeclarator varDecl) {
+        return varDecl.getType();
+      } else if (toAst instanceof Parameter param) {
+        return param.getType();
+      }
+    }
+
+    return null;
   }
 }

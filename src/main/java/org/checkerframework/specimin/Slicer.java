@@ -21,6 +21,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.specimin.unsolved.AddInformationResult;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 
@@ -49,18 +50,20 @@ public class Slicer {
   private final String rootDirectory;
   private final Map<String, CompilationUnit> toSlice;
 
-  private final UnsolvedSymbolGenerator unsolvedSymbolGenerator = new UnsolvedSymbolGenerator();
+  private final UnsolvedSymbolGenerator unsolvedSymbolGenerator;
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
   public Slicer(
       Map<String, Path> existingClassesToFilePath,
       String rootDirectory,
       Map<String, CompilationUnit> toSlice,
-      TypeRuleDependencyMap typeRuleDependencyMap) {
+      TypeRuleDependencyMap typeRuleDependencyMap,
+      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
     this.existingClassesToFilePath = existingClassesToFilePath;
     this.rootDirectory = rootDirectory;
     this.toSlice = toSlice;
     this.typeRuleDependencyMap = typeRuleDependencyMap;
+    this.unsolvedSymbolGenerator = unsolvedSymbolGenerator;
   }
 
   public void slice() throws IOException {
@@ -72,11 +75,15 @@ public class Slicer {
       handleElement(element, usedCompilationUnits);
     }
 
-    // Step 2: Handle the post-processing worklist
-    Iterator<Node> ppwIterator = postProcessingWorklist.iterator();
-    while (ppwIterator.hasNext()) {
-      Node element = ppwIterator.next();
-      generatedSymbolSlice.addAll(unsolvedSymbolGenerator.addInformation(element));
+    if (!generatedSymbolSlice.isEmpty()) {
+      // Step 2: Handle the post-processing worklist
+      Iterator<Node> ppwIterator = postProcessingWorklist.iterator();
+      while (ppwIterator.hasNext()) {
+        Node element = ppwIterator.next();
+        AddInformationResult result = unsolvedSymbolGenerator.addInformation(element);
+        generatedSymbolSlice.addAll(result.toAdd());
+        generatedSymbolSlice.removeAll(result.toRemove());
+      }
     }
 
     // Step 3: add all used compilation units

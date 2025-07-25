@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -459,6 +460,19 @@ public class FullyQualifiedNameGenerator {
           }
           return otherType;
         }
+      } else if (parentNode instanceof ReturnStmt) {
+        Object ancestor =
+            parentNode
+                .findAncestor(
+                    n -> {
+                      return n instanceof MethodDeclaration || n instanceof LambdaExpr;
+                    },
+                    Node.class)
+                .get();
+
+        if (ancestor instanceof MethodDeclaration methodDecl) {
+          return getFQNsFromType(methodDecl.getType());
+        }
       }
     }
 
@@ -472,29 +486,54 @@ public class FullyQualifiedNameGenerator {
 
       CompilationUnit cu = expr.findCompilationUnit().get();
 
-      ImportDeclaration staticImport = null;
+      ImportDeclaration importDecl = null;
 
-      for (ImportDeclaration importDecl : cu.getImports()) {
-        if (!importDecl.isStatic()) continue;
-
-        if (importDecl.getNameAsString().endsWith("." + name)) {
-          staticImport = importDecl;
+      for (ImportDeclaration anImport : cu.getImports()) {
+        if (anImport.getNameAsString().endsWith("." + name)) {
+          importDecl = anImport;
           break;
         }
       }
 
-      if (staticImport != null) {
-        return Set.of(getFQNOfStaticallyImportedMemberType(staticImport.getNameAsString(), false));
+      if (importDecl != null) {
+        if (!importDecl.isStatic()) {
+          return getFQNsFromClassName(
+              expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
+        }
+        return Set.of(getFQNOfStaticallyImportedMemberType(importDecl.getNameAsString(), false));
       }
 
       String exprTypeName = "SyntheticTypeFor" + toCapital(name);
       return getFQNsFromClassName(
           exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
     } else if (expr.isFieldAccessExpr()) {
-      String exprTypeName =
-          "SyntheticTypeFor" + toCapital(expr.asFieldAccessExpr().getNameAsString());
-      return getFQNsFromClassName(
-          exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
+      Expression scope = expr.asFieldAccessExpr().getScope();
+
+      String exprTypeName;
+      if (scope.isThisExpr() || scope.isSuperExpr()) {
+        exprTypeName = "SyntheticTypeFor" + toCapital(expr.asFieldAccessExpr().getNameAsString());
+      } else {
+        String scopeType =
+            getFQNsForExpressionType(expr.asFieldAccessExpr().getScope()).iterator().next();
+
+        return Set.of(
+            getFQNOfStaticallyImportedMemberType(
+                scopeType + "." + expr.asFieldAccessExpr().getNameAsString(), false));
+      }
+
+      // Place in the same package as its scope type
+      while (scope.hasScope()) {
+        scope = ((NodeWithTraversableScope) scope).traverseScope().get();
+      }
+
+      Set<String> fqns = getFQNsForExpressionType(scope);
+      Set<String> result = new LinkedHashSet<>();
+
+      for (String fqn : fqns) {
+        result.add(fqn.substring(0, fqn.lastIndexOf('.') + 1) + exprTypeName);
+      }
+
+      return result;
     } else if (expr.isMethodCallExpr()) {
       // It could also be a static field
       String name = expr.asMethodCallExpr().getNameAsString();
@@ -517,6 +556,24 @@ public class FullyQualifiedNameGenerator {
       }
 
       String exprTypeName = toCapital(expr.asMethodCallExpr().getNameAsString()) + "ReturnType";
+
+      if (expr.hasScope()) {
+        // Place in the same package as its scope type
+        Expression scope = expr;
+
+        while (scope.hasScope()) {
+          scope = ((NodeWithTraversableScope) scope).traverseScope().get();
+        }
+
+        Set<String> fqns = getFQNsForExpressionType(scope);
+        Set<String> result = new LinkedHashSet<>();
+
+        for (String fqn : fqns) {
+          result.add(fqn.substring(0, fqn.lastIndexOf('.') + 1) + exprTypeName);
+        }
+
+        return result;
+      }
       return getFQNsFromClassName(
           exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
     } else if (expr.isObjectCreationExpr()) {

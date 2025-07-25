@@ -93,7 +93,12 @@ public class SpeciminTestExecutor {
     }
 
     // Run specimin on target
-    SpeciminRunner.main(speciminArgs.toArray(new String[0]));
+    try {
+      SpeciminRunner.main(speciminArgs.toArray(new String[0]));
+    } catch (Exception ex) {
+      ex.printStackTrace();
+      throw ex;
+    }
 
     boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
     // Diff the files to ensure that specimin's output is what we expect

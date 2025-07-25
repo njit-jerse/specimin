@@ -1,6 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -46,7 +46,7 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
 
   @Override
   public Set<String> getFullyQualifiedNames() {
-    Set<String> fqns = new HashSet<>();
+    Set<String> fqns = new LinkedHashSet<>();
 
     for (UnsolvedClassOrInterfaceAlternates alternate : getAlternateDeclaringTypes()) {
       for (String fqn : alternate.getFullyQualifiedNames()) {

@@ -10,15 +10,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * SymbolSolver. The reason is that the class file of that method is not in the root directory.
  */
 public class UnsolvedMethod {
-
-  /** The close() method from java.lang.AutoCloseable. */
-  public static final UnsolvedMethod CLOSE =
-      new UnsolvedMethod(
-          "close",
-          new MemberType("void"),
-          Collections.emptyList(),
-          List.of(new MemberType("java.lang.Exception")));
-
   /** The name of the method */
   private final String name;
 
@@ -161,8 +152,12 @@ public class UnsolvedMethod {
       signature.append(getTypeVariablesAsString()).append(" ");
     }
 
-    if (returnType.isUnsolved() || !"".equals(returnType.getSolvedType())) {
-      signature.append(returnType).append(" ");
+    if (returnType.isUnsolved()) {
+      signature
+          .append(returnType.getUnsolvedType().getFullyQualifiedNames().iterator().next())
+          .append(" ");
+    } else if (!"".equals(returnType.getSolvedType())) {
+      signature.append(returnType.getSolvedType()).append(" ");
     }
     signature.append(name).append("(");
     signature.append(arguments);

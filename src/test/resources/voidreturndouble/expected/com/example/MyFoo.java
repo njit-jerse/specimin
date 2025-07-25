@@ -1,6 +1,7 @@
 package com.example;
 
 import org.example.Foo;
+import org.example.MethodGen;
 
 public class MyFoo extends Foo {
 
