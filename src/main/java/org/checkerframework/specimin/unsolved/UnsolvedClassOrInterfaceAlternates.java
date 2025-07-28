@@ -165,6 +165,13 @@ public class UnsolvedClassOrInterfaceAlternates
     }
   }
 
+  public boolean hasExtends() {
+    for (UnsolvedClassOrInterface alternate : getAlternates()) {
+      if (alternate.hasExtends()) return true;
+    }
+    return false;
+  }
+
   public boolean doesExtend(MemberType extendsType) {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       if (alternate.doesExtend(extendsType)) return true;

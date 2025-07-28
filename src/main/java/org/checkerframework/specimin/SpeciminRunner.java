@@ -36,7 +36,6 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
-import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
@@ -266,8 +265,7 @@ public class SpeciminRunner {
             existingClassesToFilePath,
             root,
             parsedTargetFiles,
-            new StandardTypeRuleDependencyMap(fqnToCompilationUnits),
-            new UnsolvedSymbolGenerator(fqnToCompilationUnits));
+            new StandardTypeRuleDependencyMap(fqnToCompilationUnits));
 
     TargetMemberFinderVisitor finder =
         new TargetMemberFinderVisitor(targetMethodNames, targetFieldNames, slicer);

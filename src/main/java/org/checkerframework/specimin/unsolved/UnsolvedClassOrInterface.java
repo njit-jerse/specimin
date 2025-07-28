@@ -180,6 +180,15 @@ public class UnsolvedClassOrInterface {
   }
 
   /**
+   * Returns true if this class extends another class.
+   *
+   * @return whether {@code this.extendsClause} is non-null
+   */
+  public boolean hasExtends() {
+    return this.extendsClause != null;
+  }
+
+  /**
    * Checks if the extended class is equal to the input.
    *
    * @param extendsType a fully-qualified class name for the extended class

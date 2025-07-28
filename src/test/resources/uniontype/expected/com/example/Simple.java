@@ -2,6 +2,7 @@ package com.example;
 
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import javalanguage.Method;
+import java.io.IOException;
 
 class Simple {
 

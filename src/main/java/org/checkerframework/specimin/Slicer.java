@@ -5,7 +5,13 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import java.io.IOException;
@@ -18,9 +24,11 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.unsolved.AddInformationResult;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
@@ -39,31 +47,29 @@ public class Slicer {
   private final Set<Node> slice = Collections.newSetFromMap(new IdentityHashMap<>());
 
   /** The slice of generated symbols. */
-  private final Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice = new HashSet<>();
+  private final Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice = new LinkedHashSet<>();
 
   /** The Nodes that need to be processed in the main algorithm. */
   private final Deque<Node> worklist = new ArrayDeque<>();
 
-  private final Set<Node> postProcessingWorklist = new HashSet<>();
+  private final Set<Node> postProcessingWorklist = new LinkedHashSet<>();
 
   private final Map<String, Path> existingClassesToFilePath;
   private final String rootDirectory;
   private final Map<String, CompilationUnit> toSlice;
 
-  private final UnsolvedSymbolGenerator unsolvedSymbolGenerator;
+  private final UnsolvedSymbolGenerator unsolvedSymbolGenerator = new UnsolvedSymbolGenerator();
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
   public Slicer(
       Map<String, Path> existingClassesToFilePath,
       String rootDirectory,
       Map<String, CompilationUnit> toSlice,
-      TypeRuleDependencyMap typeRuleDependencyMap,
-      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
+      TypeRuleDependencyMap typeRuleDependencyMap) {
     this.existingClassesToFilePath = existingClassesToFilePath;
     this.rootDirectory = rootDirectory;
     this.toSlice = toSlice;
     this.typeRuleDependencyMap = typeRuleDependencyMap;
-    this.unsolvedSymbolGenerator = unsolvedSymbolGenerator;
   }
 
   public void slice() throws IOException {
@@ -114,25 +120,37 @@ public class Slicer {
       return;
     }
 
-    if (node instanceof Resolvable<?>) {
+    // TypeParameter#resolve() throws an UnsupportedOperationException.
+    // Since we don't need to resolve the type parameter definition, it is
+    // safe to skip this step, since all child nodes will be added to the
+    // worklist anyway.
+
+    // UnknownType#resolve() throws an IllegalArgumentException (see docs,
+    // #convertToUsage(Context)).
+    // https://www.javadoc.io/doc/com.github.javaparser/javaparser-core/latest/com/github/javaparser/ast/type/UnknownType.html
+    if (node instanceof Resolvable<?>
+        && !(node instanceof TypeParameter || node instanceof UnknownType)) {
       Resolvable<?> asResolvable = (Resolvable<?>) node;
 
+      boolean generateUnsolvedSymbol = false;
       try {
-        Object resolved = asResolvable.resolve();
-
-        if (resolved == null) {
-          throw new RuntimeException("Unexpected null value in resolve() call");
-        }
-
-        List<Node> toAddToWorklist = typeRuleDependencyMap.getRelevantElements(resolved);
-        addToBeginningOfWorklist(toAddToWorklist);
-
-        // Since resolved declarations may reference another file, we need to add that compilation
-        // unit to the output
-        usedCompilationUnits.addAll(
-            toAddToWorklist.stream().map(n -> n.findCompilationUnit().get()).toList());
+        handleResolvedObject(asResolvable.resolve(), usedCompilationUnits);
       } catch (UnsolvedSymbolException ex) {
-        // Generate a synthetic type
+        // Calling resolve on a FieldAccessExpr/NameExpr that represents a type may also cause
+        // an UnsolvedSymbolException, even if the type is resolvable
+
+        if (node instanceof FieldAccessExpr || node instanceof NameExpr) {
+          try {
+            handleResolvedObject(((Expression) node).calculateResolvedType(), usedCompilationUnits);
+          } catch (UnsolvedSymbolException ex2) {
+            generateUnsolvedSymbol = true;
+          }
+        } else {
+          generateUnsolvedSymbol = true;
+        }
+      }
+
+      if (generateUnsolvedSymbol) {
         generatedSymbolSlice.addAll(unsolvedSymbolGenerator.inferContext(node));
       }
     }
@@ -143,6 +161,28 @@ public class Slicer {
     if (unsolvedSymbolGenerator.needToPostProcess(node)) {
       postProcessingWorklist.add(node);
     }
+  }
+
+  /**
+   * Handles a resolved Object returned by {@code Resolvable<?>.resolve()}. Helper method to be used
+   * {@link #handleElement(Node, Set)}
+   *
+   * @param resolved The resolved object
+   * @param usedCompilationUnits The set of used compilation units
+   */
+  private void handleResolvedObject(
+      @Nullable Object resolved, Set<CompilationUnit> usedCompilationUnits) {
+    if (resolved == null) {
+      throw new RuntimeException("Unexpected null value in resolve() call");
+    }
+
+    List<Node> toAddToWorklist = typeRuleDependencyMap.getRelevantElements(resolved);
+    addToBeginningOfWorklist(toAddToWorklist);
+
+    // Since resolved declarations may reference another file, we need to add that compilation
+    // unit to the output
+    usedCompilationUnits.addAll(
+        toAddToWorklist.stream().map(n -> n.findCompilationUnit().get()).toList());
   }
 
   /**
@@ -177,6 +217,12 @@ public class Slicer {
    * @param node The node to slice
    */
   private void sliceNode(Node node) {
+    // Never preserve @Override, since it causes compile errors but does not fix them.
+    if (node instanceof AnnotationExpr && node.toString().equals("@Override")) {
+      node.remove();
+      return;
+    }
+
     if (slice.contains(node)) {
       List<Node> copy = new ArrayList<>(node.getChildNodes());
       for (Node child : copy) {

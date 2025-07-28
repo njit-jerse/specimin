@@ -31,8 +31,10 @@ import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.nodeTypes.NodeWithVariables;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.ast.type.UnionType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
@@ -40,6 +42,7 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration;
@@ -47,7 +50,7 @@ import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +74,9 @@ public class FullyQualifiedNameGenerator {
    *
    * <p>Thus, a static field b could be in any of the interfaces C, D, E, F, and we need to
    * differentiate between these interfaces.
+   *
+   * <p>This method may also return an empty map if the method/field is located in a built-in Java
+   * class.
    *
    * @param expr The expression to do the analysis upon
    * @return A map of simple class names to a set of potential FQNs. Each Map.Entry represents a
@@ -100,7 +106,19 @@ public class FullyQualifiedNameGenerator {
       }
 
       // If not static, from parent, aka the edge case that makes this method necessary
-      return getFQNsOfAllUnresolvableParents(JavaParserUtil.getEnclosingClassLike(expr), expr);
+      Map<String, Set<String>> result =
+          getFQNsOfAllUnresolvableParents(JavaParserUtil.getEnclosingClassLike(expr), expr);
+
+      if (result.isEmpty() && expr.isNameExpr()) {
+        // All parent classes/interfaces are solvable, and do not contain this field. In this case,
+        // it's also likely that this could be a type
+
+        result =
+            Map.of(
+                expr.toString(), getFQNsFromClassName(expr.toString(), expr.toString(), cu, expr));
+      }
+
+      return result;
     }
 
     Expression scope;
@@ -131,7 +149,7 @@ public class FullyQualifiedNameGenerator {
         NodeList<ClassOrInterfaceType> bound =
             ((TypeParameter) typeParam.toAst().get()).getTypeBound();
 
-        Map<String, Set<String>> potentialFQNs = new HashMap<>();
+        Map<String, Set<String>> potentialFQNs = new LinkedHashMap<>();
 
         for (ClassOrInterfaceType type : bound) {
           try {
@@ -169,9 +187,47 @@ public class FullyQualifiedNameGenerator {
 
         return potentialFQNs;
       }
-
     } catch (UnsolvedSymbolException ex) {
       // Type not resolvable
+    }
+
+    // Handle union types
+    if (scope.isNameExpr()) {
+      try {
+        ResolvedValueDeclaration resolvedValueDeclaration = scope.asNameExpr().resolve();
+
+        if (resolvedValueDeclaration.toAst().isPresent()) {
+          Node toAst = resolvedValueDeclaration.toAst().get();
+
+          if (toAst instanceof Parameter param && param.getType().isUnionType()) {
+            UnionType unionType = param.getType().asUnionType();
+
+            Map<String, Set<String>> result = new LinkedHashMap<>();
+
+            for (ReferenceType type : unionType.getElements()) {
+              try {
+                // If a type in the union type is resolvable, the location of the expression will
+                // be in a built-in Java superclass. In this case, return an empty map.
+                type.resolve();
+                return Map.of();
+              } catch (UnsolvedSymbolException ex) {
+                // continue
+              }
+
+              Set<String> fqns = getFQNsFromType(type);
+
+              if (fqns.isEmpty()) continue;
+
+              String simple = JavaParserUtil.getSimpleNameFromQualifiedName(fqns.iterator().next());
+              result.put(simple, fqns);
+            }
+
+            return result;
+          }
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // Not a union type since declaration is unresolvable
+      }
     }
 
     // After these cases, we've handled all exceptions where the scope could be various different
@@ -586,9 +642,15 @@ public class FullyQualifiedNameGenerator {
   }
 
   private static Set<String> getFQNsFromType(Type type) {
-    if (type.isPrimitiveType() || type.isVoidType()) {
-      return Set.of(type.toString());
-    } else if (type.isClassOrInterfaceType()) {
+    try {
+      ResolvedType resolved = type.resolve();
+
+      return Set.of(resolved.describe());
+    } catch (UnsolvedSymbolException ex) {
+      // continue
+    }
+
+    if (type.isClassOrInterfaceType()) {
       return getFQNsFromClassOrInterfaceType(type.asClassOrInterfaceType());
     }
     return Set.of();
@@ -681,9 +743,16 @@ public class FullyQualifiedNameGenerator {
     }
 
     // Not imported
+    boolean shouldAddAfter = false;
     if (JavaParserUtil.isAClassPath(fullName)) {
-      // 1) fully qualified name
-      fqns.add(fullName);
+      if (JavaParserUtil.isCapital(fullName)) {
+        // Likely an inner class of another class, not a fully-qualified name;
+        // put the package FQN first so best effort generates that instead
+        shouldAddAfter = true;
+      } else {
+        // 1) fully qualified name
+        fqns.add(fullName);
+      }
 
       // 2) inner class of a parent class (i.e. Map.Entry), which could then fall under 3) and 4)
     }
@@ -692,6 +761,10 @@ public class FullyQualifiedNameGenerator {
     Optional<PackageDeclaration> packageDecl = compilationUnit.getPackageDeclaration();
     if (packageDecl.isPresent()) {
       fqns.add(packageDecl.get().getNameAsString() + "." + fullName);
+
+      if (shouldAddAfter) {
+        fqns.add(fullName);
+      }
     } else {
       fqns.add(fullName);
     }
@@ -818,7 +891,7 @@ public class FullyQualifiedNameGenerator {
    */
   public static Map<String, Set<String>> getFQNsOfAllUnresolvableParents(
       TypeDeclaration<?> typeDecl, Node currentNode) {
-    Map<String, Set<String>> map = new HashMap<>();
+    Map<String, Set<String>> map = new LinkedHashMap<>();
 
     getAllUnresolvableParentsImpl(typeDecl, currentNode, map);
 

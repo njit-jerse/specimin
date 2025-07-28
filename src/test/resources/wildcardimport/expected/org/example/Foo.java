@@ -6,7 +6,7 @@ public class Foo {
         throw new java.lang.Error();
     }
 
-    public FooMethodReturnType fooMethod() {
+    public org.example.FooMethodReturnType fooMethod() {
         throw new java.lang.Error();
     }
 }

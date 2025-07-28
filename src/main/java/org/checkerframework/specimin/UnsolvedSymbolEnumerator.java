@@ -1,8 +1,8 @@
 package org.checkerframework.specimin;
 
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterface;
@@ -14,9 +14,9 @@ import org.checkerframework.specimin.unsolved.UnsolvedMethodAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 
 public class UnsolvedSymbolEnumerator {
-  private final Set<UnsolvedClassOrInterfaceAlternates> unsolvedTypes = new HashSet<>();
-  private final Set<UnsolvedFieldAlternates> unsolvedFields = new HashSet<>();
-  private final Set<UnsolvedMethodAlternates> unsolvedMethods = new HashSet<>();
+  private final Set<UnsolvedClassOrInterfaceAlternates> unsolvedTypes = new LinkedHashSet<>();
+  private final Set<UnsolvedFieldAlternates> unsolvedFields = new LinkedHashSet<>();
+  private final Set<UnsolvedMethodAlternates> unsolvedMethods = new LinkedHashSet<>();
 
   public UnsolvedSymbolEnumerator(Set<UnsolvedSymbolAlternates<?>> unsolvedSlice) {
     for (UnsolvedSymbolAlternates<?> unsolvedSymbol : unsolvedSlice) {
@@ -37,39 +37,39 @@ public class UnsolvedSymbolEnumerator {
    */
   public Map<String, String> getBestEffort() {
     // Best effort is the first alternate in every alternate set
-    Set<UnsolvedClassOrInterface> types = new HashSet<>();
+    Set<UnsolvedClassOrInterface> types = new LinkedHashSet<>();
 
     for (UnsolvedClassOrInterfaceAlternates unsolved : unsolvedTypes) {
       types.add(unsolved.getAlternates().get(0));
     }
 
-    HashMap<UnsolvedClassOrInterface, Set<UnsolvedField>> typesToFields = new HashMap<>();
+    Map<UnsolvedClassOrInterface, Set<UnsolvedField>> typesToFields = new LinkedHashMap<>();
 
     for (UnsolvedFieldAlternates unsolved : unsolvedFields) {
       UnsolvedField field = unsolved.getAlternates().get(0);
       UnsolvedClassOrInterface type =
           unsolved.getAlternateDeclaringTypes().get(0).getAlternates().get(0);
       if (!typesToFields.containsKey(type)) {
-        typesToFields.put(type, new HashSet<>());
+        typesToFields.put(type, new LinkedHashSet<>());
       }
 
       typesToFields.get(type).add(field);
     }
 
-    HashMap<UnsolvedClassOrInterface, Set<UnsolvedMethod>> typesToMethods = new HashMap<>();
+    Map<UnsolvedClassOrInterface, Set<UnsolvedMethod>> typesToMethods = new LinkedHashMap<>();
 
     for (UnsolvedMethodAlternates unsolved : unsolvedMethods) {
       UnsolvedMethod field = unsolved.getAlternates().get(0);
       UnsolvedClassOrInterface type =
           unsolved.getAlternateDeclaringTypes().get(0).getAlternates().get(0);
       if (!typesToMethods.containsKey(type)) {
-        typesToMethods.put(type, new HashSet<>());
+        typesToMethods.put(type, new LinkedHashSet<>());
       }
 
       typesToMethods.get(type).add(field);
     }
 
-    Map<String, String> result = new HashMap<>();
+    Map<String, String> result = new LinkedHashMap<>();
 
     for (UnsolvedClassOrInterface type : types) {
       Set<UnsolvedField> fields = typesToFields.get(type);

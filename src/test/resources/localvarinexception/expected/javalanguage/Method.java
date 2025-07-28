@@ -6,7 +6,7 @@ public class Method {
         throw new java.lang.Error();
     }
 
-    public SolveReturnType solve() {
+    public javalanguage.SolveReturnType solve() {
         throw new java.lang.Error();
     }
 }

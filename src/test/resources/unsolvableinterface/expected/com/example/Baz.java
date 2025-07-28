@@ -1,4 +1,4 @@
 package com.example;
 
-public class Baz<E> {
+public class Baz<T> {
 }

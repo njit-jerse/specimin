@@ -450,6 +450,8 @@ public class JavaParserUtil {
         return varDecl.getElementType();
       } else if (toAst instanceof VariableDeclarator varDecl) {
         return varDecl.getType();
+      } else if (toAst instanceof FieldDeclaration fieldDecl) {
+        return fieldDecl.getElementType();
       } else if (toAst instanceof Parameter param) {
         return param.getType();
       }
