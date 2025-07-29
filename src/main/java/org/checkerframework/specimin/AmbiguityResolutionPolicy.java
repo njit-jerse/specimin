@@ -12,7 +12,10 @@ public enum AmbiguityResolutionPolicy {
       case "all" -> AmbiguityResolutionPolicy.All;
       case "best-effort" -> AmbiguityResolutionPolicy.BestEffort;
       case "input-condition" -> AmbiguityResolutionPolicy.InputCondition;
-      default -> throw new IllegalArgumentException();
+      default ->
+          throw new RuntimeException(
+              "Unsupported ambiguity resolution policy. Options are: \"all\", \"best-effort\","
+                  + " \"input-condition\"");
     };
   }
 }

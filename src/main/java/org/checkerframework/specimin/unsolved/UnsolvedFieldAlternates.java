@@ -26,6 +26,17 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
     super(alternateDeclaringTypes);
   }
 
+  /**
+   * Creates a new instance of a field. Note that there is only one alternate generated here, but
+   * there could potentially be many different declaring types.
+   *
+   * @param name The name of the field
+   * @param type The type of the field
+   * @param alternateDeclaringTypes Potential declaring types
+   * @param isStatic Whether the field is static or not
+   * @param isFinal Whether the field is final or not
+   * @return The generated field
+   */
   public static UnsolvedFieldAlternates create(
       String name,
       MemberType type,

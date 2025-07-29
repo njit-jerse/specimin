@@ -14,10 +14,6 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
@@ -26,13 +22,16 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.unsolved.AddInformationResult;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 
+/**
+ * Slices a program, given an initial worklist and a type rule dependency map. This class cannot be
+ * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque)} to use this class.
+ */
 public class Slicer {
   /**
    * The slice of nodes.
@@ -50,39 +49,63 @@ public class Slicer {
   private final Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice = new LinkedHashSet<>();
 
   /** The Nodes that need to be processed in the main algorithm. */
-  private final Deque<Node> worklist = new ArrayDeque<>();
+  private final Deque<Node> worklist;
 
+  /**
+   * A secondary worklist to use to add information to generated symbols, once all unsolved symbols
+   * are guaranteed to be generated. Contains only select Nodes, determined by {@link
+   * UnsolvedSymbolGenerator#needToPostProcess(Node)}.
+   */
   private final Set<Node> postProcessingWorklist = new LinkedHashSet<>();
 
-  private final Map<String, Path> existingClassesToFilePath;
-  private final String rootDirectory;
-  private final Map<String, CompilationUnit> toSlice;
+  /** The result of the slice, not including generated symbols. */
+  private final Set<CompilationUnit> resultCompilationUnits = new HashSet<>();
 
   private final UnsolvedSymbolGenerator unsolvedSymbolGenerator = new UnsolvedSymbolGenerator();
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
-  public Slicer(
-      Map<String, Path> existingClassesToFilePath,
-      String rootDirectory,
-      Map<String, CompilationUnit> toSlice,
-      TypeRuleDependencyMap typeRuleDependencyMap) {
-    this.existingClassesToFilePath = existingClassesToFilePath;
-    this.rootDirectory = rootDirectory;
-    this.toSlice = toSlice;
+  /**
+   * Creates a new instance of {@link Slicer}.
+   *
+   * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
+   * @param worklist The worklist to use, already populated with target members and their bodies.
+   */
+  private Slicer(TypeRuleDependencyMap typeRuleDependencyMap, Deque<Node> worklist) {
     this.typeRuleDependencyMap = typeRuleDependencyMap;
+    this.worklist = worklist;
   }
 
-  public void slice() throws IOException {
-    Set<CompilationUnit> usedCompilationUnits = new HashSet<>();
+  /**
+   * Slices a program based on the type rule dependency map and an initial worklist. Returns a
+   * {@link SliceResult} which contains sliced compilation units and also generated unsolved
+   * symbols.
+   *
+   * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
+   * @param worklist The worklist to use, already populated with target members and their bodies.
+   * @return A {@link SliceResult} representing the output of the slice.
+   */
+  public static SliceResult slice(
+      TypeRuleDependencyMap typeRuleDependencyMap, Deque<Node> worklist) {
+    Slicer slicer = new Slicer(typeRuleDependencyMap, worklist);
 
+    slicer.startSlice();
+
+    return new SliceResult(slicer.resultCompilationUnits, slicer.generatedSymbolSlice);
+  }
+
+  /**
+   * The main slicing algorithm. Mutates the compilation units in {@link #resultCompilationUnits}
+   * and trims all unused nodes, while also adding needed generated symbols to the result.
+   */
+  private void startSlice() {
     // Step 1: build the slice; see which nodes to keep
     while (!worklist.isEmpty()) {
-      Node element = worklist.remove();
-      handleElement(element, usedCompilationUnits);
+      Node element = worklist.removeLast();
+      handleElement(element);
     }
 
     if (!generatedSymbolSlice.isEmpty()) {
-      // Step 2: Handle the post-processing worklist
+      // Step 2: Add more information to generated symbols based on context
       Iterator<Node> ppwIterator = postProcessingWorklist.iterator();
       while (ppwIterator.hasNext()) {
         Node element = ppwIterator.next();
@@ -92,30 +115,23 @@ public class Slicer {
       }
     }
 
-    // Step 3: add all used compilation units
-    for (CompilationUnit used : usedCompilationUnits) {
-      toSlice.put(
-          qualifiedNameToFilePath(used.getPrimaryType().get().getFullyQualifiedName().get())
-              .toString(),
-          used);
-    }
+    // Step 3: go through each compilation unit and remove unused nodes
+    for (CompilationUnit cu : resultCompilationUnits) {
+      // If a non-primary class is preserved, the primary class still must be preserved,
+      // even if all its nodes were removed
+      slice.add(cu.getPrimaryType().get());
 
-    // Step 4: remove all nodes except the ones marked for preservation OR package/import
-    // declarations
-    for (CompilationUnit cu : toSlice.values()) {
-      sliceCompilationUnit(cu);
+      removeNonSliceNodesFromCompilationUnit(cu);
     }
   }
 
-  public Set<UnsolvedSymbolAlternates<?>> getGeneratedSymbolSlice() {
-    return generatedSymbolSlice;
-  }
-
-  public void addToWorklist(Node node) {
-    worklist.add(node);
-  }
-
-  private void handleElement(Node node, Set<CompilationUnit> usedCompilationUnits) {
+  /**
+   * Helper method for each node in the worklist. Generates a symbol if needed, otherwise it simply
+   * adds it and the results of a call to the type rule dependency map to the slice.
+   *
+   * @param node The node to handle
+   */
+  private void handleElement(Node node) {
     if (slice.contains(node)) {
       return;
     }
@@ -134,14 +150,14 @@ public class Slicer {
 
       boolean generateUnsolvedSymbol = false;
       try {
-        handleResolvedObject(asResolvable.resolve(), usedCompilationUnits);
+        handleResolvedObject(asResolvable.resolve());
       } catch (UnsolvedSymbolException ex) {
         // Calling resolve on a FieldAccessExpr/NameExpr that represents a type may also cause
         // an UnsolvedSymbolException, even if the type is resolvable
 
         if (node instanceof FieldAccessExpr || node instanceof NameExpr) {
           try {
-            handleResolvedObject(((Expression) node).calculateResolvedType(), usedCompilationUnits);
+            handleResolvedObject(((Expression) node).calculateResolvedType());
           } catch (UnsolvedSymbolException ex2) {
             generateUnsolvedSymbol = true;
           }
@@ -156,7 +172,7 @@ public class Slicer {
     }
 
     slice.add(node);
-    addToBeginningOfWorklist(typeRuleDependencyMap.getRelevantElements(node));
+    worklist.addAll(typeRuleDependencyMap.getRelevantElements(node));
 
     if (unsolvedSymbolGenerator.needToPostProcess(node)) {
       postProcessingWorklist.add(node);
@@ -165,49 +181,36 @@ public class Slicer {
 
   /**
    * Handles a resolved Object returned by {@code Resolvable<?>.resolve()}. Helper method to be used
-   * {@link #handleElement(Node, Set)}
+   * by {@link #handleElement(Node)}.
    *
    * @param resolved The resolved object
-   * @param usedCompilationUnits The set of used compilation units
    */
-  private void handleResolvedObject(
-      @Nullable Object resolved, Set<CompilationUnit> usedCompilationUnits) {
+  private void handleResolvedObject(@Nullable Object resolved) {
     if (resolved == null) {
       throw new RuntimeException("Unexpected null value in resolve() call");
     }
 
     List<Node> toAddToWorklist = typeRuleDependencyMap.getRelevantElements(resolved);
-    addToBeginningOfWorklist(toAddToWorklist);
+    worklist.addAll(toAddToWorklist);
 
     // Since resolved declarations may reference another file, we need to add that compilation
     // unit to the output
-    usedCompilationUnits.addAll(
+    resultCompilationUnits.addAll(
         toAddToWorklist.stream().map(n -> n.findCompilationUnit().get()).toList());
   }
 
   /**
-   * Adds all nodes to the beginning of the worklist. This ensures that synthetic types are
-   * generated before they are used. Use instead of worklist.addAll.
-   *
-   * @param c The list of nodes.
-   */
-  private void addToBeginningOfWorklist(List<Node> c) {
-    for (int i = c.size(); i > 0; i--) {
-      worklist.addFirst(c.get(i - 1));
-    }
-  }
-
-  /**
-   * Starts the slice on a compilation unit. Use this instead of {@link #sliceNode(Node)} because
-   * {@link CompilationUnit} has some quirks that prevents {@link CompilationUnit#getChildNodes()}
-   * from accessing anything but package/import declarations.
+   * Removes unused nodes from a compilation unit. Use this instead of {@link
+   * #removeNonSliceNodes(Node)} because {@link CompilationUnit} has some quirks that prevents
+   * {@link CompilationUnit#getChildNodes()} from accessing anything but package/import
+   * declarations.
    *
    * @param cu The compilation unit
    */
-  private void sliceCompilationUnit(CompilationUnit cu) {
+  private void removeNonSliceNodesFromCompilationUnit(CompilationUnit cu) {
     List<TypeDeclaration<?>> typesCopy = new ArrayList<>(cu.getTypes());
     for (TypeDeclaration<?> typeDecl : typesCopy) {
-      sliceNode(typeDecl);
+      removeNonSliceNodes(typeDecl);
     }
   }
 
@@ -216,7 +219,7 @@ public class Slicer {
    *
    * @param node The node to slice
    */
-  private void sliceNode(Node node) {
+  private void removeNonSliceNodes(Node node) {
     // Never preserve @Override, since it causes compile errors but does not fix them.
     if (node instanceof AnnotationExpr && node.toString().equals("@Override")) {
       node.remove();
@@ -226,7 +229,7 @@ public class Slicer {
     if (slice.contains(node)) {
       List<Node> copy = new ArrayList<>(node.getChildNodes());
       for (Node child : copy) {
-        sliceNode(child);
+        removeNonSliceNodes(child);
       }
     }
     // If a BlockStmt is being removed, it's a method/constructor to be trimmed
@@ -245,14 +248,37 @@ public class Slicer {
     }
   }
 
-  private String qualifiedNameToFilePath(String qualifiedName) {
-    if (!existingClassesToFilePath.containsKey(qualifiedName)) {
-      throw new RuntimeException(
-          "qualifiedNameToFilePath only works for classes in the original directory");
+  /**
+   * Represents the result of a slice.
+   *
+   * @param solvedSlice A set of compilation units, with all unused nodes trimmed, representing the
+   *     slice of solved elements.
+   * @param generatedSymbolSlice A set of all generated symbols that must be included in the final
+   *     output.
+   */
+  public record SliceResult(
+      Set<CompilationUnit> solvedSlice, Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice) {
+    // Override getter methods so we can add javadoc
+
+    /**
+     * Gets each used compilation unit with all its unused nodes removed; does not include generated
+     * symbols.
+     *
+     * @return The result of the slice
+     */
+    @Override
+    public Set<CompilationUnit> solvedSlice() {
+      return solvedSlice;
     }
-    Path absoluteFilePath = existingClassesToFilePath.get(qualifiedName);
-    // theoretically rootDirectory should already be absolute as stated in README.
-    Path absoluteRootDirectory = Paths.get(rootDirectory).toAbsolutePath();
-    return absoluteRootDirectory.relativize(absoluteFilePath).toString().replace('\\', '/');
+
+    /**
+     * Gets all generated symbols that must be included in the final output.
+     *
+     * @return A set of unsolved symbols generated during the slice.
+     */
+    @Override
+    public Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice() {
+      return generatedSymbolSlice;
+    }
   }
 }

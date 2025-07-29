@@ -65,6 +65,15 @@ public class UnsolvedClassOrInterfaceAlternates
     return allGenerated;
   }
 
+  /**
+   * Helper method to create parent classes, based on a FQN. For example, if org.example.Class is
+   * passed in, Class in org.example is created, while class example in package org is also created.
+   *
+   * @param fqn The fully-qualified name
+   * @param allGenerated A list of all generated symbols (such as org.example.Class and org.example)
+   * @return The most immediate unsolved type generated; i.e., the one that has an FQN equal to the
+   *     argument corresponding with {@code fqn}.
+   */
   private static UnsolvedClassOrInterfaceAlternates createPotentialContainingClass(
       String fqn, List<UnsolvedClassOrInterfaceAlternates> allGenerated) {
     String packageName = fqn.substring(0, fqn.lastIndexOf('.'));
@@ -111,17 +120,24 @@ public class UnsolvedClassOrInterfaceAlternates
     this.fullyQualifiedNames.add(alternate.getFullyQualifiedName());
   }
 
+  /**
+   * Returns true if this represents an interface.
+   *
+   * @return True if this represents an interface.
+   */
   public boolean isAnInterface() {
-    // All alternates are either classes or interfaces
+    // All alternates are either all interfaces or all classes
     return getAlternates().get(0).isAnInterface();
   }
 
+  /** Sets this type to an interface. */
   public void setIsAnInterfaceToTrue() {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       alternate.setIsAnInterfaceToTrue();
     }
   }
 
+  /** Sets this type to an annotation and generates additional alternates. */
   public void setIsAnAnnotationToTrue() {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       boolean orig = alternate.isAnAnnotation();
@@ -159,12 +175,22 @@ public class UnsolvedClassOrInterfaceAlternates
     }
   }
 
+  /**
+   * Extends this class based on a MemberType.
+   *
+   * @param extendsType The type to extend
+   */
   public void extend(MemberType extendsType) {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       alternate.extend(extendsType);
     }
   }
 
+  /**
+   * Returns true if this class has an extends clause.
+   *
+   * @return True if this class has an extends clause.
+   */
   public boolean hasExtends() {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       if (alternate.hasExtends()) return true;
@@ -172,6 +198,12 @@ public class UnsolvedClassOrInterfaceAlternates
     return false;
   }
 
+  /**
+   * Returns true if this class extends the given extendsType.
+   *
+   * @param extendsType The type to extend
+   * @return True if this type extends the given extendsType.
+   */
   public boolean doesExtend(MemberType extendsType) {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       if (alternate.doesExtend(extendsType)) return true;
@@ -179,12 +211,24 @@ public class UnsolvedClassOrInterfaceAlternates
     return false;
   }
 
+  /**
+   * Implements this class based on a MemberType.
+   *
+   * @param interfaceName The type to implement
+   */
   public void implement(String interfaceName) {
+    // TODO: make this MemberType also
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       alternate.implement(interfaceName);
     }
   }
 
+  /**
+   * Returns true if this class implements the given interface.
+   *
+   * @param interfaceName The type to implement
+   * @return True if this type implements the given interface.
+   */
   public boolean doesImplement(String interfaceName) {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       if (alternate.doesImplement(interfaceName)) return true;
@@ -192,12 +236,22 @@ public class UnsolvedClassOrInterfaceAlternates
     return false;
   }
 
+  /**
+   * Sets the number of type variables.
+   *
+   * @param number The number of type variables.
+   */
   public void setNumberOfTypeVariables(int number) {
     for (UnsolvedClassOrInterface alternate : getAlternates()) {
       alternate.setNumberOfTypeVariables(number);
     }
   }
 
+  /**
+   * Gets the type variables as a String without brackets (i.e., <T1, T2> --> T1, T2)
+   *
+   * @return The type variables without brackets
+   */
   public String getTypeVariablesAsStringWithoutBrackets() {
     return getAlternates().get(0).getTypeVariablesAsStringWithoutBrackets();
   }

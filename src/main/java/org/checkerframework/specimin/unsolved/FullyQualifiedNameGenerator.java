@@ -60,7 +60,10 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
 
-/** Helper class for {@link UnsolvedSymbolGenerator}. */
+/**
+ * Helper class for {@link UnsolvedSymbolGenerator}. Generates all FQNs based on an expression or
+ * type.
+ */
 public class FullyQualifiedNameGenerator {
   /**
    * When evaluating an expression, there is only one possible type. However, the location of an
@@ -463,6 +466,8 @@ public class FullyQualifiedNameGenerator {
 
         // We could be on either side of the assignment operator
         // In that case, take the type of the other side
+
+        // TODO: StackOverflowError likely here, refactor
         if (assignment.getTarget().equals(expr) && !assignment.getValue().isNullLiteralExpr()) {
           return getFQNsForExpressionType(assignment.getValue());
         } else if (assignment.getValue().equals(expr)
@@ -641,6 +646,12 @@ public class FullyQualifiedNameGenerator {
     throw new RuntimeException("Unknown expression scope type.");
   }
 
+  /**
+   * Gets the FQNs of a type.
+   *
+   * @param type The type
+   * @return A set of FQNs or primitive names.
+   */
   private static Set<String> getFQNsFromType(Type type) {
     try {
       ResolvedType resolved = type.resolve();
@@ -682,6 +693,12 @@ public class FullyQualifiedNameGenerator {
         type);
   }
 
+  /**
+   * Gets FQNs of an annotation.
+   *
+   * @param anno The annotation
+   * @return A set of possible FQNs
+   */
   public static Set<String> getFQNsFromAnnotation(AnnotationExpr anno) {
     // If an annotation is @Foo.Bar, we need to find the import with org.example.Foo, not
     // org.example.Foo.Bar.
@@ -898,6 +915,16 @@ public class FullyQualifiedNameGenerator {
     return map;
   }
 
+  /**
+   * Helper method for {@link #getFQNsOfAllUnresolvableParents(TypeDeclaration, Node)}. This method
+   * recursively calls itself on resolvable class/interface declarations, and continues to add fqns
+   * to the map.
+   *
+   * @param typeDecl The type declaration to find parents from
+   * @param currentNode The current node, to determine whether or not we should continue down that
+   *     path (if node.equals(currentNode), do not do recurse)
+   * @param map The map to add to
+   */
   private static void getAllUnresolvableParentsImpl(
       TypeDeclaration<?> typeDecl, Node currentNode, Map<String, Set<String>> map) {
     if (typeDecl instanceof NodeWithImplements<?>) {

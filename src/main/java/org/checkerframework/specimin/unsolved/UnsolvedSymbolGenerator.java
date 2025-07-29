@@ -39,7 +39,7 @@ import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,6 +47,11 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
 
+/**
+ * Generates unsolved symbols. This class ensures that only one of each type is created; i.e., the
+ * same FQNs will point to the same instance. Additional symbols are tracked here than returned into
+ * the final slice; this is to ensure classes used by some alternates are not always outputted.
+ */
 public class UnsolvedSymbolGenerator {
   /**
    * The slice of unsolved symbol definitions. These values need not be unique; the map is provided
@@ -175,7 +180,7 @@ public class UnsolvedSymbolGenerator {
         return;
       }
 
-      Set<String> potentialFQNs = new HashSet<>();
+      Set<String> potentialFQNs = new LinkedHashSet<>();
 
       for (Set<String> set : potentialScopeFQNs.values()) {
         for (String potentialScopeFQN : set) {
@@ -293,7 +298,7 @@ public class UnsolvedSymbolGenerator {
       // Unresolvable + not a static import --> must be in unsolved parent class
       Map<String, Set<String>> parentClassFQNs =
           FullyQualifiedNameGenerator.getFQNsForExpressionLocation(nameExpr);
-      Set<String> fieldFQNs = new HashSet<>();
+      Set<String> fieldFQNs = new LinkedHashSet<>();
 
       for (Set<String> set : parentClassFQNs.values()) {
         for (String parentClassFQN : set) {
@@ -398,7 +403,7 @@ public class UnsolvedSymbolGenerator {
         argumentToParameterPotentialFQNs.put(argument, fqns);
       }
 
-      Set<String> potentialFQNs = new HashSet<>();
+      Set<String> potentialFQNs = new LinkedHashSet<>();
 
       for (Set<String> set : potentialScopeFQNs) {
         for (String potentialScopeFQN : set) {
@@ -528,27 +533,21 @@ public class UnsolvedSymbolGenerator {
             "Scope was not generated in constructor call when it should have been.");
       }
 
-      Map<Expression, String> argumentToSimpleName = new HashMap<>();
-      Map<String, Set<String>> simpleNameToParameterPotentialFQNs = new HashMap<>();
+      Map<Expression, Set<String>> argumentToParameterPotentialFQNs = new HashMap<>();
+      List<String> simpleNames = new ArrayList<>();
 
       for (Expression argument : arguments) {
         Set<String> fqns = FullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
         String first = fqns.iterator().next();
-        String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(first);
-        simpleNameToParameterPotentialFQNs.put(simpleName, fqns);
-        argumentToSimpleName.put(argument, simpleName);
+        simpleNames.add(JavaParserUtil.getSimpleNameFromQualifiedName(first));
+        argumentToParameterPotentialFQNs.put(argument, fqns);
       }
 
-      Set<String> potentialFQNs = new HashSet<>();
+      Set<String> potentialFQNs = new LinkedHashSet<>();
 
       for (String potentialScopeFQN : scope.getFullyQualifiedNames()) {
         potentialFQNs.add(
-            potentialScopeFQN
-                + "#"
-                + constructorName
-                + "("
-                + String.join(", ", simpleNameToParameterPotentialFQNs.keySet())
-                + ")");
+            potentialScopeFQN + "#" + constructorName + "(" + String.join(", ", simpleNames) + ")");
       }
 
       UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
@@ -562,14 +561,7 @@ public class UnsolvedSymbolGenerator {
         for (Expression argument : arguments) {
           inferContextImpl(argument, result);
 
-          String simpleName = argumentToSimpleName.get(argument);
-
-          // This null check is just to satisfy the error checker
-          if (simpleName == null) {
-            throw new RuntimeException("Expected non-null when this is null");
-          }
-
-          Set<String> set = simpleNameToParameterPotentialFQNs.get(simpleName);
+          Set<String> set = argumentToParameterPotentialFQNs.get(argument);
 
           // This null check is just to satisfy the error checker
           if (set == null) {
@@ -621,7 +613,7 @@ public class UnsolvedSymbolGenerator {
         String simpleClassName = potentialScopeFQNs.keySet().iterator().next();
         Set<String> scopeFQNs = potentialScopeFQNs.get(simpleClassName);
 
-        Set<String> potentialFQNs = new HashSet<>();
+        Set<String> potentialFQNs = new LinkedHashSet<>();
 
         String methodName = JavaParserUtil.erase(methodRef.getIdentifier());
 
@@ -707,7 +699,7 @@ public class UnsolvedSymbolGenerator {
 
       Set<String> unerasedPotentialFQNs =
           FullyQualifiedNameGenerator.getFQNsForExpressionType((Expression) node);
-      Set<String> erasedPotentialFQNs = new HashSet<>();
+      Set<String> erasedPotentialFQNs = new LinkedHashSet<>();
 
       for (String unerased : unerasedPotentialFQNs) {
         erasedPotentialFQNs.add(JavaParserUtil.erase(unerased));
@@ -922,7 +914,7 @@ public class UnsolvedSymbolGenerator {
 
       try {
         methodCall.resolve();
-        return new AddInformationResult();
+        return AddInformationResult.EMPTY;
       } catch (UnsolvedSymbolException ex) {
         // continue
       }
@@ -937,7 +929,7 @@ public class UnsolvedSymbolGenerator {
         simpleNames.add(simpleName);
       }
 
-      Set<String> potentialFQNs = new HashSet<>();
+      Set<String> potentialFQNs = new LinkedHashSet<>();
       String methodSignature =
           methodCall.getNameAsString() + "(" + String.join(", ", simpleNames) + ")";
 
@@ -945,7 +937,7 @@ public class UnsolvedSymbolGenerator {
           FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
 
       if (potentialScopeFQNs.isEmpty()) {
-        return new AddInformationResult();
+        return AddInformationResult.EMPTY;
       }
 
       for (Set<String> set :
@@ -965,11 +957,11 @@ public class UnsolvedSymbolGenerator {
 
       if (!alt.getReturnType().isUnsolved()) {
         // Already known
-        return new AddInformationResult();
+        return AddInformationResult.EMPTY;
       }
 
       if (methodCall.hasScope()) {
-        Set<ResolvedType> potentialTypes = new HashSet<>();
+        Set<ResolvedType> potentialTypes = new LinkedHashSet<>();
         Expression scope = methodCall.getScope().get();
         try {
 
@@ -981,7 +973,7 @@ public class UnsolvedSymbolGenerator {
           } else {
             // If not a NameExpr or FieldAccessExpr, then we can't gain any more information, since
             // the type of the scope is unsolved.
-            return new AddInformationResult();
+            return AddInformationResult.EMPTY;
           }
 
           List<VariableDeclarator> variables;
@@ -1148,14 +1140,6 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Same as {@link #findExistingAndUpdateFQNs(Set)} but creates and returns a new method if not
-   * found. This only works for type FQNs.
-   *
-   * @param potentialFQNs
-   * @return
-   */
-
-  /**
    * Finds the existing unsolved symbol based on a set of potential FQNs. If none is found, this
    * method returns null. The generatedSymbols map is also modified if the intersection of
    * potentialFQNs and the existing set results in a smaller set of potential FQNs.
@@ -1222,6 +1206,11 @@ public class UnsolvedSymbolGenerator {
     return alreadyGenerated;
   }
 
+  /**
+   * Helper method to add a new symbol to {@link #generatedSymbols}.
+   *
+   * @param newSymbol The new symbol to add
+   */
   private void addNewSymbolToGeneratedSymbolsMap(UnsolvedSymbolAlternates<?> newSymbol) {
     for (String potentialFQN : newSymbol.getFullyQualifiedNames()) {
       if (generatedSymbols.containsKey(potentialFQN)) continue;
@@ -1229,6 +1218,11 @@ public class UnsolvedSymbolGenerator {
     }
   }
 
+  /**
+   * Helper method to remove a symbol from {@link #generatedSymbols}.
+   *
+   * @param symbol The symbol to remove
+   */
   private void removeSymbolFromGeneratedSymbolsMap(UnsolvedSymbolAlternates<?> symbol) {
     for (String potentialFQN : symbol.getFullyQualifiedNames()) {
       generatedSymbols.remove(potentialFQN);

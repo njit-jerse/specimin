@@ -22,7 +22,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,6 +38,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.modularity.ModularityModel;
 import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
@@ -71,9 +74,18 @@ public class SpeciminRunner {
     OptionSpec<String> outputDirectoryOption =
         optionParser.accepts("outputDirectory").withRequiredArg();
 
-    // The directory in which to output the results.
+    // This option determines how ambiguities are to be resolved.
+    // Accepts the arguments: "best-effort", "all", "input-condition"
     OptionSpec<String> ambiguityResolutionPolicy =
-        optionParser.accepts("ambiguityResolutionPolicy").withRequiredArg();
+        optionParser
+            .accepts("ambiguityResolutionPolicy")
+            .withOptionalArg()
+            .defaultsTo("best-effort");
+
+    // the model for the javac type system, which is shared by the Checker Framework.
+    // Accepts the arguments: "javac", "cf", "nullaway"
+    OptionSpec<String> modularityModelOption =
+        optionParser.accepts("modularityModel").withOptionalArg().defaultsTo("cf");
 
     OptionSet options = optionParser.parse(args);
 
@@ -90,7 +102,8 @@ public class SpeciminRunner {
         options.valuesOf(targetMethodsOption),
         options.valuesOf(targetFieldsOptions),
         options.valueOf(outputDirectoryOption),
-        options.valueOf(ambiguityResolutionPolicy));
+        options.valueOf(ambiguityResolutionPolicy),
+        options.valueOf(modularityModelOption));
   }
 
   /**
@@ -121,7 +134,8 @@ public class SpeciminRunner {
         targetMethodNames,
         targetFieldNames,
         outputDirectory,
-        "best-effort");
+        "best-effort",
+        "cf");
   }
 
   /**
@@ -136,6 +150,7 @@ public class SpeciminRunner {
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
    * @param ambiguityResolutionPolicy The ambiguity resolution policy to use.
+   * @param modularityModelCode The modularity model to use.
    * @throws IOException if there is an exception
    */
   public static void performMinimization(
@@ -145,7 +160,8 @@ public class SpeciminRunner {
       List<String> targetMethodNames,
       List<String> targetFieldNames,
       String outputDirectory,
-      String ambiguityResolutionPolicy)
+      String ambiguityResolutionPolicy,
+      String modularityModelCode)
       throws IOException {
     // The set of path of files that have been created by Specimin. We must be careful to delete all
     // those files in the end, because otherwise they can pollute the input directory. To do that,
@@ -160,19 +176,8 @@ public class SpeciminRunner {
               }
             });
 
-    if (ambiguityResolutionPolicy == null) {
-      ambiguityResolutionPolicy = "best-effort";
-    }
-
-    AmbiguityResolutionPolicy model;
-
-    try {
-      model = AmbiguityResolutionPolicy.parse(ambiguityResolutionPolicy);
-    } catch (IllegalArgumentException e) {
-      throw new RuntimeException(
-          "Unsupported ambiguity resolution policy. Options are: \"all\", \"best-effort\","
-              + " \"input-condition\"");
-    }
+    AmbiguityResolutionPolicy policy = AmbiguityResolutionPolicy.parse(ambiguityResolutionPolicy);
+    ModularityModel model = ModularityModel.createModularityModel(modularityModelCode);
 
     performMinimizationImpl(
         root,
@@ -181,6 +186,7 @@ public class SpeciminRunner {
         targetMethodNames,
         targetFieldNames,
         outputDirectory,
+        policy,
         model,
         createdClass);
   }
@@ -197,6 +203,7 @@ public class SpeciminRunner {
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
    * @param ambiguityResolutionPolicy The ambiguity resolution policy.
+   * @param modularityModel The modularity model.
    * @throws IOException if there is an exception
    */
   private static void performMinimizationImpl(
@@ -207,6 +214,7 @@ public class SpeciminRunner {
       List<String> targetFieldNames,
       String outputDirectory,
       AmbiguityResolutionPolicy ambiguityResolutionPolicy,
+      ModularityModel modularityModel,
       Set<Path> createdClass)
       throws IOException {
     // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
@@ -260,15 +268,11 @@ public class SpeciminRunner {
 
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
 
-    Slicer slicer =
-        new Slicer(
-            existingClassesToFilePath,
-            root,
-            parsedTargetFiles,
-            new StandardTypeRuleDependencyMap(fqnToCompilationUnits));
+    Deque<Node> worklist = new ArrayDeque<>();
 
     TargetMemberFinderVisitor finder =
-        new TargetMemberFinderVisitor(targetMethodNames, targetFieldNames, slicer);
+        new TargetMemberFinderVisitor(
+            targetMethodNames, targetFieldNames, worklist, modularityModel);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
@@ -288,7 +292,8 @@ public class SpeciminRunner {
               + unfoundMembersTable(unfoundFields, false));
     }
 
-    slicer.slice();
+    Slicer.SliceResult sliceResult =
+        Slicer.slice(new StandardTypeRuleDependencyMap(fqnToCompilationUnits), worklist);
 
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();
@@ -301,19 +306,25 @@ public class SpeciminRunner {
     }
 
     // Solvable types must all be outputted
-    for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
-      if (isEmptyCompilationUnit(target.getValue())) {
+    for (CompilationUnit cu : sliceResult.solvedSlice()) {
+      if (isEmptyCompilationUnit(cu)) {
         continue;
       }
 
+      String path =
+          qualifiedNameToFilePath(
+              cu.getPrimaryType().get().getFullyQualifiedName().get(),
+              existingClassesToFilePath,
+              root);
+
       // ignore classes from the Java package, unless we are targeting a JDK file.
       // However, all related java/ files should not be included (as in used, but not targeted)
-      String absolutePath = new File(target.getKey()).getAbsolutePath();
+      String absolutePath = new File(path).getAbsolutePath();
       if (!targetFilesAbsolutePaths.contains(absolutePath)
-          && (target.getKey().startsWith("java/") || target.getKey().startsWith("java\\"))) {
+          && (path.startsWith("java/") || path.startsWith("java\\"))) {
         continue;
       }
-      Path targetOutputPath = Path.of(outputDirectory, target.getKey());
+      Path targetOutputPath = Path.of(outputDirectory, path);
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
       // This null test is very defensive and might not be required? I think getParent can
@@ -327,7 +338,7 @@ public class SpeciminRunner {
       // Write the string representation of CompilationUnit to the file
       try {
         PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
-        writer.print(getCompilationUnitWithCommentsTrimmed(target.getValue()));
+        writer.print(getCompilationUnitWithCommentsTrimmed(cu));
         writer.close();
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
@@ -336,7 +347,7 @@ public class SpeciminRunner {
     }
 
     UnsolvedSymbolEnumerator alternateOutput =
-        new UnsolvedSymbolEnumerator(slicer.getGeneratedSymbolSlice());
+        new UnsolvedSymbolEnumerator(sliceResult.generatedSymbolSlice());
 
     Map<String, String> alternates = alternateOutput.getBestEffort();
 
@@ -587,5 +598,26 @@ public class SpeciminRunner {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  /**
+   * Gets the path of the file containing the definition for the class represented by a qualified
+   * name. Throws an exception if this class is not in the original directory.
+   *
+   * @param qualifiedName The qualified name of the type
+   * @param existingClassesToFilePath The map of existing classes to file paths
+   * @param rootDirectory The root directory
+   * @return The relative path of the file containing the definition of the class
+   */
+  private static String qualifiedNameToFilePath(
+      String qualifiedName, Map<String, Path> existingClassesToFilePath, String rootDirectory) {
+    if (!existingClassesToFilePath.containsKey(qualifiedName)) {
+      throw new RuntimeException(
+          "qualifiedNameToFilePath only works for classes in the original directory");
+    }
+    Path absoluteFilePath = existingClassesToFilePath.get(qualifiedName);
+    // theoretically rootDirectory should already be absolute as stated in README.
+    Path absoluteRootDirectory = Paths.get(rootDirectory).toAbsolutePath();
+    return absoluteRootDirectory.relativize(absoluteFilePath).toString().replace('\\', '/');
   }
 }

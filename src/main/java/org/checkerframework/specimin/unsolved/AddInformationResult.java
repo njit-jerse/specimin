@@ -8,7 +8,6 @@ import java.util.List;
  */
 public record AddInformationResult(
     List<UnsolvedSymbolAlternates<?>> toAdd, List<UnsolvedSymbolAlternates<?>> toRemove) {
-  public AddInformationResult() {
-    this(List.of(), List.of());
-  }
+  /** Represents a result where no symbols need to be added, and none need to be removed. */
+  public static AddInformationResult EMPTY = new AddInformationResult(List.of(), List.of());
 }

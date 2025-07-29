@@ -225,6 +225,11 @@ public class UnsolvedClassOrInterface {
     return Objects.hash(className, packageName);
   }
 
+  /**
+   * Returns a copy of this class.
+   *
+   * @return A copy of the current instance
+   */
   public UnsolvedClassOrInterface copy() {
     UnsolvedClassOrInterface copy = new UnsolvedClassOrInterface(className, packageName);
 

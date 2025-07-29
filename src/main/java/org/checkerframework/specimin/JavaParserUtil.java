@@ -362,10 +362,12 @@ public class JavaParserUtil {
   }
 
   /**
-   * Checks to see if an expression (usually a field or method) is static.
+   * Checks to see if an expression is a reference to a static method or field. This method is
+   * intended to be used with unsolvable expressions, with which it should always return the correct
+   * result.
    *
-   * @param expr The expression
-   * @return Whether it is static or not
+   * @param expr The expression, unresolvable definition
+   * @return Whether its definition static or not
    */
   public static boolean isAStaticMember(Expression expr) {
     CompilationUnit cu = expr.findCompilationUnit().get();
@@ -375,7 +377,8 @@ public class JavaParserUtil {
     Expression scope = null;
 
     if (expr.isNameExpr()) {
-      nameOfScope = nameOfExpr = expr.asNameExpr().getNameAsString();
+      nameOfScope = expr.asNameExpr().getNameAsString();
+      nameOfExpr = expr.asNameExpr().getNameAsString();
     } else if (expr.isMethodCallExpr()) {
       nameOfExpr = expr.asMethodCallExpr().getNameAsString();
       if (expr.asMethodCallExpr().hasScope()) {
@@ -393,6 +396,11 @@ public class JavaParserUtil {
     if (scope != null) {
       if (scope.isNameExpr()) {
         nameOfScope = scope.asNameExpr().getNameAsString();
+
+        // The scope may also be a simple class name located in the same package
+        if (isCapital(nameOfScope)) {
+          return true;
+        }
       } else if (scope.isFieldAccessExpr()) {
         nameOfScope = scope.asFieldAccessExpr().getNameAsString();
         if (isAClassPath(nameOfScope)) {
@@ -408,10 +416,14 @@ public class JavaParserUtil {
     }
 
     for (ImportDeclaration importDecl : cu.getImports()) {
+      // A static member can either be imported as a static method/field, like
+      // import static org.example.SomeClass.fieldName;
       if (importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfExpr)) {
         return true;
       }
 
+      // A static member can also be found if its scope is a non-static, imported type,
+      // i.e., Foo.myField, if there is also import org.example.Foo;
       if (!importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfScope)) {
         return true;
       }

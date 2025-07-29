@@ -12,6 +12,7 @@ public class PreserveAnnotationsTest {
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#test()"},
         "cf",
-        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
+        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"},
+        "best-effort");
   }
 }

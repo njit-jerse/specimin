@@ -9,35 +9,69 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  *
  * <p>Use this class instead of hardcoding a string into {@link UnsolvedMethod} or {@link
  * UnsolvedField} to ensure proper types when alternates are generated.
+ *
+ * <p>If {@link #unsolvedType} is set, {@link #solvedType} is null; if {@link #solvedType} is set,
+ * {@link #unsolvedType} is null.
  */
 public class MemberType {
   private @Nullable UnsolvedClassOrInterfaceAlternates unsolvedType;
   private @Nullable String solvedType;
 
+  /**
+   * Creates a new MemberType, given an unsolved type.
+   *
+   * @param unsolvedType The unsolved type
+   */
   public MemberType(UnsolvedClassOrInterfaceAlternates unsolvedType) {
     this.unsolvedType = unsolvedType;
     this.solvedType = null;
   }
 
+  /**
+   * Creates a new MemberType, given a solved type.
+   *
+   * @param solvedType The solved type, preferably as a FQN.
+   */
   public MemberType(String solvedType) {
     this.unsolvedType = null;
     this.solvedType = solvedType;
   }
 
-  public void setUnsolvedType(UnsolvedClassOrInterfaceAlternates symbol) {
-    unsolvedType = symbol;
+  /**
+   * Sets this MemberType to the unsolved type, and sets the solved type to null.
+   *
+   * @param type The unsolved type to set to
+   */
+  public void setUnsolvedType(UnsolvedClassOrInterfaceAlternates type) {
+    unsolvedType = type;
     solvedType = null;
   }
 
-  public void setSolvedType(String symbol) {
-    solvedType = symbol;
+  /**
+   * Sets this MemberType to the solved type, and sets the unsolved type to null.
+   *
+   * @param type The solved type to set to
+   */
+  public void setSolvedType(String type) {
+    solvedType = type;
     unsolvedType = null;
   }
 
+  /**
+   * Returns whether this type is unsolved.
+   *
+   * @return True if this type represents an unsolved type.
+   */
   public boolean isUnsolved() {
     return unsolvedType != null && solvedType == null;
   }
 
+  /**
+   * Gets the unsolved type. Ensure that {@link #isUnsolved()} returns true before calling this
+   * method; if not, then this method will throw.
+   *
+   * @return The unsolved type
+   */
   public UnsolvedClassOrInterfaceAlternates getUnsolvedType() {
     if (unsolvedType == null) {
       throw new RuntimeException(
@@ -47,6 +81,12 @@ public class MemberType {
     return unsolvedType;
   }
 
+  /**
+   * Gets the solved type. Ensure that {@link #isUnsolved()} returns false before calling this
+   * method; if not, then this method will throw.
+   *
+   * @return The solved type
+   */
   public String getSolvedType() {
     if (solvedType == null) {
       throw new RuntimeException(

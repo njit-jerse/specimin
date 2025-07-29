@@ -13,11 +13,21 @@ import org.checkerframework.specimin.unsolved.UnsolvedMethod;
 import org.checkerframework.specimin.unsolved.UnsolvedMethodAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 
+/**
+ * Enumerates possible combinations of unsolved symbols, given a set of generated unsolved symbols
+ * from the {@link Slicer}. Depending on the {@link AmbiguityResolutionPolicy}, this class may
+ * enumerate one to all possibilities.
+ */
 public class UnsolvedSymbolEnumerator {
   private final Set<UnsolvedClassOrInterfaceAlternates> unsolvedTypes = new LinkedHashSet<>();
   private final Set<UnsolvedFieldAlternates> unsolvedFields = new LinkedHashSet<>();
   private final Set<UnsolvedMethodAlternates> unsolvedMethods = new LinkedHashSet<>();
 
+  /**
+   * Creates a new instance of UnsolvedSymbolEnumerator.
+   *
+   * @param unsolvedSlice The slice of generated unsolved symbols, from the {@link Slicer}.
+   */
   public UnsolvedSymbolEnumerator(Set<UnsolvedSymbolAlternates<?>> unsolvedSlice) {
     for (UnsolvedSymbolAlternates<?> unsolvedSymbol : unsolvedSlice) {
       if (unsolvedSymbol instanceof UnsolvedClassOrInterfaceAlternates type) {

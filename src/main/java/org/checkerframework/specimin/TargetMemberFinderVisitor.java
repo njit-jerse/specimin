@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -9,6 +10,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -17,10 +19,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.specimin.modularity.ModularityModel;
 
 /**
  * The main visitor for Specimin's first phase, which locates the target member(s) and compiles
- * information on what specifications they use.
+ * information on what specifications they use and adds them to the worklist for later use in the
+ * slice.
  */
 public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
   /**
@@ -28,7 +32,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
    * class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...). All the names will have
    * spaces remove for ease of comparison.
    */
-  private final Set<String> targetMethods;
+  private final Set<String> targetMethodNames;
 
   /** The names of the target fields. The format is class.fully.qualified.Name#fieldName. */
   private final Set<String> targetFields;
@@ -52,30 +56,39 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
   /** Same as the unfoundMethods set, but for fields */
   private final Map<String, Set<String>> unfoundFields = new HashMap<>();
 
-  /** The slicer, providing an ability to add to the worklist or slice. */
-  private final Slicer slicer;
+  /** The worklist to later be passed into the slicer. */
+  private final Deque<Node> worklist;
+
+  /** The modularity model to use. */
+  private final ModularityModel modularityModel;
 
   /**
    * Create a new target method finding visitor.
    *
    * @param targetMethods The set of methods to preserve
    * @param targetFields The set of fields to preserve
+   * @param worklist The worklist
+   * @param modularityModel The modularity model to use
    */
   public TargetMemberFinderVisitor(
-      List<String> targetMethods, List<String> targetFields, Slicer slicer) {
-    this.targetMethods = new HashSet<String>();
+      List<String> targetMethods,
+      List<String> targetFields,
+      Deque<Node> worklist,
+      ModularityModel modularityModel) {
+    this.modularityModel = modularityModel;
+    this.targetMethodNames = new HashSet<String>();
 
     for (String methodSignature : targetMethods) {
-      this.targetMethods.add(methodSignature.replaceAll("\\s", ""));
+      this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
     }
 
     this.targetFields = new HashSet<>(targetFields);
 
     unfoundMethods = new HashMap<>(targetMethods.size());
-    this.targetMethods.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
+    this.targetMethodNames.forEach(m -> unfoundMethods.put(m, new HashSet<>()));
     this.targetFields.forEach(f -> unfoundFields.put(f, new HashSet<>()));
 
-    this.slicer = slicer;
+    this.worklist = worklist;
   }
 
   /**
@@ -112,7 +125,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
    */
   private void updateUnfoundMethods(String methodAsString) {
     Set<String> targetMethodsInClass =
-        targetMethods.stream()
+        targetMethodNames.stream()
             .filter(t -> t.startsWith(this.currentClassQualifiedName))
             .collect(Collectors.toSet());
 
@@ -182,9 +195,21 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
     String methodName = this.currentClassQualifiedName + "#" + constructorMethodAsString;
     // remove spaces
     methodName = methodName.replaceAll("\\s", "");
-    if (this.targetMethods.contains(methodName)) {
+    if (this.targetMethodNames.contains(methodName)) {
       unfoundMethods.remove(methodName);
       addMethodAndChildrenToWorklist(method);
+
+      if (modularityModel.preserveAllFieldsIfTargetIsConstructor()) {
+        // This cast is safe, because a constructor must be contained in a class declaration.
+        ClassOrInterfaceDeclaration thisClass =
+            (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(method);
+        for (FieldDeclaration field : thisClass.getFields()) {
+          worklist.add(field);
+          for (VariableDeclarator variable : field.getVariables()) {
+            worklist.add(variable);
+          }
+        }
+      }
     } else {
       updateUnfoundMethods(methodName);
     }
@@ -200,7 +225,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
 
     String methodWithoutAnySpace = methodName.replaceAll("\\s", "");
 
-    if (this.targetMethods.contains(methodWithoutAnySpace)) {
+    if (this.targetMethodNames.contains(methodWithoutAnySpace)) {
       unfoundMethods.remove(methodWithoutAnySpace);
       addMethodAndChildrenToWorklist(method);
     } else {
@@ -212,17 +237,17 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
 
   private void addMethodAndChildrenToWorklist(CallableDeclaration<?> method) {
     // Add itself to the worklist
-    slicer.addToWorklist(method);
+    worklist.add(method);
 
     // Add body to the worklist
 
     if (method instanceof ConstructorDeclaration constructor) {
-      slicer.addToWorklist(constructor.getBody());
+      worklist.add(constructor.getBody());
     } else {
       Optional<BlockStmt> body = ((MethodDeclaration) method).getBody();
 
       if (body.isPresent()) {
-        slicer.addToWorklist(body.get());
+        worklist.add(body.get());
       }
     }
   }
@@ -235,7 +260,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
       if (targetFields.contains(fieldName)) {
         unfoundFields.remove(fieldName);
 
-        slicer.addToWorklist(node);
+        worklist.add(node);
       } else {
         updateUnfoundFields(fieldName);
       }

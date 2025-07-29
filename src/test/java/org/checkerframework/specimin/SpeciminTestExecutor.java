@@ -42,6 +42,7 @@ public class SpeciminTestExecutor {
    *     class.fully.qualified.Name#fieldName for field.
    * @param modularityModel the model to use
    * @param jarPaths the path of jar files for Specimin to solve symbols
+   * @param ambiguityResolutionPolicy the ambiguity resolution policy to use
    * @throws IOException if some operation fails
    */
   public static void runTest(
@@ -49,7 +50,8 @@ public class SpeciminTestExecutor {
       String[] targetFiles,
       String[] targetMembers,
       String modularityModel,
-      String[] jarPaths)
+      String[] jarPaths,
+      String ambiguityResolutionPolicy)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -85,12 +87,14 @@ public class SpeciminTestExecutor {
         speciminArgs.add(targetMember);
       }
     }
-    // speciminArgs.add("--modularityModel");
-    // speciminArgs.add(modularityModel);
+    speciminArgs.add("--modularityModel");
+    speciminArgs.add(modularityModel);
     for (String jarPath : jarPaths) {
       speciminArgs.add("--jarPath");
       speciminArgs.add(jarPath);
     }
+    speciminArgs.add("--ambiguityResolutionPolicy");
+    speciminArgs.add(ambiguityResolutionPolicy);
 
     // Run specimin on target
     try {
@@ -170,7 +174,7 @@ public class SpeciminTestExecutor {
    */
   public static void runTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "cf", new String[] {});
+    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, "best-effort");
   }
 
   /**
@@ -186,7 +190,7 @@ public class SpeciminTestExecutor {
    */
   public static void runNullAwayTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {});
+    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, "best-effort");
   }
 
   /** Code borrowed from https://www.baeldung.com/run-shell-command-in-java. */
