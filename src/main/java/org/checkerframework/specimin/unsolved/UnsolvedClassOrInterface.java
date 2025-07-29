@@ -298,14 +298,7 @@ public class UnsolvedClassOrInterface {
     sb.append(className).append(getTypeVariablesAsString());
     if (extendsClause != null) {
       @NonNull MemberType nonNullExtends = extendsClause;
-      sb.append(" extends ");
-      if (nonNullExtends.isUnsolved()) {
-        sb.append(nonNullExtends.getUnsolvedType().getFullyQualifiedNames().iterator().next());
-        // TODO: handle more than one alternate
-      } else {
-        sb.append(nonNullExtends.getSolvedType());
-      }
-      sb.append(" ");
+      sb.append(" extends ").append(nonNullExtends).append(" ");
     }
     if (implementsClauses.size() > 0) {
       if (extendsClause != null) {

@@ -88,15 +88,9 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       for (int i = 0; i < parameterList.size(); i++) {
         MemberType param = parameterList.get(i);
 
-        if (param.isUnsolved()) {
-          // All simple names are the same for unsolved types
-          methodSignature.append(
-              JavaParserUtil.getSimpleNameFromQualifiedName(
-                  param.getUnsolvedType().getFullyQualifiedNames().iterator().next()));
-        } else {
-          methodSignature.append(
-              JavaParserUtil.getSimpleNameFromQualifiedName(param.getSolvedType()));
-        }
+        // This is safe because all simple names are the same for unsolved types
+        // and there is only one FQN for solved types
+        methodSignature.append(JavaParserUtil.getSimpleNameFromQualifiedName(param.toString()));
 
         if (i + 1 < parameterList.size()) {
           methodSignature.append(", ");

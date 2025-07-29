@@ -471,4 +471,32 @@ public class JavaParserUtil {
 
     return null;
   }
+
+  /**
+   * Removes array brackets from a type name. i.e., int[][][] -> int
+   *
+   * @param name The name of the type
+   * @return The name of the type, without the array brackets
+   */
+  public static String removeArrayBrackets(String name) {
+    return name.replaceAll("(\\[\\])+$", "");
+  }
+
+  /**
+   * Counts the number of array brackets in a type. If the type is int[][][], this method returns 3.
+   *
+   * @param name The name of the type
+   * @return The number of array brackets in the type
+   */
+  public static int countNumberOfArrayBrackets(String name) {
+    int count = 0;
+
+    for (int i = name.length() - 1;
+        i > 0 && name.charAt(i) == ']' && name.charAt(i - 1) == '[';
+        i -= 2) {
+      count++;
+    }
+
+    return count;
+  }
 }

@@ -48,19 +48,10 @@ public class UnsolvedField {
 
   @Override
   public String toString() {
-    String typeAsString;
-
-    if (type.isUnsolved()) {
-      typeAsString = type.getUnsolvedType().getFullyQualifiedNames().iterator().next();
-      // TODO: handle multiple potential FQNs
-    } else {
-      typeAsString = type.getSolvedType();
-    }
-
     return "public "
         + (isStatic ? "static " : "")
         + (isFinal ? "final " : "")
-        + typeAsString
+        + type
         + " "
         + name
         + ";";

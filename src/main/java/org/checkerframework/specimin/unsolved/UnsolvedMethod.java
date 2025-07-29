@@ -126,16 +126,9 @@ public class UnsolvedMethod {
   public String toString(boolean isInterface) {
     StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
-      MemberType parameter = parameterList.get(i);
+      MemberType parameterType = parameterList.get(i);
 
-      // TODO: parameter type should not be limited to first alternate
-      if (parameter.isUnsolved()) {
-        arguments.append(parameter.getUnsolvedType().getFullyQualifiedNames().iterator().next());
-      } else {
-        arguments.append(parameter.getSolvedType());
-      }
-
-      arguments.append(" ").append("parameter").append(i);
+      arguments.append(parameterType).append(" ").append("parameter").append(i);
       if (i < parameterList.size() - 1) {
         arguments.append(", ");
       }
@@ -152,12 +145,9 @@ public class UnsolvedMethod {
       signature.append(getTypeVariablesAsString()).append(" ");
     }
 
-    if (returnType.isUnsolved()) {
-      signature
-          .append(returnType.getUnsolvedType().getFullyQualifiedNames().iterator().next())
-          .append(" ");
-    } else if (!"".equals(returnType.getSolvedType())) {
-      signature.append(returnType.getSolvedType()).append(" ");
+    String returnTypeAsString = returnType.toString();
+    if (!"".equals(returnTypeAsString)) {
+      signature.append(returnTypeAsString).append(" ");
     }
     signature.append(name).append("(");
     signature.append(arguments);
@@ -170,12 +160,7 @@ public class UnsolvedMethod {
     StringBuilder exceptions = new StringBuilder();
     for (int i = 0; i < throwsList.size(); i++) {
       MemberType exception = throwsList.get(i);
-      // TODO: exception type should not be limited to first alternate
-      if (exception.isUnsolved()) {
-        exceptions.append(exception.getUnsolvedType().getFullyQualifiedNames().iterator().next());
-      } else {
-        exceptions.append(exception.getSolvedType());
-      }
+      exceptions.append(exception);
       if (i < throwsList.size() - 1) {
         exceptions.append(", ");
       }

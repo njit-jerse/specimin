@@ -15,6 +15,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public class MemberType {
   private @Nullable UnsolvedClassOrInterfaceAlternates unsolvedType;
+  private int numArrayBrackets;
   private @Nullable String solvedType;
 
   /**
@@ -23,7 +24,17 @@ public class MemberType {
    * @param unsolvedType The unsolved type
    */
   public MemberType(UnsolvedClassOrInterfaceAlternates unsolvedType) {
+    this(unsolvedType, 0);
+  }
+
+  /**
+   * Creates a new MemberType, given an unsolved type and the number of array brackets.
+   *
+   * @param unsolvedType The unsolved type
+   */
+  public MemberType(UnsolvedClassOrInterfaceAlternates unsolvedType, int numArrayBrackets) {
     this.unsolvedType = unsolvedType;
+    this.numArrayBrackets = numArrayBrackets;
     this.solvedType = null;
   }
 
@@ -55,6 +66,18 @@ public class MemberType {
   public void setSolvedType(String type) {
     solvedType = type;
     unsolvedType = null;
+    numArrayBrackets = 0;
+  }
+
+  /**
+   * Sets the number of [] for this type, if unsolved. For example, com.example.MyFoo[][][] should
+   * call setNumArrayBrackets(3) to get the proper number of bracket pairs. If using a solved type,
+   * just set the brackets directly into the String passed into setSolvedType.
+   *
+   * @param num The number of []s
+   */
+  public void setNumArrayBrackets(int num) {
+    numArrayBrackets = num;
   }
 
   /**
@@ -109,5 +132,16 @@ public class MemberType {
   @Override
   public int hashCode() {
     return Objects.hash(solvedType, unsolvedType);
+  }
+
+  @Override
+  public String toString() {
+    if (isUnsolved()) {
+      // TODO: handle more than one alternate
+      return getUnsolvedType().getFullyQualifiedNames().iterator().next()
+          + "[]".repeat(numArrayBrackets);
+    } else {
+      return getSolvedType();
+    }
   }
 }

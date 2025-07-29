@@ -538,11 +538,9 @@ public class FullyQualifiedNameGenerator {
     }
 
     // field/method located in unsolvable super class, but it's not explicitly marked by
-    // super. Therefore, the type of the expression is unknown.
-    // nested field
-    // Most likely, this is a field/method of a field/method
+    // super. It could also be a static member, either statically imported, a static member
+    // of an imported class, or a static member of a class in the same package.
     if (expr.isNameExpr()) {
-      // It could also be a static field
       String name = expr.asNameExpr().getNameAsString();
 
       CompilationUnit cu = expr.findCompilationUnit().get();
@@ -557,6 +555,8 @@ public class FullyQualifiedNameGenerator {
       }
 
       if (importDecl != null) {
+        // The name expr could also be a class: calling this method on the scope of Baz.foo
+        // where Baz is the name expr could mean that it's an imported type and thus static.
         if (!importDecl.isStatic()) {
           return getFQNsFromClassName(
               expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
@@ -596,7 +596,6 @@ public class FullyQualifiedNameGenerator {
 
       return result;
     } else if (expr.isMethodCallExpr()) {
-      // It could also be a static field
       String name = expr.asMethodCallExpr().getNameAsString();
 
       CompilationUnit cu = expr.findCompilationUnit().get();
@@ -653,6 +652,11 @@ public class FullyQualifiedNameGenerator {
    * @return A set of FQNs or primitive names.
    */
   private static Set<String> getFQNsFromType(Type type) {
+    if (type.isUnknownType()) {
+      // Resolving an unknown type throws an error
+      return Set.of();
+    }
+
     try {
       ResolvedType resolved = type.resolve();
 

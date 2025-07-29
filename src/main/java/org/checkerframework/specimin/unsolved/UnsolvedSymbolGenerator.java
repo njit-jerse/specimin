@@ -205,7 +205,7 @@ public class UnsolvedSymbolGenerator {
           potentialParents.add((UnsolvedClassOrInterfaceAlternates) generated);
         }
 
-        MemberType type = getMemberTypeFromFQNs(potentialTypeFQNs);
+        MemberType type = getOrCreateMemberTypeFromFQNs(potentialTypeFQNs);
 
         if (type.isUnsolved()) {
           result.add(type.getUnsolvedType());
@@ -431,7 +431,7 @@ public class UnsolvedSymbolGenerator {
           potentialParents.add((UnsolvedClassOrInterfaceAlternates) gen);
         }
 
-        MemberType returnType = getMemberTypeFromFQNs(potentialReturnTypeFQNs);
+        MemberType returnType = getOrCreateMemberTypeFromFQNs(potentialReturnTypeFQNs);
 
         if (returnType.isUnsolved()) {
           result.add(returnType.getUnsolvedType());
@@ -449,7 +449,7 @@ public class UnsolvedSymbolGenerator {
             throw new RuntimeException("Expected non-null when this is null");
           }
 
-          MemberType paramType = getMemberTypeFromFQNs(set);
+          MemberType paramType = getOrCreateMemberTypeFromFQNs(set);
           if (paramType.isUnsolved()) {
             result.add(paramType.getUnsolvedType());
           }
@@ -568,7 +568,7 @@ public class UnsolvedSymbolGenerator {
             throw new RuntimeException("Expected non-null when this is null");
           }
 
-          MemberType paramType = getMemberTypeFromFQNs(set);
+          MemberType paramType = getOrCreateMemberTypeFromFQNs(set);
           if (paramType.isUnsolved()) {
             result.add(paramType.getUnsolvedType());
           }
@@ -1237,7 +1237,7 @@ public class UnsolvedSymbolGenerator {
    * @param fqns The set of fully-qualified names
    * @return The member type
    */
-  private MemberType getMemberTypeFromFQNs(Set<String> fqns) {
+  private MemberType getOrCreateMemberTypeFromFQNs(Set<String> fqns) {
     MemberType memberType = getMemberTypeFromFQNs(fqns, true);
 
     if (memberType == null) {
@@ -1256,6 +1256,8 @@ public class UnsolvedSymbolGenerator {
    * @return The member type
    */
   private @Nullable MemberType getMemberTypeFromFQNs(Set<String> fqns, boolean createNew) {
+    // TODO: properly handle solvable non-JDK classes here too; we shouldn't create a new
+    // type definition for a parameter type that is already in the project
     for (String fqn : fqns) {
       MemberType type = getMemberTypeIfPrimitiveOrJavaLang(fqn);
 
@@ -1263,16 +1265,24 @@ public class UnsolvedSymbolGenerator {
     }
 
     UnsolvedClassOrInterfaceAlternates unsolved;
+
+    Set<String> fqnsWithoutArray = new LinkedHashSet<>();
+
+    for (String fqn : fqns) {
+      fqnsWithoutArray.add(JavaParserUtil.removeArrayBrackets(fqn));
+    }
+
     if (createNew) {
-      unsolved = findExistingAndUpdateFQNsOrCreateNewType(fqns);
+      unsolved = findExistingAndUpdateFQNsOrCreateNewType(fqnsWithoutArray);
     } else {
-      unsolved = (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(fqns);
+      unsolved = (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(fqnsWithoutArray);
     }
 
     if (unsolved == null) {
       return null;
     } else {
-      return new MemberType(unsolved);
+      return new MemberType(
+          unsolved, JavaParserUtil.countNumberOfArrayBrackets(fqns.iterator().next()));
     }
   }
 
@@ -1283,9 +1293,10 @@ public class UnsolvedSymbolGenerator {
    * @param name The name of the type, either simple or fully qualified.
    */
   private @Nullable MemberType getMemberTypeIfPrimitiveOrJavaLang(String name) {
-    if (JavaLangUtils.inJdkPackage(name)
+    if (JavaLangUtils.inJdkPackage(JavaParserUtil.removeArrayBrackets(name))
         || JavaLangUtils.isJavaLangOrPrimitiveName(
-            JavaParserUtil.getSimpleNameFromQualifiedName(name))) {
+            JavaParserUtil.getSimpleNameFromQualifiedName(
+                JavaParserUtil.removeArrayBrackets(name)))) {
       return new MemberType(name);
     }
     return null;
