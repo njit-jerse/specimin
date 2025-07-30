@@ -194,7 +194,7 @@ public class FullyQualifiedNameGenerator {
       // Type not resolvable
     }
 
-    // Handle union types
+    // Handle union types (NameExpr could be an exception capture in a catch clause)
     if (scope.isNameExpr()) {
       try {
         ResolvedValueDeclaration resolvedValueDeclaration = scope.asNameExpr().resolve();
@@ -255,7 +255,7 @@ public class FullyQualifiedNameGenerator {
     if (expr.isSuperExpr()) {
       return getFQNsFromClassOrInterfaceType(JavaParserUtil.getSuperClass(expr));
     }
-    // static field/method
+    // scope of a static field/method
     else if (JavaParserUtil.isAClassPath(expr.toString())) {
       Expression scoped = expr;
 
@@ -376,7 +376,16 @@ public class FullyQualifiedNameGenerator {
       return getFQNsFromClassName(
           "java", functionalInterface, lambda.findCompilationUnit().get(), lambda);
     } else if (expr.isLiteralExpr()) {
+      if (expr.isNullLiteralExpr()) {
+        // TODO: more robust handling?
+        return Set.of("java.lang.Object");
+      }
+
       return Set.of(expr.asLiteralExpr().calculateResolvedType().describe());
+    }
+    // Special wrapper for method reference scopes
+    else if (expr.isTypeExpr()) {
+      return getFQNsFromType(expr.asTypeExpr().getType());
     }
 
     // local variable / field / method call / object creation expression / any other case
@@ -399,7 +408,10 @@ public class FullyQualifiedNameGenerator {
 
         Type type = withVariables.getElementType();
 
-        return getFQNsFromType(type);
+        if (!type.isVarType()) {
+          // Keep going if var type
+          return getFQNsFromType(type);
+        }
       }
       // methods, new ClassName()
       else if (node instanceof NodeWithType) {
@@ -640,9 +652,8 @@ public class FullyQualifiedNameGenerator {
       return getFQNsFromClassOrInterfaceType(expr.asObjectCreationExpr().getType());
     }
 
-    // Theoretically, we should not be hitting this point, but we may have forgotten to account
-    // for a specific case
-    throw new RuntimeException("Unknown expression scope type.");
+    // Hitting this error means we forgot to account for a case
+    throw new RuntimeException("Unknown expression type.");
   }
 
   /**

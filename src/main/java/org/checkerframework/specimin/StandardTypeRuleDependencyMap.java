@@ -4,6 +4,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
@@ -15,7 +16,10 @@ import com.github.javaparser.ast.nodeTypes.NodeWithThrownExceptions;
 import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.nodeTypes.NodeWithTypeArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithTypeParameters;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -23,6 +27,7 @@ import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultCo
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
@@ -47,49 +52,32 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
   public List<Node> getRelevantElements(Node node) {
     List<Node> elements = new ArrayList<>();
 
-    if (node instanceof NodeWithAnnotations) {
-      NodeWithAnnotations<?> withAnnotations = (NodeWithAnnotations<?>) node;
-
+    if (node instanceof NodeWithAnnotations<?> withAnnotations) {
       elements.addAll(withAnnotations.getAnnotations());
     }
-    if (node instanceof NodeWithModifiers) {
-      NodeWithModifiers<?> withModifiers = (NodeWithModifiers<?>) node;
-
+    if (node instanceof NodeWithModifiers<?> withModifiers) {
       elements.addAll(withModifiers.getModifiers());
     }
-    if (node instanceof NodeWithTypeArguments) {
-      NodeWithTypeArguments<?> withTypeArguments = (NodeWithTypeArguments<?>) node;
-
-      if (withTypeArguments.getTypeArguments().isPresent()) {
-        elements.addAll(withTypeArguments.getTypeArguments().get());
-      }
+    if (node instanceof NodeWithTypeArguments<?> withTypeArguments
+        && withTypeArguments.getTypeArguments().isPresent()) {
+      elements.addAll(withTypeArguments.getTypeArguments().get());
     }
-    if (node instanceof NodeWithTypeParameters) {
-      NodeWithTypeParameters<?> withTypeParameters = (NodeWithTypeParameters<?>) node;
-
+    if (node instanceof NodeWithTypeParameters<?> withTypeParameters) {
       elements.addAll(withTypeParameters.getTypeParameters());
     }
     // i.e., method declarations, parameters, annotation type declarations, instanceof, etc.
-    if (node instanceof NodeWithType) {
-      NodeWithType<?, ?> withType = (NodeWithType<?, ?>) node;
-
+    if (node instanceof NodeWithType<?, ?> withType) {
       elements.add(withType.getType());
     }
-    if (node instanceof NodeWithSimpleName) {
-      NodeWithSimpleName<?> nodeWithSimpleName = (NodeWithSimpleName<?>) node;
-
+    if (node instanceof NodeWithSimpleName<?> nodeWithSimpleName) {
       elements.add(nodeWithSimpleName.getName());
     }
 
     // Type declarations
-    if (node instanceof NodeWithImplements) {
-      NodeWithImplements<?> withImplements = (NodeWithImplements<?>) node;
-
+    if (node instanceof NodeWithImplements<?> withImplements) {
       elements.addAll(withImplements.getImplementedTypes());
     }
-    if (node instanceof NodeWithExtends) {
-      NodeWithExtends<?> withExtends = (NodeWithExtends<?>) node;
-
+    if (node instanceof NodeWithExtends<?> withExtends) {
       elements.addAll(withExtends.getExtendedTypes());
     }
 
@@ -104,19 +92,13 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     // Method declarations
 
     // i.e., constructor/method declarations, lambdas
-    if (node instanceof NodeWithParameters) {
-      NodeWithParameters<?> withParameters = (NodeWithParameters<?>) node;
-
+    if (node instanceof NodeWithParameters<?> withParameters) {
       elements.addAll(withParameters.getParameters());
     }
 
     // i.e., constructor/method declarations
-    if (node instanceof NodeWithThrownExceptions) {
-      NodeWithThrownExceptions<?> withThrownExceptions = (NodeWithThrownExceptions<?>) node;
-
+    if (node instanceof NodeWithThrownExceptions<?> withThrownExceptions) {
       elements.addAll(withThrownExceptions.getThrownExceptions());
-
-      return elements;
     }
 
     // If the node is a callable declaration, exit now, so we don't unintentionally
@@ -151,40 +133,60 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     if (resolved instanceof ResolvedReferenceTypeDeclaration resolvedTypeDeclaration) {
-      CompilationUnit cu = fqnToCompilationUnits.get(resolvedTypeDeclaration.getQualifiedName());
-
-      if (cu == null) {
-        // Not in project; solved by reflection, not our concern
-        return elements;
-      }
-
       TypeDeclaration<?> type =
-          cu.findFirst(
-                  TypeDeclaration.class,
-                  n ->
-                      n.getFullyQualifiedName().isPresent()
-                          && n.getFullyQualifiedName()
-                              .get()
-                              .equals(resolvedTypeDeclaration.getQualifiedName()))
-              .get();
+          getTypeFromQualifiedName(resolvedTypeDeclaration.getQualifiedName());
+
+      if (type == null) return elements;
       elements.add(type);
     }
 
     if (resolved instanceof ResolvedMethodLikeDeclaration resolvedMethodLikeDeclaration) {
-      String declaringTypeFQN = resolvedMethodLikeDeclaration.declaringType().getQualifiedName();
-      CompilationUnit cu = fqnToCompilationUnits.get(declaringTypeFQN);
-      if (cu == null) {
-        // Not in project; solved by reflection, not our concern
-        return elements;
-      }
-
       TypeDeclaration<?> type =
-          cu.findFirst(
-                  TypeDeclaration.class,
-                  n ->
-                      n.getFullyQualifiedName().isPresent()
-                          && n.getFullyQualifiedName().get().equals(declaringTypeFQN))
-              .get();
+          getTypeFromQualifiedName(
+              resolvedMethodLikeDeclaration.declaringType().getQualifiedName());
+      if (type == null) return elements;
+
+      if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
+        // If this current method is an override, add the original definition too
+        // Get direct ancestors, since each ancestor method definition will return to this method.
+        List<ClassOrInterfaceType> parents = new ArrayList<>();
+
+        if (type instanceof NodeWithExtends<?> withExtends) {
+          parents.addAll(withExtends.getExtendedTypes());
+        }
+        if (type instanceof NodeWithImplements<?> withImplements) {
+          parents.addAll(withImplements.getImplementedTypes());
+        }
+
+        for (ClassOrInterfaceType parent : parents) {
+          try {
+            ResolvedType parentType = parent.resolve();
+
+            if (!parentType.isReferenceType()
+                || parentType.asReferenceType().getTypeDeclaration().isEmpty()) {
+              continue;
+            }
+
+            ResolvedReferenceTypeDeclaration decl =
+                parentType.asReferenceType().getTypeDeclaration().get();
+
+            TypeDeclaration<?> typeDecl = getTypeFromQualifiedName(decl.getQualifiedName());
+            if (typeDecl == null) continue;
+
+            for (ResolvedMethodDeclaration method : decl.asReferenceType().getDeclaredMethods()) {
+              if (resolvedMethodDeclaration.getSignature().equals(method.getSignature())) {
+                Node unattached = method.toAst().get();
+                MethodDeclaration methodDecl =
+                    typeDecl.findFirst(MethodDeclaration.class, n -> n.equals(unattached)).get();
+
+                elements.add(methodDecl);
+              }
+            }
+          } catch (UnsolvedSymbolException ex) {
+            // continue
+          }
+        }
+      }
 
       // Rare case: new Foo() but Foo does not contain a constructor
       if (!(resolved instanceof DefaultConstructorDeclaration)) {
@@ -193,29 +195,16 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             type.findFirst(CallableDeclaration.class, n -> n.equals(unattached)).get();
 
         elements.add(methodLike);
-        elements.addAll(getRelevantElements(methodLike));
       }
 
       elements.add(type);
-      elements.addAll(getRelevantElements(type));
     }
 
     if (resolved instanceof ResolvedFieldDeclaration resolvedFieldDeclaration) {
-      String declaringTypeFQN = resolvedFieldDeclaration.declaringType().getQualifiedName();
-      CompilationUnit cu = fqnToCompilationUnits.get(declaringTypeFQN);
-
-      if (cu == null) {
-        // Not in project; solved by reflection, not our concern
-        return elements;
-      }
-
       TypeDeclaration<?> type =
-          cu.findFirst(
-                  TypeDeclaration.class,
-                  n ->
-                      n.getFullyQualifiedName().isPresent()
-                          && n.getFullyQualifiedName().get().equals(declaringTypeFQN))
-              .get();
+          getTypeFromQualifiedName(resolvedFieldDeclaration.declaringType().getQualifiedName());
+
+      if (type == null) return elements;
 
       Node unattached = resolvedFieldDeclaration.toAst().get();
       FieldDeclaration field =
@@ -223,10 +212,33 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
       elements.add(type);
       elements.add(field);
-      elements.addAll(getRelevantElements(type));
-      elements.addAll(getRelevantElements(field));
     }
 
     return elements;
+  }
+
+  /**
+   * Gets the corresponding type declaration from a qualified type name.
+   *
+   * @param fqn The fully-qualified type name
+   * @return The type declaration
+   */
+  private @Nullable TypeDeclaration<?> getTypeFromQualifiedName(String fqn) {
+    CompilationUnit cu = fqnToCompilationUnits.get(fqn);
+
+    if (cu == null) {
+      // Not in project; solved by reflection, not our concern
+      return null;
+    }
+
+    TypeDeclaration<?> type =
+        cu.findFirst(
+                TypeDeclaration.class,
+                n ->
+                    n.getFullyQualifiedName().isPresent()
+                        && n.getFullyQualifiedName().get().equals(fqn))
+            .get();
+
+    return type;
   }
 }

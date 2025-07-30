@@ -175,6 +175,15 @@ public class UnsolvedMethod {
   }
 
   /**
+   * Gets the number of type variables.
+   *
+   * @return The number of type variables
+   */
+  public int getNumberOfTypeVariables() {
+    return numberOfTypeVariables;
+  }
+
+  /**
    * Return a synthetic representation for type variables of the current class.
    *
    * @return the synthetic representation for type variables

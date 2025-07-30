@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
@@ -149,21 +150,41 @@ public class Slicer {
       Resolvable<?> asResolvable = (Resolvable<?>) node;
 
       boolean generateUnsolvedSymbol = false;
+      Object resolved = null;
       try {
-        handleResolvedObject(asResolvable.resolve());
+        // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
+        // if there are unresolvable argument types
+        resolved = asResolvable.resolve();
       } catch (UnsolvedSymbolException ex) {
-        // Calling resolve on a FieldAccessExpr/NameExpr that represents a type may also cause
-        // an UnsolvedSymbolException, even if the type is resolvable
+        boolean shouldTryToResolve = true;
+        if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {
+          // We may encounter this if the user includes a FQN in their input, since the type rule
+          // dependency map returns the scope of the type, even if it's a package.
+          shouldTryToResolve = false;
+          generateUnsolvedSymbol = false;
+        }
 
-        if (node instanceof FieldAccessExpr || node instanceof NameExpr) {
-          try {
-            handleResolvedObject(((Expression) node).calculateResolvedType());
-          } catch (UnsolvedSymbolException ex2) {
+        if (shouldTryToResolve) {
+          // Calling resolve on a FieldAccessExpr/NameExpr that represents a type may also cause
+          // an UnsolvedSymbolException, even if the type is resolvable
+          if (node instanceof FieldAccessExpr || node instanceof NameExpr) {
+            if (!JavaParserUtil.isProbablyAPackage((Expression) node)) {
+              try {
+                resolved = ((Expression) node).calculateResolvedType();
+              } catch (UnsolvedSymbolException ex2) {
+                generateUnsolvedSymbol = true;
+              }
+            } else {
+              generateUnsolvedSymbol = false;
+            }
+          } else {
             generateUnsolvedSymbol = true;
           }
-        } else {
-          generateUnsolvedSymbol = true;
         }
+      }
+
+      if (resolved != null) {
+        handleResolvedObject(resolved);
       }
 
       if (generateUnsolvedSymbol) {

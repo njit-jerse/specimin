@@ -14,6 +14,7 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -402,7 +403,7 @@ public class JavaParserUtil {
           return true;
         }
       } else if (scope.isFieldAccessExpr()) {
-        nameOfScope = scope.asFieldAccessExpr().getNameAsString();
+        nameOfScope = scope.asFieldAccessExpr().toString();
         if (isAClassPath(nameOfScope)) {
           return true;
         }
@@ -499,4 +500,69 @@ public class JavaParserUtil {
 
     return count;
   }
+
+  /**
+   * When getting the scope/children of a ClassOrInterfaceType, it returns another
+   * ClassOrInterfaceType. However, it does not differentiate between whether this type is a package
+   * or if it's another type, so this method helps to differentiate between the two.
+   *
+   * @param type The type
+   * @return True if the type is probably a package, based on Java naming standards
+   */
+  public static boolean isProbablyAPackage(ClassOrInterfaceType type) {
+    return !isAClassPath(type.toString()) && !isCapital(type.toString());
+  }
+
+  /**
+   * Checks to see if an expression (FieldAccessExpr or NameExpr) is likely part of a package. This
+   * checks parents too, so org.example would be seen as org.example.Test, allowing us to
+   * differentiate between part of a package and a field name.
+   *
+   * @param type The type
+   * @return True if the type is probably a package, based on Java naming standards
+   */
+  public static boolean isProbablyAPackage(Expression type) {
+    if (!type.isFieldAccessExpr() && !type.isNameExpr()) {
+      return false;
+    }
+
+    // Baz in Baz.myField
+    if (type.isNameExpr() && isCapital(type.toString())) {
+      return false;
+    }
+
+    if (type.isFieldAccessExpr() && isAClassPath(type.toString())) {
+      return false;
+    }
+
+    while (type.hasParentNode() && type.getParentNode().get() instanceof FieldAccessExpr field) {
+      type = field;
+      if (isAClassPath(type.toString())) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // TODO: wait for prof response
+  // public static ResolvedConstructorDeclaration
+  // tryResolveConstructorCallWithUnresolvableArguments(ObjectCreationExpr constructorCall) {
+  //   List<@Nullable ResolvedType> parameterTypes = new ArrayList<>();
+
+  //   for (Expression argument : constructorCall.getArguments()) {
+  //     try {
+  //       parameterTypes.add(argument.calculateResolvedType());
+  //     } catch (UnsolvedSymbolException ex) {
+  //       parameterTypes.add(null);
+  //     }
+  //   }
+
+  //   TypeDeclaration<?> enclosingClass = getEnclosingClassLike(constructorCall);
+
+  //   for (ConstructorDeclaration resolvedConstructor : enclosingClass.getConstructors()) {
+  //     ResolvedConstructorDeclaration resolved = resolvedConstructor.resolve();
+
+  //   }
+  // }
 }

@@ -65,7 +65,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       List<MemberType> parameters,
       List<MemberType> exceptions) {
     if (alternateDeclaringTypes.isEmpty()) {
-      throw new RuntimeException("Unsolved field must have at least one potential declaring type.");
+      throw new RuntimeException(
+          "Unsolved method must have at least one potential declaring type.");
     }
     UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
 
@@ -114,6 +115,15 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     for (UnsolvedMethod method : getAlternates()) {
       method.setStatic();
     }
+  }
+
+  /**
+   * Gets the number of type variables.
+   *
+   * @return The number of type variables
+   */
+  public int getNumberOfTypeVariables() {
+    return getAlternates().get(0).getNumberOfTypeVariables();
   }
 
   /**

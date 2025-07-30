@@ -1,4 +1,4 @@
-package org.sampling;
+package com.example;
 
 public class DoAdditionReturnType {
 }

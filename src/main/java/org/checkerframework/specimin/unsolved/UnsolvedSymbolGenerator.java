@@ -350,7 +350,7 @@ public class UnsolvedSymbolGenerator {
       try {
         ResolvedMethodDeclaration resolvedMethodDeclaration = methodCall.resolve();
 
-        // If we're here, this was probably passed in as scope or a method argument
+        // If we're here, this was probably passed in as scope
         if (resolvedMethodDeclaration.toAst().isPresent()) {
           MethodDeclaration toAst = (MethodDeclaration) resolvedMethodDeclaration.toAst().get();
 
@@ -440,16 +440,23 @@ public class UnsolvedSymbolGenerator {
         List<MemberType> parameters = new ArrayList<>();
 
         for (Expression argument : methodCall.getArguments()) {
-          inferContextImpl(argument, result);
+          MemberType paramType;
+          try {
+            ResolvedType type = argument.calculateResolvedType();
+            paramType = new MemberType(type.describe());
+          } catch (UnsolvedSymbolException ex) {
+            inferContextImpl(argument, result);
 
-          Set<String> set = argumentToParameterPotentialFQNs.get(argument);
+            Set<String> set = argumentToParameterPotentialFQNs.get(argument);
 
-          // This null check is just to satisfy the error checker
-          if (set == null) {
-            throw new RuntimeException("Expected non-null when this is null");
+            // This null check is just to satisfy the error checker
+            if (set == null) {
+              throw new RuntimeException("Expected non-null when this is null");
+            }
+
+            paramType = getOrCreateMemberTypeFromFQNs(set);
           }
 
-          MemberType paramType = getOrCreateMemberTypeFromFQNs(set);
           if (paramType.isUnsolved()) {
             result.add(paramType.getUnsolvedType());
           }
@@ -484,6 +491,15 @@ public class UnsolvedSymbolGenerator {
       if (node instanceof ObjectCreationExpr) {
         ObjectCreationExpr constructor = (ObjectCreationExpr) node;
 
+        try {
+          constructor.calculateResolvedType();
+          // If the type is resolvable, the constructor is too; a type in the constructor is not
+          // solvable. Return because we don't need to generate a new constructor.
+          return;
+        } catch (UnsolvedSymbolException ex) {
+          // continue
+        }
+
         inferContextImpl(constructor.getType(), result);
         // Do not generate here; that should be taken care of in the inferContextImpl call above.
         scope =
@@ -500,6 +516,17 @@ public class UnsolvedSymbolGenerator {
         }
       } else {
         ExplicitConstructorInvocationStmt constructor = (ExplicitConstructorInvocationStmt) node;
+
+        try {
+          // get() is safe; ExplicitConstructorInvocationStmt wraps an existing expression in an
+          // Optional
+          constructor.getExpression().get().calculateResolvedType();
+          // If the type is resolvable, the constructor is too; a type in the constructor is not
+          // solvable. Return because we don't need to generate a new constructor.
+          return;
+        } catch (UnsolvedSymbolException ex) {
+          // continue
+        }
 
         // If it's unresolvable, it's a constructor in the unsolved parent class
         TypeDeclaration<?> decl = JavaParserUtil.getEnclosingClassLike(node);
@@ -559,16 +586,24 @@ public class UnsolvedSymbolGenerator {
         List<MemberType> parameters = new ArrayList<>();
 
         for (Expression argument : arguments) {
-          inferContextImpl(argument, result);
+          MemberType paramType;
 
-          Set<String> set = argumentToParameterPotentialFQNs.get(argument);
+          try {
+            ResolvedType type = argument.calculateResolvedType();
+            paramType = new MemberType(type.describe());
+          } catch (UnsolvedSymbolException ex) {
+            inferContextImpl(argument, result);
 
-          // This null check is just to satisfy the error checker
-          if (set == null) {
-            throw new RuntimeException("Expected non-null when this is null");
+            Set<String> set = argumentToParameterPotentialFQNs.get(argument);
+
+            // This null check is just to satisfy the error checker
+            if (set == null) {
+              throw new RuntimeException("Expected non-null when this is null");
+            }
+
+            paramType = getOrCreateMemberTypeFromFQNs(set);
           }
 
-          MemberType paramType = getOrCreateMemberTypeFromFQNs(set);
           if (paramType.isUnsolved()) {
             result.add(paramType.getUnsolvedType());
           }
@@ -603,15 +638,16 @@ public class UnsolvedSymbolGenerator {
       // we'll need to rely on JavaTypeCorrect to give us the correct functional interface.
 
       // TODO: it may also be possible to generate alternates based on all the definitions for a
-      // method
-      // reference expression. For example, obj::foo could refer to foo(int) or foo(int, String).
+      // method reference expression. For example, obj::foo could refer to foo(int) or foo(int,
+      // String).
+      // This is the exact same case as the problem we face with constructors/methods with unsolved
+      // argument types; fix this code segment once that is also done.
       if (!isResolvable) {
         Map<String, Set<String>> potentialScopeFQNs =
             FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodRef);
         // A method ref has a scope, so its location is known to be a single type; therefore, it's
         // safe to do this.
         String simpleClassName = potentialScopeFQNs.keySet().iterator().next();
-        Set<String> scopeFQNs = potentialScopeFQNs.get(simpleClassName);
 
         Set<String> potentialFQNs = new LinkedHashSet<>();
 
@@ -620,14 +656,25 @@ public class UnsolvedSymbolGenerator {
         boolean isConstructor = methodName.equals("new");
 
         List<UnsolvedClassOrInterfaceAlternates> scope = new ArrayList<>();
-        // Unsolvable method ref: default to parameterless
-        if (isConstructor) {
-          for (String fqn : scopeFQNs) {
-            potentialFQNs.add(fqn + "#" + simpleClassName + "()");
-          }
-        } else {
-          for (String fqn : scopeFQNs) {
-            potentialFQNs.add(fqn + "#" + methodName + "()");
+
+        for (Set<String> set : potentialScopeFQNs.values()) {
+          UnsolvedClassOrInterfaceAlternates generated =
+              (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
+
+          // TODO: throw an error here once we add some sort of custom resolution logic
+          if (generated == null) continue;
+
+          scope.add(generated);
+
+          // Unsolvable method ref: default to parameterless
+          if (isConstructor) {
+            for (String fqn : set) {
+              potentialFQNs.add(fqn + "#" + simpleClassName + "()");
+            }
+          } else {
+            for (String fqn : set) {
+              potentialFQNs.add(fqn + "#" + methodName + "()");
+            }
           }
         }
 
@@ -839,7 +886,7 @@ public class UnsolvedSymbolGenerator {
       }
 
       for (UnsolvedClassOrInterfaceAlternates exception : exceptions) {
-        MemberType type = new MemberType("java.lang.Throwable");
+        MemberType type = new MemberType("java.lang.Exception");
         if (exception == null || exception.doesExtend(type)) continue;
         exception.extend(type);
       }
@@ -1127,12 +1174,11 @@ public class UnsolvedSymbolGenerator {
 
     if (existing == null) {
       List<UnsolvedClassOrInterfaceAlternates> created =
-          UnsolvedClassOrInterfaceAlternates.create(fqns);
+          UnsolvedClassOrInterfaceAlternates.create(fqns, generatedSymbols);
 
       for (UnsolvedClassOrInterfaceAlternates c : created) {
         addNewSymbolToGeneratedSymbolsMap(c);
       }
-
       return created.get(0);
     }
 

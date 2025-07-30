@@ -2,7 +2,7 @@ package org.sampling;
 
 public class OrgSamplingBazMyFieldSyntheticType {
 
-    public DoAdditionReturnType doAddition() {
+    public com.example.DoAdditionReturnType doAddition() {
         throw new java.lang.Error();
     }
 }

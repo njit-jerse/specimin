@@ -3,6 +3,7 @@ package org.checkerframework.specimin.unsolved;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -32,10 +33,13 @@ public class UnsolvedClassOrInterfaceAlternates
    * potential outer classes of the type. The simple class name is the same among all alternates.
    *
    * @param fqns The set of fqns
+   * @param generatedSymbolsMap The map of generated symbols from UnsolvedSymbolGenerator. This is
+   *     to ensure potential outer classes are not duplicated
    * @return A list of generated types; the first is the type of the fqns, the next few are
    *     potential outer classes
    */
-  public static List<UnsolvedClassOrInterfaceAlternates> create(Set<String> fqns) {
+  public static List<UnsolvedClassOrInterfaceAlternates> create(
+      Set<String> fqns, Map<String, UnsolvedSymbolAlternates<?>> generatedSymbolsMap) {
     List<UnsolvedClassOrInterfaceAlternates> allGenerated = new ArrayList<>();
     List<UnsolvedClassOrInterfaceAlternates> potentialDeclaringTypes = new ArrayList<>();
     List<UnsolvedClassOrInterface> alternates = new ArrayList<>();
@@ -49,7 +53,8 @@ public class UnsolvedClassOrInterfaceAlternates
       alternates.add(type);
 
       if (packageName.contains(".")) {
-        potentialDeclaringTypes.add(createPotentialContainingClass(packageName, allGenerated));
+        potentialDeclaringTypes.add(
+            createPotentialContainingClass(packageName, allGenerated, generatedSymbolsMap));
       }
     }
 
@@ -71,20 +76,29 @@ public class UnsolvedClassOrInterfaceAlternates
    *
    * @param fqn The fully-qualified name
    * @param allGenerated A list of all generated symbols (such as org.example.Class and org.example)
+   * @param generatedSymbolsMap The map of generated symbols from UnsolvedSymbolGenerator. This is
+   *     to ensure potential outer classes are not duplicated
    * @return The most immediate unsolved type generated; i.e., the one that has an FQN equal to the
    *     argument corresponding with {@code fqn}.
    */
   private static UnsolvedClassOrInterfaceAlternates createPotentialContainingClass(
-      String fqn, List<UnsolvedClassOrInterfaceAlternates> allGenerated) {
+      String fqn,
+      List<UnsolvedClassOrInterfaceAlternates> allGenerated,
+      Map<String, UnsolvedSymbolAlternates<?>> generatedSymbolsMap) {
     String packageName = fqn.substring(0, fqn.lastIndexOf('.'));
     String className = fqn.substring(packageName.length() + 1);
 
     UnsolvedClassOrInterfaceAlternates generated;
 
+    if (generatedSymbolsMap.containsKey(packageName)) {
+      return (UnsolvedClassOrInterfaceAlternates) generatedSymbolsMap.get(packageName);
+    }
+
     if (packageName.contains(".")) {
       generated =
           new UnsolvedClassOrInterfaceAlternates(
-              List.of(createPotentialContainingClass(packageName, allGenerated)));
+              List.of(
+                  createPotentialContainingClass(packageName, allGenerated, generatedSymbolsMap)));
     } else {
       generated = new UnsolvedClassOrInterfaceAlternates(List.of());
     }
