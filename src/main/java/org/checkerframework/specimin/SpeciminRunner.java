@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -39,6 +40,7 @@ import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 import org.checkerframework.specimin.modularity.ModularityModel;
+import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
@@ -292,8 +294,13 @@ public class SpeciminRunner {
               + unfoundMembersTable(unfoundFields, false));
     }
 
+    UnsolvedSymbolGenerator unsolvedSymbolGenerator =
+        new UnsolvedSymbolGenerator(fqnToCompilationUnits);
     Slicer.SliceResult sliceResult =
-        Slicer.slice(new StandardTypeRuleDependencyMap(fqnToCompilationUnits), worklist);
+        Slicer.slice(
+            new StandardTypeRuleDependencyMap(fqnToCompilationUnits),
+            worklist,
+            unsolvedSymbolGenerator);
 
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();
@@ -305,10 +312,70 @@ public class SpeciminRunner {
       targetFilesAbsolutePaths.add(targetFile.getAbsolutePath());
     }
 
-    // Solvable types must all be outputted
-    for (CompilationUnit cu : sliceResult.solvedSlice()) {
-      if (isEmptyCompilationUnit(cu)) {
+    UnsolvedSymbolEnumerator alternateOutput =
+        new UnsolvedSymbolEnumerator(sliceResult.generatedSymbolSlice());
+    UnsolvedSymbolEnumeratorResult enumeratorResult =
+        alternateOutput.getBestEffort(sliceResult.generatedSymbolDependentSlice());
+
+    handleUnsolvedSymbolEnumeratorResult(
+        sliceResult,
+        enumeratorResult,
+        existingClassesToFilePath,
+        root,
+        targetFilesAbsolutePaths,
+        outputDirectory,
+        createdDirectories);
+  }
+
+  /**
+   * Handles a result from an iteration of {@link UnsolvedSymbolEnumerator}. This outputs the files
+   * for both solved and unsolved symbols.
+   *
+   * @param sliceResult The result of the slice
+   * @param enumeratorResult The iteration of the UnsolvedSymbolEnumerator
+   * @param existingClassesToFilePath A map of existing classes to their files paths
+   * @param root The root directory
+   * @param targetFilesAbsolutePaths The target files as absolute paths
+   * @param outputDirectory The output directory
+   * @param createdDirectories A cache of created directories
+   */
+  private static void handleUnsolvedSymbolEnumeratorResult(
+      Slicer.SliceResult sliceResult,
+      UnsolvedSymbolEnumeratorResult enumeratorResult,
+      Map<String, Path> existingClassesToFilePath,
+      String root,
+      Set<String> targetFilesAbsolutePaths,
+      String outputDirectory,
+      Set<Path> createdDirectories)
+      throws IOException {
+    for (CompilationUnit original : sliceResult.solvedSlice()) {
+      if (isEmptyCompilationUnit(original)) {
         continue;
+      }
+
+      // Generally, this set will be small, so we'll check if we need to clone at all
+      // to prevent the cloning process from happening when it's not necessary
+      boolean shouldClone = false;
+      for (Node node : enumeratorResult.unusedDependentNodes()) {
+        if (node.findCompilationUnit().get().equals(original)) {
+          shouldClone = true;
+          break;
+        }
+      }
+
+      CompilationUnit cu = original;
+      if (shouldClone) {
+        cu = original.clone();
+
+        IdentityHashMap<Node, Node> map = new IdentityHashMap<>();
+        mapNodes(original, cu, map);
+
+        for (Node toRemove : enumeratorResult.unusedDependentNodes()) {
+          Node clone = map.get(toRemove);
+
+          if (clone == null) continue;
+          clone.remove();
+        }
       }
 
       String path =
@@ -346,12 +413,7 @@ public class SpeciminRunner {
       }
     }
 
-    UnsolvedSymbolEnumerator alternateOutput =
-        new UnsolvedSymbolEnumerator(sliceResult.generatedSymbolSlice());
-
-    Map<String, String> alternates = alternateOutput.getBestEffort();
-
-    for (Entry<String, String> alternate : alternates.entrySet()) {
+    for (Entry<String, String> alternate : enumeratorResult.classNamesToFileContent().entrySet()) {
       Path targetOutputPath =
           Path.of(outputDirectory, alternate.getKey().replace('.', '/') + ".java");
       // Create any parts of the directory structure that don't already exist.
@@ -373,6 +435,24 @@ public class SpeciminRunner {
         System.out.println("failed to write output file " + targetOutputPath);
         System.out.println("with error: " + e);
       }
+    }
+  }
+
+  /**
+   * Creates a map of original nodes to cloned nodes.
+   *
+   * @param original The original node
+   * @param clone The cloned node
+   * @param map The final mapping
+   */
+  private static void mapNodes(Node original, Node clone, IdentityHashMap<Node, Node> map) {
+    map.put(original, clone);
+
+    List<Node> originalChildNodes = original.getChildNodes();
+    List<Node> cloneChildNodes = clone.getChildNodes();
+
+    for (int i = 0; i < originalChildNodes.size(); i++) {
+      mapNodes(originalChildNodes.get(i), cloneChildNodes.get(i), map);
     }
   }
 

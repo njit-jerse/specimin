@@ -1,10 +1,13 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.Node;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.specimin.unsolved.MemberType;
 import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterface;
 import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterfaceAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedField;
@@ -43,9 +46,10 @@ public class UnsolvedSymbolEnumerator {
   /**
    * Gets the best effort unsolved symbol generation.
    *
+   * @param allDependentNodes The set of all nodes that are dependent on some alternate
    * @return A map of class names to file content
    */
-  public Map<String, String> getBestEffort() {
+  public UnsolvedSymbolEnumeratorResult getBestEffort(Set<Node> allDependentNodes) {
     // Best effort is the first alternate in every alternate set
     Set<UnsolvedClassOrInterface> types = new LinkedHashSet<>();
 
@@ -61,25 +65,45 @@ public class UnsolvedSymbolEnumerator {
           unsolved.getAlternateDeclaringTypes().get(0).getAlternates().get(0);
       if (!typesToFields.containsKey(type)) {
         typesToFields.put(type, new LinkedHashSet<>());
+        types.add(type);
       }
 
       typesToFields.get(type).add(field);
+
+      MemberType typeOfField = field.getType();
+      if (typeOfField.isUnsolved()) {
+        types.add(typeOfField.getUnsolvedType().getAlternates().get(0));
+      }
     }
 
     Map<UnsolvedClassOrInterface, Set<UnsolvedMethod>> typesToMethods = new LinkedHashMap<>();
 
     for (UnsolvedMethodAlternates unsolved : unsolvedMethods) {
-      UnsolvedMethod field = unsolved.getAlternates().get(0);
+      UnsolvedMethod method = unsolved.getAlternates().get(0);
       UnsolvedClassOrInterface type =
           unsolved.getAlternateDeclaringTypes().get(0).getAlternates().get(0);
       if (!typesToMethods.containsKey(type)) {
         typesToMethods.put(type, new LinkedHashSet<>());
+        types.add(type);
       }
 
-      typesToMethods.get(type).add(field);
+      typesToMethods.get(type).add(method);
+
+      MemberType typesToMethod = method.getReturnType();
+      if (typesToMethod.isUnsolved()) {
+        types.add(typesToMethod.getUnsolvedType().getAlternates().get(0));
+      }
+
+      for (MemberType parameterType : method.getParameterList()) {
+        if (parameterType.isUnsolved()) {
+          types.add(parameterType.getUnsolvedType().getAlternates().get(0));
+        }
+      }
     }
 
     Map<String, String> result = new LinkedHashMap<>();
+
+    Set<Node> ableToRemove = new HashSet<>(allDependentNodes);
 
     for (UnsolvedClassOrInterface type : types) {
       Set<UnsolvedField> fields = typesToFields.get(type);
@@ -94,11 +118,21 @@ public class UnsolvedSymbolEnumerator {
         methods = Set.of();
       }
 
+      ableToRemove.removeAll(type.getMustPreserveNodes());
+
+      for (UnsolvedField field : fields) {
+        ableToRemove.removeAll(field.getMustPreserveNodes());
+      }
+
+      for (UnsolvedMethod method : methods) {
+        ableToRemove.removeAll(method.getMustPreserveNodes());
+      }
+
       result.put(
           type.getFullyQualifiedName(),
           type.toString(methods, fields, Collections.emptyList(), false));
     }
 
-    return result;
+    return new UnsolvedSymbolEnumeratorResult(result, ableToRemove);
   }
 }

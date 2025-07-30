@@ -25,13 +25,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.checkerframework.specimin.unsolved.AddInformationResult;
+import org.checkerframework.specimin.unsolved.UnsolvedGenerationResult;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 
 /**
  * Slices a program, given an initial worklist and a type rule dependency map. This class cannot be
- * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque)} to use this class.
+ * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque, UnsolvedSymbolGenerator)}
+ * to use this class.
  */
 public class Slicer {
   /**
@@ -62,7 +63,7 @@ public class Slicer {
   /** The result of the slice, not including generated symbols. */
   private final Set<CompilationUnit> resultCompilationUnits = new HashSet<>();
 
-  private final UnsolvedSymbolGenerator unsolvedSymbolGenerator = new UnsolvedSymbolGenerator();
+  private final UnsolvedSymbolGenerator unsolvedSymbolGenerator;
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
   /**
@@ -70,10 +71,15 @@ public class Slicer {
    *
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
+   * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
    */
-  private Slicer(TypeRuleDependencyMap typeRuleDependencyMap, Deque<Node> worklist) {
+  private Slicer(
+      TypeRuleDependencyMap typeRuleDependencyMap,
+      Deque<Node> worklist,
+      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
     this.typeRuleDependencyMap = typeRuleDependencyMap;
     this.worklist = worklist;
+    this.unsolvedSymbolGenerator = unsolvedSymbolGenerator;
   }
 
   /**
@@ -86,19 +92,36 @@ public class Slicer {
    * @return A {@link SliceResult} representing the output of the slice.
    */
   public static SliceResult slice(
-      TypeRuleDependencyMap typeRuleDependencyMap, Deque<Node> worklist) {
-    Slicer slicer = new Slicer(typeRuleDependencyMap, worklist);
+      TypeRuleDependencyMap typeRuleDependencyMap,
+      Deque<Node> worklist,
+      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
+    Slicer slicer = new Slicer(typeRuleDependencyMap, worklist, unsolvedSymbolGenerator);
 
-    slicer.startSlice();
+    slicer.buildSlice();
 
-    return new SliceResult(slicer.resultCompilationUnits, slicer.generatedSymbolSlice);
+    Set<Node> dependentSlice = new HashSet<>();
+    for (UnsolvedSymbolAlternates<?> gen : slicer.generatedSymbolSlice) {
+      for (Node node : gen.getDependentNodes()) {
+        // These nodes may be something like a method declaration; we need to call the
+        // type rule dependency map once to get its keywords to make sure it's not removed
+        slicer.slice.add(node);
+        slicer.slice.addAll(typeRuleDependencyMap.getRelevantElements(node));
+
+        if (!slicer.slice.contains(node)) dependentSlice.add(node);
+      }
+    }
+
+    slicer.prune();
+
+    return new SliceResult(
+        slicer.resultCompilationUnits, slicer.generatedSymbolSlice, dependentSlice);
   }
 
   /**
    * The main slicing algorithm. Mutates the compilation units in {@link #resultCompilationUnits}
    * and trims all unused nodes, while also adding needed generated symbols to the result.
    */
-  private void startSlice() {
+  private void buildSlice() {
     // Step 1: build the slice; see which nodes to keep
     while (!worklist.isEmpty()) {
       Node element = worklist.removeLast();
@@ -110,12 +133,15 @@ public class Slicer {
       Iterator<Node> ppwIterator = postProcessingWorklist.iterator();
       while (ppwIterator.hasNext()) {
         Node element = ppwIterator.next();
-        AddInformationResult result = unsolvedSymbolGenerator.addInformation(element);
+        UnsolvedGenerationResult result = unsolvedSymbolGenerator.addInformation(element);
         generatedSymbolSlice.addAll(result.toAdd());
         generatedSymbolSlice.removeAll(result.toRemove());
       }
     }
+  }
 
+  /** Prunes all unused elements based on the slice. */
+  private void prune() {
     // Step 3: go through each compilation unit and remove unused nodes
     for (CompilationUnit cu : resultCompilationUnits) {
       // If a non-primary class is preserved, the primary class still must be preserved,
@@ -278,7 +304,9 @@ public class Slicer {
    *     output.
    */
   public record SliceResult(
-      Set<CompilationUnit> solvedSlice, Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice) {
+      Set<CompilationUnit> solvedSlice,
+      Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice,
+      Set<Node> generatedSymbolDependentSlice) {
     // Override getter methods so we can add javadoc
 
     /**
@@ -300,6 +328,17 @@ public class Slicer {
     @Override
     public Set<UnsolvedSymbolAlternates<?>> generatedSymbolSlice() {
       return generatedSymbolSlice;
+    }
+
+    /**
+     * Gets all nodes that are dependent on at least one alternate and not part of the "mandatory"
+     * slice.
+     *
+     * @return All nodes that are only dependent on an alternate.
+     */
+    @Override
+    public Set<Node> generatedSymbolDependentSlice() {
+      return generatedSymbolDependentSlice;
     }
   }
 }

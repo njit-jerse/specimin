@@ -4,6 +4,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
@@ -15,17 +16,25 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
+import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
+import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
+import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -545,24 +554,279 @@ public class JavaParserUtil {
     return false;
   }
 
-  // TODO: wait for prof response
-  // public static ResolvedConstructorDeclaration
-  // tryResolveConstructorCallWithUnresolvableArguments(ObjectCreationExpr constructorCall) {
-  //   List<@Nullable ResolvedType> parameterTypes = new ArrayList<>();
+  /**
+   * Given a constructor call, returns all possible constructors that match the arity and known
+   * types of the arguments.
+   *
+   * @param constructorCall The constructor call expression
+   * @return All possible constructor declarations
+   */
+  public static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
+      ObjectCreationExpr constructorCall) {
+    List<@Nullable ResolvedType> parameterTypes =
+        getArgumentTypesAsResolved(constructorCall.getArguments());
 
-  //   for (Expression argument : constructorCall.getArguments()) {
-  //     try {
-  //       parameterTypes.add(argument.calculateResolvedType());
-  //     } catch (UnsolvedSymbolException ex) {
-  //       parameterTypes.add(null);
-  //     }
-  //   }
+    TypeDeclaration<?> enclosingClass = getEnclosingClassLike(constructorCall);
+    List<ConstructorDeclaration> candidates = new ArrayList<>();
 
-  //   TypeDeclaration<?> enclosingClass = getEnclosingClassLike(constructorCall);
+    addAllMatchingCallablesToList(
+        enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
 
-  //   for (ConstructorDeclaration resolvedConstructor : enclosingClass.getConstructors()) {
-  //     ResolvedConstructorDeclaration resolved = resolvedConstructor.resolve();
+    return candidates;
+  }
 
-  //   }
-  // }
+  /**
+   * Given a constructor call, returns all possible constructors that match the arity and known
+   * types of the arguments.
+   *
+   * @param constructorCall The constructor call statement (super or this constructor call)
+   * @return All possible constructor declarations
+   */
+  public static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
+      ExplicitConstructorInvocationStmt constructorCall,
+      Map<String, CompilationUnit> fqnToCompilationUnits) {
+    List<@Nullable ResolvedType> parameterTypes =
+        getArgumentTypesAsResolved(constructorCall.getArguments());
+
+    TypeDeclaration<?> enclosingClass = getEnclosingClassLike(constructorCall);
+    List<ConstructorDeclaration> candidates = new ArrayList<>();
+
+    if (constructorCall.isThis()) {
+      addAllMatchingCallablesToList(
+          enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
+    } else {
+      for (TypeDeclaration<?> ancestor :
+          getAllSolvableAncestors(enclosingClass, fqnToCompilationUnits)) {
+        addAllMatchingCallablesToList(
+            ancestor, parameterTypes, candidates, null, ConstructorDeclaration.class);
+      }
+    }
+
+    return candidates;
+  }
+
+  /**
+   * Given a method call, returns all possible methods that match the arity and known types of the
+   * arguments.
+   *
+   * @param methodCall The method call expression
+   * @return All possible method declarations
+   */
+  public static List<MethodDeclaration> tryResolveMethodCallWithUnresolvableArguments(
+      MethodCallExpr methodCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    boolean isSuperOnly = false;
+
+    TypeDeclaration<?> enclosingClass;
+    if (methodCall.hasScope()) {
+      Expression scope = methodCall.getScope().get();
+
+      if (scope.isSuperExpr()) {
+        isSuperOnly = true;
+      }
+
+      try {
+        ResolvedType scopeType = scope.calculateResolvedType();
+
+        enclosingClass = getTypeFromQualifiedName(scopeType.describe(), fqnToCompilationUnits);
+
+        if (enclosingClass == null) {
+          return List.of();
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // not relevant
+        return List.of();
+      }
+    } else {
+      enclosingClass = JavaParserUtil.getEnclosingClassLike(methodCall);
+    }
+
+    List<@Nullable ResolvedType> parameterTypes =
+        getArgumentTypesAsResolved(methodCall.getArguments());
+
+    List<MethodDeclaration> candidates = new ArrayList<>();
+
+    if (!isSuperOnly) {
+      addAllMatchingCallablesToList(
+          enclosingClass,
+          parameterTypes,
+          candidates,
+          methodCall.getNameAsString(),
+          MethodDeclaration.class);
+    }
+
+    for (TypeDeclaration<?> ancestor :
+        getAllSolvableAncestors(enclosingClass, fqnToCompilationUnits)) {
+      addAllMatchingCallablesToList(
+          ancestor,
+          parameterTypes,
+          candidates,
+          methodCall.getNameAsString(),
+          MethodDeclaration.class);
+    }
+
+    return candidates;
+  }
+
+  /**
+   * Helper method for {@link #tryResolveConstructorCallWithUnresolvableArguments}. Gets argument
+   * types as their resolved counterparts and null if unresolvable.
+   *
+   * @param arguments The arguments, as a list of expressions
+   * @return The list of resolved types, or null if unresolvable
+   */
+  private static List<@Nullable ResolvedType> getArgumentTypesAsResolved(
+      List<Expression> arguments) {
+    List<@Nullable ResolvedType> parameterTypes = new ArrayList<>();
+
+    for (Expression argument : arguments) {
+      try {
+        parameterTypes.add(argument.calculateResolvedType());
+      } catch (UnsolvedSymbolException ex) {
+        parameterTypes.add(null);
+      }
+    }
+
+    return parameterTypes;
+  }
+
+  /**
+   * Helper method for {@link #tryResolveConstructorCallWithUnresolvableArguments} and {@link
+   * #tryResolveMethodCallWithUnresolvableArguments}. Adds all callables (constructors/methods) that
+   * match the given parameterTypes to the output list.
+   *
+   * @param typeDecl The type declaration to search through
+   * @param parameterTypes The resolved parameter types. If unresolvable, it is null.
+   * @param result The list to append to
+   * @param methodName The method name, if the callable is a method (it is ignored otherwise)
+   * @param callableType The type of callable (i.e., ConstructorDeclaration or MethodDeclaration)
+   */
+  private static <T extends CallableDeclaration<?>> void addAllMatchingCallablesToList(
+      TypeDeclaration<?> typeDecl,
+      List<@Nullable ResolvedType> parameterTypes,
+      List<T> result,
+      @Nullable String methodName,
+      Class<T> callableType) {
+    List<? extends CallableDeclaration<?>> callables;
+    if (callableType == ConstructorDeclaration.class) {
+      callables = typeDecl.getConstructors();
+    } else if (callableType == MethodDeclaration.class) {
+      callables = typeDecl.getMethods();
+    } else {
+      // Impossible: see
+      // https://www.javadoc.io/doc/com.github.javaparser/javaparser-core/latest/com/github/javaparser/ast/body/CallableDeclaration.html
+      throw new IllegalArgumentException("Impossible CallableDeclaration type.");
+    }
+
+    for (CallableDeclaration<?> callable : callables) {
+      if (callable.getParameters().size() != parameterTypes.size()) continue;
+      if (callableType == MethodDeclaration.class && !callable.getNameAsString().equals(methodName))
+        continue;
+
+      boolean isAMatch = true;
+
+      for (int i = 0; i < callable.getParameters().size(); i++) {
+        ResolvedType typeInCall = parameterTypes.get(i);
+        try {
+          if (!callable.getParameter(i).resolve().getType().equals(typeInCall)) {
+            isAMatch = false;
+            break;
+          }
+        } catch (UnsolvedSymbolException ex) {
+          if (parameterTypes.get(i) != null) {
+            isAMatch = false;
+            break;
+          }
+        }
+      }
+
+      if (isAMatch) {
+        result.add(callableType.cast(callable));
+      }
+    }
+  }
+
+  /**
+   * Finds all solvable ancestors, given a type declaration to start.
+   *
+   * @param start The type declaration
+   * @param fqnToCompilationUnits A map of FQNs to compilation units
+   * @return A list of type declarations representing all solvable ancestors
+   */
+  public static List<TypeDeclaration<?>> getAllSolvableAncestors(
+      TypeDeclaration<?> start, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    List<TypeDeclaration<?>> result = new ArrayList<>();
+
+    return result;
+  }
+
+  /**
+   * Helper method for {@link #getAllSolvableAncestors(TypeDeclaration, Map)}. Recursively calls
+   * itself on all solvable ancestors.
+   *
+   * @param start The declaration to start at
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @param result The
+   */
+  private static void getAllSolvableAncestorsImpl(
+      TypeDeclaration<?> start,
+      Map<String, CompilationUnit> fqnToCompilationUnits,
+      List<TypeDeclaration<?>> result) {
+    List<ClassOrInterfaceType> extendedOrImplemented = new ArrayList<>();
+
+    if (start instanceof NodeWithExtends<?> withExtends) {
+      extendedOrImplemented.addAll(withExtends.getExtendedTypes());
+    } else if (start instanceof NodeWithImplements<?> withImplements) {
+      extendedOrImplemented.addAll(withImplements.getImplementedTypes());
+    }
+
+    for (ClassOrInterfaceType type : extendedOrImplemented) {
+      try {
+        ResolvedType resolvedType = type.resolve();
+
+        if (resolvedType.isReferenceType()
+            && resolvedType.asReferenceType().getTypeDeclaration().isPresent()) {
+          ResolvedReferenceTypeDeclaration resolvedDecl =
+              resolvedType.asReferenceType().getTypeDeclaration().get();
+
+          TypeDeclaration<?> typeDecl =
+              getTypeFromQualifiedName(resolvedDecl.getQualifiedName(), fqnToCompilationUnits);
+
+          if (typeDecl == null) continue;
+
+          result.add(typeDecl);
+          getAllSolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // continue
+      }
+    }
+  }
+
+  /**
+   * Gets the corresponding type declaration from a qualified type name. Use this method instead of
+   * casting from toAst() to avoid resolve() errors on child nodes.
+   *
+   * @param fqn The fully-qualified type name
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return The type declaration; null if not in the project.
+   */
+  public static @Nullable TypeDeclaration<?> getTypeFromQualifiedName(
+      String fqn, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    CompilationUnit cu = fqnToCompilationUnits.get(fqn);
+
+    if (cu == null) {
+      // Not in project; solved by reflection, not our concern
+      return null;
+    }
+
+    TypeDeclaration<?> type =
+        cu.findFirst(
+                TypeDeclaration.class,
+                n ->
+                    n.getFullyQualifiedName().isPresent()
+                        && n.getFullyQualifiedName().get().equals(fqn))
+            .get();
+
+    return type;
+  }
 }

@@ -11,7 +11,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
-public class UnsolvedClassOrInterface {
+public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
 
   /** The name of the class */
   private final @ClassGetSimpleName String className;
@@ -50,6 +50,8 @@ public class UnsolvedClassOrInterface {
    * @param packageName the name of the package
    */
   public UnsolvedClassOrInterface(String className, String packageName) {
+    // Types do not have mustPreserve nodes
+    super(Set.of());
     if (className.contains("<")) {
       @SuppressWarnings("signature") // removing the <> makes this a true simple name
       @ClassGetSimpleName String classNameWithoutAngleBrackets = className.substring(0, className.indexOf('<'));

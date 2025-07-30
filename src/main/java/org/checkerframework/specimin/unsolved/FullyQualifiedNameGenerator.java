@@ -662,10 +662,20 @@ public class FullyQualifiedNameGenerator {
    * @param type The type
    * @return A set of FQNs or primitive names.
    */
-  private static Set<String> getFQNsFromType(Type type) {
+  public static Set<String> getFQNsFromType(Type type) {
     if (type.isUnknownType()) {
       // Resolving an unknown type throws an error
       return Set.of();
+    }
+
+    if (type.isArrayType()) {
+      Set<String> result = new LinkedHashSet<>();
+      int arrayLevel = type.asArrayType().getArrayLevel();
+      for (String fqn : getFQNsFromType(type.asArrayType().getElementType())) {
+        result.add(fqn + "[]".repeat(arrayLevel));
+      }
+
+      return result;
     }
 
     try {
@@ -784,6 +794,7 @@ public class FullyQualifiedNameGenerator {
       } else {
         // 1) fully qualified name
         fqns.add(fullName);
+        return fqns;
       }
 
       // 2) inner class of a parent class (i.e. Map.Entry), which could then fall under 3) and 4)

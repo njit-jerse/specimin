@@ -27,7 +27,6 @@ import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultCo
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
@@ -134,7 +133,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
     if (resolved instanceof ResolvedReferenceTypeDeclaration resolvedTypeDeclaration) {
       TypeDeclaration<?> type =
-          getTypeFromQualifiedName(resolvedTypeDeclaration.getQualifiedName());
+          JavaParserUtil.getTypeFromQualifiedName(
+              resolvedTypeDeclaration.getQualifiedName(), fqnToCompilationUnits);
 
       if (type == null) return elements;
       elements.add(type);
@@ -142,8 +142,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
     if (resolved instanceof ResolvedMethodLikeDeclaration resolvedMethodLikeDeclaration) {
       TypeDeclaration<?> type =
-          getTypeFromQualifiedName(
-              resolvedMethodLikeDeclaration.declaringType().getQualifiedName());
+          JavaParserUtil.getTypeFromQualifiedName(
+              resolvedMethodLikeDeclaration.declaringType().getQualifiedName(),
+              fqnToCompilationUnits);
       if (type == null) return elements;
 
       if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
@@ -170,7 +171,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             ResolvedReferenceTypeDeclaration decl =
                 parentType.asReferenceType().getTypeDeclaration().get();
 
-            TypeDeclaration<?> typeDecl = getTypeFromQualifiedName(decl.getQualifiedName());
+            TypeDeclaration<?> typeDecl =
+                JavaParserUtil.getTypeFromQualifiedName(
+                    decl.getQualifiedName(), fqnToCompilationUnits);
             if (typeDecl == null) continue;
 
             for (ResolvedMethodDeclaration method : decl.asReferenceType().getDeclaredMethods()) {
@@ -202,7 +205,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
     if (resolved instanceof ResolvedFieldDeclaration resolvedFieldDeclaration) {
       TypeDeclaration<?> type =
-          getTypeFromQualifiedName(resolvedFieldDeclaration.declaringType().getQualifiedName());
+          JavaParserUtil.getTypeFromQualifiedName(
+              resolvedFieldDeclaration.declaringType().getQualifiedName(), fqnToCompilationUnits);
 
       if (type == null) return elements;
 
@@ -215,30 +219,5 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     return elements;
-  }
-
-  /**
-   * Gets the corresponding type declaration from a qualified type name.
-   *
-   * @param fqn The fully-qualified type name
-   * @return The type declaration
-   */
-  private @Nullable TypeDeclaration<?> getTypeFromQualifiedName(String fqn) {
-    CompilationUnit cu = fqnToCompilationUnits.get(fqn);
-
-    if (cu == null) {
-      // Not in project; solved by reflection, not our concern
-      return null;
-    }
-
-    TypeDeclaration<?> type =
-        cu.findFirst(
-                TypeDeclaration.class,
-                n ->
-                    n.getFullyQualifiedName().isPresent()
-                        && n.getFullyQualifiedName().get().equals(fqn))
-            .get();
-
-    return type;
   }
 }

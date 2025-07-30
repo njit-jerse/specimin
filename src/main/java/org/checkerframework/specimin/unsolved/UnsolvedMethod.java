@@ -1,15 +1,17 @@
 package org.checkerframework.specimin.unsolved;
 
+import com.github.javaparser.ast.Node;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * An UnsolvedMethod instance is a representation of a method that can not be solved by
  * SymbolSolver. The reason is that the class file of that method is not in the root directory.
  */
-public class UnsolvedMethod {
+public class UnsolvedMethod extends UnsolvedSymbolAlternate {
   /** The name of the method */
   private final String name;
 
@@ -29,18 +31,7 @@ public class UnsolvedMethod {
   private int numberOfTypeVariables = 0;
 
   /**
-   * Create an instance of UnsolvedMethod
-   *
-   * @param name the name of the method
-   * @param returnType the return type of the method
-   * @param parameterList the list of parameters for this method
-   */
-  public UnsolvedMethod(String name, MemberType returnType, List<MemberType> parameterList) {
-    this(name, returnType, parameterList, List.of());
-  }
-
-  /**
-   * Create an instance of UnsolvedMethod for a synthetic interface.
+   * Create an instance of UnsolvedMethod.
    *
    * @param name the name of the method
    * @param returnType the return type of the method
@@ -51,7 +42,9 @@ public class UnsolvedMethod {
       String name,
       MemberType returnType,
       List<MemberType> parameterList,
-      List<MemberType> throwsList) {
+      List<MemberType> throwsList,
+      Set<Node> mustPreserve) {
+    super(mustPreserve);
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
@@ -83,6 +76,15 @@ public class UnsolvedMethod {
    */
   public List<MemberType> getParameterList() {
     return Collections.unmodifiableList(parameterList);
+  }
+
+  /**
+   * Getter for the throws list. Note that the list is read-only.
+   *
+   * @return the throws list
+   */
+  public List<MemberType> getThrownExceptions() {
+    return Collections.unmodifiableList(throwsList);
   }
 
   /** Set isStatic to true */

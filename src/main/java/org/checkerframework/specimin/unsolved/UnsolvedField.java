@@ -1,6 +1,10 @@
 package org.checkerframework.specimin.unsolved;
 
-public class UnsolvedField {
+import java.util.Objects;
+import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
+
+public class UnsolvedField extends UnsolvedSymbolAlternate {
   /** The name of the field */
   private final String name;
 
@@ -22,6 +26,8 @@ public class UnsolvedField {
    * @param isFinal if the field is final
    */
   public UnsolvedField(String name, MemberType type, boolean isStatic, boolean isFinal) {
+    // Haven't found a case yet where nodes need to be selectively preserved for fields
+    super(Set.of());
     this.name = name;
     this.type = type;
     this.isStatic = isStatic;
@@ -55,5 +61,18 @@ public class UnsolvedField {
         + " "
         + name
         + ";";
+  }
+
+  @Override
+  public boolean equals(@Nullable Object o) {
+    if (!(o instanceof UnsolvedField other)) {
+      return false;
+    }
+    return other.name.equals(this.name);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(name);
   }
 }
