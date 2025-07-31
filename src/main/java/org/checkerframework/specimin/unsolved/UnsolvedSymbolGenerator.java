@@ -23,7 +23,6 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.PatternExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
-import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -51,8 +50,9 @@ import org.checkerframework.specimin.JavaParserUtil;
 
 /**
  * Generates unsolved symbols. This class ensures that only one of each type is created; i.e., the
- * same FQNs will point to the same instance. Additional symbols are tracked here than returned into
- * the final slice; this is to ensure classes used by some alternates are not always outputted.
+ * same FQNs will point to the same instance. More symbols are tracked here than returned into the
+ * final slice; this is to ensure classes used by some alternates are only outputted when those
+ * alternates are selected.
  */
 public class UnsolvedSymbolGenerator {
   private Map<String, CompilationUnit> fqnsToCompilationUnits;
@@ -68,7 +68,7 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * The slice of unsolved symbol definitions. These values need not be unique; the map is provided
+   * The cache of unsolved symbol definitions. These values need not be unique; the map is provided
    * for simple lookups when adding new symbols. Keys: fully qualified names --> values: unsolved
    * symbol alternates
    */
@@ -111,420 +111,19 @@ public class UnsolvedSymbolGenerator {
 
     // Types
     if (node instanceof ClassOrInterfaceType asType) {
-      try {
-        asType.resolve();
-        return;
-      } catch (UnsolvedSymbolException ex) {
-        // Ok to continue
-      }
-
-      Set<String> potentialFQNs =
-          FullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(asType);
-
-      UnsolvedClassOrInterfaceAlternates generated =
-          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
-
-      if (asType.getTypeArguments().isPresent()) {
-        generated.setNumberOfTypeVariables(asType.getTypeArguments().get().size());
-      }
-
-      result.add(generated);
+      handleClassOrInterfaceType(asType, result);
     } else if (node instanceof AnnotationExpr asAnno) {
-      try {
-        asAnno.resolve();
-        return;
-      } catch (UnsolvedSymbolException ex) {
-        // Ok to continue
-      }
-      Set<String> potentialFQNs = FullyQualifiedNameGenerator.getFQNsFromAnnotation(asAnno);
-
-      UnsolvedClassOrInterfaceAlternates generated =
-          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
-      generated.setIsAnAnnotationToTrue();
-
-      result.add(generated);
+      handleAnnotationExpr(asAnno, result);
     }
-    // Fields (although types are handled first conditional in FieldAccessExpr)
+    // Fields (although some types are handled as FieldAccessExpr or NameExpr too)
     else if (node instanceof FieldAccessExpr asField) {
-      // It may be solvable (when passed into this method via scope)
-      // In this case, while the declaration may be solvable, the type may not be
-      try {
-        ResolvedValueDeclaration resolved = asField.resolve();
-
-        Type type = JavaParserUtil.getTypeFromResolvedValueDeclaration(resolved);
-
-        if (type != null) {
-          inferContextImpl(type, result);
-        }
-      } catch (UnsolvedSymbolException ex) {
-        // Ignore
-      }
-
-      try {
-        asField.calculateResolvedType();
-
-        return;
-      } catch (UnsolvedSymbolException ex) {
-        // Ignore
-      }
-
-      // When we have a FieldAccessExpr like a.b.c, the scope a.b is also a FieldAccessExpr
-      // We need to handle the case where the scope could be a class, like org.example.MyClass,
-      // because resolving the scope of a static field like org.example.MyClass.a would return
-      // another FieldAccessExpr, not a ClassOrInterfaceType
-      if (JavaParserUtil.isAClassPath(node.toString())) {
-        Set<String> potentialFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType(asField);
-
-        UnsolvedClassOrInterfaceAlternates generated =
-            findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
-
-        result.add(generated);
-        return;
-      }
-      Expression scope = asField.getScope();
-
-      // Generate everything in the scopes before
-      inferContextImpl(scope, result);
-
-      Map<String, Set<String>> potentialScopeFQNs =
-          FullyQualifiedNameGenerator.getFQNsForExpressionLocation(asField);
-
-      if (potentialScopeFQNs.isEmpty()) {
-        return;
-      }
-
-      Set<String> potentialFQNs = new LinkedHashSet<>();
-
-      for (Set<String> set : potentialScopeFQNs.values()) {
-        for (String potentialScopeFQN : set) {
-          potentialFQNs.add(potentialScopeFQN + "#" + asField.getNameAsString());
-        }
-      }
-
-      UnsolvedSymbolAlternates<?> alreadyGenerated = findExistingAndUpdateFQNs(potentialFQNs);
-
-      if (!(alreadyGenerated instanceof UnsolvedFieldAlternates)) {
-        Set<String> potentialTypeFQNs =
-            FullyQualifiedNameGenerator.getFQNsForExpressionType(asField);
-
-        // Since we called inferContextImpl(scope), the field's parents are created
-        List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
-        for (Set<String> set : potentialScopeFQNs.values()) {
-          UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(set);
-
-          if (generated == null) {
-            throw new RuntimeException("Field scope types are not yet created");
-          }
-          potentialParents.add((UnsolvedClassOrInterfaceAlternates) generated);
-        }
-
-        MemberType type = getOrCreateMemberTypeFromFQNs(potentialTypeFQNs);
-
-        boolean isStatic = JavaParserUtil.isAStaticMember(asField);
-
-        UnsolvedFieldAlternates field =
-            UnsolvedFieldAlternates.create(
-                asField.getNameAsString(), type, potentialParents, isStatic, false);
-
-        addNewSymbolToGeneratedSymbolsMap(field);
-        result.add(field);
-      }
+      handleFieldAccessExpr(asField, result);
     } else if (node instanceof NameExpr nameExpr) {
-      // resolvable (when passed into this method via scope)
-      // In this case, while the declaration may be solvable, the type may not be
-      try {
-        ResolvedValueDeclaration resolved = nameExpr.resolve();
-
-        Type type = JavaParserUtil.getTypeFromResolvedValueDeclaration(resolved);
-
-        if (type != null) {
-          inferContextImpl(type, result);
-        }
-
-        return;
-      } catch (UnsolvedSymbolException ex) {
-        // Ignore
-      }
-
-      try {
-        nameExpr.calculateResolvedType();
-
-        return;
-      } catch (UnsolvedSymbolException ex) {
-        // Ignore
-      }
-
-      // class name
-      if (JavaParserUtil.isCapital(nameExpr.getNameAsString())) {
-        Set<String> potentialFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
-
-        UnsolvedClassOrInterfaceAlternates generated =
-            findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
-
-        result.add(generated);
-        return;
-      }
-
-      // static import
-      ImportDeclaration importDecl =
-          getImportDeclaration(nameExpr.getNameAsString(), node.findCompilationUnit().get());
-
-      if (importDecl != null) {
-        if (importDecl.isStatic()) {
-          Name staticImport = importDecl.getName();
-          String staticImportFqn =
-              staticImport.getQualifier().get() + "#" + staticImport.getIdentifier();
-
-          String encapsulatingClass = staticImport.getQualifier().get().toString();
-
-          UnsolvedSymbolAlternates<?> generatedField =
-              findExistingAndUpdateFQNs(Set.of(staticImportFqn));
-
-          if (!(generatedField instanceof UnsolvedFieldAlternates)) {
-            // Generate/find the class that will hold the field
-            UnsolvedClassOrInterfaceAlternates generatedClass =
-                findExistingAndUpdateFQNsOrCreateNewType(Set.of(encapsulatingClass));
-
-            // Generate the synthetic type
-            String typeFQN =
-                FullyQualifiedNameGenerator.getFQNOfStaticallyImportedMemberType(
-                    encapsulatingClass, false);
-
-            UnsolvedClassOrInterfaceAlternates generatedType =
-                findExistingAndUpdateFQNsOrCreateNewType(Set.of(typeFQN));
-
-            generatedField =
-                UnsolvedFieldAlternates.create(
-                    staticImport.getIdentifier(),
-                    new MemberType(generatedType),
-                    List.of(generatedClass),
-                    true,
-                    true);
-
-            addNewSymbolToGeneratedSymbolsMap(generatedField);
-
-            result.add(generatedField);
-          }
-        } else {
-          // Update FQNs
-          findExistingAndUpdateFQNs(FullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr));
-        }
-
-        return;
-      }
-
-      // super class field
-      Map<String, Set<String>> parentClassFQNs =
-          FullyQualifiedNameGenerator.getFQNsForExpressionLocation(nameExpr);
-      Set<String> fieldFQNs = new LinkedHashSet<>();
-
-      for (Set<String> set : parentClassFQNs.values()) {
-        for (String parentClassFQN : set) {
-          fieldFQNs.add(parentClassFQN + "#" + nameExpr.getNameAsString());
-        }
-      }
-
-      UnsolvedSymbolAlternates<?> generatedField = findExistingAndUpdateFQNs(fieldFQNs);
-
-      if (!(generatedField instanceof UnsolvedFieldAlternates)) {
-        // Generate/find the class that will hold the field
-        List<UnsolvedClassOrInterfaceAlternates> generatedClasses = new ArrayList<>();
-
-        for (Set<String> fqns : parentClassFQNs.values()) {
-          generatedClasses.add(findExistingAndUpdateFQNsOrCreateNewType(fqns));
-        }
-
-        // Generate the synthetic type
-        Set<String> typeFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
-
-        MemberType type = getOrCreateMemberTypeFromFQNs(typeFQNs);
-
-        generatedField =
-            UnsolvedFieldAlternates.create(
-                nameExpr.getNameAsString(), type, generatedClasses, false, false);
-
-        addNewSymbolToGeneratedSymbolsMap(generatedField);
-
-        result.add(generatedField);
-      }
+      handleNameExpr(nameExpr, result);
     }
     // Methods
     else if (node instanceof MethodCallExpr methodCall) {
-      try {
-        ResolvedMethodDeclaration resolvedMethodDeclaration = methodCall.resolve();
-
-        // If we're here, this was probably passed in as scope
-        if (resolvedMethodDeclaration.toAst().isPresent()) {
-          MethodDeclaration toAst = (MethodDeclaration) resolvedMethodDeclaration.toAst().get();
-
-          inferContextImpl(toAst.getType(), result);
-        }
-
-        return;
-      } catch (UnsolvedSymbolException ex) {
-        // continue
-      }
-
-      // A collection of sets of fqns. Each set represents potentially a different class/interface.
-      Collection<Set<String>> potentialScopeFQNs = null;
-
-      String methodName = methodCall.getNameAsString();
-
-      // Static import
-      if (!methodCall.hasScope()) {
-        ImportDeclaration importDecl =
-            getImportDeclaration(methodName, node.findCompilationUnit().get());
-
-        if (importDecl != null && importDecl.isStatic()) {
-          potentialScopeFQNs = Set.of(Set.of(importDecl.getName().getQualifier().get().toString()));
-
-          // update or create the type
-          findExistingAndUpdateFQNsOrCreateNewType(potentialScopeFQNs.iterator().next());
-        }
-      } else {
-        inferContextImpl(methodCall.getScope().get(), result);
-      }
-
-      if (potentialScopeFQNs == null) {
-        potentialScopeFQNs =
-            FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall).values();
-      }
-
-      if (potentialScopeFQNs.isEmpty()) {
-        return;
-      }
-
-      Map<Expression, Set<String>> argumentToParameterPotentialFQNs = new HashMap<>();
-
-      List<String> simpleNames = new ArrayList<>();
-
-      for (Expression argument : methodCall.getArguments()) {
-        Set<String> fqns = FullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
-        String first = fqns.iterator().next();
-        String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(first);
-        simpleNames.add(simpleName);
-        argumentToParameterPotentialFQNs.put(argument, fqns);
-      }
-
-      Set<String> potentialFQNs = new LinkedHashSet<>();
-
-      for (Set<String> set : potentialScopeFQNs) {
-        for (String potentialScopeFQN : set) {
-          potentialFQNs.add(
-              potentialScopeFQN + "#" + methodName + "(" + String.join(", ", simpleNames) + ")");
-        }
-      }
-
-      UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
-
-      // Here, try to find if this method call is an argument of a solvable method call
-      // If so, we have multiple potential return types to choose from, based on each definition
-      Node parent = methodCall.getParentNode().get();
-      List<? extends CallableDeclaration<?>> parentCallableDeclarations;
-      int paramNum = 0;
-      if (parent instanceof MethodCallExpr parentMethodCall) {
-        parentCallableDeclarations =
-            JavaParserUtil.tryResolveMethodCallWithUnresolvableArguments(
-                parentMethodCall, fqnsToCompilationUnits);
-        paramNum = parentMethodCall.getArgumentPosition(methodCall);
-      } else if (parent instanceof ExplicitConstructorInvocationStmt parentConstructorCall) {
-        parentCallableDeclarations =
-            JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
-                parentConstructorCall, fqnsToCompilationUnits);
-        paramNum = parentConstructorCall.getArgumentPosition(methodCall);
-      } else if (parent instanceof ObjectCreationExpr parentConstructorCall) {
-        parentCallableDeclarations =
-            JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
-                parentConstructorCall);
-        paramNum = parentConstructorCall.getArgumentPosition(methodCall);
-      } else {
-        parentCallableDeclarations = List.of();
-      }
-
-      // TODO: see if this is an issue if two different methods have the same parameter type
-      Map<MemberType, @Nullable Node> returnTypeToMustPreserveNode = new LinkedHashMap<>();
-
-      for (CallableDeclaration<?> callable : parentCallableDeclarations) {
-        Parameter param = callable.getParameter(paramNum);
-
-        Set<String> fqns = FullyQualifiedNameGenerator.getFQNsFromType(param.getType());
-        MemberType memberType = getOrCreateMemberTypeFromFQNs(fqns);
-
-        returnTypeToMustPreserveNode.put(memberType, callable);
-      }
-
-      UnsolvedMethodAlternates generatedMethod;
-
-      if (generated instanceof UnsolvedMethodAlternates) {
-        generatedMethod = (UnsolvedMethodAlternates) generated;
-
-        if (!parentCallableDeclarations.isEmpty()) {
-          generatedMethod.updateReturnTypesAndMustPreserveNodes(returnTypeToMustPreserveNode);
-        }
-      } else {
-        Set<String> potentialReturnTypeFQNs =
-            FullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall);
-
-        List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
-        for (Set<String> set : potentialScopeFQNs) {
-          UnsolvedSymbolAlternates<?> gen = findExistingAndUpdateFQNs(set);
-
-          if (gen == null) {
-            throw new RuntimeException("Method scope types are not yet created");
-          }
-          potentialParents.add((UnsolvedClassOrInterfaceAlternates) gen);
-        }
-
-        List<MemberType> parameters = new ArrayList<>();
-
-        for (Expression argument : methodCall.getArguments()) {
-          MemberType paramType;
-          try {
-            ResolvedType type = argument.calculateResolvedType();
-            paramType = new MemberType(type.describe());
-          } catch (UnsolvedSymbolException ex) {
-            inferContextImpl(argument, result);
-
-            Set<String> set = argumentToParameterPotentialFQNs.get(argument);
-
-            // This null check is just to satisfy the error checker
-            if (set == null) {
-              throw new RuntimeException("Expected non-null when this is null");
-            }
-
-            paramType = getOrCreateMemberTypeFromFQNs(set);
-          }
-
-          parameters.add(paramType);
-        }
-
-        if (parentCallableDeclarations.isEmpty()) {
-          MemberType returnType = getOrCreateMemberTypeFromFQNs(potentialReturnTypeFQNs);
-
-          generatedMethod =
-              UnsolvedMethodAlternates.create(methodName, returnType, potentialParents, parameters);
-        } else {
-          generatedMethod =
-              UnsolvedMethodAlternates.create(
-                  methodName,
-                  returnTypeToMustPreserveNode,
-                  potentialParents,
-                  parameters,
-                  List.of());
-        }
-
-        addNewSymbolToGeneratedSymbolsMap(generatedMethod);
-
-        if (methodCall.getTypeArguments().isPresent()) {
-          generatedMethod.setNumberOfTypeVariables(methodCall.getTypeArguments().get().size());
-        }
-      }
-
-      if (JavaParserUtil.isAStaticMember(methodCall)) {
-        generatedMethod.setIsStaticToTrue();
-      }
-
-      result.add(generatedMethod);
+      handleMethodCallExpr(methodCall, result);
     } else if (node instanceof ObjectCreationExpr
         || node instanceof ExplicitConstructorInvocationStmt) {
       UnsolvedClassOrInterfaceAlternates scope;
@@ -532,11 +131,7 @@ public class UnsolvedSymbolGenerator {
       List<Expression> arguments;
       int numberOfTypeParams = 0;
 
-      // Calling inferContextButDoNotAddInformation on a ClassOrInterfaceType always returns a list
-      // of length 1 with the generated/found type
-      if (node instanceof ObjectCreationExpr) {
-        ObjectCreationExpr constructor = (ObjectCreationExpr) node;
-
+      if (node instanceof ObjectCreationExpr constructor) {
         try {
           constructor.calculateResolvedType();
           // If the type is resolvable, the constructor is too; a type in the constructor is not
@@ -564,8 +159,6 @@ public class UnsolvedSymbolGenerator {
         ExplicitConstructorInvocationStmt constructor = (ExplicitConstructorInvocationStmt) node;
 
         try {
-          // get() is safe; ExplicitConstructorInvocationStmt wraps an existing expression in an
-          // Optional
           constructor.getExpression().get().calculateResolvedType();
           // If the type is resolvable, the constructor is too; a type in the constructor is not
           // solvable. Return because we don't need to generate a new constructor.
@@ -575,10 +168,9 @@ public class UnsolvedSymbolGenerator {
         }
 
         // If it's unresolvable, it's a constructor in the unsolved parent class
-        TypeDeclaration<?> decl = JavaParserUtil.getEnclosingClassLike(node);
-        if (decl instanceof NodeWithExtends && !constructor.isThis()) {
+        if (!constructor.isThis()) {
           // There can only be one extends in a class
-          ClassOrInterfaceType superClass = ((NodeWithExtends<?>) decl).getExtendedTypes(0);
+          ClassOrInterfaceType superClass = JavaParserUtil.getSuperClass(node);
 
           inferContextImpl(superClass, result);
           // Do not generate here; that should be taken care of in the inferContextImpl call above.
@@ -606,185 +198,687 @@ public class UnsolvedSymbolGenerator {
             "Scope was not generated in constructor call when it should have been.");
       }
 
-      Map<Expression, Set<String>> argumentToParameterPotentialFQNs = new HashMap<>();
-      List<String> simpleNames = new ArrayList<>();
-
-      for (Expression argument : arguments) {
-        Set<String> fqns = FullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
-        String first = fqns.iterator().next();
-        simpleNames.add(JavaParserUtil.getSimpleNameFromQualifiedName(first));
-        argumentToParameterPotentialFQNs.put(argument, fqns);
-      }
-
-      Set<String> potentialFQNs = new LinkedHashSet<>();
-
-      for (String potentialScopeFQN : scope.getFullyQualifiedNames()) {
-        potentialFQNs.add(
-            potentialScopeFQN + "#" + constructorName + "(" + String.join(", ", simpleNames) + ")");
-      }
-
-      UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
-      UnsolvedMethodAlternates generatedMethod;
-
-      if (generated instanceof UnsolvedMethodAlternates) {
-        generatedMethod = (UnsolvedMethodAlternates) generated;
-      } else {
-        List<MemberType> parameters = new ArrayList<>();
-
-        for (Expression argument : arguments) {
-          MemberType paramType;
-
-          try {
-            ResolvedType type = argument.calculateResolvedType();
-            paramType = new MemberType(type.describe());
-          } catch (UnsolvedSymbolException ex) {
-            inferContextImpl(argument, result);
-
-            Set<String> set = argumentToParameterPotentialFQNs.get(argument);
-
-            // This null check is just to satisfy the error checker
-            if (set == null) {
-              throw new RuntimeException("Expected non-null when this is null");
-            }
-
-            paramType = getOrCreateMemberTypeFromFQNs(set);
-          }
-
-          parameters.add(paramType);
-        }
-
-        generatedMethod =
-            UnsolvedMethodAlternates.create(
-                constructorName, new MemberType(""), List.of(scope), parameters);
-
-        addNewSymbolToGeneratedSymbolsMap(generatedMethod);
-
-        generatedMethod.setNumberOfTypeVariables(numberOfTypeParams);
-      }
-
-      result.add(generatedMethod);
+      handleConstructorCall(scope, constructorName, arguments, numberOfTypeParams, result);
     }
     // Method references
     else if (node instanceof MethodReferenceExpr methodRef) {
-      // It will be the case that a method reference expression is NEVER solvable in this method.
-      // Both the method itself and the type of the functional interface must be known in order to
-      // resolve, which will never happen here (that would mean a fully solvable method or variable)
-
-      // TODO: it may also be possible to generate alternates based on all the definitions for a
-      // method reference expression. For example, obj::foo could refer to foo(int) or foo(int,
-      // String). This is the exact same case as the problem we face with constructors/methods with
-      // unsolved argument types; fix this code segment once that is also done.
-
-      Map<String, Set<String>> potentialScopeFQNs =
-          FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodRef);
-      // A method ref has a scope, so its location is known to be a single type; therefore, it's
-      // safe to do this.
-      String simpleClassName = potentialScopeFQNs.keySet().iterator().next();
-
-      Set<String> potentialFQNs = new LinkedHashSet<>();
-
-      String methodName = JavaParserUtil.erase(methodRef.getIdentifier());
-
-      boolean isConstructor = methodName.equals("new");
-
-      List<UnsolvedClassOrInterfaceAlternates> scope = new ArrayList<>();
-
-      for (Set<String> set : potentialScopeFQNs.values()) {
-        UnsolvedClassOrInterfaceAlternates generated =
-            (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
-
-        // TODO: throw an error here once we add some sort of custom resolution logic
-        if (generated == null) {
-          continue;
-        }
-
-        scope.add(generated);
-
-        // Unsolvable method ref: default to parameterless
-        if (isConstructor) {
-          for (String fqn : set) {
-            potentialFQNs.add(fqn + "#" + simpleClassName + "()");
-          }
-        } else {
-          for (String fqn : set) {
-            potentialFQNs.add(fqn + "#" + methodName + "()");
-          }
-        }
-      }
-
-      UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
-      UnsolvedMethodAlternates generatedMethod;
-
-      if (generated instanceof UnsolvedMethodAlternates) {
-        generatedMethod = (UnsolvedMethodAlternates) generated;
-      } else {
-        List<MemberType> parameters = new ArrayList<>();
-
-        generatedMethod =
-            UnsolvedMethodAlternates.create(
-                isConstructor ? simpleClassName : methodName,
-                new MemberType(isConstructor ? "" : "void"),
-                scope,
-                parameters);
-
-        if (methodRef.getTypeArguments().isPresent()) {
-          generatedMethod.setNumberOfTypeVariables(methodRef.getTypeArguments().get().size());
-        }
-
-        addNewSymbolToGeneratedSymbolsMap(generatedMethod);
-      }
-
-      result.add(generatedMethod);
+      handleMethodReferenceExpr(methodRef, result);
     }
     // A lambda expr is not of type Resolvable<?>, but it could be passed into this method
     // when an argument is a lambda.
-    if (node instanceof LambdaExpr) {
-      boolean isVoid;
-      LambdaExpr lambda = (LambdaExpr) node;
-
-      if (lambda.getExpressionBody().isPresent()) {
-        Expression body = lambda.getExpressionBody().get();
-        Set<String> fqns = FullyQualifiedNameGenerator.getFQNsForExpressionType(body);
-        isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
-      } else {
-        isVoid =
-            lambda.getBody().asBlockStmt().getStatements().stream()
-                .anyMatch(stmt -> stmt instanceof ReturnStmt);
-      }
-
-      int arity = lambda.getParameters().size();
-
-      Set<String> unerasedPotentialFQNs =
-          FullyQualifiedNameGenerator.getFQNsForExpressionType((Expression) node);
-      Set<String> erasedPotentialFQNs = new LinkedHashSet<>();
-
-      for (String unerased : unerasedPotentialFQNs) {
-        erasedPotentialFQNs.add(JavaParserUtil.erase(unerased));
-      }
-
-      UnsolvedClassOrInterfaceAlternates functionalInterface =
-          findExistingAndUpdateFQNsOrCreateNewType(erasedPotentialFQNs);
-      functionalInterface.setNumberOfTypeVariables(arity + (isVoid ? 1 : 0));
-      result.add(functionalInterface);
-
-      String[] paramArray =
-          functionalInterface.getTypeVariablesAsStringWithoutBrackets().split(", ", -1);
-      List<MemberType> params = new ArrayList<>();
-
-      // remove the last element of params, because that's the return type, not a parameter
-      for (int i = 0; i < params.size() - (isVoid ? 1 : 0); i++) {
-        params.add(new MemberType(paramArray[i]));
-      }
-
-      String returnType = isVoid ? "void" : "T" + arity;
-      UnsolvedMethodAlternates apply =
-          UnsolvedMethodAlternates.create(
-              "apply", new MemberType(returnType), List.of(functionalInterface), params);
-
-      addNewSymbolToGeneratedSymbolsMap(apply);
-
-      result.add(apply);
+    else if (node instanceof LambdaExpr lambda) {
+      handleLambdaExpr(lambda, result);
     }
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Handles ClassOrInterfaceType: adds the
+   * existing definition to the result if found, or a new definition if one does not already exist.
+   *
+   * @param type The type to handle
+   * @param result The result of inferContext
+   */
+  private void handleClassOrInterfaceType(
+      ClassOrInterfaceType type, List<UnsolvedSymbolAlternates<?>> result) {
+    try {
+      type.resolve();
+      return;
+    } catch (UnsolvedSymbolException ex) {
+      // Ok to continue
+    }
+    Set<String> potentialFQNs = FullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(type);
+
+    UnsolvedClassOrInterfaceAlternates generated =
+        findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+
+    if (type.getTypeArguments().isPresent()) {
+      generated.setNumberOfTypeVariables(type.getTypeArguments().get().size());
+    }
+
+    result.add(generated);
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Handles annotations: adds the existing
+   * definition to the result if found, or a new definition if one does not already exist.
+   *
+   * @param anno The annotation to handle
+   * @param result The result of inferContext
+   */
+  private void handleAnnotationExpr(AnnotationExpr anno, List<UnsolvedSymbolAlternates<?>> result) {
+    try {
+      anno.resolve();
+      return;
+    } catch (UnsolvedSymbolException ex) {
+      // Ok to continue
+    }
+    Set<String> potentialFQNs = FullyQualifiedNameGenerator.getFQNsFromAnnotation(anno);
+
+    UnsolvedClassOrInterfaceAlternates generated =
+        findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+    generated.setIsAnAnnotationToTrue();
+
+    result.add(generated);
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. This method handles cases where
+   * FieldAccessExpr could be either a type or a field (when getting the scope of a FieldAccessExpr,
+   * it may return another FieldAccessExpr in the form of a class path). Adds the existing
+   * definition to the result if found, or a new definition if one does not already exist.
+   *
+   * @param field The field to handle
+   * @param result The result of inferContext
+   */
+  private void handleFieldAccessExpr(
+      FieldAccessExpr field, List<UnsolvedSymbolAlternates<?>> result) {
+    // It may be solvable (when passed into this method via scope)
+    // In this case, while the declaration may be solvable, the type may not be
+    try {
+      ResolvedValueDeclaration resolved = field.resolve();
+
+      Type type = JavaParserUtil.getTypeFromResolvedValueDeclaration(resolved);
+
+      if (type != null) {
+        inferContextImpl(type, result);
+      }
+    } catch (UnsolvedSymbolException ex) {
+      // If the declaration is not resolvable, then check to see if it is a
+      // known class that has been passed in
+      if (JavaParserUtil.isExprTypeResolvable(field)) {
+        // This is most likely a class; resolve() only works on field declarations.
+        // System.out, for example, would fail to resolve() but calculateResolvedType() would work.
+        return;
+      }
+    }
+
+    // When we have a FieldAccessExpr like a.b.c, the scope a.b is also a FieldAccessExpr
+    // We need to handle the case where the scope could be a class, like org.example.MyClass,
+    // because resolving the scope of a static field like org.example.MyClass.a would return
+    // another FieldAccessExpr, not a ClassOrInterfaceType
+    if (JavaParserUtil.isAClassPath(field.toString())) {
+      Set<String> potentialFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType(field);
+
+      UnsolvedClassOrInterfaceAlternates generated =
+          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+
+      result.add(generated);
+      return;
+    }
+    Expression scope = field.getScope();
+
+    // Generate everything in the scopes before
+    inferContextImpl(scope, result);
+
+    Map<String, Set<String>> potentialScopeFQNs =
+        FullyQualifiedNameGenerator.getFQNsForExpressionLocation(field);
+
+    // Could be empty if the field is called on a NameExpr with a union type,
+    // but the field is located in a known class.
+    if (potentialScopeFQNs.isEmpty()) {
+      return;
+    }
+
+    Set<String> potentialFQNs = new LinkedHashSet<>();
+
+    for (Set<String> set : potentialScopeFQNs.values()) {
+      for (String potentialScopeFQN : set) {
+        potentialFQNs.add(potentialScopeFQN + "#" + field.getNameAsString());
+      }
+    }
+
+    UnsolvedSymbolAlternates<?> alreadyGenerated = findExistingAndUpdateFQNs(potentialFQNs);
+
+    if (!(alreadyGenerated instanceof UnsolvedFieldAlternates)) {
+      Set<String> potentialTypeFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType(field);
+
+      // Since we called inferContextImpl(scope), the field's parents are created
+      List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
+      for (Set<String> set : potentialScopeFQNs.values()) {
+        UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(set);
+
+        if (generated == null) {
+          throw new RuntimeException("Field scope types are not yet created");
+        }
+        potentialParents.add((UnsolvedClassOrInterfaceAlternates) generated);
+      }
+
+      MemberType type = getOrCreateMemberTypeFromFQNs(potentialTypeFQNs);
+
+      boolean isStatic = JavaParserUtil.isAStaticMember(field);
+
+      UnsolvedFieldAlternates createdField =
+          UnsolvedFieldAlternates.create(
+              field.getNameAsString(), type, potentialParents, isStatic, false);
+
+      addNewSymbolToGeneratedSymbolsMap(createdField);
+      result.add(createdField);
+    }
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Adds the existing definition to the
+   * result if found, or a new definition if one does not already exist. This method handles cases
+   * where NameExpr could be either a type or a field (when getting the scope of a FieldAccessExpr,
+   * it may return a NameExpr in the form of a class name, indicated by a capital). Adds the
+   * existing definition to the result if found, or a new definition if one does not already exist.
+   *
+   * @param nameExpr The field/variable to handle
+   * @param result The result of inferContext
+   */
+  private void handleNameExpr(NameExpr nameExpr, List<UnsolvedSymbolAlternates<?>> result) {
+    // resolvable (when passed into this method via scope)
+    // In this case, while the declaration may be solvable, the type may not be
+    try {
+      ResolvedValueDeclaration resolved = nameExpr.resolve();
+
+      Type type = JavaParserUtil.getTypeFromResolvedValueDeclaration(resolved);
+
+      if (type != null) {
+        inferContextImpl(type, result);
+      }
+
+      return;
+    } catch (UnsolvedSymbolException ex) {
+      // If the declaration is not resolvable, then check to see if it is a
+      // known class that has been passed in
+      if (JavaParserUtil.isExprTypeResolvable(nameExpr)) {
+        // This is most likely a class; resolve() only works on field/variable declarations.
+        // System, for example, would fail to resolve() but calculateResolvedType() would work.
+        return;
+      }
+    }
+
+    // class name
+    if (JavaParserUtil.isAClassName(nameExpr.getNameAsString())) {
+      Set<String> potentialFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
+
+      UnsolvedClassOrInterfaceAlternates generated =
+          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+
+      result.add(generated);
+      return;
+    }
+
+    // static import
+    ImportDeclaration importDecl =
+        getImportDeclaration(nameExpr.getNameAsString(), nameExpr.findCompilationUnit().get());
+
+    if (importDecl != null) {
+      if (importDecl.isStatic()) {
+        Name staticImport = importDecl.getName();
+        String staticImportFqn =
+            staticImport.getQualifier().get() + "#" + staticImport.getIdentifier();
+
+        String encapsulatingClass = staticImport.getQualifier().get().toString();
+
+        UnsolvedSymbolAlternates<?> generatedField =
+            findExistingAndUpdateFQNs(Set.of(staticImportFqn));
+
+        if (!(generatedField instanceof UnsolvedFieldAlternates)) {
+          // Generate/find the class that will hold the field
+          UnsolvedClassOrInterfaceAlternates generatedClass =
+              findExistingAndUpdateFQNsOrCreateNewType(Set.of(encapsulatingClass));
+
+          // Generate the synthetic type
+          String typeFQN =
+              FullyQualifiedNameGenerator.getFQNOfStaticallyImportedMemberType(
+                  encapsulatingClass, false);
+
+          UnsolvedClassOrInterfaceAlternates generatedType =
+              findExistingAndUpdateFQNsOrCreateNewType(Set.of(typeFQN));
+
+          generatedField =
+              UnsolvedFieldAlternates.create(
+                  staticImport.getIdentifier(),
+                  new MemberType(generatedType),
+                  List.of(generatedClass),
+                  true,
+                  true);
+
+          addNewSymbolToGeneratedSymbolsMap(generatedField);
+
+          result.add(generatedField);
+        }
+      } else {
+        // Update FQNs
+        findExistingAndUpdateFQNs(FullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr));
+      }
+
+      return;
+    }
+
+    // super class field
+    Map<String, Set<String>> parentClassFQNs =
+        FullyQualifiedNameGenerator.getFQNsForExpressionLocation(nameExpr);
+    Set<String> fieldFQNs = new LinkedHashSet<>();
+
+    for (Set<String> set : parentClassFQNs.values()) {
+      for (String parentClassFQN : set) {
+        fieldFQNs.add(parentClassFQN + "#" + nameExpr.getNameAsString());
+      }
+    }
+
+    UnsolvedSymbolAlternates<?> generatedField = findExistingAndUpdateFQNs(fieldFQNs);
+
+    if (!(generatedField instanceof UnsolvedFieldAlternates)) {
+      // Generate/find the class that will hold the field
+      List<UnsolvedClassOrInterfaceAlternates> generatedClasses = new ArrayList<>();
+
+      for (Set<String> fqns : parentClassFQNs.values()) {
+        generatedClasses.add(findExistingAndUpdateFQNsOrCreateNewType(fqns));
+      }
+
+      // Generate the synthetic type
+      Set<String> typeFQNs = FullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
+
+      MemberType type = getOrCreateMemberTypeFromFQNs(typeFQNs);
+
+      generatedField =
+          UnsolvedFieldAlternates.create(
+              nameExpr.getNameAsString(), type, generatedClasses, false, false);
+
+      addNewSymbolToGeneratedSymbolsMap(generatedField);
+
+      result.add(generatedField);
+    }
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Adds the existing definition to the
+   * result if found, or a new definition if one does not already exist.
+   *
+   * @param methodCall The method call to handle
+   * @param result The result of inferContext
+   */
+  private void handleMethodCallExpr(
+      MethodCallExpr methodCall, List<UnsolvedSymbolAlternates<?>> result) {
+    try {
+      ResolvedMethodDeclaration resolvedMethodDeclaration = methodCall.resolve();
+
+      // If we're here, this was probably passed in as scope
+      if (resolvedMethodDeclaration.toAst().isPresent()) {
+        MethodDeclaration toAst = (MethodDeclaration) resolvedMethodDeclaration.toAst().get();
+
+        inferContextImpl(toAst.getType(), result);
+      }
+
+      return;
+    } catch (UnsolvedSymbolException ex) {
+      // continue
+    }
+
+    // A collection of sets of fqns. Each set represents potentially a different class/interface.
+    Collection<Set<String>> potentialScopeFQNs = null;
+
+    String methodName = methodCall.getNameAsString();
+
+    // Static import
+    if (!methodCall.hasScope()) {
+      ImportDeclaration importDecl =
+          getImportDeclaration(methodName, methodCall.findCompilationUnit().get());
+
+      if (importDecl != null && importDecl.isStatic()) {
+        potentialScopeFQNs = Set.of(Set.of(importDecl.getName().getQualifier().get().toString()));
+
+        // update or create the type
+        findExistingAndUpdateFQNsOrCreateNewType(potentialScopeFQNs.iterator().next());
+      }
+    } else {
+      inferContextImpl(methodCall.getScope().get(), result);
+    }
+
+    if (potentialScopeFQNs == null) {
+      potentialScopeFQNs =
+          FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall).values();
+    }
+
+    // Could be empty if the method is called on a NameExpr with a union type,
+    // but the method is located in a known class.
+    if (potentialScopeFQNs.isEmpty()) {
+      return;
+    }
+
+    Map<Expression, Set<String>> argumentToParameterPotentialFQNs = new HashMap<>();
+
+    List<String> simpleNames = new ArrayList<>();
+
+    for (Expression argument : methodCall.getArguments()) {
+      Set<String> fqns = FullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
+      String first = fqns.iterator().next();
+      String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(first);
+      simpleNames.add(simpleName);
+      argumentToParameterPotentialFQNs.put(argument, fqns);
+    }
+
+    Set<String> potentialFQNs = new LinkedHashSet<>();
+
+    for (Set<String> set : potentialScopeFQNs) {
+      for (String potentialScopeFQN : set) {
+        potentialFQNs.add(
+            potentialScopeFQN + "#" + methodName + "(" + String.join(", ", simpleNames) + ")");
+      }
+    }
+
+    UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
+
+    // Here, try to find if this method call is an argument of a solvable method call
+    // If so, we have multiple potential return types to choose from, based on each definition
+    Node parent = methodCall.getParentNode().get();
+    List<? extends CallableDeclaration<?>> parentCallableDeclarations;
+    int paramNum = 0;
+    if (parent instanceof MethodCallExpr parentMethodCall) {
+      parentCallableDeclarations =
+          JavaParserUtil.tryResolveMethodCallWithUnresolvableArguments(
+              parentMethodCall, fqnsToCompilationUnits);
+      paramNum = parentMethodCall.getArgumentPosition(methodCall);
+    } else if (parent instanceof ExplicitConstructorInvocationStmt parentConstructorCall) {
+      parentCallableDeclarations =
+          JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
+              parentConstructorCall, fqnsToCompilationUnits);
+      paramNum = parentConstructorCall.getArgumentPosition(methodCall);
+    } else if (parent instanceof ObjectCreationExpr parentConstructorCall) {
+      parentCallableDeclarations =
+          JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(parentConstructorCall);
+      paramNum = parentConstructorCall.getArgumentPosition(methodCall);
+    } else {
+      parentCallableDeclarations = List.of();
+    }
+
+    // TODO: see if this is an issue if two different methods have the same parameter type
+    Map<MemberType, @Nullable Node> returnTypeToMustPreserveNode = new LinkedHashMap<>();
+
+    for (CallableDeclaration<?> callable : parentCallableDeclarations) {
+      Parameter param = callable.getParameter(paramNum);
+
+      Set<String> fqns = FullyQualifiedNameGenerator.getFQNsFromType(param.getType());
+      MemberType memberType = getOrCreateMemberTypeFromFQNs(fqns);
+
+      returnTypeToMustPreserveNode.put(memberType, callable);
+    }
+
+    UnsolvedMethodAlternates generatedMethod;
+
+    if (generated instanceof UnsolvedMethodAlternates) {
+      generatedMethod = (UnsolvedMethodAlternates) generated;
+
+      if (!parentCallableDeclarations.isEmpty()) {
+        generatedMethod.updateReturnTypesAndMustPreserveNodes(returnTypeToMustPreserveNode);
+      }
+    } else {
+      Set<String> potentialReturnTypeFQNs =
+          FullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall);
+
+      List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
+      for (Set<String> set : potentialScopeFQNs) {
+        UnsolvedSymbolAlternates<?> gen = findExistingAndUpdateFQNs(set);
+
+        if (gen == null) {
+          throw new RuntimeException("Method scope types are not yet created");
+        }
+        potentialParents.add((UnsolvedClassOrInterfaceAlternates) gen);
+      }
+
+      List<MemberType> parameters = new ArrayList<>();
+
+      for (Expression argument : methodCall.getArguments()) {
+        MemberType paramType;
+        try {
+          ResolvedType type = argument.calculateResolvedType();
+          paramType = new MemberType(type.describe());
+        } catch (UnsolvedSymbolException ex) {
+          inferContextImpl(argument, result);
+
+          Set<String> set = argumentToParameterPotentialFQNs.get(argument);
+
+          // This null check is just to satisfy the error checker
+          if (set == null) {
+            throw new RuntimeException("Expected non-null when this is null");
+          }
+
+          paramType = getOrCreateMemberTypeFromFQNs(set);
+        }
+
+        parameters.add(paramType);
+      }
+
+      if (parentCallableDeclarations.isEmpty()) {
+        MemberType returnType = getOrCreateMemberTypeFromFQNs(potentialReturnTypeFQNs);
+
+        generatedMethod =
+            UnsolvedMethodAlternates.create(methodName, returnType, potentialParents, parameters);
+      } else {
+        generatedMethod =
+            UnsolvedMethodAlternates.create(
+                methodName, returnTypeToMustPreserveNode, potentialParents, parameters, List.of());
+      }
+
+      addNewSymbolToGeneratedSymbolsMap(generatedMethod);
+
+      if (methodCall.getTypeArguments().isPresent()) {
+        generatedMethod.setNumberOfTypeVariables(methodCall.getTypeArguments().get().size());
+      }
+    }
+
+    if (JavaParserUtil.isAStaticMember(methodCall)) {
+      generatedMethod.setIsStaticToTrue();
+    }
+
+    result.add(generatedMethod);
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Adds the existing definition to the
+   * result if found, or a new definition if one does not already exist. Handles both explicit
+   * constructor invocation statements (super/this) and constructor calls (new ...()).
+   *
+   * @param location The location of the constructor
+   * @param constructorName The name of the constructor
+   * @param arguments The arguments of the constructor call
+   * @param numberOfTypeParams The number of type parameters of the constructor only
+   * @param result The result of inferContext
+   */
+  private void handleConstructorCall(
+      UnsolvedClassOrInterfaceAlternates location,
+      String constructorName,
+      List<Expression> arguments,
+      int numberOfTypeParams,
+      List<UnsolvedSymbolAlternates<?>> result) {
+    Map<Expression, Set<String>> argumentToParameterPotentialFQNs = new HashMap<>();
+    List<String> simpleNames = new ArrayList<>();
+
+    for (Expression argument : arguments) {
+      Set<String> fqns = FullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
+      String first = fqns.iterator().next();
+      simpleNames.add(JavaParserUtil.getSimpleNameFromQualifiedName(first));
+      argumentToParameterPotentialFQNs.put(argument, fqns);
+    }
+
+    Set<String> potentialFQNs = new LinkedHashSet<>();
+
+    for (String potentialScopeFQN : location.getFullyQualifiedNames()) {
+      potentialFQNs.add(
+          potentialScopeFQN + "#" + constructorName + "(" + String.join(", ", simpleNames) + ")");
+    }
+
+    UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
+    UnsolvedMethodAlternates generatedMethod;
+
+    if (generated instanceof UnsolvedMethodAlternates) {
+      generatedMethod = (UnsolvedMethodAlternates) generated;
+    } else {
+      List<MemberType> parameters = new ArrayList<>();
+
+      for (Expression argument : arguments) {
+        MemberType paramType;
+
+        try {
+          ResolvedType type = argument.calculateResolvedType();
+          paramType = new MemberType(type.describe());
+        } catch (UnsolvedSymbolException ex) {
+          inferContextImpl(argument, result);
+
+          Set<String> set = argumentToParameterPotentialFQNs.get(argument);
+
+          // This null check is just to satisfy the error checker
+          if (set == null) {
+            throw new RuntimeException("Expected non-null when this is null");
+          }
+
+          paramType = getOrCreateMemberTypeFromFQNs(set);
+        }
+
+        parameters.add(paramType);
+      }
+
+      generatedMethod =
+          UnsolvedMethodAlternates.create(
+              constructorName, new MemberType(""), List.of(location), parameters);
+
+      addNewSymbolToGeneratedSymbolsMap(generatedMethod);
+
+      generatedMethod.setNumberOfTypeVariables(numberOfTypeParams);
+    }
+
+    result.add(generatedMethod);
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Generates the method corresponding
+   * with the given method reference expression (parameterless void).
+   *
+   * @param methodRef The method reference expression
+   * @param result The result of inferContext
+   */
+  private void handleMethodReferenceExpr(
+      MethodReferenceExpr methodRef, List<UnsolvedSymbolAlternates<?>> result) {
+    // It will be the case that a method reference expression is NEVER solvable in this method.
+    // Both the method itself and the type of the functional interface must be known in order to
+    // resolve, which will never happen here (that would mean a fully solvable method or variable)
+
+    // TODO: it may also be possible to generate alternates based on all the definitions for a
+    // method reference expression. For example, obj::foo could refer to foo(int) or foo(int,
+    // String). This is the exact same case as the problem we face with constructors/methods with
+    // unsolved argument types; fix this code segment once that is also done.
+
+    Map<String, Set<String>> potentialScopeFQNs =
+        FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodRef);
+    // A method ref has a scope, so its location is known to be a single type; therefore, it's
+    // safe to do this.
+    String simpleClassName = potentialScopeFQNs.keySet().iterator().next();
+
+    Set<String> potentialFQNs = new LinkedHashSet<>();
+
+    String methodName = JavaParserUtil.erase(methodRef.getIdentifier());
+
+    boolean isConstructor = methodName.equals("new");
+
+    List<UnsolvedClassOrInterfaceAlternates> scope = new ArrayList<>();
+
+    for (Set<String> set : potentialScopeFQNs.values()) {
+      UnsolvedClassOrInterfaceAlternates generated =
+          (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
+
+      if (generated == null) {
+        throw new RuntimeException(
+            "Method reference scope was not generated when it should have been.");
+      }
+
+      scope.add(generated);
+
+      // Unsolvable method ref: default to parameterless
+      if (isConstructor) {
+        for (String fqn : set) {
+          potentialFQNs.add(fqn + "#" + simpleClassName + "()");
+        }
+      } else {
+        for (String fqn : set) {
+          potentialFQNs.add(fqn + "#" + methodName + "()");
+        }
+      }
+    }
+
+    UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
+    UnsolvedMethodAlternates generatedMethod;
+
+    if (generated instanceof UnsolvedMethodAlternates) {
+      generatedMethod = (UnsolvedMethodAlternates) generated;
+    } else {
+      List<MemberType> parameters = new ArrayList<>();
+
+      generatedMethod =
+          UnsolvedMethodAlternates.create(
+              isConstructor ? simpleClassName : methodName,
+              new MemberType(isConstructor ? "" : "void"),
+              scope,
+              parameters);
+
+      if (methodRef.getTypeArguments().isPresent()) {
+        generatedMethod.setNumberOfTypeVariables(methodRef.getTypeArguments().get().size());
+      }
+
+      addNewSymbolToGeneratedSymbolsMap(generatedMethod);
+    }
+
+    result.add(generatedMethod);
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Generates a functional interface for
+   * the lambda (if a built-in one cannot be used) and adds it to {@code result}.
+   *
+   * @param lambda The lambda expression
+   * @param result The result of inferContext
+   */
+  private void handleLambdaExpr(LambdaExpr lambda, List<UnsolvedSymbolAlternates<?>> result) {
+    boolean isVoid;
+    if (lambda.getExpressionBody().isPresent()) {
+      Expression body = lambda.getExpressionBody().get();
+      Set<String> fqns = FullyQualifiedNameGenerator.getFQNsForExpressionType(body);
+      isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
+    } else {
+      isVoid =
+          lambda.getBody().asBlockStmt().getStatements().stream()
+              .anyMatch(stmt -> stmt instanceof ReturnStmt);
+    }
+
+    int arity = lambda.getParameters().size();
+
+    Set<String> unerasedPotentialFQNs =
+        FullyQualifiedNameGenerator.getFQNsForExpressionType(lambda);
+    Set<String> erasedPotentialFQNs = new LinkedHashSet<>();
+
+    for (String unerased : unerasedPotentialFQNs) {
+      if (unerased.startsWith("java.")) {
+        // Built-in functional interface can be used; no need for synthetic generation.
+        return;
+      }
+
+      erasedPotentialFQNs.add(JavaParserUtil.erase(unerased));
+    }
+
+    UnsolvedClassOrInterfaceAlternates functionalInterface =
+        findExistingAndUpdateFQNsOrCreateNewType(erasedPotentialFQNs);
+    functionalInterface.setNumberOfTypeVariables(arity + (isVoid ? 1 : 0));
+    result.add(functionalInterface);
+
+    String[] paramArray =
+        functionalInterface.getTypeVariablesAsStringWithoutBrackets().split(", ", -1);
+    List<MemberType> params = new ArrayList<>();
+
+    // remove the last element of params, because that's the return type, not a parameter
+    for (int i = 0; i < params.size() - (isVoid ? 1 : 0); i++) {
+      params.add(new MemberType(paramArray[i]));
+    }
+
+    String returnType = isVoid ? "void" : "T" + arity;
+    UnsolvedMethodAlternates apply =
+        UnsolvedMethodAlternates.create(
+            "apply", new MemberType(returnType), List.of(functionalInterface), params);
+
+    addNewSymbolToGeneratedSymbolsMap(apply);
+
+    result.add(apply);
   }
 
   /**
@@ -999,6 +1093,8 @@ public class UnsolvedSymbolGenerator {
       Map<String, Set<String>> potentialScopeFQNs =
           FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
 
+      // Could be empty if the method is called on a NameExpr with a union type,
+      // but the method is located in a known class.
       if (potentialScopeFQNs.isEmpty()) {
         return UnsolvedGenerationResult.EMPTY;
       }

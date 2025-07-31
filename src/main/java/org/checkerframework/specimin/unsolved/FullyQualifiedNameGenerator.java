@@ -86,7 +86,7 @@ public class FullyQualifiedNameGenerator {
    *
    * @param expr The expression to do the analysis upon
    * @return A map of simple class names to a set of potential FQNs. Each Map.Entry represents a
-   *     different class.
+   *     different class. Will return Map.of() if the location is in a solvable type.
    */
   public static Map<String, Set<String>> getFQNsForExpressionLocation(Expression expr) {
     if (expr.isNameExpr() || (expr.isMethodCallExpr() && !expr.hasScope())) {
@@ -131,7 +131,9 @@ public class FullyQualifiedNameGenerator {
     } else if (expr.isMethodReferenceExpr()) {
       scope = expr.asMethodReferenceExpr().getScope();
     } else {
-      return Map.of();
+      throw new RuntimeException(
+          "Unexpected call to getFQNsForExpressionLocation with expression type "
+              + expr.getClass());
     }
 
     if (scope.isSuperExpr() || scope.isThisExpr()) {
@@ -250,6 +252,11 @@ public class FullyQualifiedNameGenerator {
    * @return The potential FQNs of the type of the given expression.
    */
   public static Set<String> getFQNsForExpressionType(Expression expr) {
+    // If the type of the expression can already be calculated, return it
+    if (JavaParserUtil.isExprTypeResolvable(expr)) {
+      return Set.of(expr.calculateResolvedType().describe());
+    }
+
     // super
     if (expr.isSuperExpr()) {
       return getFQNsFromClassOrInterfaceType(JavaParserUtil.getSuperClass(expr));
@@ -837,7 +844,7 @@ public class FullyQualifiedNameGenerator {
     // Not imported
     boolean shouldAddAfter = false;
     if (JavaParserUtil.isAClassPath(fullName)) {
-      if (JavaParserUtil.isCapital(fullName)) {
+      if (JavaParserUtil.isAClassName(fullName)) {
         // Likely an inner class of another class, not a fully-qualified name;
         // put the package FQN first so best effort generates that instead
         shouldAddAfter = true;

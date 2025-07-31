@@ -22,19 +22,19 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    */
   private final String packageName;
 
-  /** This field records the number of type variables for this class */
+  /** The number of type variables for this class */
   private int numberOfTypeVariables = 0;
 
-  /** This field records the name of type variables that we prefer this class to have. */
+  /** The name of type variables that we prefer this class to have. */
   private Set<String> preferredTypeVariables = new HashSet<>();
 
-  /** This field records the extends clause, if one exists. */
+  /** The extends clause, if one exists. */
   private @Nullable MemberType extendsClause;
 
   /** The implements clauses, if they exist. */
   private Set<String> implementsClauses = new LinkedHashSet<>(0);
 
-  /** This field records if the class is an interface */
+  /** If the class is an interface */
   private boolean isAnInterface;
 
   /** Is this class an annotation? */
@@ -43,8 +43,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
   private Set<String> annotations = new HashSet<>();
 
   /**
-   * Create an instance of UnsolvedClass. This constructor correctly splits apart the class name and
-   * any generics attached to it.
+   * This constructor correctly splits apart the class name and any generics attached to it.
    *
    * @param className the name of the class, possibly followed by a set of type arguments
    * @param packageName the name of the package

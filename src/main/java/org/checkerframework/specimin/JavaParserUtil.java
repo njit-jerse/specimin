@@ -89,6 +89,26 @@ public class JavaParserUtil {
   }
 
   /**
+   * This method checks if a string represents a simple class name.
+   *
+   * @param string the string to be checked
+   * @return true if the string represents a simple class name
+   */
+  public static boolean isAClassName(String string) {
+    // A class name should have its first letter capitalized but its second letter
+    // should be lower case. If otherwise, then it may be a constant
+    Character first = string.charAt(0);
+    if (string.length() > 1) {
+      Character second = string.charAt(1);
+
+      return Character.isUpperCase(first) && Character.isLowerCase(second);
+    }
+
+    // A name like "A": assume it's a class
+    return Character.isUpperCase(first);
+  }
+
+  /**
    * This method checks if a string is capitalized
    *
    * @param string the string to be checked
@@ -408,7 +428,7 @@ public class JavaParserUtil {
         nameOfScope = scope.asNameExpr().getNameAsString();
 
         // The scope may also be a simple class name located in the same package
-        if (isCapital(nameOfScope)) {
+        if (isAClassName(nameOfScope)) {
           return true;
         }
       } else if (scope.isFieldAccessExpr()) {
@@ -519,7 +539,7 @@ public class JavaParserUtil {
    * @return True if the type is probably a package, based on Java naming standards
    */
   public static boolean isProbablyAPackage(ClassOrInterfaceType type) {
-    return !isAClassPath(type.toString()) && !isCapital(type.toString());
+    return !isAClassPath(type.toString()) && !isAClassName(type.toString());
   }
 
   /**
@@ -536,7 +556,7 @@ public class JavaParserUtil {
     }
 
     // Baz in Baz.myField
-    if (type.isNameExpr() && isCapital(type.toString())) {
+    if (type.isNameExpr() && isAClassName(type.toString())) {
       return false;
     }
 

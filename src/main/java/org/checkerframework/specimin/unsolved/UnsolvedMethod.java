@@ -10,6 +10,11 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 /**
  * An UnsolvedMethod instance is a representation of a method that can not be solved by
  * SymbolSolver. The reason is that the class file of that method is not in the root directory.
+ *
+ * <p>Note for {@link #equals}: <strong>Use with caution: two UnsolvedMethods may return not equal
+ * but they may belong to the same UnsolvedMethodAlternates. This could be the case when the same
+ * unsolved method is called but there are multiple possibilities for a parameter type. When able
+ * to, call .equals on UnsolvedMethodAlternates instead of here.</strong>
  */
 public class UnsolvedMethod extends UnsolvedSymbolAlternate {
   /** The name of the method */
@@ -27,7 +32,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate {
   /** The list of the types of the exceptions thrown by the method. */
   private final List<MemberType> throwsList;
 
-  /** This field records the number of type variables for this class */
+  /** The number of type variables for this method. */
   private int numberOfTypeVariables = 0;
 
   /**
@@ -101,6 +106,14 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate {
     this.numberOfTypeVariables = numberOfTypeVariables;
   }
 
+  /**
+   * <strong>Use with caution: two UnsolvedMethods may return not equal here but they may belong to
+   * the same UnsolvedMethodAlternates. This could be the case when the same unsolved method is
+   * called but there are multiple possibilities for a parameter type. When able to, call .equals on
+   * UnsolvedMethodAlternates instead of here.</strong>
+   *
+   * <p>{@inheritDoc}
+   */
   @Override
   public boolean equals(@Nullable Object o) {
     if (!(o instanceof UnsolvedMethod)) {

@@ -56,7 +56,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    * Creates a new unsolved method declaration
    *
    * @param name The name of the method
-   * @param returnTypesToMustPreserveNodes A map of return types to must-preserve nodes
+   * @param returnTypesToMustPreserveNodes A map of return types to must-preserve nodes. Different
+   *     return types may lead to different sets of nodes that need to be conditionally preserved.
    * @param alternateDeclaringTypes Potential declaring types of the method
    * @param parameters The parameters of the method
    * @param exceptions Thrown exceptions of this method
