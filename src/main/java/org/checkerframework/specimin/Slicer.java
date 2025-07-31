@@ -4,7 +4,10 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -280,19 +283,61 @@ public class Slicer {
       }
     }
     // If a BlockStmt is being removed, it's a method/constructor to be trimmed
-    else if (node instanceof BlockStmt blockStmt) {
+    else if (node instanceof BlockStmt blockStmt
+        && node.getParentNode().get() instanceof CallableDeclaration<?> callable) {
       TypeDeclaration<?> enclosing = JavaParserUtil.getEnclosingClassLike(node);
 
-      if (enclosing.isClassOrInterfaceDeclaration()
-          && enclosing.asClassOrInterfaceDeclaration().isInterface()) {
-        node.remove();
-      } else {
+      boolean handled = false;
+      if (enclosing.isClassOrInterfaceDeclaration() && callable.isMethodDeclaration()) {
+        // Non-default interface method
+        if (enclosing.asClassOrInterfaceDeclaration().isInterface()
+            && !callable.asMethodDeclaration().isDefault()) {
+          handled = true;
+          node.remove();
+        }
+        // abstract method
+        if (callable.asMethodDeclaration().isAbstract()) {
+          handled = true;
+          node.remove();
+        }
+      }
+      if (!handled) {
         blockStmt.setStatements(
             new NodeList<>(StaticJavaParser.parseStatement("throw new java.lang.Error();")));
       }
+    }
+    // If an initializer is being removed, it's a field declaration to be trimmed
+    // Only replace with default value if it's a final field
+    else if (node instanceof Expression initializer
+        && node.getParentNode().get() instanceof VariableDeclarator fieldDeclarator
+        && fieldDeclarator.getInitializer().isPresent()
+        && fieldDeclarator.getInitializer().get().equals(initializer)
+        && fieldDeclarator.getParentNode().get() instanceof FieldDeclaration fieldDecl
+        && fieldDecl.isFinal()) {
+      fieldDeclarator.setInitializer(getInitializerRHS(fieldDeclarator.getType().toString()));
     } else {
       node.remove();
     }
+  }
+
+  /**
+   * Returns a type-compatible initializer for a field of the given type.
+   *
+   * @param variableType the type of the field
+   * @return a type-compatible initializer
+   */
+  private static String getInitializerRHS(String variableType) {
+    return switch (variableType) {
+      case "byte" -> "(byte)0";
+      case "short" -> "(short)0";
+      case "int" -> "0";
+      case "long" -> "0L";
+      case "float" -> "0.0f";
+      case "double" -> "0.0d";
+      case "char" -> "'\\u0000'";
+      case "boolean" -> "false";
+      default -> "null";
+    };
   }
 
   /**

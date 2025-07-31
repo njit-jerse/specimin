@@ -2,7 +2,7 @@ package org.sampling;
 
 public class OrgSamplingBazCalSyntheticType {
 
-    public com.example.DoAdditionReturnType doAddition() {
+    public org.sampling.DoAdditionReturnType doAddition() {
         throw new java.lang.Error();
     }
 }

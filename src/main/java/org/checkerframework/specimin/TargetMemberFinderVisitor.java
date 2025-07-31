@@ -261,6 +261,9 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
         unfoundFields.remove(fieldName);
 
         worklist.add(node);
+        if (node.getInitializer().isPresent()) {
+          worklist.add(node.getInitializer().get());
+        }
       } else {
         updateUnfoundFields(fieldName);
       }

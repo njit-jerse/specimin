@@ -6,6 +6,8 @@ import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
@@ -100,7 +102,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.addAll(withThrownExceptions.getThrownExceptions());
     }
 
-    // If the node is a callable declaration, exit now, so we don't unintentionally
+    // If the node is a member declaration, exit now, so we don't unintentionally
     // add extra nodes to our worklist.
     if (node instanceof CallableDeclaration) {
       return elements;
@@ -111,6 +113,23 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     // Statements
     // ** If a statement is included in the slice, then that means it is in one
     // of the target members. Therefore, its children are always relevant.
+
+    if (node instanceof VariableDeclarator varDecl
+        && varDecl.getInitializer().isPresent()
+        && node.getParentNode().get() instanceof FieldDeclaration) {
+      // For field declarations, don't add the initializer
+      Expression initializer = varDecl.getInitializer().get();
+
+      for (Node child : varDecl.getChildNodes()) {
+        if (child.equals(initializer)) {
+          continue;
+        }
+
+        elements.add(child);
+      }
+
+      return elements;
+    }
 
     elements.addAll(node.getChildNodes());
 

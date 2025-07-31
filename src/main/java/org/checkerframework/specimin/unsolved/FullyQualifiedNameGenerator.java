@@ -15,12 +15,9 @@ import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
-import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.Name;
-import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithCondition;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
@@ -71,10 +68,10 @@ public class FullyQualifiedNameGenerator {
   /**
    * When evaluating an expression, there is only one possible type. However, the location of an
    * expression could vary, depending on the parent classes/interfaces of the class which holds the
-   * expression. This method and {@link #getFQNsForExpressionType(Expression)} return different values;
-   * for example, for the method call {@code foo()}, this method could return the class name from a 
-   * static import or from unsolved super classes. The latter method would return {@code FooReturnType} or
-   * its solvable equivalent.
+   * expression. This method and {@link #getFQNsForExpressionType(Expression)} return different
+   * values; for example, for the method call {@code foo()}, this method could return the class name
+   * from a static import or from unsolved super classes. The latter method would return {@code
+   * FooReturnType} or its solvable equivalent.
    *
    * <p>For example, take expression a.b where a is of type A. A implements interface B, and
    * interface B extends many different unsolved interfaces C, D, E, F, etc.
@@ -207,9 +204,12 @@ public class FullyQualifiedNameGenerator {
             for (ReferenceType type : unionType.getElements()) {
               try {
                 // If a type in the union type is resolvable, the location of the expression will
-                // be in a built-in Java superclass. In this case, return an empty map. Follow this reasoning:
-                // If a union type is UnsolvedException | NullPointerException, then any method called on the NameExpr
-                // representing an exception of this type will be in Exception or Throwable (or NullPointerException if
+                // be in a built-in Java superclass. In this case, return an empty map. Follow this
+                // reasoning:
+                // If a union type is UnsolvedException | NullPointerException, then any method
+                // called on the NameExpr
+                // representing an exception of this type will be in Exception or Throwable (or
+                // NullPointerException if
                 // UnsolvedException extended it).
 
                 // TODO: handle a case where a user-defined exception could be solvable but a parent

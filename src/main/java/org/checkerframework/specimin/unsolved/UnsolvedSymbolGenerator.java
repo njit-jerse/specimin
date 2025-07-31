@@ -23,6 +23,7 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.PatternExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -38,6 +39,7 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -305,13 +307,21 @@ public class UnsolvedSymbolGenerator {
       result.add(generated);
       return;
     }
-    Expression scope = field.getScope();
-
-    // Generate everything in the scopes before
-    inferContextImpl(scope, result);
 
     Map<String, Set<String>> potentialScopeFQNs =
         FullyQualifiedNameGenerator.getFQNsForExpressionLocation(field);
+
+    Expression scope = field.getScope();
+
+    // Special case: handle this/super separately since potentialScopeFQNs
+    // provides more information than a this/super expression alone in
+    // inferContextImpl
+    if (scope.isThisExpr() || scope.isSuperExpr()) {
+      handleThisOrSuperExpr(potentialScopeFQNs.values());
+    } else {
+      // Generate everything in the scopes before
+      inferContextImpl(scope, result);
+    }
 
     // Could be empty if the field is called on a NameExpr with a union type,
     // but the field is located in a known class.
@@ -338,7 +348,7 @@ public class UnsolvedSymbolGenerator {
         UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(set);
 
         if (generated == null) {
-          throw new RuntimeException("Field scope types are not yet created");
+          throw new RuntimeException("Field scope types are not yet created; FQNs: " + set);
         }
         potentialParents.add((UnsolvedClassOrInterfaceAlternates) generated);
       }
@@ -524,13 +534,23 @@ public class UnsolvedSymbolGenerator {
         // update or create the type
         findExistingAndUpdateFQNsOrCreateNewType(potentialScopeFQNs.iterator().next());
       }
-    } else {
-      inferContextImpl(methodCall.getScope().get(), result);
     }
 
     if (potentialScopeFQNs == null) {
       potentialScopeFQNs =
           FullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall).values();
+    }
+
+    // Special case: handle this/super separately since potentialScopeFQNs
+    // provides more information than a this/super expression alone in
+    // inferContextImpl
+    if (methodCall.hasScope()) {
+      if (methodCall.getScope().get().isThisExpr() || methodCall.getScope().get().isSuperExpr()) {
+        handleThisOrSuperExpr(potentialScopeFQNs);
+      } else {
+        // Generate everything in the scopes before
+        inferContextImpl(methodCall.getScope().get(), result);
+      }
     }
 
     // Could be empty if the method is called on a NameExpr with a union type,
@@ -565,24 +585,35 @@ public class UnsolvedSymbolGenerator {
     // Here, try to find if this method call is an argument of a solvable method call
     // If so, we have multiple potential return types to choose from, based on each definition
     Node parent = methodCall.getParentNode().get();
-    List<? extends CallableDeclaration<?>> parentCallableDeclarations;
-    int paramNum = 0;
-    if (parent instanceof MethodCallExpr parentMethodCall) {
-      parentCallableDeclarations =
-          JavaParserUtil.tryResolveMethodCallWithUnresolvableArguments(
-              parentMethodCall, fqnsToCompilationUnits);
-      paramNum = parentMethodCall.getArgumentPosition(methodCall);
-    } else if (parent instanceof ExplicitConstructorInvocationStmt parentConstructorCall) {
-      parentCallableDeclarations =
-          JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
-              parentConstructorCall, fqnsToCompilationUnits);
-      paramNum = parentConstructorCall.getArgumentPosition(methodCall);
-    } else if (parent instanceof ObjectCreationExpr parentConstructorCall) {
-      parentCallableDeclarations =
-          JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(parentConstructorCall);
-      paramNum = parentConstructorCall.getArgumentPosition(methodCall);
-    } else {
-      parentCallableDeclarations = List.of();
+    int paramNum = -1;
+
+    if (parent instanceof NodeWithArguments<?> withArgs) {
+      for (int i = 0; i < withArgs.getArguments().size(); i++) {
+        if (withArgs.getArgument(i).equals(methodCall)) {
+          paramNum = i;
+          break;
+        }
+      }
+    }
+
+    List<? extends CallableDeclaration<?>> parentCallableDeclarations = Collections.emptyList();
+
+    // paramNum could still be -1 if methodCall is the scope of another method call,
+    // not an argument
+    if (paramNum != -1) {
+      if (parent instanceof MethodCallExpr parentMethodCall) {
+        parentCallableDeclarations =
+            JavaParserUtil.tryResolveMethodCallWithUnresolvableArguments(
+                parentMethodCall, fqnsToCompilationUnits);
+      } else if (parent instanceof ExplicitConstructorInvocationStmt parentConstructorCall) {
+        parentCallableDeclarations =
+            JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
+                parentConstructorCall, fqnsToCompilationUnits);
+      } else if (parent instanceof ObjectCreationExpr parentConstructorCall) {
+        parentCallableDeclarations =
+            JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
+                parentConstructorCall, fqnsToCompilationUnits);
+      }
     }
 
     // TODO: see if this is an issue if two different methods have the same parameter type
@@ -879,6 +910,20 @@ public class UnsolvedSymbolGenerator {
     addNewSymbolToGeneratedSymbolsMap(apply);
 
     result.add(apply);
+  }
+
+  /**
+   * After checking if an expression's scope is super/this, pass in the value collection of the
+   * result of {@link FullyQualifiedNameGenerator#getFQNsForExpressionLocation(Expression)} to this
+   * method to ensure all possible types are generated.
+   *
+   * @param fqnSets The value collection of the result of getFQNsForExpressionLocation, if the scope
+   *     is super/this; a collection of FQN sets each representing a different type.
+   */
+  private void handleThisOrSuperExpr(Collection<Set<String>> fqnSets) {
+    for (Set<String> fqnSet : fqnSets) {
+      findExistingAndUpdateFQNsOrCreateNewType(fqnSet);
+    }
   }
 
   /**

@@ -582,11 +582,25 @@ public class JavaParserUtil {
    * @return All possible constructor declarations
    */
   public static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
-      ObjectCreationExpr constructorCall) {
+      ObjectCreationExpr constructorCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
     List<@Nullable ResolvedType> parameterTypes =
         getArgumentTypesAsResolved(constructorCall.getArguments());
 
-    TypeDeclaration<?> enclosingClass = getEnclosingClassLike(constructorCall);
+    TypeDeclaration<?> enclosingClass;
+
+    try {
+      ResolvedType type = constructorCall.getType().resolve();
+
+      enclosingClass = getTypeFromQualifiedName(type.describe(), fqnToCompilationUnits);
+
+      if (enclosingClass == null) {
+        return List.of();
+      }
+    } catch (UnsolvedSymbolException ex) {
+      // not relevant
+      return List.of();
+    }
+
     List<ConstructorDeclaration> candidates = new ArrayList<>();
 
     addAllMatchingCallablesToList(
@@ -779,6 +793,8 @@ public class JavaParserUtil {
   public static List<TypeDeclaration<?>> getAllSolvableAncestors(
       TypeDeclaration<?> start, Map<String, CompilationUnit> fqnToCompilationUnits) {
     List<TypeDeclaration<?>> result = new ArrayList<>();
+
+    getAllSolvableAncestorsImpl(start, fqnToCompilationUnits, result);
 
     return result;
   }
