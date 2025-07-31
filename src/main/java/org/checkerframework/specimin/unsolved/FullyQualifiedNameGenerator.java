@@ -71,9 +71,10 @@ public class FullyQualifiedNameGenerator {
   /**
    * When evaluating an expression, there is only one possible type. However, the location of an
    * expression could vary, depending on the parent classes/interfaces of the class which holds the
-   * expression. When determining the location of a {@link FieldAccessExpr}, {@link MethodCallExpr},
-   * or {@link NameExpr}, use this method instead of {@link #getFQNsForExpressionType} because it
-   * doesn't differentiate between different classes, while this method does.
+   * expression. This method and {@link #getFQNsForExpressionType(Expression)} return different values;
+   * for example, for the method call {@code foo()}, this method could return the class name from a 
+   * static import or from unsolved super classes. The latter method would return {@code FooReturnType} or
+   * its solvable equivalent.
    *
    * <p>For example, take expression a.b where a is of type A. A implements interface B, and
    * interface B extends many different unsolved interfaces C, D, E, F, etc.
@@ -206,7 +207,10 @@ public class FullyQualifiedNameGenerator {
             for (ReferenceType type : unionType.getElements()) {
               try {
                 // If a type in the union type is resolvable, the location of the expression will
-                // be in a built-in Java superclass. In this case, return an empty map.
+                // be in a built-in Java superclass. In this case, return an empty map. Follow this reasoning:
+                // If a union type is UnsolvedException | NullPointerException, then any method called on the NameExpr
+                // representing an exception of this type will be in Exception or Throwable (or NullPointerException if
+                // UnsolvedException extended it).
 
                 // TODO: handle a case where a user-defined exception could be solvable but a parent
                 // class of that exception is not.
