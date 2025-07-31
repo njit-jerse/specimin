@@ -12,6 +12,7 @@ import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterface;
 import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterfaceAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedField;
 import org.checkerframework.specimin.unsolved.UnsolvedFieldAlternates;
+import org.checkerframework.specimin.unsolved.UnsolvedMemberType;
 import org.checkerframework.specimin.unsolved.UnsolvedMethod;
 import org.checkerframework.specimin.unsolved.UnsolvedMethodAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
@@ -71,8 +72,8 @@ public class UnsolvedSymbolEnumerator {
       typesToFields.get(type).add(field);
 
       MemberType typeOfField = field.getType();
-      if (typeOfField.isUnsolved()) {
-        types.add(typeOfField.getUnsolvedType().getAlternates().get(0));
+      if (typeOfField instanceof UnsolvedMemberType unsolvedType) {
+        types.add(unsolvedType.getUnsolvedType().getAlternates().get(0));
       }
     }
 
@@ -90,13 +91,13 @@ public class UnsolvedSymbolEnumerator {
       typesToMethods.get(type).add(method);
 
       MemberType typesToMethod = method.getReturnType();
-      if (typesToMethod.isUnsolved()) {
-        types.add(typesToMethod.getUnsolvedType().getAlternates().get(0));
+      if (typesToMethod instanceof UnsolvedMemberType unsolvedType) {
+        types.add(unsolvedType.getUnsolvedType().getAlternates().get(0));
       }
 
       for (MemberType parameterType : method.getParameterList()) {
-        if (parameterType.isUnsolved()) {
-          types.add(parameterType.getUnsolvedType().getAlternates().get(0));
+        if (parameterType instanceof UnsolvedMemberType unsolvedType) {
+          types.add(unsolvedType.getUnsolvedType().getAlternates().get(0));
         }
       }
     }

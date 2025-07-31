@@ -2,7 +2,9 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -20,6 +22,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithTypeArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithTypeParameters;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
@@ -155,7 +158,25 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           JavaParserUtil.getTypeFromQualifiedName(
               resolvedTypeDeclaration.getQualifiedName(), fqnToCompilationUnits);
 
-      if (type == null) return elements;
+      if (type == null) {
+        return elements;
+      }
+
+      // Unfortunately, JavaParser doesn't allow us to solve annotation member value pairs,
+      // so we can't tell what is used and what isn't. Preserve all annotation members for
+      // now until we figure out a better solution/JavaParser adds support.
+      if (resolvedTypeDeclaration.isAnnotation()) {
+        elements.addAll(
+            resolvedTypeDeclaration.asAnnotation().getAnnotationMembers().stream()
+                .map(
+                    member ->
+                        type.findFirst(
+                                AnnotationMemberDeclaration.class,
+                                n -> n.getNameAsString().equals(member.getName()))
+                            .get())
+                .toList());
+      }
+
       elements.add(type);
     }
 
@@ -164,7 +185,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           JavaParserUtil.getTypeFromQualifiedName(
               resolvedMethodLikeDeclaration.declaringType().getQualifiedName(),
               fqnToCompilationUnits);
-      if (type == null) return elements;
+      if (type == null) {
+        return elements;
+      }
 
       if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
         // If this current method is an override, add the original definition too
@@ -229,7 +252,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           JavaParserUtil.getTypeFromQualifiedName(
               resolvedFieldDeclaration.declaringType().getQualifiedName(), fqnToCompilationUnits);
 
-      if (type == null) return elements;
+      if (type == null) {
+        return elements;
+      }
 
       Node unattached = resolvedFieldDeclaration.toAst().get();
       FieldDeclaration field =
@@ -237,6 +262,23 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
       elements.add(type);
       elements.add(field);
+    }
+
+    if (resolved instanceof ResolvedEnumConstantDeclaration resolvedEnumConstantDeclaration) {
+      TypeDeclaration<?> type =
+          JavaParserUtil.getTypeFromQualifiedName(
+              resolvedEnumConstantDeclaration.getType().describe(), fqnToCompilationUnits);
+
+      if (type == null) {
+        return elements;
+      }
+
+      Node unattached = resolvedEnumConstantDeclaration.toAst().get();
+      EnumConstantDeclaration enumConstant =
+          type.findFirst(EnumConstantDeclaration.class, n -> n.equals(unattached)).get();
+
+      elements.add(type);
+      elements.add(enumConstant);
     }
 
     return elements;

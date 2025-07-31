@@ -27,7 +27,7 @@ public class Simple<@TypeParam T> {
     }
 
     @AnnotationDeclaration
-    @Target({ METHOD })
+    @Target({ METHOD, FIELD, TYPE_USE })
     private @interface AnnoDecl {
     }
 

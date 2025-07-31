@@ -5,6 +5,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /** Base type for all synthetic definitions containing alternates. */
 public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate> {
@@ -39,6 +43,67 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    */
   public List<T> getAlternates() {
     return alternates;
+  }
+
+  /**
+   * Utility method to apply a transformation to all alternates. For example, if you want to set all
+   * alternates to an interface, pass in {@code UnsolvedClassOrInterface::setIsAnInterfaceToTrue}.
+   *
+   * @param apply A Consumer that modifies each alternate. Pass in an instance method from {@link T}
+   *     with no parameters.
+   */
+  public void applyToAllAlternates(Consumer<T> apply) {
+    for (T alternate : alternates) {
+      apply.accept(alternate);
+    }
+  }
+
+  /**
+   * Utility method to apply a transformation to all alternates. For example, if you want all
+   * alternates to extend type "Foo", pass in {@code UnsolvedClassOrInterface::extend} and "Foo".
+   *
+   * @param apply A BiConsumer that modifies each alternate. Pass in an instance method from {@link
+   *     T} with one parameter.
+   * @param input The input to use to set all alternates.
+   */
+  public <U> void applyToAllAlternates(BiConsumer<T, U> apply, U input) {
+    for (T alternate : alternates) {
+      apply.accept(alternate, input);
+    }
+  }
+
+  /**
+   * Returns true if all alternates return true for a predicate. You can pass in a method reference
+   * (like UnsolvedClassOrInterface::isAnInterface) to check if all alternates are an interface, for
+   * example.
+   *
+   * @param predicate A predicate; pass in an instance method from {@link T} with no parameters.
+   * @return True if all alternates return true for the predicate
+   */
+  public boolean doAllAlternatesReturnTrueFor(Predicate<T> predicate) {
+    for (T alternate : alternates) {
+      if (!predicate.test(alternate)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Returns true if all alternates return true for a predicate. You can pass in a method reference
+   * (like UnsolvedClassOrInterface::doesImplement) and an interface "MyInterface" to check if all
+   * alternates implement the "MyInterface" interface.
+   *
+   * @param predicate A BiPredicate; pass in an instance method from {@link T} with one parameter.
+   * @return True if all alternates return true for the predicate
+   */
+  public <U> boolean doAllAlternatesReturnTrueFor(BiPredicate<T, U> predicate, U input) {
+    for (T alternate : alternates) {
+      if (!predicate.test(alternate, input)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

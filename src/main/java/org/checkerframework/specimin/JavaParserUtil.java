@@ -95,6 +95,10 @@ public class JavaParserUtil {
    * @return true if the string represents a simple class name
    */
   public static boolean isAClassName(String string) {
+    if (string.contains(".")) {
+      return false;
+    }
+
     // A class name should have its first letter capitalized but its second letter
     // should be lower case. If otherwise, then it may be a constant
     Character first = string.charAt(0);
@@ -392,14 +396,14 @@ public class JavaParserUtil {
   }
 
   /**
-   * Checks to see if an expression is a reference to a static method or field. This method is
-   * intended to be used with unsolvable expressions, with which it should always return the correct
-   * result.
+   * Returns the FQN if the expression is a reference to a static method or field or empty if it
+   * isn't one. This method is intended to be used with unsolvable expressions, with which it should
+   * always return the correct result.
    *
-   * @param expr The expression, unresolvable definition
-   * @return Whether its definition static or not
+   * @param expr The expression
+   * @return The FQN if it is a static member, empty otherwise
    */
-  public static boolean isAStaticMember(Expression expr) {
+  public static Optional<String> getFQNIfStaticMember(Expression expr) {
     CompilationUnit cu = expr.findCompilationUnit().get();
 
     String nameOfExpr;
@@ -409,6 +413,11 @@ public class JavaParserUtil {
     if (expr.isNameExpr()) {
       nameOfScope = expr.asNameExpr().getNameAsString();
       nameOfExpr = expr.asNameExpr().getNameAsString();
+
+      // If an expression is a class name, it cannot be a static member
+      if (isAClassName(nameOfExpr)) {
+        return Optional.empty();
+      }
     } else if (expr.isMethodCallExpr()) {
       nameOfExpr = expr.asMethodCallExpr().getNameAsString();
       if (expr.asMethodCallExpr().hasScope()) {
@@ -420,46 +429,74 @@ public class JavaParserUtil {
       nameOfExpr = expr.asFieldAccessExpr().getNameAsString();
       scope = expr.asFieldAccessExpr().getScope();
     } else {
-      return false;
+      return Optional.empty();
     }
 
     if (scope != null) {
       if (scope.isNameExpr()) {
-        nameOfScope = scope.asNameExpr().getNameAsString();
+        try {
+          ResolvedType scopeType = expr.calculateResolvedType();
 
-        // The scope may also be a simple class name located in the same package
-        if (isAClassName(nameOfScope)) {
-          return true;
+          if (getSimpleNameFromQualifiedName(scopeType.describe()).equals(scope.toString())) {
+            return Optional.of(scopeType.describe() + "." + nameOfExpr);
+          }
+        } catch (UnsolvedSymbolException ex) {
+          // continue
         }
+
+        nameOfScope = scope.asNameExpr().getNameAsString();
       } else if (scope.isFieldAccessExpr()) {
+        try {
+          ResolvedType scopeType = expr.calculateResolvedType();
+
+          if (getSimpleNameFromQualifiedName(scopeType.describe()).endsWith(scope.toString())) {
+            return Optional.of(scopeType.describe() + "." + nameOfExpr);
+          }
+        } catch (UnsolvedSymbolException ex) {
+          // continue
+        }
+
         nameOfScope = scope.asFieldAccessExpr().toString();
         if (isAClassPath(nameOfScope)) {
-          return true;
+          return Optional.of(nameOfScope + "." + nameOfExpr);
         }
       } else {
-        return false;
+        return Optional.empty();
       }
     }
 
     if (nameOfScope == null) {
-      return false;
+      return Optional.empty();
     }
 
     for (ImportDeclaration importDecl : cu.getImports()) {
       // A static member can either be imported as a static method/field, like
       // import static org.example.SomeClass.fieldName;
       if (importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfExpr)) {
-        return true;
+        return Optional.of(importDecl.getNameAsString());
       }
 
       // A static member can also be found if its scope is a non-static, imported type,
       // i.e., Foo.myField, if there is also import org.example.Foo;
       if (!importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfScope)) {
-        return true;
+        return Optional.of(
+            expr.isNameExpr()
+                ? importDecl.getNameAsString()
+                : importDecl.getNameAsString() + "." + nameOfExpr);
       }
     }
 
-    return false;
+    // The scope may also be a simple class name located in the same package
+    if (scope != null && isAClassName(nameOfScope)) {
+      return Optional.of(
+          cu.getPackageDeclaration().get().getNameAsString()
+              + "."
+              + nameOfScope
+              + "."
+              + nameOfExpr);
+    }
+
+    return Optional.empty();
   }
 
   /**
@@ -854,15 +891,23 @@ public class JavaParserUtil {
    */
   public static @Nullable TypeDeclaration<?> getTypeFromQualifiedName(
       String fqn, Map<String, CompilationUnit> fqnToCompilationUnits) {
-    CompilationUnit cu = fqnToCompilationUnits.get(fqn);
+    CompilationUnit someCandidate = null;
 
-    if (cu == null) {
+    String searchFQN = fqn;
+
+    while (searchFQN.contains(".") && someCandidate == null) {
+      someCandidate = fqnToCompilationUnits.get(searchFQN);
+      searchFQN = searchFQN.substring(0, searchFQN.lastIndexOf('.'));
+    }
+
+    if (someCandidate == null) {
       // Not in project; solved by reflection, not our concern
       return null;
     }
 
     TypeDeclaration<?> type =
-        cu.findFirst(
+        someCandidate
+            .findFirst(
                 TypeDeclaration.class,
                 n ->
                     n.getFullyQualifiedName().isPresent()

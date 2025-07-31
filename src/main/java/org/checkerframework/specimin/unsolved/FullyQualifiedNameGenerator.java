@@ -55,6 +55,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
 
 /**
@@ -326,6 +327,12 @@ public class FullyQualifiedNameGenerator {
     // field/method located in unsolvable super class, but it's not explicitly marked by
     // super. It could also be a static member, either statically imported, a static member
     // of an imported class, or a static member of a class in the same package.
+    Optional<String> fqnOfStaticMember = JavaParserUtil.getFQNIfStaticMember(expr);
+    if (fqnOfStaticMember.isPresent()) {
+      return Set.of(
+          generateFQNForTheTypeOfAStaticallyImportedMember(fqnOfStaticMember.get(), false));
+    }
+
     if (expr.isNameExpr()) {
       String name = expr.asNameExpr().getNameAsString();
 
@@ -340,7 +347,8 @@ public class FullyQualifiedNameGenerator {
           return getFQNsFromClassName(
               expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
         }
-        return Set.of(getFQNOfStaticallyImportedMemberType(importDecl.getNameAsString(), false));
+        return Set.of(
+            generateFQNForTheTypeOfAStaticallyImportedMember(importDecl.getNameAsString(), false));
       }
 
       String exprTypeName = SYNTHETIC_TYPE_FOR + toCapital(name);
@@ -357,7 +365,7 @@ public class FullyQualifiedNameGenerator {
             getFQNsForExpressionType(expr.asFieldAccessExpr().getScope()).iterator().next();
 
         return Set.of(
-            getFQNOfStaticallyImportedMemberType(
+            generateFQNForTheTypeOfAStaticallyImportedMember(
                 scopeType + "." + expr.asFieldAccessExpr().getNameAsString(), false));
       }
 
@@ -375,16 +383,6 @@ public class FullyQualifiedNameGenerator {
 
       return result;
     } else if (expr.isMethodCallExpr()) {
-      String name = expr.asMethodCallExpr().getNameAsString();
-
-      CompilationUnit cu = expr.findCompilationUnit().get();
-
-      ImportDeclaration staticImport = getImportDeclarationFromName(name, cu, false);
-
-      if (staticImport != null) {
-        return Set.of(getFQNOfStaticallyImportedMemberType(staticImport.getNameAsString(), true));
-      }
-
       String exprTypeName = toCapital(expr.asMethodCallExpr().getNameAsString()) + RETURN_TYPE;
 
       if (expr.hasScope()) {
@@ -840,7 +838,8 @@ public class FullyQualifiedNameGenerator {
     for (ImportDeclaration importDecl : compilationUnit.getImports()) {
       if (importDecl.getNameAsString().endsWith("." + firstIdentifier)) {
         return Set.of(importDecl.getNameAsString());
-      } else if (importDecl.isAsterisk()) {
+      } else if (importDecl.isAsterisk()
+          && !JavaLangUtils.inJdkPackage(importDecl.getNameAsString())) {
         fqns.add(importDecl.getNameAsString() + "." + firstIdentifier);
       }
     }
@@ -875,12 +874,14 @@ public class FullyQualifiedNameGenerator {
 
     if (node != null) {
       // 4) inner class of a parent class of the enclosing class
-      TypeDeclaration<?> enclosingType = JavaParserUtil.getEnclosingClassLike(node);
+      TypeDeclaration<?> enclosingType = JavaParserUtil.getEnclosingClassLikeOptional(node);
 
-      // Flatten the map: we only care about the value sets
-      for (Set<String> set : getFQNsOfAllUnresolvableParents(enclosingType, node).values()) {
-        for (String fqn : set) {
-          fqns.add(fqn + "." + fullName);
+      if (enclosingType != null) {
+        // Flatten the map: we only care about the value sets
+        for (Set<String> set : getFQNsOfAllUnresolvableParents(enclosingType, node).values()) {
+          for (String fqn : set) {
+            fqns.add(fqn + "." + fullName);
+          }
         }
       }
     }
@@ -893,7 +894,8 @@ public class FullyQualifiedNameGenerator {
    * @param expr the field access/method call expression to be used as input. Must be in the form of
    *     a qualified class name.
    */
-  public static String getFQNOfStaticallyImportedMemberType(String expr, boolean isMethod) {
+  public static String generateFQNForTheTypeOfAStaticallyImportedMember(
+      String expr, boolean isMethod) {
     // As this code involves complex string operations, we'll use a field access expression as an
     // example, following its progression through the code.
     // Suppose this is our field access expression: com.example.MyClass.myField
@@ -920,7 +922,7 @@ public class FullyQualifiedNameGenerator {
     fieldTypeClassName
         .append(toCapital(className))
         .append(toCapital(fieldName))
-        .append(isMethod ? "ReturnType" : "SyntheticType");
+        .append(isMethod ? RETURN_TYPE : "SyntheticType");
 
     return packageName.toString() + "." + fieldTypeClassName.toString();
   }

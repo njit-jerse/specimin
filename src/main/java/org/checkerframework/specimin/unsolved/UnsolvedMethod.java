@@ -16,7 +16,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * unsolved method is called but there are multiple possibilities for a parameter type. When able
  * to, call .equals on UnsolvedMethodAlternates instead of here.</strong>
  */
-public class UnsolvedMethod extends UnsolvedSymbolAlternate {
+public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedMethodCommon {
   /** The name of the method */
   private final String name;
 
@@ -57,7 +57,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate {
   }
 
   /**
-   * Get the return type of this method
+   * Get the return type of this method.
    *
    * @return the value of returnType
    */
@@ -66,10 +66,11 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate {
   }
 
   /**
-   * Get the name of this method
+   * Get the name of this method.
    *
    * @return the name of this method
    */
+  @Override
   public String getName() {
     return name;
   }
@@ -88,11 +89,13 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate {
    *
    * @return the throws list
    */
+  @Override
   public List<MemberType> getThrownExceptions() {
     return Collections.unmodifiableList(throwsList);
   }
 
   /** Set isStatic to true */
+  @Override
   public void setStatic() {
     isStatic = true;
   }
@@ -102,8 +105,14 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate {
    *
    * @param numberOfTypeVariables number of type variable in this class.
    */
+  @Override
   public void setNumberOfTypeVariables(int numberOfTypeVariables) {
     this.numberOfTypeVariables = numberOfTypeVariables;
+  }
+
+  @Override
+  public void setReturnType(MemberType returnType) {
+    this.returnType = returnType;
   }
 
   /**
@@ -194,6 +203,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate {
    *
    * @return The number of type variables
    */
+  @Override
   public int getNumberOfTypeVariables() {
     return numberOfTypeVariables;
   }

@@ -11,7 +11,8 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
-public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
+public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
+    implements UnsolvedClassOrInterfaceCommon {
 
   /** The name of the class */
   private final @ClassGetSimpleName String className;
@@ -68,6 +69,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @return return true if the current UnsolvedClassOrInterface instance represents an interface.
    */
+  @Override
   public boolean isAnInterface() {
     return isAnInterface;
   }
@@ -77,6 +79,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @return return true if the current UnsolvedClassOrInterface instance represents an annotation.
    */
+  @Override
   public boolean isAnAnnotation() {
     return isAnAnnotation;
   }
@@ -85,6 +88,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    * Sets isAnInterface to true. isAnInterface is monotonic: it can start as false and become true
    * (because we encounter an implements clause), but it can never go from true to false.
    */
+  @Override
   public void setIsAnInterfaceToTrue() {
     this.isAnInterface = true;
   }
@@ -94,6 +98,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    * (because we encounter evidence that this is an annotation), but it can never go from true to
    * false.
    */
+  @Override
   public void setIsAnAnnotationToTrue() {
     this.isAnAnnotation = true;
   }
@@ -103,6 +108,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @return the name of the class
    */
+  @Override
   public @ClassGetSimpleName String getClassName() {
     return className;
   }
@@ -130,17 +136,9 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @param numberOfTypeVariables number of type variable in this class.
    */
+  @Override
   public void setNumberOfTypeVariables(int numberOfTypeVariables) {
     this.numberOfTypeVariables = numberOfTypeVariables;
-  }
-
-  /**
-   * Set the value for preferredTypeVariables.
-   *
-   * @param preferredTypeVariables desired value for preferredTypeVariables.
-   */
-  public void setPreferredTypeVariables(Set<String> preferredTypeVariables) {
-    this.preferredTypeVariables = preferredTypeVariables;
   }
 
   /**
@@ -148,6 +146,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @return the number of type variables
    */
+  @Override
   public int getNumberOfTypeVariables() {
     return this.numberOfTypeVariables;
   }
@@ -157,6 +156,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @param interfaceName the fqn of the interface
    */
+  @Override
   public void implement(String interfaceName) {
     implementsClauses.add(interfaceName);
   }
@@ -166,6 +166,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @param interfaceName the fqn of the interface
    */
+  @Override
   public boolean doesImplement(String interfaceName) {
     return implementsClauses.contains(interfaceName);
   }
@@ -176,6 +177,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    * @param extendsType a {@link MemberType} of the extended type, represented with fully qualified
    *     names.
    */
+  @Override
   public void extend(MemberType extendsType) {
     this.extendsClause = extendsType;
   }
@@ -185,6 +187,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @return whether {@code this.extendsClause} is non-null
    */
+  @Override
   public boolean hasExtends() {
     return this.extendsClause != null;
   }
@@ -195,6 +198,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    * @param extendsType a fully-qualified class name for the extended class
    * @return whether {@code className} is the extended class of this
    */
+  @Override
   public boolean doesExtend(MemberType extendsType) {
     return this.extendsClause != null && this.extendsClause.equals(extendsType);
   }
@@ -266,7 +270,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
     }
 
     for (String annotation : annotations) {
-      sb.append(annotation);
+      sb.append(annotation).append("\n");
     }
 
     sb.append("public ");
@@ -335,6 +339,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @return the synthetic representation for type variables
    */
+  @Override
   public String getTypeVariablesAsString() {
     if (numberOfTypeVariables == 0) {
       return "";
@@ -353,6 +358,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
    *
    * @return the synthetic representation for type variables
    */
+  @Override
   public String getTypeVariablesAsStringWithoutBrackets() {
     if (numberOfTypeVariables == 0) {
       return "";
@@ -363,21 +369,15 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate {
   }
 
   /**
-   * Helper method for {@link #getTypeVariablesAsStringWithoutBrackets} and {@link
+   * Helper method for {@link #getTypeVariablesAsStringWithoutBrackets()} and {@link
    * #getTypeVariablesAsString()}.
    *
    * @param result a string builder. Will be side-effected.
    */
   private void getTypeVariablesImpl(StringBuilder result) {
-    if (preferredTypeVariables.size() == 0) {
-      for (int i = 0; i < numberOfTypeVariables; i++) {
-        String typeExpression = "T" + ((i > 0) ? i : "");
-        result.append(typeExpression).append(", ");
-      }
-    } else {
-      for (String preferedTypeVar : preferredTypeVariables) {
-        result.append(preferedTypeVar).append(", ");
-      }
+    for (int i = 0; i < numberOfTypeVariables; i++) {
+      String typeExpression = "T" + ((i > 0) ? i : "");
+      result.append(typeExpression).append(", ");
     }
     result.delete(result.length() - 2, result.length());
   }

@@ -20,7 +20,8 @@ import java.util.Set;
  * getAlternates()} will always return a single alternate for this class, since {@code
  * UnsolvedFieldAlternates} depends on encapsulating classes for alternate definitions.
  */
-public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedField> {
+public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedField>
+    implements UnsolvedFieldCommon {
   private UnsolvedFieldAlternates(
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes) {
     super(alternateDeclaringTypes);
@@ -66,5 +67,15 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
     }
 
     return fqns;
+  }
+
+  @Override
+  public MemberType getType() {
+    return getAlternates().get(0).getType();
+  }
+
+  @Override
+  public String getName() {
+    return getAlternates().get(0).getName();
   }
 }

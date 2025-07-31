@@ -355,7 +355,7 @@ public class UnsolvedSymbolGenerator {
 
       MemberType type = getOrCreateMemberTypeFromFQNs(potentialTypeFQNs);
 
-      boolean isStatic = JavaParserUtil.isAStaticMember(field);
+      boolean isStatic = JavaParserUtil.getFQNIfStaticMember(field).isPresent();
 
       UnsolvedFieldAlternates createdField =
           UnsolvedFieldAlternates.create(
@@ -432,7 +432,7 @@ public class UnsolvedSymbolGenerator {
 
           // Generate the synthetic type
           String typeFQN =
-              FullyQualifiedNameGenerator.getFQNOfStaticallyImportedMemberType(
+              FullyQualifiedNameGenerator.generateFQNForTheTypeOfAStaticallyImportedMember(
                   encapsulatingClass, false);
 
           UnsolvedClassOrInterfaceAlternates generatedType =
@@ -441,7 +441,7 @@ public class UnsolvedSymbolGenerator {
           generatedField =
               UnsolvedFieldAlternates.create(
                   staticImport.getIdentifier(),
-                  new MemberType(generatedType),
+                  new UnsolvedMemberType(generatedType),
                   List.of(generatedClass),
                   true,
                   true);
@@ -656,7 +656,7 @@ public class UnsolvedSymbolGenerator {
         MemberType paramType;
         try {
           ResolvedType type = argument.calculateResolvedType();
-          paramType = new MemberType(type.describe());
+          paramType = new SolvedMemberType(type.describe());
         } catch (UnsolvedSymbolException ex) {
           inferContextImpl(argument, result);
 
@@ -691,8 +691,8 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    if (JavaParserUtil.isAStaticMember(methodCall)) {
-      generatedMethod.setIsStaticToTrue();
+    if (JavaParserUtil.getFQNIfStaticMember(methodCall).isPresent()) {
+      generatedMethod.setStatic();
     }
 
     result.add(generatedMethod);
@@ -745,7 +745,7 @@ public class UnsolvedSymbolGenerator {
 
         try {
           ResolvedType type = argument.calculateResolvedType();
-          paramType = new MemberType(type.describe());
+          paramType = new SolvedMemberType(type.describe());
         } catch (UnsolvedSymbolException ex) {
           inferContextImpl(argument, result);
 
@@ -764,7 +764,7 @@ public class UnsolvedSymbolGenerator {
 
       generatedMethod =
           UnsolvedMethodAlternates.create(
-              constructorName, new MemberType(""), List.of(location), parameters);
+              constructorName, new SolvedMemberType(""), List.of(location), parameters);
 
       addNewSymbolToGeneratedSymbolsMap(generatedMethod);
 
@@ -840,7 +840,7 @@ public class UnsolvedSymbolGenerator {
       generatedMethod =
           UnsolvedMethodAlternates.create(
               isConstructor ? simpleClassName : methodName,
-              new MemberType(isConstructor ? "" : "void"),
+              new SolvedMemberType(isConstructor ? "" : "void"),
               scope,
               parameters);
 
@@ -899,13 +899,13 @@ public class UnsolvedSymbolGenerator {
 
     // remove the last element of params, because that's the return type, not a parameter
     for (int i = 0; i < params.size() - (isVoid ? 1 : 0); i++) {
-      params.add(new MemberType(paramArray[i]));
+      params.add(new SolvedMemberType(paramArray[i]));
     }
 
     String returnType = isVoid ? "void" : "T" + arity;
     UnsolvedMethodAlternates apply =
         UnsolvedMethodAlternates.create(
-            "apply", new MemberType(returnType), List.of(functionalInterface), params);
+            "apply", new SolvedMemberType(returnType), List.of(functionalInterface), params);
 
     addNewSymbolToGeneratedSymbolsMap(apply);
 
@@ -963,7 +963,7 @@ public class UnsolvedSymbolGenerator {
                         thrownException.asClassOrInterfaceType()));
 
         if (syntheticType != null) {
-          syntheticType.extend(new MemberType("java.lang.Throwable"));
+          syntheticType.extend(new SolvedMemberType("java.lang.Throwable"));
         }
       }
     } else if (node instanceof ThrowStmt throwStmt) {
@@ -976,7 +976,7 @@ public class UnsolvedSymbolGenerator {
       // way before any throw statements will be added. So, if they've already extended the
       // type, we know it is not an uncaught exception.
       if (syntheticType != null && !syntheticType.hasExtends()) {
-        syntheticType.extend(new MemberType("java.lang.RuntimeException"));
+        syntheticType.extend(new SolvedMemberType("java.lang.RuntimeException"));
       }
     }
 
@@ -1037,7 +1037,7 @@ public class UnsolvedSymbolGenerator {
       }
 
       for (UnsolvedClassOrInterfaceAlternates exception : exceptions) {
-        MemberType type = new MemberType("java.lang.Exception");
+        MemberType type = new SolvedMemberType("java.lang.Exception");
         if (exception == null || exception.doesExtend(type)) {
           continue;
         }
@@ -1054,10 +1054,10 @@ public class UnsolvedSymbolGenerator {
         UnsolvedMethodAlternates unsolvedMethodAlternates =
             UnsolvedMethodAlternates.create(
                 "close",
-                new MemberType("void"),
+                new SolvedMemberType("void"),
                 List.of(type),
                 List.of(),
-                List.of(new MemberType("java.lang.Exception")));
+                List.of(new SolvedMemberType("java.lang.Exception")));
 
         addNewSymbolToGeneratedSymbolsMap(unsolvedMethodAlternates);
         toAdd.add(unsolvedMethodAlternates);
@@ -1159,7 +1159,8 @@ public class UnsolvedSymbolGenerator {
             "Unresolvable method is not generated when all unsolved symbols should be.");
       }
 
-      if (alt.getReturnTypes().size() > 1 || !alt.getReturnTypes().get(0).isUnsolved()) {
+      if (alt.getReturnTypes().size() > 1
+          || !(alt.getReturnTypes().get(0) instanceof UnsolvedMemberType)) {
         // Return type is not synthetic
         return UnsolvedGenerationResult.EMPTY;
       }
@@ -1249,11 +1250,11 @@ public class UnsolvedSymbolGenerator {
 
               if (signature.equals(methodSignature)) {
                 UnsolvedClassOrInterfaceAlternates oldReturn =
-                    alt.getReturnTypes().get(0).getUnsolvedType();
+                    ((UnsolvedMemberType) alt.getReturnTypes().get(0)).getUnsolvedType();
                 try {
                   ResolvedType resolvedType = methodDecl.getReturnType();
 
-                  alt.getReturnTypes().get(0).setSolvedType(resolvedType.describe());
+                  alt.setReturnType(new SolvedMemberType(resolvedType.describe()));
 
                   toRemove.add(oldReturn);
                   removeSymbolFromGeneratedSymbolsMap(oldReturn);
@@ -1465,7 +1466,7 @@ public class UnsolvedSymbolGenerator {
    */
   private @Nullable MemberType getMemberTypeFromFQNs(Set<String> fqns, boolean createNew) {
     for (String fqn : fqns) {
-      if (fqnsToCompilationUnits.containsKey(fqn)) return new MemberType(fqn);
+      if (fqnsToCompilationUnits.containsKey(fqn)) return new SolvedMemberType(fqn);
 
       MemberType type = getMemberTypeIfPrimitiveOrJavaLang(fqn);
 
@@ -1489,7 +1490,7 @@ public class UnsolvedSymbolGenerator {
     if (unsolved == null) {
       return null;
     } else {
-      return new MemberType(
+      return new UnsolvedMemberType(
           unsolved, JavaParserUtil.countNumberOfArrayBrackets(fqns.iterator().next()));
     }
   }
@@ -1505,7 +1506,7 @@ public class UnsolvedSymbolGenerator {
         || JavaLangUtils.isJavaLangOrPrimitiveName(
             JavaParserUtil.getSimpleNameFromQualifiedName(
                 JavaParserUtil.removeArrayBrackets(name)))) {
-      return new MemberType(name);
+      return new SolvedMemberType(name);
     }
     return null;
   }

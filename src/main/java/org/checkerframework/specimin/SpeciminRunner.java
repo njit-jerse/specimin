@@ -7,8 +7,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
@@ -252,19 +251,12 @@ public class SpeciminRunner {
         }
       }
 
-      for (ClassOrInterfaceDeclaration declaredClass :
-          compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
+      for (TypeDeclaration<?> declaredClass : compilationUnit.findAll(TypeDeclaration.class)) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
-          String declaredClassQualifiedName =
-              declaredClass.getFullyQualifiedName().get().toString();
+          String declaredClassQualifiedName = declaredClass.getFullyQualifiedName().get();
           existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
           fqnToCompilationUnits.put(declaredClassQualifiedName, compilationUnit);
         }
-      }
-      for (EnumDeclaration enumDeclaration : compilationUnit.findAll(EnumDeclaration.class)) {
-        existingClassesToFilePath.put(
-            enumDeclaration.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
-        fqnToCompilationUnits.put(enumDeclaration.getFullyQualifiedName().get(), compilationUnit);
       }
     }
 

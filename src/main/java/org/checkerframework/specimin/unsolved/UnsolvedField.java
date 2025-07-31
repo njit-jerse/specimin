@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-public class UnsolvedField extends UnsolvedSymbolAlternate {
+public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFieldCommon {
   /** The name of the field */
   private final String name;
 
@@ -39,6 +39,7 @@ public class UnsolvedField extends UnsolvedSymbolAlternate {
    *
    * @return the value of type
    */
+  @Override
   public MemberType getType() {
     return type;
   }
@@ -48,6 +49,7 @@ public class UnsolvedField extends UnsolvedSymbolAlternate {
    *
    * @return the name of this field
    */
+  @Override
   public String getName() {
     return name;
   }

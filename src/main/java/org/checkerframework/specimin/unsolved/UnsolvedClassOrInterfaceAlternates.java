@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
 
 /**
@@ -19,7 +20,8 @@ import org.checkerframework.specimin.JavaParserUtil;
  * </ul>
  */
 public class UnsolvedClassOrInterfaceAlternates
-    extends UnsolvedSymbolAlternates<UnsolvedClassOrInterface> {
+    extends UnsolvedSymbolAlternates<UnsolvedClassOrInterface>
+    implements UnsolvedClassOrInterfaceCommon {
 
   private Set<String> fullyQualifiedNames = new LinkedHashSet<>();
 
@@ -146,21 +148,21 @@ public class UnsolvedClassOrInterfaceAlternates
    *
    * @return True if this represents an interface.
    */
+  @Override
   public boolean isAnInterface() {
-    // All alternates are either all interfaces or all classes
-    return getAlternates().get(0).isAnInterface();
+    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::isAnInterface);
   }
 
   /** Sets this type to an interface. */
+  @Override
   public void setIsAnInterfaceToTrue() {
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
-      alternate.setIsAnInterfaceToTrue();
-    }
+    applyToAllAlternates(UnsolvedClassOrInterface::setIsAnInterfaceToTrue);
   }
 
   /** Sets this type to an annotation and generates additional alternates. */
+  @Override
   public void setIsAnAnnotationToTrue() {
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
+    for (UnsolvedClassOrInterface alternate : List.copyOf(getAlternates())) {
       boolean orig = alternate.isAnAnnotation();
       alternate.setIsAnAnnotationToTrue();
 
@@ -201,10 +203,9 @@ public class UnsolvedClassOrInterfaceAlternates
    *
    * @param extendsType The type to extend
    */
+  @Override
   public void extend(MemberType extendsType) {
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
-      alternate.extend(extendsType);
-    }
+    applyToAllAlternates(UnsolvedClassOrInterface::extend, extendsType);
   }
 
   /**
@@ -212,11 +213,9 @@ public class UnsolvedClassOrInterfaceAlternates
    *
    * @return True if this class has an extends clause.
    */
+  @Override
   public boolean hasExtends() {
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
-      if (alternate.hasExtends()) return true;
-    }
-    return false;
+    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::hasExtends);
   }
 
   /**
@@ -225,11 +224,9 @@ public class UnsolvedClassOrInterfaceAlternates
    * @param extendsType The type to extend
    * @return True if this type extends the given extendsType.
    */
+  @Override
   public boolean doesExtend(MemberType extendsType) {
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
-      if (alternate.doesExtend(extendsType)) return true;
-    }
-    return false;
+    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::doesExtend, extendsType);
   }
 
   /**
@@ -237,11 +234,10 @@ public class UnsolvedClassOrInterfaceAlternates
    *
    * @param interfaceName The type to implement
    */
+  @Override
   public void implement(String interfaceName) {
     // TODO: make this MemberType also
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
-      alternate.implement(interfaceName);
-    }
+    applyToAllAlternates(UnsolvedClassOrInterface::implement, interfaceName);
   }
 
   /**
@@ -250,11 +246,9 @@ public class UnsolvedClassOrInterfaceAlternates
    * @param interfaceName The type to implement
    * @return True if this type implements the given interface.
    */
+  @Override
   public boolean doesImplement(String interfaceName) {
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
-      if (alternate.doesImplement(interfaceName)) return true;
-    }
-    return false;
+    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::doesImplement, interfaceName);
   }
 
   /**
@@ -262,10 +256,9 @@ public class UnsolvedClassOrInterfaceAlternates
    *
    * @param number The number of type variables.
    */
+  @Override
   public void setNumberOfTypeVariables(int number) {
-    for (UnsolvedClassOrInterface alternate : getAlternates()) {
-      alternate.setNumberOfTypeVariables(number);
-    }
+    applyToAllAlternates(UnsolvedClassOrInterface::setNumberOfTypeVariables, number);
   }
 
   /**
@@ -273,7 +266,28 @@ public class UnsolvedClassOrInterfaceAlternates
    *
    * @return The type variables without brackets
    */
+  @Override
   public String getTypeVariablesAsStringWithoutBrackets() {
     return getAlternates().get(0).getTypeVariablesAsStringWithoutBrackets();
+  }
+
+  @Override
+  public boolean isAnAnnotation() {
+    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::isAnAnnotation);
+  }
+
+  @Override
+  public int getNumberOfTypeVariables() {
+    return getAlternates().get(0).getNumberOfTypeVariables();
+  }
+
+  @Override
+  public @ClassGetSimpleName String getClassName() {
+    return getAlternates().get(0).getClassName();
+  }
+
+  @Override
+  public String getTypeVariablesAsString() {
+    return getAlternates().get(0).getTypeVariablesAsString();
   }
 }

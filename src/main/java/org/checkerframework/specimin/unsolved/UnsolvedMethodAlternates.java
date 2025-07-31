@@ -26,7 +26,8 @@ import org.checkerframework.specimin.JavaParserUtil;
  * getAlternates()} will always return a single alternate for this class, since {@code
  * UnsolvedMethodAlternates} depends on encapsulating classes for alternate definitions.
  */
-public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedMethod> {
+public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedMethod>
+    implements UnsolvedMethodCommon {
   private UnsolvedMethodAlternates(
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes) {
     super(alternateDeclaringTypes);
@@ -46,7 +47,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       MemberType type,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       List<MemberType> parameters) {
-    // TODO: enable alternate methods in case a method reference is a parameter
+    // TODO: enable alternate methods in case a method reference is an argument
     // For example, Foo::bar may refer to a bar(int) -> void or a bar(String) -> boolean
     // If Foo::bar were an argument, we wouldn't know which is which
     return create(name, type, alternateDeclaringTypes, parameters, List.of());
@@ -176,10 +177,9 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   }
 
   /** Makes this method static. */
-  public void setIsStaticToTrue() {
-    for (UnsolvedMethod method : getAlternates()) {
-      method.setStatic();
-    }
+  @Override
+  public void setStatic() {
+    applyToAllAlternates(UnsolvedMethod::setStatic);
   }
 
   /**
@@ -187,6 +187,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    *
    * @return The number of type variables
    */
+  @Override
   public int getNumberOfTypeVariables() {
     return getAlternates().get(0).getNumberOfTypeVariables();
   }
@@ -196,10 +197,9 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    *
    * @param number The number of type variables
    */
+  @Override
   public void setNumberOfTypeVariables(int number) {
-    for (UnsolvedMethod method : getAlternates()) {
-      method.setNumberOfTypeVariables(number);
-    }
+    applyToAllAlternates(UnsolvedMethod::setNumberOfTypeVariables, number);
   }
 
   /**
@@ -209,5 +209,25 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    */
   public List<MemberType> getReturnTypes() {
     return getAlternates().stream().map(alternate -> alternate.getReturnType()).toList();
+  }
+
+  @Override
+  public String getName() {
+    return getAlternates().get(0).getName();
+  }
+
+  @Override
+  public List<MemberType> getThrownExceptions() {
+    return getAlternates().get(0).getThrownExceptions();
+  }
+
+  /**
+   * Use with caution: this method sets all alternates' return types to the same type.
+   *
+   * <p>{@inheritDoc}
+   */
+  @Override
+  public void setReturnType(MemberType memberType) {
+    applyToAllAlternates(UnsolvedMethod::setReturnType, memberType);
   }
 }
