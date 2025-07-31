@@ -373,7 +373,9 @@ public class SpeciminRunner {
         for (Node toRemove : enumeratorResult.unusedDependentNodes()) {
           Node clone = map.get(toRemove);
 
-          if (clone == null) continue;
+          if (clone == null) {
+            continue;
+          }
           clone.remove();
         }
       }

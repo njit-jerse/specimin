@@ -694,7 +694,9 @@ public class UnsolvedSymbolGenerator {
             (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
 
         // TODO: throw an error here once we add some sort of custom resolution logic
-        if (generated == null) continue;
+        if (generated == null) {
+          continue;
+        }
 
         scope.add(generated);
 
@@ -811,7 +813,9 @@ public class UnsolvedSymbolGenerator {
       }
     } else if (node instanceof MethodDeclaration methodDecl) {
       for (ReferenceType thrownException : methodDecl.getThrownExceptions()) {
-        if (!thrownException.isClassOrInterfaceType()) continue;
+        if (!thrownException.isClassOrInterfaceType()) {
+          continue;
+        }
 
         UnsolvedClassOrInterfaceAlternates syntheticType =
             (UnsolvedClassOrInterfaceAlternates)
@@ -895,12 +899,16 @@ public class UnsolvedSymbolGenerator {
 
       for (UnsolvedClassOrInterfaceAlternates exception : exceptions) {
         MemberType type = new MemberType("java.lang.Exception");
-        if (exception == null || exception.doesExtend(type)) continue;
+        if (exception == null || exception.doesExtend(type)) {
+          continue;
+        }
         exception.extend(type);
       }
 
       for (UnsolvedClassOrInterfaceAlternates type : types) {
-        if (type == null || type.doesImplement("java.lang.AutoCloseable")) continue;
+        if (type == null || type.doesImplement("java.lang.AutoCloseable")) {
+          continue;
+        }
 
         type.implement("java.lang.AutoCloseable");
 
@@ -1218,7 +1226,9 @@ public class UnsolvedSymbolGenerator {
     for (String potentialFQN : potentialFQNs) {
       alreadyGenerated = generatedSymbols.get(potentialFQN);
 
-      if (alreadyGenerated != null) break;
+      if (alreadyGenerated != null) {
+        break;
+      }
     }
 
     if (alreadyGenerated != null) {
@@ -1268,7 +1278,9 @@ public class UnsolvedSymbolGenerator {
    */
   private void addNewSymbolToGeneratedSymbolsMap(UnsolvedSymbolAlternates<?> newSymbol) {
     for (String potentialFQN : newSymbol.getFullyQualifiedNames()) {
-      if (generatedSymbols.containsKey(potentialFQN)) continue;
+      if (generatedSymbols.containsKey(potentialFQN)) {
+        continue;
+      }
       generatedSymbols.put(potentialFQN, newSymbol);
     }
   }

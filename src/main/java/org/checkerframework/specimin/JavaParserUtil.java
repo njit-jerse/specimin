@@ -718,9 +718,13 @@ public class JavaParserUtil {
     }
 
     for (CallableDeclaration<?> callable : callables) {
-      if (callable.getParameters().size() != parameterTypes.size()) continue;
-      if (callableType == MethodDeclaration.class && !callable.getNameAsString().equals(methodName))
+      if (callable.getParameters().size() != parameterTypes.size()) {
         continue;
+      }
+      if (callableType == MethodDeclaration.class
+          && !callable.getNameAsString().equals(methodName)) {
+        continue;
+      }
 
       boolean isAMatch = true;
 
@@ -791,7 +795,9 @@ public class JavaParserUtil {
           TypeDeclaration<?> typeDecl =
               getTypeFromQualifiedName(resolvedDecl.getQualifiedName(), fqnToCompilationUnits);
 
-          if (typeDecl == null) continue;
+          if (typeDecl == null) {
+            continue;
+          }
 
           result.add(typeDecl);
           getAllSolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);

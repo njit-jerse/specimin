@@ -174,7 +174,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             TypeDeclaration<?> typeDecl =
                 JavaParserUtil.getTypeFromQualifiedName(
                     decl.getQualifiedName(), fqnToCompilationUnits);
-            if (typeDecl == null) continue;
+            if (typeDecl == null) {
+              continue;
+            }
 
             for (ResolvedMethodDeclaration method : decl.asReferenceType().getDeclaredMethods()) {
               if (resolvedMethodDeclaration.getSignature().equals(method.getSignature())) {

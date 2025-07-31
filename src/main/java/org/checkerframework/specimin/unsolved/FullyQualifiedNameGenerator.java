@@ -65,6 +65,9 @@ import org.checkerframework.specimin.JavaParserUtil;
  * type.
  */
 public class FullyQualifiedNameGenerator {
+  private static final String SYNTHETIC_TYPE_FOR = "SyntheticTypeFor";
+  private static final String RETURN_TYPE = "ReturnType";
+
   /**
    * When evaluating an expression, there is only one possible type. However, the location of an
    * expression could vary, depending on the parent classes/interfaces of the class which holds the
@@ -91,16 +94,7 @@ public class FullyQualifiedNameGenerator {
 
       CompilationUnit cu = expr.findCompilationUnit().get();
 
-      ImportDeclaration staticImport = null;
-
-      for (ImportDeclaration importDecl : cu.getImports()) {
-        if (!importDecl.isStatic()) continue;
-
-        if (importDecl.getNameAsString().endsWith("." + name)) {
-          staticImport = importDecl;
-          break;
-        }
-      }
+      ImportDeclaration staticImport = getImportDeclarationFromName(name, cu, true);
 
       if (staticImport != null) {
         String holdingType = staticImport.getName().getQualifier().get().toString();
@@ -211,6 +205,9 @@ public class FullyQualifiedNameGenerator {
               try {
                 // If a type in the union type is resolvable, the location of the expression will
                 // be in a built-in Java superclass. In this case, return an empty map.
+
+                // TODO: handle a case where a user-defined exception could be solvable but a parent
+                // class of that exception is not.
                 type.resolve();
                 return Map.of();
               } catch (UnsolvedSymbolException ex) {
@@ -219,7 +216,9 @@ public class FullyQualifiedNameGenerator {
 
               Set<String> fqns = getFQNsFromType(type);
 
-              if (fqns.isEmpty()) continue;
+              if (fqns.isEmpty()) {
+                continue;
+              }
 
               String simple = JavaParserUtil.getSimpleNameFromQualifiedName(fqns.iterator().next());
               result.put(simple, fqns);
@@ -269,112 +268,11 @@ public class FullyQualifiedNameGenerator {
     }
     // method ref
     else if (expr.isMethodReferenceExpr()) {
-      MethodReferenceExpr methodRef = expr.asMethodReferenceExpr();
-      String functionalInterface;
-
-      try {
-        // In practice, this may never resolve. JavaParser resolve on MethodReferenceExprs only
-        // resolves if the LHS is also resolvable, which is often not the case for this method.
-        // Instead, we'll need to rely on JavaTypeCorrect to give us the correct functional
-        // interface.
-        ResolvedMethodDeclaration resolved = methodRef.resolve();
-
-        // Try to get the most exact parameters; if something is unresolvable and has an ambiguous
-        // FQN, then opt to use java.lang.Object; placing alternates into a type parameter would
-        // require a lot more code, which we may choose to do in the future.
-        List<String> parameters = new ArrayList<>();
-        if (resolved.toAst().isPresent()) {
-          Node toAst = resolved.toAst().get();
-
-          CallableDeclaration<?> callableDecl = (CallableDeclaration<?>) toAst;
-
-          for (Parameter param : callableDecl.getParameters()) {
-            try {
-              parameters.add(param.resolve().describeType());
-            } catch (UnsolvedSymbolException ex) {
-              Set<String> fqns = getFQNsFromType(param.getType());
-              if (fqns.size() == 1) {
-                parameters.add(fqns.iterator().next());
-              } else {
-                parameters.add("java.lang.Object");
-              }
-            }
-          }
-        } else {
-          // By reflection or jar
-          for (int i = 0; i < resolved.getNumberOfParams(); i++) {
-            try {
-              parameters.add(resolved.getParam(i).describeType());
-            } catch (UnsolvedSymbolException ex) {
-              parameters.add("java.lang.Object");
-            }
-          }
-        }
-
-        // Getting the return type could also cause an unsolved symbol exception, but we only care
-        // if it's void or not
-        boolean isVoid;
-        try {
-          isVoid = resolved.getReturnType().isVoid();
-        } catch (UnsolvedSymbolException ex) {
-          isVoid = false;
-        }
-
-        functionalInterface =
-            getNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
-        // UnsupportedOperationException is for constructors
-      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
-        if (methodRef.getIdentifier().equals("new")) {
-          functionalInterface = getNameOfFunctionalInterface(0, false);
-        } else {
-          // If the method ref is unresolvable, use a built-in type (Runnable)
-          functionalInterface = getNameOfFunctionalInterface(0, true);
-        }
-      }
-
-      // firstIdentifier is used to check imports. Since functionalInterface is always either
-      // java.____ or a simple synthetic class name, we know it's never required to import.
-      return getFQNsFromClassName(
-          "java", functionalInterface, methodRef.findCompilationUnit().get(), methodRef);
+      return getFQNsForMethodReferenceType(expr.asMethodReferenceExpr());
     }
     // lambda
     else if (expr.isLambdaExpr()) {
-      LambdaExpr lambda = expr.asLambdaExpr();
-
-      boolean isVoid;
-
-      if (lambda.getExpressionBody().isPresent()) {
-        Expression body = lambda.getExpressionBody().get();
-        Set<String> fqns = getFQNsForExpressionType(body);
-        isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
-      } else {
-        isVoid =
-            lambda.getBody().asBlockStmt().getStatements().stream()
-                .anyMatch(stmt -> stmt instanceof ReturnStmt);
-      }
-
-      List<String> parameters = new ArrayList<>();
-
-      for (Parameter param : lambda.getParameters()) {
-        try {
-          parameters.add(param.resolve().describeType());
-        } catch (UnsolvedSymbolException ex) {
-          Set<String> fqns = getFQNsFromType(param.getType());
-          if (fqns.size() == 1) {
-            parameters.add(fqns.iterator().next());
-          } else {
-            parameters.add("java.lang.Object");
-          }
-        }
-      }
-
-      String functionalInterface =
-          getNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
-
-      // firstIdentifier is used to check imports. Since functionalInterface is always either
-      // java.____ or a simple synthetic class name, we know it's never required to import.
-      return getFQNsFromClassName(
-          "java", functionalInterface, lambda.findCompilationUnit().get(), lambda);
+      return getFQNsForLambdaType(expr.asLambdaExpr());
     } else if (expr.isLiteralExpr()) {
       if (expr.isNullLiteralExpr()) {
         // TODO: more robust handling?
@@ -387,165 +285,30 @@ public class FullyQualifiedNameGenerator {
     else if (expr.isTypeExpr()) {
       return getFQNsFromType(expr.asTypeExpr().getType());
     }
+    // cast expression
+    else if (expr.isCastExpr()) {
+      return getFQNsFromClassOrInterfaceType(expr.asCastExpr().getType().asClassOrInterfaceType());
+    }
 
     // local variable / field / method call / object creation expression / any other case
-    // where the expression is resolvable
-    // While the field/method itself may not be resolvable, the scope may be.
-    // If it's a local variable or field declaration, the scope will be resolvable.
+    // where the expression is resolvable BUT the type of the expression may not be.
     try {
-      Node node = null;
-      if (expr instanceof Resolvable<?>) {
-        Object resolved = ((Resolvable<?>) expr).resolve();
-
-        if (resolved instanceof AssociableToAST) {
-          node = ((AssociableToAST) resolved).toAst().get();
+      if (expr instanceof Resolvable<?> resolvable) {
+        @Nullable Set<String> solvableDeclarationTypeFQNs =
+            getFQNsForTypeOfSolvableExpression(resolvable);
+        if (solvableDeclarationTypeFQNs != null) {
+          return solvableDeclarationTypeFQNs;
         }
-      }
-
-      // Field declaration and variable declaration expressions
-      if (node instanceof NodeWithVariables) {
-        NodeWithVariables<?> withVariables = (NodeWithVariables<?>) node;
-
-        Type type = withVariables.getElementType();
-
-        if (!type.isVarType()) {
-          // Keep going if var type
-          return getFQNsFromType(type);
-        }
-      }
-      // methods, new ClassName()
-      else if (node instanceof NodeWithType) {
-        NodeWithType<?, ?> asVariableDeclarationExpr = (NodeWithType<?, ?>) node;
-
-        Type type = asVariableDeclarationExpr.getType();
-
-        return getFQNsFromType(type);
       }
     } catch (UnsolvedSymbolException ex) {
       // Not a local variable or field
     }
 
-    // cast expression
-    if (expr.isCastExpr()) {
-      return getFQNsFromClassOrInterfaceType(expr.asCastExpr().getType().asClassOrInterfaceType());
-    }
-
-    // Left-hand side is known (i.e. in a variable declarator, or as an argument)
+    // Handle the cases where the type of the expression can be inferred from surrounding context
     if (expr.hasParentNode()) {
-      Node parentNode = expr.getParentNode().get();
-
-      // Method call, constructor call, super() call
-      if (parentNode instanceof NodeWithArguments<?>) {
-        NodeWithArguments<?> methodCall = (NodeWithArguments<?>) parentNode;
-
-        int param = -1;
-        for (int i = 0; i < methodCall.getArguments().size(); i++) {
-          if (methodCall.getArgument(i).equals(expr)) {
-            param = i;
-          }
-        }
-
-        if (param != -1) {
-          try {
-            // All NodeWithArguments<?> are resolvable, aside from EnumConstantDeclaration,
-            // but we won't encounter a situation where EnumConstantDeclaration is on the RHS
-
-            // Constructors and methods both are ResolvedMethodLikeDeclaration
-            ResolvedMethodLikeDeclaration resolved =
-                (ResolvedMethodLikeDeclaration) ((Resolvable<?>) methodCall).resolve();
-
-            if (resolved == null) {
-              throw new RuntimeException("Unexpected null resolve() value");
-            }
-
-            ResolvedType paramType = resolved.getParam(param).getType();
-
-            return Set.of(paramType.describe());
-          } catch (UnsolvedSymbolException ex) {
-            // Argument type is not resolvable; i.e., method is unsolvable
-          }
-        }
-        // scope of the method call, not an argument, continue
-
-      } else if (parentNode instanceof VariableDeclarator) {
-        VariableDeclarator declarator = (VariableDeclarator) parentNode;
-
-        // When the parent is a VariableDeclarator, the child (expr) is on the right hand side
-        // The type is on the left hand side
-        return getFQNsFromType(declarator.getType());
-      } else if (parentNode instanceof AssignExpr) {
-        AssignExpr assignment = (AssignExpr) parentNode;
-
-        // We could be on either side of the assignment operator
-        // In that case, take the type of the other side
-
-        // TODO: StackOverflowError likely here, refactor
-        if (assignment.getTarget().equals(expr) && !assignment.getValue().isNullLiteralExpr()) {
-          return getFQNsForExpressionType(assignment.getValue());
-        } else if (assignment.getValue().equals(expr)
-            && !assignment.getTarget().isNullLiteralExpr()) {
-          return getFQNsForExpressionType(assignment.getTarget());
-        }
-      }
-      // Check if it's the conditional of an if, while, do, ?:; if so, its type is boolean
-      else if (parentNode instanceof NodeWithCondition) {
-        NodeWithCondition<?> withCondition = (NodeWithCondition<?>) parentNode;
-
-        if (withCondition.getCondition().equals(expr)) {
-          return Set.of("boolean");
-        }
-      }
-      // If it's in a binary expression (i.e., + - / * == != etc.), then set it to the type of the
-      // other side,
-      // if known
-      else if (parentNode instanceof BinaryExpr) {
-        BinaryExpr binary = (BinaryExpr) parentNode;
-        Operator operator = binary.getOperator();
-
-        Expression other;
-
-        if (binary.getLeft().equals(expr)) {
-          other = binary.getRight();
-        } else {
-          other = binary.getLeft();
-        }
-
-        // Boolean
-        if (operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR) {
-          return Set.of("boolean");
-        }
-        // ==, !=; we don't know the type, since the types on either side are not necessarily equal
-        else if (operator != BinaryExpr.Operator.EQUALS
-            && operator != BinaryExpr.Operator.NOT_EQUALS) {
-          // Treat all other cases; type on one side is equal to the other
-          Set<String> otherType = getFQNsForExpressionType(other);
-
-          // No type known for sure, synthetic; these only work with Java built-in types
-          if (otherType.size() > 1) {
-            // Try getting the type of the LHS; i.e. if looking at getA() + getB() in String x =
-            // getA() + getB();
-            otherType = getFQNsForExpressionType(binary);
-
-            if (otherType.size() > 1) {
-              // int is safe for all the remaining operators
-              return Set.of("int");
-            }
-          }
-          return otherType;
-        }
-      } else if (parentNode instanceof ReturnStmt) {
-        Object ancestor =
-            parentNode
-                .findAncestor(
-                    n -> {
-                      return n instanceof MethodDeclaration || n instanceof LambdaExpr;
-                    },
-                    Node.class)
-                .get();
-
-        if (ancestor instanceof MethodDeclaration methodDecl) {
-          return getFQNsFromType(methodDecl.getType());
-        }
+      @Nullable Set<String> fromLHS = getFQNsFromSurroundingContextType(expr);
+      if (fromLHS != null) {
+        return fromLHS;
       }
     }
 
@@ -557,14 +320,7 @@ public class FullyQualifiedNameGenerator {
 
       CompilationUnit cu = expr.findCompilationUnit().get();
 
-      ImportDeclaration importDecl = null;
-
-      for (ImportDeclaration anImport : cu.getImports()) {
-        if (anImport.getNameAsString().endsWith("." + name)) {
-          importDecl = anImport;
-          break;
-        }
-      }
+      ImportDeclaration importDecl = getImportDeclarationFromName(name, cu, false);
 
       if (importDecl != null) {
         // The name expr could also be a class: calling this method on the scope of Baz.foo
@@ -576,7 +332,7 @@ public class FullyQualifiedNameGenerator {
         return Set.of(getFQNOfStaticallyImportedMemberType(importDecl.getNameAsString(), false));
       }
 
-      String exprTypeName = "SyntheticTypeFor" + toCapital(name);
+      String exprTypeName = SYNTHETIC_TYPE_FOR + toCapital(name);
       return getFQNsFromClassName(
           exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
     } else if (expr.isFieldAccessExpr()) {
@@ -584,7 +340,7 @@ public class FullyQualifiedNameGenerator {
 
       String exprTypeName;
       if (scope.isThisExpr() || scope.isSuperExpr()) {
-        exprTypeName = "SyntheticTypeFor" + toCapital(expr.asFieldAccessExpr().getNameAsString());
+        exprTypeName = SYNTHETIC_TYPE_FOR + toCapital(expr.asFieldAccessExpr().getNameAsString());
       } else {
         String scopeType =
             getFQNsForExpressionType(expr.asFieldAccessExpr().getScope()).iterator().next();
@@ -612,22 +368,13 @@ public class FullyQualifiedNameGenerator {
 
       CompilationUnit cu = expr.findCompilationUnit().get();
 
-      ImportDeclaration staticImport = null;
-
-      for (ImportDeclaration importDecl : cu.getImports()) {
-        if (!importDecl.isStatic()) continue;
-
-        if (importDecl.getNameAsString().endsWith("." + name)) {
-          staticImport = importDecl;
-          break;
-        }
-      }
+      ImportDeclaration staticImport = getImportDeclarationFromName(name, cu, false);
 
       if (staticImport != null) {
         return Set.of(getFQNOfStaticallyImportedMemberType(staticImport.getNameAsString(), true));
       }
 
-      String exprTypeName = toCapital(expr.asMethodCallExpr().getNameAsString()) + "ReturnType";
+      String exprTypeName = toCapital(expr.asMethodCallExpr().getNameAsString()) + RETURN_TYPE;
 
       if (expr.hasScope()) {
         // Place in the same package as its scope type
@@ -653,7 +400,310 @@ public class FullyQualifiedNameGenerator {
     }
 
     // Hitting this error means we forgot to account for a case
-    throw new RuntimeException("Unknown expression type.");
+    throw new RuntimeException(
+        "Unknown expression type: " + expr.getClass() + "; expression value: " + expr);
+  }
+
+  /**
+   * Given a method reference expression, return the FQNs of its functional interface.
+   *
+   * @param methodRef The method reference expression
+   * @return The FQNs of its functional interface
+   */
+  private static Set<String> getFQNsForMethodReferenceType(MethodReferenceExpr methodRef) {
+    String functionalInterface;
+
+    try {
+      // In practice, this may never resolve. JavaParser resolve on MethodReferenceExprs only
+      // resolves if the LHS is also resolvable, which is often not the case for this method.
+      // TODO: find all possible definitions for this method and return all their functional
+      // interfaces
+      ResolvedMethodDeclaration resolved = methodRef.resolve();
+
+      // Try to get the most exact parameters; if something is unresolvable and has an ambiguous
+      // FQN, then opt to use java.lang.Object; placing alternates into a type parameter would
+      // require a lot more code, which we may choose to do in the future.
+      List<String> parameters = new ArrayList<>();
+      if (resolved.toAst().isPresent()) {
+        Node toAst = resolved.toAst().get();
+
+        CallableDeclaration<?> callableDecl = (CallableDeclaration<?>) toAst;
+
+        for (Parameter param : callableDecl.getParameters()) {
+          try {
+            parameters.add(param.resolve().describeType());
+          } catch (UnsolvedSymbolException ex) {
+            Set<String> fqns = getFQNsFromType(param.getType());
+            if (fqns.size() == 1) {
+              parameters.add(fqns.iterator().next());
+            } else {
+              parameters.add("java.lang.Object");
+            }
+          }
+        }
+      } else {
+        // By reflection or jar
+        for (int i = 0; i < resolved.getNumberOfParams(); i++) {
+          try {
+            parameters.add(resolved.getParam(i).describeType());
+          } catch (UnsolvedSymbolException ex) {
+            parameters.add("java.lang.Object");
+          }
+        }
+      }
+
+      // Getting the return type could also cause an unsolved symbol exception, but we only care
+      // if it's void or not
+      boolean isVoid;
+      try {
+        isVoid = resolved.getReturnType().isVoid();
+      } catch (UnsolvedSymbolException ex) {
+        isVoid = false;
+      }
+
+      functionalInterface = getNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
+      // UnsupportedOperationException is for constructors
+    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+      if (methodRef.getIdentifier().equals("new")) {
+        functionalInterface = getNameOfFunctionalInterface(0, false);
+      } else {
+        // If the method ref is unresolvable, use a built-in type (Runnable)
+        functionalInterface = getNameOfFunctionalInterface(0, true);
+      }
+    }
+
+    // firstIdentifier is used to check imports. Since functionalInterface is always either
+    // java.____ or a simple synthetic class name, we know it's never required to import.
+    return getFQNsFromClassName(
+        "java", functionalInterface, methodRef.findCompilationUnit().get(), methodRef);
+  }
+
+  /**
+   * Given a lambda expression, return the FQNs of its functional interface.
+   *
+   * @param lambda The lambda expression
+   * @return The FQNs of its functional interface
+   */
+  private static Set<String> getFQNsForLambdaType(LambdaExpr lambda) {
+    boolean isVoid;
+
+    if (lambda.getExpressionBody().isPresent()) {
+      Expression body = lambda.getExpressionBody().get();
+      Set<String> fqns = getFQNsForExpressionType(body);
+      isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
+    } else {
+      isVoid =
+          lambda.getBody().asBlockStmt().getStatements().stream()
+              .anyMatch(stmt -> stmt instanceof ReturnStmt);
+    }
+
+    List<String> parameters = new ArrayList<>();
+
+    for (Parameter param : lambda.getParameters()) {
+      try {
+        parameters.add(param.resolve().describeType());
+      } catch (UnsolvedSymbolException ex) {
+        Set<String> fqns = getFQNsFromType(param.getType());
+        if (fqns.size() == 1) {
+          parameters.add(fqns.iterator().next());
+        } else {
+          parameters.add("java.lang.Object");
+        }
+      }
+    }
+
+    String functionalInterface =
+        getNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
+
+    // firstIdentifier is used to check imports. Since functionalInterface is always either
+    // java.____ or a simple synthetic class name, we know it's never required to import.
+    return getFQNsFromClassName(
+        "java", functionalInterface, lambda.findCompilationUnit().get(), lambda);
+  }
+
+  /**
+   * Given an expression that can be resolved, return a best shot at its type based on a resolved
+   * declaration. May return null if a type cannot be found from the resolved declaration. This
+   * method will also throw an UnsolvedSymbolException if .resolve() fails.
+   *
+   * @param resolvable A resolvable expression
+   * @return A set of FQNs, or null if unfound
+   */
+  private static @Nullable Set<String> getFQNsForTypeOfSolvableExpression(
+      Resolvable<?> resolvable) {
+    Node node = null;
+    Object resolved = resolvable.resolve();
+
+    if (resolved instanceof AssociableToAST) {
+      node = ((AssociableToAST) resolved).toAst().get();
+    }
+
+    // Field declaration and variable declaration expressions
+    if (node instanceof NodeWithVariables<?> withVariables) {
+      Type type = withVariables.getElementType();
+
+      if (!type.isVarType()) {
+        // Keep going if var type
+        return getFQNsFromType(type);
+      }
+    }
+    // methods, new ClassName()
+    else if (node instanceof NodeWithType<?, ?> withType) {
+      return getFQNsFromType(withType.getType());
+    }
+
+    return null;
+  }
+
+  /**
+   * Given an expression, try to find its type based on its surrounding context. For example, if an
+   * expression is located on the right-hand side of a variable declaration, take the type on the
+   * left. If an expression is passed into a known method, return the type of that parameter. This
+   * method will return null if the surrounding context's type cannot be found.
+   *
+   * @param expr The expression
+   * @return A set of FQNs, or null if unfound
+   */
+  private static @Nullable Set<String> getFQNsFromSurroundingContextType(Expression expr) {
+    Node parentNode = expr.getParentNode().get();
+
+    // Method call, constructor call, super() call
+    if (parentNode instanceof NodeWithArguments<?>) {
+      NodeWithArguments<?> methodCall = (NodeWithArguments<?>) parentNode;
+
+      int param = -1;
+      for (int i = 0; i < methodCall.getArguments().size(); i++) {
+        if (methodCall.getArgument(i).equals(expr)) {
+          param = i;
+        }
+      }
+
+      if (param != -1) {
+        try {
+          // All NodeWithArguments<?> are resolvable, aside from EnumConstantDeclaration,
+          // but we won't encounter a situation where EnumConstantDeclaration is on the RHS
+
+          // Constructors and methods both are ResolvedMethodLikeDeclaration
+          ResolvedMethodLikeDeclaration resolved =
+              (ResolvedMethodLikeDeclaration) ((Resolvable<?>) methodCall).resolve();
+
+          if (resolved == null) {
+            throw new RuntimeException("Unexpected null resolve() value");
+          }
+
+          ResolvedType paramType = resolved.getParam(param).getType();
+
+          return Set.of(paramType.describe());
+        } catch (UnsolvedSymbolException ex) {
+          // Argument type is not resolvable; i.e., method is unsolvable
+        }
+      }
+      // scope of the method call, not an argument, continue
+
+    } else if (parentNode instanceof VariableDeclarator) {
+      VariableDeclarator declarator = (VariableDeclarator) parentNode;
+
+      // When the parent is a VariableDeclarator, the child (expr) is on the right hand side
+      // The type is on the left hand side
+      return getFQNsFromType(declarator.getType());
+    } else if (parentNode instanceof AssignExpr) {
+      AssignExpr assignment = (AssignExpr) parentNode;
+
+      // We could be on either side of the assignment operator
+      // In that case, take the type of the other side
+
+      // TODO: StackOverflowError likely here, refactor
+      if (assignment.getTarget().equals(expr) && !assignment.getValue().isNullLiteralExpr()) {
+        return getFQNsForExpressionType(assignment.getValue());
+      } else if (assignment.getValue().equals(expr)
+          && !assignment.getTarget().isNullLiteralExpr()) {
+        return getFQNsForExpressionType(assignment.getTarget());
+      }
+    }
+    // Check if it's the conditional of an if, while, do, ?:; if so, its type is boolean
+    else if (parentNode instanceof NodeWithCondition) {
+      NodeWithCondition<?> withCondition = (NodeWithCondition<?>) parentNode;
+
+      if (withCondition.getCondition().equals(expr)) {
+        return Set.of("boolean");
+      }
+    }
+    // If it's in a binary expression (i.e., + - / * == != etc.), then set it to the type of the
+    // other side,
+    // if known
+    else if (parentNode instanceof BinaryExpr) {
+      BinaryExpr binary = (BinaryExpr) parentNode;
+      Operator operator = binary.getOperator();
+
+      Expression other;
+
+      if (binary.getLeft().equals(expr)) {
+        other = binary.getRight();
+      } else {
+        other = binary.getLeft();
+      }
+
+      // Boolean
+      if (operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR) {
+        return Set.of("boolean");
+      }
+      // ==, !=; we don't know the type, since the types on either side are not necessarily equal
+      else if (operator != BinaryExpr.Operator.EQUALS
+          && operator != BinaryExpr.Operator.NOT_EQUALS) {
+        // Treat all other cases; type on one side is equal to the other
+        Set<String> otherType = getFQNsForExpressionType(other);
+
+        // No type known for sure, synthetic; these only work with Java built-in types
+        if (otherType.size() > 1) {
+          // Try getting the type of the LHS; i.e. if looking at getA() + getB() in String x =
+          // getA() + getB();
+          otherType = getFQNsForExpressionType(binary);
+
+          if (otherType.size() > 1) {
+            // int is safe for all the remaining operators
+            return Set.of("int");
+          }
+        }
+        return otherType;
+      }
+    } else if (parentNode instanceof ReturnStmt) {
+      Object ancestor =
+          parentNode
+              .findAncestor(
+                  n -> {
+                    return n instanceof MethodDeclaration || n instanceof LambdaExpr;
+                  },
+                  Node.class)
+              .get();
+
+      if (ancestor instanceof MethodDeclaration methodDecl) {
+        return getFQNsFromType(methodDecl.getType());
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Gets an import declaration based on a simple name, if one exists. Returns null if not found.
+   *
+   * @param name The simple name; does not contain a period
+   * @param cu The compilation unit
+   * @param mustBeStatic True if looking only for static imports
+   * @return The import declaration, if found; if not, then null
+   */
+  private static @Nullable ImportDeclaration getImportDeclarationFromName(
+      String name, CompilationUnit cu, boolean mustBeStatic) {
+    for (ImportDeclaration importDecl : cu.getImports()) {
+      if (mustBeStatic && !importDecl.isStatic()) {
+        continue;
+      }
+
+      if (importDecl.getNameAsString().endsWith("." + name)) {
+        return importDecl;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -955,7 +1005,9 @@ public class FullyQualifiedNameGenerator {
       TypeDeclaration<?> typeDecl, Node currentNode, Map<String, Set<String>> map) {
     if (typeDecl instanceof NodeWithImplements<?>) {
       for (ClassOrInterfaceType type : ((NodeWithImplements<?>) typeDecl).getImplementedTypes()) {
-        if (type.equals(currentNode)) continue;
+        if (type.equals(currentNode)) {
+          continue;
+        }
 
         try {
           ResolvedReferenceType resolved = type.resolve().asReferenceType();
@@ -975,7 +1027,9 @@ public class FullyQualifiedNameGenerator {
 
     if (typeDecl instanceof NodeWithExtends<?>) {
       for (ClassOrInterfaceType type : ((NodeWithExtends<?>) typeDecl).getExtendedTypes()) {
-        if (type.equals(currentNode)) continue;
+        if (type.equals(currentNode)) {
+          continue;
+        }
 
         try {
           ResolvedReferenceType resolved = type.resolve().asReferenceType();
