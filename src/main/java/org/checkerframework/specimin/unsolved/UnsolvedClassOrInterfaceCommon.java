@@ -10,24 +10,18 @@ import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
  */
 public interface UnsolvedClassOrInterfaceCommon {
   /**
-   * Returns true if this represents an interface.
+   * Returns the type of this type. i.e., is it a class, interface, annotation, or enum?
    *
-   * @return True if this represents an interface.
+   * @return The type of this type
    */
-  public boolean isAnInterface();
+  public UnsolvedClassOrInterfaceType getType();
 
   /**
-   * Returns true if this represents an annotation
+   * Sets the type of this type.
    *
-   * @return True if this represents an annotation.
+   * @param type The type to set this type to
    */
-  public boolean isAnAnnotation();
-
-  /** Sets this type to an interface. */
-  public void setIsAnInterfaceToTrue();
-
-  /** Sets this type to an annotation. */
-  public void setIsAnAnnotationToTrue();
+  public void setType(UnsolvedClassOrInterfaceType type);
 
   /**
    * Extends this class based on a MemberType.

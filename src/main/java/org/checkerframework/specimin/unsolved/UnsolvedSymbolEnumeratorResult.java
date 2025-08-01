@@ -1,4 +1,4 @@
-package org.checkerframework.specimin;
+package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
 import java.util.Map;

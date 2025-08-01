@@ -26,22 +26,16 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   /** The number of type variables for this class */
   private int numberOfTypeVariables = 0;
 
-  /** The name of type variables that we prefer this class to have. */
-  private Set<String> preferredTypeVariables = new HashSet<>();
-
   /** The extends clause, if one exists. */
   private @Nullable MemberType extendsClause;
 
   /** The implements clauses, if they exist. */
   private Set<String> implementsClauses = new LinkedHashSet<>(0);
 
-  /** If the class is an interface */
-  private boolean isAnInterface;
-
-  /** Is this class an annotation? */
-  private boolean isAnAnnotation = false;
-
   private Set<String> annotations = new HashSet<>();
+
+  /** The type of this type; i.e., is it a class, interface, annotation, enum? */
+  private UnsolvedClassOrInterfaceType typeOfType = UnsolvedClassOrInterfaceType.CLASS;
 
   /**
    * This constructor correctly splits apart the class name and any generics attached to it.
@@ -62,45 +56,6 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       this.className = classNameWithoutAngleBrackets;
     }
     this.packageName = packageName;
-  }
-
-  /**
-   * Returns the value of isAnInterface.
-   *
-   * @return return true if the current UnsolvedClassOrInterface instance represents an interface.
-   */
-  @Override
-  public boolean isAnInterface() {
-    return isAnInterface;
-  }
-
-  /**
-   * Returns the value of isAnAnnotation.
-   *
-   * @return return true if the current UnsolvedClassOrInterface instance represents an annotation.
-   */
-  @Override
-  public boolean isAnAnnotation() {
-    return isAnAnnotation;
-  }
-
-  /**
-   * Sets isAnInterface to true. isAnInterface is monotonic: it can start as false and become true
-   * (because we encounter an implements clause), but it can never go from true to false.
-   */
-  @Override
-  public void setIsAnInterfaceToTrue() {
-    this.isAnInterface = true;
-  }
-
-  /**
-   * Sets isAnAnnotation to true. isAnAnnotation is monotonic: it can start as false and become true
-   * (because we encounter evidence that this is an annotation), but it can never go from true to
-   * false.
-   */
-  @Override
-  public void setIsAnAnnotationToTrue() {
-    this.isAnAnnotation = true;
   }
 
   /**
@@ -240,9 +195,8 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
 
     copy.extendsClause = this.extendsClause;
     copy.implementsClauses = new LinkedHashSet<>(this.implementsClauses);
-    copy.isAnAnnotation = this.isAnAnnotation;
+    copy.typeOfType = this.typeOfType;
     copy.numberOfTypeVariables = this.numberOfTypeVariables;
-    copy.preferredTypeVariables = new HashSet<>(this.preferredTypeVariables);
     copy.annotations = new HashSet<>(this.annotations);
 
     return copy;
@@ -287,7 +241,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       // a discussion of the difference.
       sb.append("static ");
     }
-    if (isAnInterface) {
+    if (typeOfType == UnsolvedClassOrInterfaceType.INTERFACE) {
       // For synthetic interfaces created for lambdas only.
       if (methods.size() == 1
           && (className.startsWith("SyntheticFunction")
@@ -295,8 +249,10 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
         sb.append("@FunctionalInterface\n");
       }
       sb.append("interface ");
-    } else if (isAnAnnotation) {
+    } else if (typeOfType == UnsolvedClassOrInterfaceType.ANNOTATION) {
       sb.append("@interface ");
+    } else if (typeOfType == UnsolvedClassOrInterfaceType.ENUM) {
+      sb.append("enum ");
     } else {
       sb.append("class ");
     }
@@ -325,10 +281,10 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       }
     }
     for (UnsolvedField variableDeclarations : fields) {
-      sb.append("    ").append(variableDeclarations).append("\n");
+      sb.append("    ").append(variableDeclarations.toString(typeOfType)).append("\n");
     }
     for (UnsolvedMethod method : methods) {
-      sb.append(method.toString(isAnInterface));
+      sb.append(method.toString(typeOfType));
     }
     sb.append("}\n");
     return sb.toString();
@@ -380,5 +336,15 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       result.append(typeExpression).append(", ");
     }
     result.delete(result.length() - 2, result.length());
+  }
+
+  @Override
+  public UnsolvedClassOrInterfaceType getType() {
+    return typeOfType;
+  }
+
+  @Override
+  public void setType(UnsolvedClassOrInterfaceType type) {
+    typeOfType = type;
   }
 }

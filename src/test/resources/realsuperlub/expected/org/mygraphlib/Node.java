@@ -1,6 +1,6 @@
 package org.mygraphlib;
 
-public class Node extends com.example.SyntheticTypeForChild {
+public class Node {
 
     public org.mygraphlib.Node child;
 

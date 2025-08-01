@@ -1,5 +1,6 @@
 package com.example;
 
+import com.example.MyClass;
 import unreal.pack.AClass;
 
 class Simple {

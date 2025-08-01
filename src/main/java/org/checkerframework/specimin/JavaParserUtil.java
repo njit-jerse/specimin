@@ -26,6 +26,7 @@ import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -83,7 +84,7 @@ public class JavaParserUtil {
     List<String> elements = Splitter.onPattern("\\.").splitToList(potentialClassPath);
     int elementsCount = elements.size();
     return elementsCount > 1
-        && isCapital(elements.get(elementsCount - 1))
+        && isAClassName(elements.get(elementsCount - 1))
         // Classpaths cannot contain spaces!
         && elements.stream().noneMatch(s -> s.contains(" "));
   }
@@ -113,14 +114,21 @@ public class JavaParserUtil {
   }
 
   /**
-   * This method checks if a string is capitalized
+   * Returns true if a simple name looks like a constant; i.e., all its characters are either
+   * capital or _. This is a heuristic.
    *
-   * @param string the string to be checked
-   * @return true if the string is capitalized
+   * @param simpleName The simple name to check, should contain no dots
+   * @return If it looks like a constant
    */
-  public static boolean isCapital(String string) {
-    Character first = string.charAt(0);
-    return Character.isUpperCase(first);
+  public static boolean looksLikeAConstant(String simpleName) {
+    for (int i = 0; i < simpleName.length(); i++) {
+      char character = simpleName.charAt(i);
+      if (!Character.isUpperCase(character) && character != '_') {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -396,14 +404,14 @@ public class JavaParserUtil {
   }
 
   /**
-   * Returns the FQN if the expression is a reference to a static method or field or empty if it
+   * Returns the FQN if the expression is a reference to a static method or field or null if it
    * isn't one. This method is intended to be used with unsolvable expressions, with which it should
    * always return the correct result.
    *
    * @param expr The expression
    * @return The FQN if it is a static member, empty otherwise
    */
-  public static Optional<String> getFQNIfStaticMember(Expression expr) {
+  public static @Nullable String getFQNIfStaticMember(Expression expr) {
     CompilationUnit cu = expr.findCompilationUnit().get();
 
     String nameOfExpr;
@@ -416,7 +424,7 @@ public class JavaParserUtil {
 
       // If an expression is a class name, it cannot be a static member
       if (isAClassName(nameOfExpr)) {
-        return Optional.empty();
+        return null;
       }
     } else if (expr.isMethodCallExpr()) {
       nameOfExpr = expr.asMethodCallExpr().getNameAsString();
@@ -429,7 +437,7 @@ public class JavaParserUtil {
       nameOfExpr = expr.asFieldAccessExpr().getNameAsString();
       scope = expr.asFieldAccessExpr().getScope();
     } else {
-      return Optional.empty();
+      return null;
     }
 
     if (scope != null) {
@@ -438,7 +446,7 @@ public class JavaParserUtil {
           ResolvedType scopeType = expr.calculateResolvedType();
 
           if (getSimpleNameFromQualifiedName(scopeType.describe()).equals(scope.toString())) {
-            return Optional.of(scopeType.describe() + "." + nameOfExpr);
+            return scopeType.describe() + "." + nameOfExpr;
           }
         } catch (UnsolvedSymbolException ex) {
           // continue
@@ -450,7 +458,7 @@ public class JavaParserUtil {
           ResolvedType scopeType = expr.calculateResolvedType();
 
           if (getSimpleNameFromQualifiedName(scopeType.describe()).endsWith(scope.toString())) {
-            return Optional.of(scopeType.describe() + "." + nameOfExpr);
+            return scopeType.describe() + "." + nameOfExpr;
           }
         } catch (UnsolvedSymbolException ex) {
           // continue
@@ -458,45 +466,43 @@ public class JavaParserUtil {
 
         nameOfScope = scope.asFieldAccessExpr().toString();
         if (isAClassPath(nameOfScope)) {
-          return Optional.of(nameOfScope + "." + nameOfExpr);
+          return nameOfScope + "." + nameOfExpr;
         }
       } else {
-        return Optional.empty();
+        return null;
       }
     }
 
     if (nameOfScope == null) {
-      return Optional.empty();
+      return null;
     }
 
     for (ImportDeclaration importDecl : cu.getImports()) {
       // A static member can either be imported as a static method/field, like
       // import static org.example.SomeClass.fieldName;
       if (importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfExpr)) {
-        return Optional.of(importDecl.getNameAsString());
+        return importDecl.getNameAsString();
       }
 
       // A static member can also be found if its scope is a non-static, imported type,
       // i.e., Foo.myField, if there is also import org.example.Foo;
       if (!importDecl.isStatic() && importDecl.getNameAsString().endsWith("." + nameOfScope)) {
-        return Optional.of(
-            expr.isNameExpr()
-                ? importDecl.getNameAsString()
-                : importDecl.getNameAsString() + "." + nameOfExpr);
+        return expr.isNameExpr()
+            ? importDecl.getNameAsString()
+            : importDecl.getNameAsString() + "." + nameOfExpr;
       }
     }
 
     // The scope may also be a simple class name located in the same package
     if (scope != null && isAClassName(nameOfScope)) {
-      return Optional.of(
-          cu.getPackageDeclaration().get().getNameAsString()
-              + "."
-              + nameOfScope
-              + "."
-              + nameOfExpr);
+      return cu.getPackageDeclaration().get().getNameAsString()
+          + "."
+          + nameOfScope
+          + "."
+          + nameOfExpr;
     }
 
-    return Optional.empty();
+    return null;
   }
 
   /**
@@ -519,21 +525,21 @@ public class JavaParserUtil {
    * Gets the type from a {@code ResolvedValueDeclaration}. Returns null if unable to be found.
    *
    * @param resolved The resolved value declaration
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
    * @return The Type of the resolved value declaration
    */
   public static @Nullable Type getTypeFromResolvedValueDeclaration(
-      ResolvedValueDeclaration resolved) {
-    if (resolved.toAst().isPresent()) {
-      Node toAst = resolved.toAst().get();
-      if (toAst instanceof VariableDeclarationExpr varDecl) {
-        return varDecl.getElementType();
-      } else if (toAst instanceof VariableDeclarator varDecl) {
-        return varDecl.getType();
-      } else if (toAst instanceof FieldDeclaration fieldDecl) {
-        return fieldDecl.getElementType();
-      } else if (toAst instanceof Parameter param) {
-        return param.getType();
-      }
+      ResolvedValueDeclaration resolved, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    Node attached = tryFindAttachedNode(resolved, fqnToCompilationUnits);
+
+    if (attached instanceof VariableDeclarationExpr varDecl) {
+      return varDecl.getElementType();
+    } else if (attached instanceof VariableDeclarator varDecl) {
+      return varDecl.getType();
+    } else if (attached instanceof FieldDeclaration fieldDecl) {
+      return fieldDecl.getElementType();
+    } else if (attached instanceof Parameter param) {
+      return param.getType();
     }
 
     return null;
@@ -915,5 +921,87 @@ public class JavaParserUtil {
             .get();
 
     return type;
+  }
+
+  /**
+   * Given an AssociableToAST that could give a detached node, find its attached equivalent. This
+   * method is only necessary when you need to call resolve() or calculateResolvedType() on its
+   * children. Throws if the result is null; use {@link #tryFindAttachedNode(AssociableToAST, Map)}
+   * if you do not want this.
+   *
+   * @param associable The resolved definition that could yield a detached node
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return The attached node
+   */
+  public static Node findAttachedNode(
+      AssociableToAST associable, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    Node result = tryFindAttachedNode(associable, fqnToCompilationUnits);
+
+    if (result == null) {
+      throw new RuntimeException("Could not find an attached AST node.");
+    }
+
+    return result;
+  }
+
+  /**
+   * Given an AssociableToAST that could give a detached node, find its attached equivalent. This
+   * method is only necessary when you need to call resolve() or calculateResolvedType() on its
+   * children.
+   *
+   * @param associable The resolved definition that could yield a detached node
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return The attached node if found, or null if not found
+   */
+  public static @Nullable Node tryFindAttachedNode(
+      AssociableToAST associable, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    Node detachedNode = associable.toAst().orElse(null);
+
+    if (detachedNode == null) {
+      return null;
+    }
+
+    TypeDeclaration<?> declaration = getEnclosingClassLike(detachedNode);
+    TypeDeclaration<?> next = getEnclosingClassLikeOptional(declaration);
+
+    TypeDeclaration<?> attached =
+        getTypeFromQualifiedName(
+            declaration.getFullyQualifiedName().orElse(""), fqnToCompilationUnits);
+
+    // Keep going outward until we find a type declaration that is in the map
+    while (next != null && attached == null) {
+      declaration = next;
+
+      next = getEnclosingClassLikeOptional(declaration);
+      attached =
+          getTypeFromQualifiedName(
+              declaration.getFullyQualifiedName().orElse(""), fqnToCompilationUnits);
+    }
+
+    if (attached == null) {
+      return null;
+    }
+
+    return attached.findFirst(detachedNode.getClass(), n -> n.equals(detachedNode)).get();
+  }
+
+  /**
+   * Returns a type-compatible initializer for a field of the given type.
+   *
+   * @param variableType the type of the field
+   * @return a type-compatible initializer
+   */
+  public static String getInitializerRHS(String variableType) {
+    return switch (variableType) {
+      case "byte" -> "(byte)0";
+      case "short" -> "(short)0";
+      case "int" -> "0";
+      case "long" -> "0L";
+      case "float" -> "0.0f";
+      case "double" -> "0.0d";
+      case "char" -> "'\\u0000'";
+      case "boolean" -> "false";
+      default -> "null";
+    };
   }
 }

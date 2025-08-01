@@ -65,6 +65,16 @@ import org.checkerframework.specimin.JavaParserUtil;
 public class FullyQualifiedNameGenerator {
   private static final String SYNTHETIC_TYPE_FOR = "SyntheticTypeFor";
   private static final String RETURN_TYPE = "ReturnType";
+  private Map<String, CompilationUnit> fqnToCompilationUnits;
+
+  /**
+   * Create a new instance. Needs a map of type FQNs to compilation units for symbol resolution.
+   *
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   */
+  public FullyQualifiedNameGenerator(Map<String, CompilationUnit> fqnToCompilationUnits) {
+    this.fqnToCompilationUnits = fqnToCompilationUnits;
+  }
 
   /**
    * When evaluating an expression, there is only one possible type. However, the location of an
@@ -87,7 +97,7 @@ public class FullyQualifiedNameGenerator {
    * @return A map of simple class names to a set of potential FQNs. Each Map.Entry represents a
    *     different class. Will return Map.of() if the location is in a solvable type.
    */
-  public static Map<String, Set<String>> getFQNsForExpressionLocation(Expression expr) {
+  public Map<String, Set<String>> getFQNsForExpressionLocation(Expression expr) {
     if (expr.isNameExpr() || (expr.isMethodCallExpr() && !expr.hasScope())) {
       String name = JavaParserUtil.erase(((NodeWithSimpleName<?>) expr).getNameAsString());
 
@@ -144,8 +154,11 @@ public class FullyQualifiedNameGenerator {
 
       if (resolved.isTypeVariable()) {
         ResolvedTypeParameterDeclaration typeParam = resolved.asTypeVariable().asTypeParameter();
-        NodeList<ClassOrInterfaceType> bound =
-            ((TypeParameter) typeParam.toAst().get()).getTypeBound();
+
+        TypeParameter attachedTypeParameter =
+            (TypeParameter) JavaParserUtil.findAttachedNode(typeParam, fqnToCompilationUnits);
+
+        NodeList<ClassOrInterfaceType> bound = attachedTypeParameter.getTypeBound();
 
         Map<String, Set<String>> potentialFQNs = new LinkedHashMap<>();
 
@@ -158,7 +171,15 @@ public class FullyQualifiedNameGenerator {
 
             if (optionalTypeDecl.isPresent() && optionalTypeDecl.get().toAst().isPresent()) {
               TypeDeclaration<?> typeDecl =
-                  (TypeDeclaration<?>) optionalTypeDecl.get().toAst().get();
+                  (TypeDeclaration<?>)
+                      JavaParserUtil.getTypeFromQualifiedName(
+                          optionalTypeDecl.get().getQualifiedName(), fqnToCompilationUnits);
+
+              if (typeDecl == null) {
+                // We shouldn't ever encounter this error. If toAst() returns a non-empty value,
+                // then it is in the project
+                throw new RuntimeException("Cannot be null here");
+              }
 
               Map<String, Set<String>> toAdd = getFQNsOfAllUnresolvableParents(typeDecl, type);
 
@@ -194,45 +215,44 @@ public class FullyQualifiedNameGenerator {
       try {
         ResolvedValueDeclaration resolvedValueDeclaration = scope.asNameExpr().resolve();
 
-        if (resolvedValueDeclaration.toAst().isPresent()) {
-          Node toAst = resolvedValueDeclaration.toAst().get();
+        Node toAst =
+            JavaParserUtil.tryFindAttachedNode(resolvedValueDeclaration, fqnToCompilationUnits);
 
-          if (toAst instanceof Parameter param && param.getType().isUnionType()) {
-            UnionType unionType = param.getType().asUnionType();
+        if (toAst instanceof Parameter param && param.getType().isUnionType()) {
+          UnionType unionType = param.getType().asUnionType();
 
-            Map<String, Set<String>> result = new LinkedHashMap<>();
+          Map<String, Set<String>> result = new LinkedHashMap<>();
 
-            for (ReferenceType type : unionType.getElements()) {
-              try {
-                // If a type in the union type is resolvable, the location of the expression will
-                // be in a built-in Java superclass. In this case, return an empty map. Follow this
-                // reasoning:
-                // If a union type is UnsolvedException | NullPointerException, then any method
-                // called on the NameExpr
-                // representing an exception of this type will be in Exception or Throwable (or
-                // NullPointerException if
-                // UnsolvedException extended it).
+          for (ReferenceType type : unionType.getElements()) {
+            try {
+              // If a type in the union type is resolvable, the location of the expression will
+              // be in a built-in Java superclass. In this case, return an empty map. Follow this
+              // reasoning:
+              // If a union type is UnsolvedException | NullPointerException, then any method
+              // called on the NameExpr
+              // representing an exception of this type will be in Exception or Throwable (or
+              // NullPointerException if
+              // UnsolvedException extended it).
 
-                // TODO: handle a case where a user-defined exception could be solvable but a parent
-                // class of that exception is not.
-                type.resolve();
-                return Map.of();
-              } catch (UnsolvedSymbolException ex) {
-                // continue
-              }
-
-              Set<String> fqns = getFQNsFromType(type);
-
-              if (fqns.isEmpty()) {
-                continue;
-              }
-
-              String simple = JavaParserUtil.getSimpleNameFromQualifiedName(fqns.iterator().next());
-              result.put(simple, fqns);
+              // TODO: handle a case where a user-defined exception could be solvable but a parent
+              // class of that exception is not.
+              type.resolve();
+              return Map.of();
+            } catch (UnsolvedSymbolException ex) {
+              // continue
             }
 
-            return result;
+            Set<String> fqns = getFQNsFromType(type);
+
+            if (fqns.isEmpty()) {
+              continue;
+            }
+
+            String simple = JavaParserUtil.getSimpleNameFromQualifiedName(fqns.iterator().next());
+            result.put(simple, fqns);
           }
+
+          return result;
         }
       } catch (UnsolvedSymbolException ex) {
         // Not a union type since declaration is unresolvable
@@ -251,14 +271,29 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
-   * Given an expression, this method returns possible FQNs of its type.
+   * Given an expression, this method returns possible FQNs of its type. If the type is an array,
+   * all FQNs will have the same number of array brackets.
    *
    * @param expr The expression
    * @return The potential FQNs of the type of the given expression.
    */
-  public static Set<String> getFQNsForExpressionType(Expression expr) {
+  public Set<String> getFQNsForExpressionType(Expression expr) {
+    return getFQNsForExpressionTypeImpl(expr, true);
+  }
+
+  /**
+   * Given an expression, this method returns possible FQNs of its type. This is the implementation
+   * for {@link #getFQNsForExpressionLocation(Expression)}; use this method instead to prevent
+   * StackOverflowError when recursing.
+   *
+   * @param expr The expression
+   * @param canRecurse Whether or not this method can call itself
+   * @return The potential FQNs of the type of the given expression.
+   */
+  public Set<String> getFQNsForExpressionTypeImpl(Expression expr, boolean canRecurse) {
     // If the type of the expression can already be calculated, return it
-    if (JavaParserUtil.isExprTypeResolvable(expr)) {
+    // Throws UnsupportedOperationException for annotation expressions
+    if (!expr.isAnnotationExpr() && JavaParserUtil.isExprTypeResolvable(expr)) {
       return Set.of(expr.calculateResolvedType().describe());
     }
 
@@ -277,6 +312,9 @@ public class FullyQualifiedNameGenerator {
 
       return getFQNsFromClassName(
           scoped.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
+    } else if (expr.isNameExpr() && JavaParserUtil.isAClassName(expr.toString())) {
+      return getFQNsFromClassName(
+          expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
     }
     // method ref
     else if (expr.isMethodReferenceExpr()) {
@@ -300,6 +338,13 @@ public class FullyQualifiedNameGenerator {
     // cast expression
     else if (expr.isCastExpr()) {
       return getFQNsFromClassOrInterfaceType(expr.asCastExpr().getType().asClassOrInterfaceType());
+    } else if (expr.isClassExpr()) {
+      return new LinkedHashSet<>(
+          getFQNsFromType(expr.asClassExpr().getType()).stream()
+              .map(fqn -> "java.lang.Class<" + fqn + ">")
+              .toList());
+    } else if (expr.isAnnotationExpr()) {
+      return getFQNsFromAnnotation(expr.asAnnotationExpr());
     }
 
     // local variable / field / method call / object creation expression / any other case
@@ -327,10 +372,11 @@ public class FullyQualifiedNameGenerator {
     // field/method located in unsolvable super class, but it's not explicitly marked by
     // super. It could also be a static member, either statically imported, a static member
     // of an imported class, or a static member of a class in the same package.
-    Optional<String> fqnOfStaticMember = JavaParserUtil.getFQNIfStaticMember(expr);
-    if (fqnOfStaticMember.isPresent()) {
+    String fqnOfStaticMember = JavaParserUtil.getFQNIfStaticMember(expr);
+    if (fqnOfStaticMember != null) {
       return Set.of(
-          generateFQNForTheTypeOfAStaticallyImportedMember(fqnOfStaticMember.get(), false));
+          generateFQNForTheTypeOfAStaticallyImportedMember(
+              fqnOfStaticMember, expr.isMethodCallExpr()));
     }
 
     if (expr.isNameExpr()) {
@@ -387,11 +433,7 @@ public class FullyQualifiedNameGenerator {
 
       if (expr.hasScope()) {
         // Place in the same package as its scope type
-        Expression scope = expr;
-
-        while (scope.hasScope()) {
-          scope = ((NodeWithTraversableScope) scope).traverseScope().get();
-        }
+        Expression scope = expr.asMethodCallExpr().getScope().get();
 
         Set<String> fqns = getFQNsForExpressionType(scope);
         Set<String> result = new LinkedHashSet<>();
@@ -419,7 +461,7 @@ public class FullyQualifiedNameGenerator {
    * @param methodRef The method reference expression
    * @return The FQNs of its functional interface
    */
-  private static Set<String> getFQNsForMethodReferenceType(MethodReferenceExpr methodRef) {
+  private Set<String> getFQNsForMethodReferenceType(MethodReferenceExpr methodRef) {
     String functionalInterface;
 
     try {
@@ -433,10 +475,10 @@ public class FullyQualifiedNameGenerator {
       // FQN, then opt to use java.lang.Object; placing alternates into a type parameter would
       // require a lot more code, which we may choose to do in the future.
       List<String> parameters = new ArrayList<>();
-      if (resolved.toAst().isPresent()) {
-        Node toAst = resolved.toAst().get();
 
-        CallableDeclaration<?> callableDecl = (CallableDeclaration<?>) toAst;
+      Node attached = JavaParserUtil.tryFindAttachedNode(resolved, fqnToCompilationUnits);
+      if (attached != null) {
+        CallableDeclaration<?> callableDecl = (CallableDeclaration<?>) attached;
 
         for (Parameter param : callableDecl.getParameters()) {
           try {
@@ -493,7 +535,7 @@ public class FullyQualifiedNameGenerator {
    * @param lambda The lambda expression
    * @return The FQNs of its functional interface
    */
-  private static Set<String> getFQNsForLambdaType(LambdaExpr lambda) {
+  private Set<String> getFQNsForLambdaType(LambdaExpr lambda) {
     boolean isVoid;
 
     if (lambda.getExpressionBody().isPresent()) {
@@ -538,13 +580,12 @@ public class FullyQualifiedNameGenerator {
    * @param resolvable A resolvable expression
    * @return A set of FQNs, or null if unfound
    */
-  private static @Nullable Set<String> getFQNsForTypeOfSolvableExpression(
-      Resolvable<?> resolvable) {
+  private @Nullable Set<String> getFQNsForTypeOfSolvableExpression(Resolvable<?> resolvable) {
     Node node = null;
     Object resolved = resolvable.resolve();
 
-    if (resolved instanceof AssociableToAST) {
-      node = ((AssociableToAST) resolved).toAst().get();
+    if (resolved instanceof AssociableToAST associableToAST) {
+      node = JavaParserUtil.tryFindAttachedNode(associableToAST, fqnToCompilationUnits);
     }
 
     // Field declaration and variable declaration expressions
@@ -573,7 +614,7 @@ public class FullyQualifiedNameGenerator {
    * @param expr The expression
    * @return A set of FQNs, or null if unfound
    */
-  private static @Nullable Set<String> getFQNsFromSurroundingContextType(Expression expr) {
+  private @Nullable Set<String> getFQNsFromSurroundingContextType(Expression expr) {
     Node parentNode = expr.getParentNode().get();
 
     // Method call, constructor call, super() call
@@ -621,12 +662,11 @@ public class FullyQualifiedNameGenerator {
       // We could be on either side of the assignment operator
       // In that case, take the type of the other side
 
-      // TODO: StackOverflowError likely here, refactor
       if (assignment.getTarget().equals(expr) && !assignment.getValue().isNullLiteralExpr()) {
-        return getFQNsForExpressionType(assignment.getValue());
+        return getFQNsForExpressionTypeImpl(assignment.getValue(), false);
       } else if (assignment.getValue().equals(expr)
           && !assignment.getTarget().isNullLiteralExpr()) {
-        return getFQNsForExpressionType(assignment.getTarget());
+        return getFQNsForExpressionTypeImpl(assignment.getTarget(), false);
       }
     }
     // Check if it's the conditional of an if, while, do, ?:; if so, its type is boolean
@@ -676,9 +716,10 @@ public class FullyQualifiedNameGenerator {
         return otherType;
       }
     } else if (parentNode instanceof ReturnStmt) {
-      Object ancestor =
+      @SuppressWarnings("unchecked")
+      Node ancestor =
           parentNode
-              .findAncestor(
+              .<Node>findAncestor(
                   n -> {
                     return n instanceof MethodDeclaration || n instanceof LambdaExpr;
                   },
@@ -721,7 +762,7 @@ public class FullyQualifiedNameGenerator {
    * @param type The type
    * @return A set of FQNs or primitive names.
    */
-  public static Set<String> getFQNsFromType(Type type) {
+  public Set<String> getFQNsFromType(Type type) {
     if (type.isUnknownType()) {
       // Resolving an unknown type throws an error
       return Set.of();
@@ -757,7 +798,7 @@ public class FullyQualifiedNameGenerator {
    * @param type The type
    * @return A set of possible FQNs
    */
-  public static Set<String> getFQNsFromClassOrInterfaceType(ClassOrInterfaceType type) {
+  public Set<String> getFQNsFromClassOrInterfaceType(ClassOrInterfaceType type) {
     // If a ClassOrInterfaceType is Map.Entry, we need to find the import with java.util.Map, not
     // java.util.Map.Entry.
     // Hence, look for the import with the "earliest" scope (with Map.Entry, this would be Map).
@@ -783,7 +824,7 @@ public class FullyQualifiedNameGenerator {
    * @param anno The annotation
    * @return A set of possible FQNs
    */
-  public static Set<String> getFQNsFromAnnotation(AnnotationExpr anno) {
+  public Set<String> getFQNsFromAnnotation(AnnotationExpr anno) {
     // If an annotation is @Foo.Bar, we need to find the import with org.example.Foo, not
     // org.example.Foo.Bar.
     // Hence, look for the import with the "earliest" scope (with @Foo.Bar, this would be Foo).
@@ -827,7 +868,7 @@ public class FullyQualifiedNameGenerator {
    * @param node The node representing the class (if this is null, we won't look at parent types)
    * @return A set of potential FQNs
    */
-  private static Set<String> getFQNsFromClassName(
+  private Set<String> getFQNsFromClassName(
       String firstIdentifier,
       String fullName,
       CompilationUnit compilationUnit,
@@ -995,7 +1036,7 @@ public class FullyQualifiedNameGenerator {
    * @return A map of all class/interface FQNs representing all {@code typeDecl}'s parents; simple
    *     class name --> set of potential FQNs
    */
-  public static Map<String, Set<String>> getFQNsOfAllUnresolvableParents(
+  public Map<String, Set<String>> getFQNsOfAllUnresolvableParents(
       TypeDeclaration<?> typeDecl, Node currentNode) {
     Map<String, Set<String>> map = new LinkedHashMap<>();
 
@@ -1014,7 +1055,7 @@ public class FullyQualifiedNameGenerator {
    *     path (if node.equals(currentNode), do not do recurse)
    * @param map The map to add to
    */
-  private static void getAllUnresolvableParentsImpl(
+  private void getAllUnresolvableParentsImpl(
       TypeDeclaration<?> typeDecl, Node currentNode, Map<String, Set<String>> map) {
     if (typeDecl instanceof NodeWithImplements<?>) {
       for (ClassOrInterfaceType type : ((NodeWithImplements<?>) typeDecl).getImplementedTypes()) {

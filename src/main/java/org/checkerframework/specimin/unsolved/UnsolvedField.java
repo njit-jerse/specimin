@@ -3,6 +3,7 @@ package org.checkerframework.specimin.unsolved;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.specimin.JavaParserUtil;
 
 public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFieldCommon {
   /** The name of the field */
@@ -54,14 +55,25 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
     return name;
   }
 
-  @Override
-  public String toString() {
+  /**
+   * Return the content of this field. If declaringTypeType is ENUM, then this is also formatted as
+   * an enum constant declaration.
+   *
+   * @param declaringTypeType The type of the declaring type
+   * @return The field declaration
+   */
+  public String toString(UnsolvedClassOrInterfaceType declaringTypeType) {
+    if (declaringTypeType == UnsolvedClassOrInterfaceType.ENUM) {
+      // Still compilable even with an extra comma at the end
+      return name + ",";
+    }
     return "public "
         + (isStatic ? "static " : "")
         + (isFinal ? "final " : "")
         + type
         + " "
         + name
+        + (isStatic && isFinal ? " = " + JavaParserUtil.getInitializerRHS(type.toString()) : "")
         + ";";
   }
 

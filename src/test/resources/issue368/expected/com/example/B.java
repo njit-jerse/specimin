@@ -1,5 +1,6 @@
 package com.example;
 
+import java.io.IOException;
 import java.net.InetAddress;
 
 public class B extends A {

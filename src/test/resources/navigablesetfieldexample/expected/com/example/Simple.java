@@ -1,5 +1,7 @@
 package com.example;
 
+import java.io.Serializable;
+
 public class Simple {
 
     static class UnmodifiableCollection<E> {
@@ -13,7 +15,7 @@ public class Simple {
 
     static class UnmodifiableNavigableSet<E> extends UnmodifiableSortedSet<E> implements NavigableSet<E> {
 
-        private static class EmptyNavigableSet<E> extends UnmodifiableNavigableSet<E> {
+        private static class EmptyNavigableSet<E> extends UnmodifiableNavigableSet<E> implements Serializable {
 
             public EmptyNavigableSet() {
                 throw new java.lang.Error();

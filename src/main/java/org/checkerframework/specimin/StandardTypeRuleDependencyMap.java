@@ -162,6 +162,15 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         return elements;
       }
 
+      // Ensure outer classes are included in the slice
+      TypeDeclaration<?> outerType = JavaParserUtil.getEnclosingClassLikeOptional(type);
+
+      // Don't get all the outer classes, since it's redundant. Once this added outerType
+      // is handled in the worklist, it will add the next outer class, and so on.
+      if (outerType != null) {
+        elements.add(outerType);
+      }
+
       // Unfortunately, JavaParser doesn't allow us to solve annotation member value pairs,
       // so we can't tell what is used and what isn't. Preserve all annotation members for
       // now until we figure out a better solution/JavaParser adds support.

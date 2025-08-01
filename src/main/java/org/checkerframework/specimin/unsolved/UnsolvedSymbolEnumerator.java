@@ -1,4 +1,4 @@
-package org.checkerframework.specimin;
+package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
 import java.util.Collections;
@@ -7,15 +7,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import org.checkerframework.specimin.unsolved.MemberType;
-import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterface;
-import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterfaceAlternates;
-import org.checkerframework.specimin.unsolved.UnsolvedField;
-import org.checkerframework.specimin.unsolved.UnsolvedFieldAlternates;
-import org.checkerframework.specimin.unsolved.UnsolvedMemberType;
-import org.checkerframework.specimin.unsolved.UnsolvedMethod;
-import org.checkerframework.specimin.unsolved.UnsolvedMethodAlternates;
-import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 
 /**
  * Enumerates possible combinations of unsolved symbols, given a set of generated unsolved symbols

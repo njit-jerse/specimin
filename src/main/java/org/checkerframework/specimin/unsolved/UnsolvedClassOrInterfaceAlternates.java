@@ -144,61 +144,6 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
-   * Returns true if this represents an interface.
-   *
-   * @return True if this represents an interface.
-   */
-  @Override
-  public boolean isAnInterface() {
-    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::isAnInterface);
-  }
-
-  /** Sets this type to an interface. */
-  @Override
-  public void setIsAnInterfaceToTrue() {
-    applyToAllAlternates(UnsolvedClassOrInterface::setIsAnInterfaceToTrue);
-  }
-
-  /** Sets this type to an annotation and generates additional alternates. */
-  @Override
-  public void setIsAnAnnotationToTrue() {
-    for (UnsolvedClassOrInterface alternate : List.copyOf(getAlternates())) {
-      boolean orig = alternate.isAnAnnotation();
-      alternate.setIsAnAnnotationToTrue();
-
-      if (!orig) {
-        UnsolvedClassOrInterface typeUse = alternate.copy();
-        UnsolvedClassOrInterface type = alternate.copy();
-        alternate.addAnnotation(
-            "@java.lang.annotation.Target({ java.lang.annotation.ElementType.TYPE_USE,"
-                + " java.lang.annotation.ElementType.TYPE, java.lang.annotation.ElementType.FIELD,"
-                + " java.lang.annotation.ElementType.METHOD,"
-                + " java.lang.annotation.ElementType.PARAMETER,"
-                + " java.lang.annotation.ElementType.CONSTRUCTOR,"
-                + " java.lang.annotation.ElementType.LOCAL_VARIABLE,"
-                + " java.lang.annotation.ElementType.ANNOTATION_TYPE,"
-                + " java.lang.annotation.ElementType.PACKAGE,"
-                + " java.lang.annotation.ElementType.TYPE_PARAMETER})");
-        typeUse.addAnnotation(
-            "@java.lang.annotation.Target(java.lang.annotation.ElementType.TYPE_USE)");
-        type.addAnnotation(
-            "@java.lang.annotation.Target({ java.lang.annotation.ElementType.TYPE,"
-                + " java.lang.annotation.ElementType.FIELD,"
-                + " java.lang.annotation.ElementType.METHOD,"
-                + " java.lang.annotation.ElementType.PARAMETER,"
-                + " java.lang.annotation.ElementType.CONSTRUCTOR,"
-                + " java.lang.annotation.ElementType.LOCAL_VARIABLE,"
-                + " java.lang.annotation.ElementType.ANNOTATION_TYPE,"
-                + " java.lang.annotation.ElementType.PACKAGE,"
-                + " java.lang.annotation.ElementType.TYPE_PARAMETER})");
-
-        addAlternate(typeUse);
-        addAlternate(type);
-      }
-    }
-  }
-
-  /**
    * Extends this class based on a MemberType.
    *
    * @param extendsType The type to extend
@@ -272,11 +217,6 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   @Override
-  public boolean isAnAnnotation() {
-    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::isAnAnnotation);
-  }
-
-  @Override
   public int getNumberOfTypeVariables() {
     return getAlternates().get(0).getNumberOfTypeVariables();
   }
@@ -289,5 +229,53 @@ public class UnsolvedClassOrInterfaceAlternates
   @Override
   public String getTypeVariablesAsString() {
     return getAlternates().get(0).getTypeVariablesAsString();
+  }
+
+  @Override
+  public UnsolvedClassOrInterfaceType getType() {
+    return getAlternates().get(0).getType();
+  }
+
+  @Override
+  public void setType(UnsolvedClassOrInterfaceType type) {
+    boolean wasOriginallyAnAnnotation = getType() == UnsolvedClassOrInterfaceType.ANNOTATION;
+
+    applyToAllAlternates(UnsolvedClassOrInterface::setType, type);
+
+    if (type != UnsolvedClassOrInterfaceType.ANNOTATION) {
+      return;
+    }
+
+    if (!wasOriginallyAnAnnotation) {
+      for (UnsolvedClassOrInterface alternate : List.copyOf(getAlternates())) {
+        UnsolvedClassOrInterface typeUseAnnos = alternate.copy();
+        UnsolvedClassOrInterface typeAnnos = alternate.copy();
+        alternate.addAnnotation(
+            "@java.lang.annotation.Target({ java.lang.annotation.ElementType.TYPE_USE,"
+                + " java.lang.annotation.ElementType.TYPE, java.lang.annotation.ElementType.FIELD,"
+                + " java.lang.annotation.ElementType.METHOD,"
+                + " java.lang.annotation.ElementType.PARAMETER,"
+                + " java.lang.annotation.ElementType.CONSTRUCTOR,"
+                + " java.lang.annotation.ElementType.LOCAL_VARIABLE,"
+                + " java.lang.annotation.ElementType.ANNOTATION_TYPE,"
+                + " java.lang.annotation.ElementType.PACKAGE,"
+                + " java.lang.annotation.ElementType.TYPE_PARAMETER})");
+        typeUseAnnos.addAnnotation(
+            "@java.lang.annotation.Target(java.lang.annotation.ElementType.TYPE_USE)");
+        typeAnnos.addAnnotation(
+            "@java.lang.annotation.Target({ java.lang.annotation.ElementType.TYPE,"
+                + " java.lang.annotation.ElementType.FIELD,"
+                + " java.lang.annotation.ElementType.METHOD,"
+                + " java.lang.annotation.ElementType.PARAMETER,"
+                + " java.lang.annotation.ElementType.CONSTRUCTOR,"
+                + " java.lang.annotation.ElementType.LOCAL_VARIABLE,"
+                + " java.lang.annotation.ElementType.ANNOTATION_TYPE,"
+                + " java.lang.annotation.ElementType.PACKAGE,"
+                + " java.lang.annotation.ElementType.TYPE_PARAMETER})");
+
+        addAlternate(typeUseAnnos);
+        addAlternate(typeAnnos);
+      }
+    }
   }
 }

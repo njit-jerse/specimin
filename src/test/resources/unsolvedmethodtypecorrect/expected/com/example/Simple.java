@@ -1,5 +1,6 @@
 package com.example;
 
+import org.example.LocalVariables;
 import org.example.Foo;
 
 class Simple {
@@ -7,9 +8,6 @@ class Simple {
         Foo f = new Foo();
         f.getLocals().set(0);
         baz();
-    }
-
-    void baz() {
-        throw new java.lang.Error();
+        final LocalVariables locals = f.getLocals();
     }
 }

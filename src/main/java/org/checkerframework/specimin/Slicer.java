@@ -314,30 +314,11 @@ public class Slicer {
         && fieldDeclarator.getInitializer().get().equals(initializer)
         && fieldDeclarator.getParentNode().get() instanceof FieldDeclaration fieldDecl
         && fieldDecl.isFinal()) {
-      fieldDeclarator.setInitializer(getInitializerRHS(fieldDeclarator.getType().toString()));
+      fieldDeclarator.setInitializer(
+          JavaParserUtil.getInitializerRHS(fieldDeclarator.getType().toString()));
     } else {
       node.remove();
     }
-  }
-
-  /**
-   * Returns a type-compatible initializer for a field of the given type.
-   *
-   * @param variableType the type of the field
-   * @return a type-compatible initializer
-   */
-  private static String getInitializerRHS(String variableType) {
-    return switch (variableType) {
-      case "byte" -> "(byte)0";
-      case "short" -> "(short)0";
-      case "int" -> "0";
-      case "long" -> "0L";
-      case "float" -> "0.0f";
-      case "double" -> "0.0d";
-      case "char" -> "'\\u0000'";
-      case "boolean" -> "false";
-      default -> "null";
-    };
   }
 
   /**

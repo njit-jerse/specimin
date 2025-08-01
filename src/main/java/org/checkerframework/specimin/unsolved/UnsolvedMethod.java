@@ -145,9 +145,10 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   /**
    * Return the content of the method. Note that the body of the method is stubbed out.
    *
+   * @param type The type of the declaring type
    * @return the content of the method with the body stubbed out
    */
-  public String toString(boolean isInterface) {
+  public String toString(UnsolvedClassOrInterfaceType type) {
     StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
       MemberType parameterType = parameterList.get(i);
@@ -191,8 +192,9 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     }
     signature.append(exceptions);
 
-    if (isInterface) {
-      return signature.append(";").toString();
+    if (type == UnsolvedClassOrInterfaceType.ANNOTATION
+        || type == UnsolvedClassOrInterfaceType.INTERFACE) {
+      return "\n    " + signature + ";\n";
     } else {
       return "\n    " + signature + " {\n        throw new java.lang.Error();\n    }\n";
     }

@@ -39,6 +39,8 @@ import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 import org.checkerframework.specimin.modularity.ModularityModel;
+import org.checkerframework.specimin.unsolved.UnsolvedSymbolEnumerator;
+import org.checkerframework.specimin.unsolved.UnsolvedSymbolEnumeratorResult;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
