@@ -163,6 +163,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    *
    * @param annotation a fully-qualified annotation to apply
    */
+  @Override
   public void addAnnotation(String annotation) {
     this.annotations.add(annotation);
   }
@@ -242,12 +243,6 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       sb.append("static ");
     }
     if (typeOfType == UnsolvedClassOrInterfaceType.INTERFACE) {
-      // For synthetic interfaces created for lambdas only.
-      if (methods.size() == 1
-          && (className.startsWith("SyntheticFunction")
-              || className.startsWith("SyntheticConsumer"))) {
-        sb.append("@FunctionalInterface\n");
-      }
       sb.append("interface ");
     } else if (typeOfType == UnsolvedClassOrInterfaceType.ANNOTATION) {
       sb.append("@interface ");

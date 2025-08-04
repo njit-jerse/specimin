@@ -46,6 +46,13 @@ public interface UnsolvedClassOrInterfaceCommon {
   public boolean doesExtend(MemberType extendsType);
 
   /**
+   * Adds an annotation to this class.
+   *
+   * @param annotation a fully-qualified annotation to apply
+   */
+  public void addAnnotation(String annotation);
+
+  /**
    * Implements this class based on a MemberType.
    *
    * @param interfaceName The type to implement

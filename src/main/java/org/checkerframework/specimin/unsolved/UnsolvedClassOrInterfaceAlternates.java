@@ -174,6 +174,11 @@ public class UnsolvedClassOrInterfaceAlternates
     return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::doesExtend, extendsType);
   }
 
+  @Override
+  public void addAnnotation(String annotation) {
+    applyToAllAlternates(UnsolvedClassOrInterface::addAnnotation, annotation);
+  }
+
   /**
    * Implements this class based on a MemberType.
    *

@@ -4,11 +4,13 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
@@ -57,7 +59,16 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     List<Node> elements = new ArrayList<>();
 
     if (node instanceof NodeWithAnnotations<?> withAnnotations) {
-      elements.addAll(withAnnotations.getAnnotations());
+      for (AnnotationExpr annotation : withAnnotations.getAnnotations()) {
+        if (annotation.toString().equals("@Override")) {
+          // Never preserve @Override, since it causes compile errors but does not fix them.
+          continue;
+        } else if (annotation.toString().equals("@FunctionalInterface")) {
+          // Don't preserve @FunctionalInterface until we know the method is also preserved.
+          continue;
+        }
+        elements.add(annotation);
+      }
     }
     if (node instanceof NodeWithModifiers<?> withModifiers) {
       elements.addAll(withModifiers.getModifiers());
@@ -105,9 +116,20 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.addAll(withThrownExceptions.getThrownExceptions());
     }
 
+    // If this is a method declaration in a functional interface, preserve the
+    // "@FunctionalInterface" annotation.
+    if (node instanceof MethodDeclaration methodDeclaration
+        && JavaParserUtil.getEnclosingClassLikeOptional(methodDeclaration)
+            instanceof ClassOrInterfaceDeclaration typeDecl
+        && typeDecl.isInterface()
+        && typeDecl.getAnnotationByName("FunctionalInterface").isPresent()) {
+      elements.add(typeDecl.getAnnotationByName("FunctionalInterface").get());
+    }
+
     // If the node is a member declaration, exit now, so we don't unintentionally
     // add extra nodes to our worklist.
     if (node instanceof CallableDeclaration) {
+
       return elements;
     }
 

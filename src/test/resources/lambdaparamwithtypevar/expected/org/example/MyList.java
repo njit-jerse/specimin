@@ -1,7 +1,7 @@
 package org.example;
 
 public class MyList<T> {
-    public ToArrayReturnType toArray() {
+    public org.example.ToArrayReturnType toArray() {
         throw new java.lang.Error();
     }
 }

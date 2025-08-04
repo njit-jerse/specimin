@@ -8,7 +8,6 @@ import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.NameExpr;
@@ -270,12 +269,6 @@ public class Slicer {
    * @param node The node to slice
    */
   private void removeNonSliceNodes(Node node) {
-    // Never preserve @Override, since it causes compile errors but does not fix them.
-    if (node instanceof AnnotationExpr && node.toString().equals("@Override")) {
-      node.remove();
-      return;
-    }
-
     if (slice.contains(node)) {
       List<Node> copy = new ArrayList<>(node.getChildNodes());
       for (Node child : copy) {

@@ -163,7 +163,7 @@ public class JavaParserUtil {
   }
 
   /**
-   * Erases type arguments from a method signature string.
+   * Erases type arguments from a method or type signature string.
    *
    * @param signature the signature
    * @return the same signature without type arguments

@@ -2,6 +2,7 @@ package com.example;
 
 import java.util.Set;
 import java.util.Iterator;
+import java.util.Spliterator;
 import java.util.Collection;
 
 class WrappedSet<K, V> implements Set<V> {

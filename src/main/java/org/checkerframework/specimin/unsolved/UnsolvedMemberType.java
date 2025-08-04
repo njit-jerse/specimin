@@ -1,5 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -10,7 +11,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  *
  * <p>See {@link MemberType} for more details.
  */
-public class UnsolvedMemberType implements MemberType {
+public class UnsolvedMemberType extends MemberType {
 
   private final UnsolvedClassOrInterfaceAlternates unsolved;
   private int numArrayBrackets;
@@ -31,6 +32,22 @@ public class UnsolvedMemberType implements MemberType {
    * @param numArrayBrackets The number of array brackets
    */
   public UnsolvedMemberType(UnsolvedClassOrInterfaceAlternates unsolved, int numArrayBrackets) {
+    this(unsolved, numArrayBrackets, List.of());
+  }
+
+  /**
+   * Creates a new UnsolvedMemberType with the given unsolved type, number of array brackets, and
+   * type arguments.
+   *
+   * @param unsolved The unsolved type
+   * @param numArrayBrackets The number of array brackets
+   * @param typeArguments The type arguments for this type
+   */
+  public UnsolvedMemberType(
+      UnsolvedClassOrInterfaceAlternates unsolved,
+      int numArrayBrackets,
+      List<MemberType> typeArguments) {
+    super(typeArguments);
     this.unsolved = unsolved;
     this.numArrayBrackets = numArrayBrackets;
   }
@@ -52,7 +69,26 @@ public class UnsolvedMemberType implements MemberType {
   @Override
   public String toString() {
     // TODO: handle more than one alternate
-    return getFullyQualifiedNames().iterator().next() + "[]".repeat(numArrayBrackets);
+    StringBuilder sb = new StringBuilder();
+
+    sb.append(getFullyQualifiedNames().iterator().next());
+
+    if (!getTypeArguments().isEmpty()) {
+      sb.append('<');
+      for (int i = 0; i < getTypeArguments().size(); i++) {
+        if (i > 0) {
+          sb.append(", ");
+        }
+        sb.append(getTypeArguments().get(i).toString());
+      }
+      sb.append('>');
+    }
+
+    if (numArrayBrackets > 0) {
+      sb.append("[]".repeat(numArrayBrackets));
+    }
+
+    return sb.toString();
   }
 
   @Override

@@ -157,7 +157,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
 
         // This is safe because all simple names are the same for unsolved types
         // and there is only one FQN for solved types
-        methodSignature.append(JavaParserUtil.getSimpleNameFromQualifiedName(param.toString()));
+        methodSignature.append(
+            JavaParserUtil.getSimpleNameFromQualifiedName(JavaParserUtil.erase(param.toString())));
 
         if (i + 1 < parameterList.size()) {
           methodSignature.append(", ");

@@ -1,5 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -10,7 +11,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  *
  * <p>See {@link MemberType} for more details.
  */
-public class SolvedMemberType implements MemberType {
+public class SolvedMemberType extends MemberType {
   private String fqn;
 
   /**
@@ -19,6 +20,18 @@ public class SolvedMemberType implements MemberType {
    * @param fqn The fully-qualified name
    */
   public SolvedMemberType(String fqn) {
+    this(fqn, List.of());
+  }
+
+  /**
+   * Creates a new SolvedMemberType based on a fully-qualified name. May include array brackets.
+   * Also provides a list of type arguments.
+   *
+   * @param fqn The fully-qualified name
+   * @param typeArguments The type arguments for this type
+   */
+  public SolvedMemberType(String fqn, List<MemberType> typeArguments) {
+    super(typeArguments);
     this.fqn = fqn;
   }
 
@@ -29,7 +42,34 @@ public class SolvedMemberType implements MemberType {
 
   @Override
   public String toString() {
-    return fqn;
+    StringBuilder sb = new StringBuilder();
+
+    int arrayBracketsIndex = fqn.indexOf("[]");
+    String arrayBrackets;
+    if (arrayBracketsIndex != -1) {
+      arrayBrackets = fqn.substring(arrayBracketsIndex);
+      sb.append(fqn.substring(0, arrayBracketsIndex));
+    } else {
+      arrayBrackets = "";
+      sb.append(fqn);
+    }
+
+    if (!getTypeArguments().isEmpty()) {
+      sb.append('<');
+      for (int i = 0; i < getTypeArguments().size(); i++) {
+        if (i > 0) {
+          sb.append(", ");
+        }
+        sb.append(getTypeArguments().get(i).toString());
+      }
+      sb.append('>');
+    }
+
+    if (!arrayBrackets.isBlank()) {
+      sb.append(arrayBrackets);
+    }
+
+    return sb.toString();
   }
 
   @Override

@@ -242,10 +242,17 @@ public class UnsolvedSymbolGenerator {
     } catch (UnsolvedSymbolException ex) {
       // Ok to continue
     }
-    Set<String> potentialFQNs = fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(type);
+    FullyQualifiedNameSet potentialFQNs =
+        fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(type);
+
+    // ClassOrInterfaceType may be Set<UnknownType>, which would be unresolvable because of
+    // UnknownType, but we should not create Set in this case.
+    if (doesOverlapWithKnownType(potentialFQNs.erasedFqns())) {
+      return;
+    }
 
     UnsolvedClassOrInterfaceAlternates generated =
-        findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+        findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs.erasedFqns());
 
     if (type.getTypeArguments().isPresent()) {
       generated.setNumberOfTypeVariables(type.getTypeArguments().get().size());
@@ -268,10 +275,10 @@ public class UnsolvedSymbolGenerator {
     } catch (UnsolvedSymbolException ex) {
       // Ok to continue
     }
-    Set<String> potentialFQNs = fullyQualifiedNameGenerator.getFQNsFromAnnotation(anno);
+    FullyQualifiedNameSet potentialFQNs = fullyQualifiedNameGenerator.getFQNsFromAnnotation(anno);
 
     UnsolvedClassOrInterfaceAlternates generated =
-        findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+        findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs.erasedFqns());
     generated.setType(UnsolvedClassOrInterfaceType.ANNOTATION);
 
     result.add(generated);
@@ -327,19 +334,19 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    Set<String> fqns;
+    FullyQualifiedNameSet fqns;
     if (isEmpty) {
       // Handle empty arrays (i.e. @Anno({})); we have no way of telling
       // what it actually is
-      fqns = Set.of("java.lang.String[]");
+      fqns = new FullyQualifiedNameSet(Set.of("java.lang.String[]"));
     } else {
-      fqns = new LinkedHashSet<>();
-
-      Set<String> rawFqns;
+      FullyQualifiedNameSet rawFqns;
 
       try {
         if (toLookUpTypeFor.isAnnotationExpr()) {
-          rawFqns = Set.of(toLookUpTypeFor.asAnnotationExpr().resolve().getQualifiedName());
+          rawFqns =
+              new FullyQualifiedNameSet(
+                  Set.of(toLookUpTypeFor.asAnnotationExpr().resolve().getQualifiedName()));
         } else if (toLookUpTypeFor instanceof FieldAccessExpr fieldAccess
             && JavaParserUtil.looksLikeAConstant(fieldAccess.getNameAsString())) {
           // If it looks like an enum, it probably is
@@ -351,20 +358,22 @@ public class UnsolvedSymbolGenerator {
         rawFqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(toLookUpTypeFor);
       }
 
-      for (String fqn : rawFqns) {
-        String erased = JavaParserUtil.erase(fqn);
-
+      List<FullyQualifiedNameSet> typeArgs = List.of();
+      Set<String> fqnsAsString = new LinkedHashSet<>();
+      for (String fqn : rawFqns.erasedFqns()) {
         // java.lang.Class<...> --> java.lang.Class<?>
-        if (!erased.equals(fqn)) {
-          fqn = erased + "<?>";
+        if (fqn.equals("java.lang.Class")) {
+          typeArgs = List.of(new FullyQualifiedNameSet(Set.of("?")));
         }
 
         if (isArray) {
           fqn += "[]";
         }
 
-        fqns.add(fqn);
+        fqnsAsString.add(fqn);
       }
+
+      fqns = new FullyQualifiedNameSet(fqnsAsString, typeArgs);
     }
 
     MemberType type = getMemberTypeFromFQNs(fqns, false);
@@ -434,10 +443,11 @@ public class UnsolvedSymbolGenerator {
     // because resolving the scope of a static field like org.example.MyClass.a would return
     // another FieldAccessExpr, not a ClassOrInterfaceType
     if (JavaParserUtil.isAClassPath(field.toString())) {
-      Set<String> potentialFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionType(field);
+      FullyQualifiedNameSet potentialFQNs =
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(field);
 
       UnsolvedClassOrInterfaceAlternates generated =
-          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs.erasedFqns());
 
       result.add(generated);
       return;
@@ -475,7 +485,8 @@ public class UnsolvedSymbolGenerator {
     UnsolvedSymbolAlternates<?> alreadyGenerated = findExistingAndUpdateFQNs(potentialFQNs);
 
     if (!(alreadyGenerated instanceof UnsolvedFieldAlternates)) {
-      Set<String> potentialTypeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionType(field);
+      FullyQualifiedNameSet potentialTypeFQNs =
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(field);
 
       // Since we called inferContextImpl(scope), the field's parents are created
       List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
@@ -547,10 +558,11 @@ public class UnsolvedSymbolGenerator {
 
     // class name
     if (JavaParserUtil.isAClassName(nameExpr.getNameAsString())) {
-      Set<String> potentialFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
+      FullyQualifiedNameSet potentialFQNs =
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
 
       UnsolvedClassOrInterfaceAlternates generated =
-          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+          findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs.erasedFqns());
 
       result.add(generated);
       return;
@@ -577,7 +589,8 @@ public class UnsolvedSymbolGenerator {
       }
 
       // Generate the synthetic type
-      Set<String> typeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
+      FullyQualifiedNameSet typeFQNs =
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr);
 
       MemberType type = getOrCreateMemberTypeFromFQNs(typeFQNs);
 
@@ -642,7 +655,7 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
-    Map<Expression, Set<String>> argumentToParameterPotentialFQNs = new HashMap<>();
+    Map<Expression, FullyQualifiedNameSet> argumentToParameterPotentialFQNs = new HashMap<>();
 
     Set<String> potentialFQNs =
         getMethodFQNsWithSideEffect(
@@ -690,8 +703,9 @@ public class UnsolvedSymbolGenerator {
     for (CallableDeclaration<?> callable : parentCallableDeclarations) {
       Parameter param = callable.getParameter(paramNum);
 
-      Set<String> fqns = fullyQualifiedNameGenerator.getFQNsFromType(param.getType());
-      MemberType memberType = getOrCreateMemberTypeFromFQNs(fqns);
+      MemberType memberType =
+          getOrCreateMemberTypeFromFQNs(
+              fullyQualifiedNameGenerator.getFQNsFromType(param.getType()));
 
       returnTypeToMustPreserveNode.put(memberType, callable);
     }
@@ -705,11 +719,15 @@ public class UnsolvedSymbolGenerator {
         generatedMethod.updateReturnTypesAndMustPreserveNodes(returnTypeToMustPreserveNode);
       }
     } else {
-      Set<String> potentialReturnTypeFQNs =
+      FullyQualifiedNameSet potentialReturnTypeFQNs =
           fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall);
 
       List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
       for (Set<String> set : potentialScopeFQNs) {
+        if (doesOverlapWithKnownType(set)) {
+          return;
+        }
+
         UnsolvedSymbolAlternates<?> gen = findExistingAndUpdateFQNs(set);
 
         if (gen == null) {
@@ -728,7 +746,7 @@ public class UnsolvedSymbolGenerator {
         } catch (UnsolvedSymbolException ex) {
           inferContextImpl(argument, result);
 
-          Set<String> set = argumentToParameterPotentialFQNs.get(argument);
+          FullyQualifiedNameSet set = argumentToParameterPotentialFQNs.get(argument);
 
           // This null check is just to satisfy the error checker
           if (set == null) {
@@ -852,12 +870,12 @@ public class UnsolvedSymbolGenerator {
   private Set<String> getMethodFQNsWithSideEffect(
       MethodCallExpr methodCall,
       Collection<Set<String>> potentialScopeFQNs,
-      @Nullable Map<Expression, Set<String>> argumentToParameterPotentialFQNs) {
+      @Nullable Map<Expression, FullyQualifiedNameSet> argumentToParameterPotentialFQNs) {
     List<String> simpleNames = new ArrayList<>();
 
     for (Expression argument : methodCall.getArguments()) {
-      Set<String> fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
-      String first = fqns.iterator().next();
+      FullyQualifiedNameSet fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
+      String first = fqns.erasedFqns().iterator().next();
       String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(first);
       simpleNames.add(simpleName);
       if (argumentToParameterPotentialFQNs != null) {
@@ -899,12 +917,12 @@ public class UnsolvedSymbolGenerator {
       List<Expression> arguments,
       int numberOfTypeParams,
       List<UnsolvedSymbolAlternates<?>> result) {
-    Map<Expression, Set<String>> argumentToParameterPotentialFQNs = new HashMap<>();
+    Map<Expression, FullyQualifiedNameSet> argumentToParameterPotentialFQNs = new HashMap<>();
     List<String> simpleNames = new ArrayList<>();
 
     for (Expression argument : arguments) {
-      Set<String> fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
-      String first = fqns.iterator().next();
+      FullyQualifiedNameSet fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
+      String first = fqns.erasedFqns().iterator().next();
       simpleNames.add(JavaParserUtil.getSimpleNameFromQualifiedName(first));
       argumentToParameterPotentialFQNs.put(argument, fqns);
     }
@@ -933,7 +951,7 @@ public class UnsolvedSymbolGenerator {
         } catch (UnsolvedSymbolException ex) {
           inferContextImpl(argument, result);
 
-          Set<String> set = argumentToParameterPotentialFQNs.get(argument);
+          FullyQualifiedNameSet set = argumentToParameterPotentialFQNs.get(argument);
 
           // This null check is just to satisfy the error checker
           if (set == null) {
@@ -991,6 +1009,10 @@ public class UnsolvedSymbolGenerator {
     List<UnsolvedClassOrInterfaceAlternates> scope = new ArrayList<>();
 
     for (Set<String> set : potentialScopeFQNs.values()) {
+      if (doesOverlapWithKnownType(set)) {
+        return;
+      }
+
       UnsolvedClassOrInterfaceAlternates generated =
           (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
 
@@ -1049,41 +1071,63 @@ public class UnsolvedSymbolGenerator {
     boolean isVoid;
     if (lambda.getExpressionBody().isPresent()) {
       Expression body = lambda.getExpressionBody().get();
-      Set<String> fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(body);
+      Set<String> fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(body).erasedFqns();
       isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
     } else {
       isVoid =
-          lambda.getBody().asBlockStmt().getStatements().stream()
+          !lambda.getBody().asBlockStmt().getStatements().stream()
               .anyMatch(stmt -> stmt instanceof ReturnStmt);
     }
 
     int arity = lambda.getParameters().size();
 
-    Set<String> unerasedPotentialFQNs =
+    FullyQualifiedNameSet potentialFQNs =
         fullyQualifiedNameGenerator.getFQNsForExpressionType(lambda);
-    Set<String> erasedPotentialFQNs = new LinkedHashSet<>();
 
-    for (String unerased : unerasedPotentialFQNs) {
+    for (String unerased : potentialFQNs.erasedFqns()) {
       if (unerased.startsWith("java.")) {
         // Built-in functional interface can be used; no need for synthetic generation.
         return;
       }
-
-      erasedPotentialFQNs.add(JavaParserUtil.erase(unerased));
     }
 
     UnsolvedClassOrInterfaceAlternates functionalInterface =
-        findExistingAndUpdateFQNsOrCreateNewType(erasedPotentialFQNs);
-    functionalInterface.setNumberOfTypeVariables(arity + (isVoid ? 1 : 0));
+        findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs.erasedFqns());
+    functionalInterface.setNumberOfTypeVariables(arity + (isVoid ? 0 : 1));
+    functionalInterface.setType(UnsolvedClassOrInterfaceType.INTERFACE);
+    functionalInterface.addAnnotation("@FunctionalInterface");
+
     result.add(functionalInterface);
 
     String[] paramArray =
         functionalInterface.getTypeVariablesAsStringWithoutBrackets().split(", ", -1);
     List<MemberType> params = new ArrayList<>();
+    String paramListAsString = functionalInterface.getTypeVariablesAsString();
 
     // remove the last element of params, because that's the return type, not a parameter
-    for (int i = 0; i < params.size() - (isVoid ? 1 : 0); i++) {
+    for (int i = 0; i < paramArray.length - (isVoid ? 0 : 1); i++) {
       params.add(new SolvedMemberType(paramArray[i]));
+      paramListAsString += paramArray[i];
+    }
+
+    if (!isVoid) {
+      int lastIndexOfComma = paramListAsString.lastIndexOf(',');
+      if (lastIndexOfComma != -1) {
+        paramListAsString = paramListAsString.substring(0, lastIndexOfComma);
+      } else {
+        paramListAsString = "";
+      }
+    }
+
+    Set<String> potentialMethodFQNs = new LinkedHashSet<>();
+
+    for (String fqn : potentialFQNs.erasedFqns()) {
+      potentialMethodFQNs.add(fqn + "#apply(" + paramListAsString + ")");
+    }
+
+    if (findExistingAndUpdateFQNs(potentialMethodFQNs) != null) {
+      // If the method already exists, no need to create a new one
+      return;
     }
 
     String returnType = isVoid ? "void" : "T" + arity;
@@ -1325,6 +1369,12 @@ public class UnsolvedSymbolGenerator {
         return UnsolvedGenerationResult.EMPTY;
       }
 
+      for (Set<String> set : potentialScopeFQNs) {
+        if (doesOverlapWithKnownType(set)) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
+      }
+
       Set<String> potentialFQNs = getMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null);
 
       UnsolvedMethodAlternates alt =
@@ -1524,11 +1574,25 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Short-hand call for {@link #findExistingAndUpdateFQNs(FullyQualifiedNameSet)} that takes a
+   * {@link FullyQualifiedNameSet} as input.
+   *
+   * @param potentialFQNs The set of potential FQNs
+   * @return The existing symbol, or null if one does not exist yet.
+   * @see #findExistingAndUpdateFQNs(Set)
+   */
+  private @Nullable UnsolvedSymbolAlternates<?> findExistingAndUpdateFQNs(
+      FullyQualifiedNameSet potentialFQNs) {
+    return findExistingAndUpdateFQNs(potentialFQNs.erasedFqns());
+  }
+
+  /**
    * Finds the existing unsolved symbol based on a set of potential FQNs. If none is found, this
    * method returns null. The generatedSymbols map is also modified if the intersection of
    * potentialFQNs and the existing set results in a smaller set of potential FQNs.
    *
-   * @param potentialFQNs The set of potential fully-qualified names in the current context.
+   * @param potentialFQNs The set of potential fully-qualified names (type arguments erased) in the
+   *     current context.
    * @return The existing symbol, or null if one does not exist yet.
    */
   private @Nullable UnsolvedSymbolAlternates<?> findExistingAndUpdateFQNs(
@@ -1625,7 +1689,7 @@ public class UnsolvedSymbolGenerator {
    * @param fqns The set of fully-qualified names
    * @return The member type
    */
-  private MemberType getOrCreateMemberTypeFromFQNs(Set<String> fqns) {
+  private MemberType getOrCreateMemberTypeFromFQNs(FullyQualifiedNameSet fqns) {
     MemberType memberType = getMemberTypeFromFQNs(fqns, true);
 
     if (memberType == null) {
@@ -1636,32 +1700,69 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Returns true if any fqn in the set represents a type included in the input or in the JDK.
+   *
+   * @param fqns The set of fully-qualified names to check
+   * @return True if the set overlaps with known types, false otherwise
+   */
+  private boolean doesOverlapWithKnownType(Set<String> fqns) {
+    for (String fqn : fqns) {
+      if (fqnsToCompilationUnits.containsKey(fqn)
+          || JavaLangUtils.inJdkPackage(JavaParserUtil.removeArrayBrackets(fqn))
+          || JavaLangUtils.isJavaLangOrPrimitiveName(
+              JavaParserUtil.getSimpleNameFromQualifiedName(
+                  JavaParserUtil.removeArrayBrackets(fqn)))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Gets the {@code MemberType} from a set of FQNs. If one of the FQNs represents a primitive or
    * built-in java class, then it returns that type. If not, then this method will find an existing
-   * generated type (or create it, depending on {@code createNew}), and return it.
+   * generated type (or create it, depending on {@code createNew}), and return it. If there are type
+   * arguments, please fully qualify them before passing into this method.
    *
    * @param fqns The set of fully-qualified names
    * @return The member type
    */
-  private @Nullable MemberType getMemberTypeFromFQNs(Set<String> fqns, boolean createNew) {
-    for (String fqn : fqns) {
-      if (fqnsToCompilationUnits.containsKey(fqn)) return new SolvedMemberType(fqn);
+  private @Nullable MemberType getMemberTypeFromFQNs(
+      FullyQualifiedNameSet fqns, boolean createNew) {
+    List<MemberType> typeArguments = new ArrayList<>();
 
-      MemberType type = getMemberTypeIfPrimitiveOrJavaLang(fqn);
+    for (FullyQualifiedNameSet typeArg : fqns.typeArguments()) {
+      MemberType memberType = getMemberTypeFromFQNs(typeArg, createNew);
 
-      if (type != null) return type;
+      if (memberType == null) {
+        throw new RuntimeException("Type arguments must be generated.");
+      }
+
+      typeArguments.add(memberType);
+    }
+
+    for (String fqn : fqns.erasedFqns()) {
+      if (fqnsToCompilationUnits.containsKey(fqn)) {
+        return new SolvedMemberType(fqn, typeArguments);
+      }
+
+      MemberType type = getMemberTypeIfPrimitiveOrJavaLang(fqn, typeArguments);
+
+      if (type != null) {
+        return type;
+      }
     }
 
     // If a set has one element with no dots, it's likely a type variable
-    if (fqns.size() == 1 && !fqns.iterator().next().contains(".")) {
-      return new SolvedMemberType(fqns.iterator().next());
+    if (fqns.erasedFqns().size() == 1 && !fqns.erasedFqns().iterator().next().contains(".")) {
+      return new SolvedMemberType(fqns.erasedFqns().iterator().next());
     }
 
     UnsolvedClassOrInterfaceAlternates unsolved;
 
     Set<String> fqnsWithoutArray = new LinkedHashSet<>();
 
-    for (String fqn : fqns) {
+    for (String fqn : fqns.erasedFqns()) {
       fqnsWithoutArray.add(JavaParserUtil.removeArrayBrackets(fqn));
     }
 
@@ -1675,7 +1776,9 @@ public class UnsolvedSymbolGenerator {
       return null;
     } else {
       return new UnsolvedMemberType(
-          unsolved, JavaParserUtil.countNumberOfArrayBrackets(fqns.iterator().next()));
+          unsolved,
+          JavaParserUtil.countNumberOfArrayBrackets(fqns.erasedFqns().iterator().next()),
+          typeArguments);
     }
   }
 
@@ -1684,13 +1787,15 @@ public class UnsolvedSymbolGenerator {
    * another java package, then return the MemberType holding it. Else, return null.
    *
    * @param name The name of the type, either simple or fully qualified.
+   * @param typeArguments The type arguments of the type, if any.
    */
-  private @Nullable MemberType getMemberTypeIfPrimitiveOrJavaLang(String name) {
+  private @Nullable MemberType getMemberTypeIfPrimitiveOrJavaLang(
+      String name, List<MemberType> typeArguments) {
     if (JavaLangUtils.inJdkPackage(JavaParserUtil.removeArrayBrackets(name))
         || JavaLangUtils.isJavaLangOrPrimitiveName(
             JavaParserUtil.getSimpleNameFromQualifiedName(
                 JavaParserUtil.removeArrayBrackets(name)))) {
-      return new SolvedMemberType(name);
+      return new SolvedMemberType(name, typeArguments);
     }
     return null;
   }

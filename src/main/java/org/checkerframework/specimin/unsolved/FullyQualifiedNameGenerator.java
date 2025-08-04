@@ -46,7 +46,6 @@ import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParse
 import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -121,7 +120,8 @@ public class FullyQualifiedNameGenerator {
 
         result =
             Map.of(
-                expr.toString(), getFQNsFromClassName(expr.toString(), expr.toString(), cu, expr));
+                expr.toString(),
+                getFQNsFromErasedClassName(expr.toString(), expr.toString(), cu, expr));
       }
 
       return result;
@@ -136,7 +136,7 @@ public class FullyQualifiedNameGenerator {
       return Map.of(
           JavaParserUtil.getSimpleNameFromQualifiedName(
               expr.asObjectCreationExpr().getTypeAsString()),
-          getFQNsFromClassOrInterfaceType(expr.asObjectCreationExpr().getType()));
+          getFQNsFromClassOrInterfaceType(expr.asObjectCreationExpr().getType()).erasedFqns());
     } else if (expr.isMethodReferenceExpr()) {
       scope = expr.asMethodReferenceExpr().getScope();
     } else {
@@ -159,6 +159,10 @@ public class FullyQualifiedNameGenerator {
             (TypeParameter) JavaParserUtil.findAttachedNode(typeParam, fqnToCompilationUnits);
 
         NodeList<ClassOrInterfaceType> bound = attachedTypeParameter.getTypeBound();
+
+        if (bound == null) {
+          return Map.of();
+        }
 
         Map<String, Set<String>> potentialFQNs = new LinkedHashMap<>();
 
@@ -197,10 +201,14 @@ public class FullyQualifiedNameGenerator {
 
           String simpleClassName = JavaParserUtil.erase(type.getNameAsString());
 
+          // Since we're looking at the LOCATION of the expression, the type arguments are not
+          // relevant here.
           if (potentialFQNs.containsKey(simpleClassName)) {
-            potentialFQNs.get(simpleClassName).addAll(getFQNsFromClassOrInterfaceType(type));
+            potentialFQNs
+                .get(simpleClassName)
+                .addAll(getFQNsFromClassOrInterfaceType(type).erasedFqns());
           } else {
-            potentialFQNs.put(simpleClassName, getFQNsFromClassOrInterfaceType(type));
+            potentialFQNs.put(simpleClassName, getFQNsFromClassOrInterfaceType(type).erasedFqns());
           }
         }
 
@@ -242,7 +250,9 @@ public class FullyQualifiedNameGenerator {
               // continue
             }
 
-            Set<String> fqns = getFQNsFromType(type);
+            // Safe to just use erased fqns: member location does not depend on what the type
+            // argument is
+            Set<String> fqns = getFQNsFromType(type).erasedFqns();
 
             if (fqns.isEmpty()) {
               continue;
@@ -264,7 +274,7 @@ public class FullyQualifiedNameGenerator {
     // Non-super members with scope are located in the same type as the scope; there is only one
     // possible type for these scopes.
 
-    Set<String> fqns = getFQNsForExpressionType(scope);
+    Set<String> fqns = getFQNsForExpressionType(scope).erasedFqns();
     String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(fqns.iterator().next());
 
     return Map.of(simpleName, fqns);
@@ -277,7 +287,7 @@ public class FullyQualifiedNameGenerator {
    * @param expr The expression
    * @return The potential FQNs of the type of the given expression.
    */
-  public Set<String> getFQNsForExpressionType(Expression expr) {
+  public FullyQualifiedNameSet getFQNsForExpressionType(Expression expr) {
     return getFQNsForExpressionTypeImpl(expr, true);
   }
 
@@ -290,11 +300,13 @@ public class FullyQualifiedNameGenerator {
    * @param canRecurse Whether or not this method can call itself
    * @return The potential FQNs of the type of the given expression.
    */
-  public Set<String> getFQNsForExpressionTypeImpl(Expression expr, boolean canRecurse) {
+  public FullyQualifiedNameSet getFQNsForExpressionTypeImpl(Expression expr, boolean canRecurse) {
     // If the type of the expression can already be calculated, return it
     // Throws UnsupportedOperationException for annotation expressions
     if (!expr.isAnnotationExpr() && JavaParserUtil.isExprTypeResolvable(expr)) {
-      return Set.of(expr.calculateResolvedType().describe());
+      ResolvedType type = expr.calculateResolvedType();
+
+      return getFQNsForResolvedType(type);
     }
 
     // super
@@ -310,11 +322,13 @@ public class FullyQualifiedNameGenerator {
         scoped = ((NodeWithTraversableScope) scoped).traverseScope().get();
       }
 
-      return getFQNsFromClassName(
-          scoped.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
+      return new FullyQualifiedNameSet(
+          getFQNsFromErasedClassName(
+              scoped.toString(), expr.toString(), expr.findCompilationUnit().get(), expr));
     } else if (expr.isNameExpr() && JavaParserUtil.isAClassName(expr.toString())) {
-      return getFQNsFromClassName(
-          expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
+      return new FullyQualifiedNameSet(
+          getFQNsFromErasedClassName(
+              expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr));
     }
     // method ref
     else if (expr.isMethodReferenceExpr()) {
@@ -326,10 +340,11 @@ public class FullyQualifiedNameGenerator {
     } else if (expr.isLiteralExpr()) {
       if (expr.isNullLiteralExpr()) {
         // TODO: more robust handling?
-        return Set.of("java.lang.Object");
+        return new FullyQualifiedNameSet(Set.of("java.lang.Object"));
       }
 
-      return Set.of(expr.asLiteralExpr().calculateResolvedType().describe());
+      return new FullyQualifiedNameSet(
+          Set.of(expr.asLiteralExpr().calculateResolvedType().describe()));
     }
     // Special wrapper for method reference scopes
     else if (expr.isTypeExpr()) {
@@ -339,10 +354,8 @@ public class FullyQualifiedNameGenerator {
     else if (expr.isCastExpr()) {
       return getFQNsFromClassOrInterfaceType(expr.asCastExpr().getType().asClassOrInterfaceType());
     } else if (expr.isClassExpr()) {
-      return new LinkedHashSet<>(
-          getFQNsFromType(expr.asClassExpr().getType()).stream()
-              .map(fqn -> "java.lang.Class<" + fqn + ">")
-              .toList());
+      return new FullyQualifiedNameSet(
+          Set.of("java.lang.Class"), List.of(getFQNsFromType(expr.asClassExpr().getType())));
     } else if (expr.isAnnotationExpr()) {
       return getFQNsFromAnnotation(expr.asAnnotationExpr());
     }
@@ -351,7 +364,7 @@ public class FullyQualifiedNameGenerator {
     // where the expression is resolvable BUT the type of the expression may not be.
     try {
       if (expr instanceof Resolvable<?> resolvable) {
-        @Nullable Set<String> solvableDeclarationTypeFQNs =
+        @Nullable FullyQualifiedNameSet solvableDeclarationTypeFQNs =
             getFQNsForTypeOfSolvableExpression(resolvable);
         if (solvableDeclarationTypeFQNs != null) {
           return solvableDeclarationTypeFQNs;
@@ -363,7 +376,7 @@ public class FullyQualifiedNameGenerator {
 
     // Handle the cases where the type of the expression can be inferred from surrounding context
     if (expr.hasParentNode()) {
-      @Nullable Set<String> fromLHS = getFQNsFromSurroundingContextType(expr);
+      @Nullable FullyQualifiedNameSet fromLHS = getFQNsFromSurroundingContextType(expr);
       if (fromLHS != null) {
         return fromLHS;
       }
@@ -374,9 +387,10 @@ public class FullyQualifiedNameGenerator {
     // of an imported class, or a static member of a class in the same package.
     String fqnOfStaticMember = JavaParserUtil.getFQNIfStaticMember(expr);
     if (fqnOfStaticMember != null) {
-      return Set.of(
-          generateFQNForTheTypeOfAStaticallyImportedMember(
-              fqnOfStaticMember, expr.isMethodCallExpr()));
+      return new FullyQualifiedNameSet(
+          Set.of(
+              generateFQNForTheTypeOfAStaticallyImportedMember(
+                  fqnOfStaticMember, expr.isMethodCallExpr())));
     }
 
     if (expr.isNameExpr()) {
@@ -390,16 +404,20 @@ public class FullyQualifiedNameGenerator {
         // The name expr could also be a class: calling this method on the scope of Baz.foo
         // where Baz is the name expr could mean that it's an imported type and thus static.
         if (!importDecl.isStatic()) {
-          return getFQNsFromClassName(
-              expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr);
+          return new FullyQualifiedNameSet(
+              getFQNsFromErasedClassName(
+                  expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr));
         }
-        return Set.of(
-            generateFQNForTheTypeOfAStaticallyImportedMember(importDecl.getNameAsString(), false));
+        return new FullyQualifiedNameSet(
+            Set.of(
+                generateFQNForTheTypeOfAStaticallyImportedMember(
+                    importDecl.getNameAsString(), false)));
       }
 
       String exprTypeName = SYNTHETIC_TYPE_FOR + toCapital(name);
-      return getFQNsFromClassName(
-          exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
+      return new FullyQualifiedNameSet(
+          getFQNsFromErasedClassName(
+              exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null));
     } else if (expr.isFieldAccessExpr()) {
       Expression scope = expr.asFieldAccessExpr().getScope();
 
@@ -408,11 +426,15 @@ public class FullyQualifiedNameGenerator {
         exprTypeName = SYNTHETIC_TYPE_FOR + toCapital(expr.asFieldAccessExpr().getNameAsString());
       } else {
         String scopeType =
-            getFQNsForExpressionType(expr.asFieldAccessExpr().getScope()).iterator().next();
+            getFQNsForExpressionType(expr.asFieldAccessExpr().getScope())
+                .erasedFqns()
+                .iterator()
+                .next();
 
-        return Set.of(
-            generateFQNForTheTypeOfAStaticallyImportedMember(
-                scopeType + "." + expr.asFieldAccessExpr().getNameAsString(), false));
+        return new FullyQualifiedNameSet(
+            Set.of(
+                generateFQNForTheTypeOfAStaticallyImportedMember(
+                    scopeType + "." + expr.asFieldAccessExpr().getNameAsString(), false)));
       }
 
       // Place in the same package as its scope type
@@ -420,14 +442,14 @@ public class FullyQualifiedNameGenerator {
         scope = ((NodeWithTraversableScope) scope).traverseScope().get();
       }
 
-      Set<String> fqns = getFQNsForExpressionType(scope);
+      Set<String> fqns = getFQNsForExpressionType(scope).erasedFqns();
       Set<String> result = new LinkedHashSet<>();
 
       for (String fqn : fqns) {
         result.add(fqn.substring(0, fqn.lastIndexOf('.') + 1) + exprTypeName);
       }
 
-      return result;
+      return new FullyQualifiedNameSet(result);
     } else if (expr.isMethodCallExpr()) {
       String exprTypeName = toCapital(expr.asMethodCallExpr().getNameAsString()) + RETURN_TYPE;
 
@@ -435,17 +457,18 @@ public class FullyQualifiedNameGenerator {
         // Place in the same package as its scope type
         Expression scope = expr.asMethodCallExpr().getScope().get();
 
-        Set<String> fqns = getFQNsForExpressionType(scope);
+        Set<String> fqns = getFQNsForExpressionType(scope).erasedFqns();
         Set<String> result = new LinkedHashSet<>();
 
         for (String fqn : fqns) {
           result.add(fqn.substring(0, fqn.lastIndexOf('.') + 1) + exprTypeName);
         }
 
-        return result;
+        return new FullyQualifiedNameSet(result);
       }
-      return getFQNsFromClassName(
-          exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null);
+      return new FullyQualifiedNameSet(
+          getFQNsFromErasedClassName(
+              exprTypeName, exprTypeName, expr.findCompilationUnit().get(), null));
     } else if (expr.isObjectCreationExpr()) {
       return getFQNsFromClassOrInterfaceType(expr.asObjectCreationExpr().getType());
     }
@@ -456,13 +479,31 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
+   * Given a resolved type, return the FQNs of its type.
+   *
+   * @param resolvedType The resolved type
+   * @return The FQNs of the type
+   */
+  private FullyQualifiedNameSet getFQNsForResolvedType(ResolvedType resolvedType) {
+    if (resolvedType.isReferenceType()) {
+      return new FullyQualifiedNameSet(
+          Set.of(resolvedType.asReferenceType().getQualifiedName()),
+          resolvedType.asReferenceType().typeParametersValues().stream()
+              .map(this::getFQNsForResolvedType)
+              .toList());
+    }
+
+    return new FullyQualifiedNameSet(Set.of(resolvedType.describe()));
+  }
+
+  /**
    * Given a method reference expression, return the FQNs of its functional interface.
    *
    * @param methodRef The method reference expression
    * @return The FQNs of its functional interface
    */
-  private Set<String> getFQNsForMethodReferenceType(MethodReferenceExpr methodRef) {
-    String functionalInterface;
+  private FullyQualifiedNameSet getFQNsForMethodReferenceType(MethodReferenceExpr methodRef) {
+    FullyQualifiedNameSet functionalInterface;
 
     try {
       // In practice, this may never resolve. JavaParser resolve on MethodReferenceExprs only
@@ -471,34 +512,22 @@ public class FullyQualifiedNameGenerator {
       // interfaces
       ResolvedMethodDeclaration resolved = methodRef.resolve();
 
-      // Try to get the most exact parameters; if something is unresolvable and has an ambiguous
-      // FQN, then opt to use java.lang.Object; placing alternates into a type parameter would
-      // require a lot more code, which we may choose to do in the future.
-      List<String> parameters = new ArrayList<>();
+      List<FullyQualifiedNameSet> parameters = new ArrayList<>();
 
       Node attached = JavaParserUtil.tryFindAttachedNode(resolved, fqnToCompilationUnits);
       if (attached != null) {
         CallableDeclaration<?> callableDecl = (CallableDeclaration<?>) attached;
 
         for (Parameter param : callableDecl.getParameters()) {
-          try {
-            parameters.add(param.resolve().describeType());
-          } catch (UnsolvedSymbolException ex) {
-            Set<String> fqns = getFQNsFromType(param.getType());
-            if (fqns.size() == 1) {
-              parameters.add(fqns.iterator().next());
-            } else {
-              parameters.add("java.lang.Object");
-            }
-          }
+          parameters.add(getFQNsFromType(param.getType()));
         }
       } else {
         // By reflection or jar
         for (int i = 0; i < resolved.getNumberOfParams(); i++) {
           try {
-            parameters.add(resolved.getParam(i).describeType());
+            parameters.add(new FullyQualifiedNameSet(Set.of(resolved.getParam(i).describeType())));
           } catch (UnsolvedSymbolException ex) {
-            parameters.add("java.lang.Object");
+            parameters.add(new FullyQualifiedNameSet(Set.of("java.lang.Object")));
           }
         }
       }
@@ -512,21 +541,27 @@ public class FullyQualifiedNameGenerator {
         isVoid = false;
       }
 
-      functionalInterface = getNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
+      functionalInterface =
+          getSimpleNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
       // UnsupportedOperationException is for constructors
     } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
       if (methodRef.getIdentifier().equals("new")) {
-        functionalInterface = getNameOfFunctionalInterface(0, false);
+        functionalInterface = getSimpleNameOfFunctionalInterface(0, false);
       } else {
         // If the method ref is unresolvable, use a built-in type (Runnable)
-        functionalInterface = getNameOfFunctionalInterface(0, true);
+        functionalInterface = getSimpleNameOfFunctionalInterface(0, true);
       }
     }
 
     // firstIdentifier is used to check imports. Since functionalInterface is always either
     // java.____ or a simple synthetic class name, we know it's never required to import.
-    return getFQNsFromClassName(
-        "java", functionalInterface, methodRef.findCompilationUnit().get(), methodRef);
+    return new FullyQualifiedNameSet(
+        getFQNsFromErasedClassName(
+            "java",
+            functionalInterface.erasedFqns().iterator().next(),
+            methodRef.findCompilationUnit().get(),
+            methodRef),
+        functionalInterface.typeArguments());
   }
 
   /**
@@ -535,41 +570,31 @@ public class FullyQualifiedNameGenerator {
    * @param lambda The lambda expression
    * @return The FQNs of its functional interface
    */
-  private Set<String> getFQNsForLambdaType(LambdaExpr lambda) {
+  private FullyQualifiedNameSet getFQNsForLambdaType(LambdaExpr lambda) {
     boolean isVoid;
 
     if (lambda.getExpressionBody().isPresent()) {
       Expression body = lambda.getExpressionBody().get();
-      Set<String> fqns = getFQNsForExpressionType(body);
+      Set<String> fqns = getFQNsForExpressionType(body).erasedFqns();
       isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
     } else {
       isVoid =
-          lambda.getBody().asBlockStmt().getStatements().stream()
+          !lambda.getBody().asBlockStmt().getStatements().stream()
               .anyMatch(stmt -> stmt instanceof ReturnStmt);
     }
 
-    List<String> parameters = new ArrayList<>();
-
-    for (Parameter param : lambda.getParameters()) {
-      try {
-        parameters.add(param.resolve().describeType());
-      } catch (UnsolvedSymbolException ex) {
-        Set<String> fqns = getFQNsFromType(param.getType());
-        if (fqns.size() == 1) {
-          parameters.add(fqns.iterator().next());
-        } else {
-          parameters.add("java.lang.Object");
-        }
-      }
-    }
-
-    String functionalInterface =
-        getNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
+    FullyQualifiedNameSet functionalInterface =
+        getSimpleNameOfFunctionalInterface(lambda.getParameters().size(), isVoid);
 
     // firstIdentifier is used to check imports. Since functionalInterface is always either
     // java.____ or a simple synthetic class name, we know it's never required to import.
-    return getFQNsFromClassName(
-        "java", functionalInterface, lambda.findCompilationUnit().get(), lambda);
+    return new FullyQualifiedNameSet(
+        getFQNsFromErasedClassName(
+            "java",
+            functionalInterface.erasedFqns().iterator().next(),
+            lambda.findCompilationUnit().get(),
+            lambda),
+        functionalInterface.typeArguments());
   }
 
   /**
@@ -580,7 +605,8 @@ public class FullyQualifiedNameGenerator {
    * @param resolvable A resolvable expression
    * @return A set of FQNs, or null if unfound
    */
-  private @Nullable Set<String> getFQNsForTypeOfSolvableExpression(Resolvable<?> resolvable) {
+  private @Nullable FullyQualifiedNameSet getFQNsForTypeOfSolvableExpression(
+      Resolvable<?> resolvable) {
     Node node = null;
     Object resolved = resolvable.resolve();
 
@@ -614,7 +640,7 @@ public class FullyQualifiedNameGenerator {
    * @param expr The expression
    * @return A set of FQNs, or null if unfound
    */
-  private @Nullable Set<String> getFQNsFromSurroundingContextType(Expression expr) {
+  private @Nullable FullyQualifiedNameSet getFQNsFromSurroundingContextType(Expression expr) {
     Node parentNode = expr.getParentNode().get();
 
     // Method call, constructor call, super() call
@@ -643,7 +669,7 @@ public class FullyQualifiedNameGenerator {
 
           ResolvedType paramType = resolved.getParam(param).getType();
 
-          return Set.of(paramType.describe());
+          return new FullyQualifiedNameSet(Set.of(paramType.describe()));
         } catch (UnsolvedSymbolException ex) {
           // Argument type is not resolvable; i.e., method is unsolvable
         }
@@ -674,7 +700,7 @@ public class FullyQualifiedNameGenerator {
       NodeWithCondition<?> withCondition = (NodeWithCondition<?>) parentNode;
 
       if (withCondition.getCondition().equals(expr)) {
-        return Set.of("boolean");
+        return new FullyQualifiedNameSet(Set.of("boolean"));
       }
     }
     // If it's in a binary expression (i.e., + - / * == != etc.), then set it to the type of the
@@ -694,23 +720,23 @@ public class FullyQualifiedNameGenerator {
 
       // Boolean
       if (operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR) {
-        return Set.of("boolean");
+        return new FullyQualifiedNameSet(Set.of("boolean"));
       }
       // ==, !=; we don't know the type, since the types on either side are not necessarily equal
       else if (operator != BinaryExpr.Operator.EQUALS
           && operator != BinaryExpr.Operator.NOT_EQUALS) {
         // Treat all other cases; type on one side is equal to the other
-        Set<String> otherType = getFQNsForExpressionType(other);
+        FullyQualifiedNameSet otherType = getFQNsForExpressionType(other);
 
         // No type known for sure, synthetic; these only work with Java built-in types
-        if (otherType.size() > 1) {
+        if (otherType.erasedFqns().size() > 1) {
           // Try getting the type of the LHS; i.e. if looking at getA() + getB() in String x =
           // getA() + getB();
           otherType = getFQNsForExpressionType(binary);
 
-          if (otherType.size() > 1) {
+          if (otherType.erasedFqns().size() > 1) {
             // int is safe for all the remaining operators
-            return Set.of("int");
+            return new FullyQualifiedNameSet(Set.of("int"));
           }
         }
         return otherType;
@@ -762,26 +788,28 @@ public class FullyQualifiedNameGenerator {
    * @param type The type
    * @return A set of FQNs or primitive names.
    */
-  public Set<String> getFQNsFromType(Type type) {
+  public FullyQualifiedNameSet getFQNsFromType(Type type) {
     if (type.isUnknownType()) {
       // Resolving an unknown type throws an error
-      return Set.of();
+      // Return java.lang.Object since we don't know the type
+      return new FullyQualifiedNameSet(Set.of("java.lang.Object"));
     }
 
     if (type.isArrayType()) {
       Set<String> result = new LinkedHashSet<>();
       int arrayLevel = type.asArrayType().getArrayLevel();
-      for (String fqn : getFQNsFromType(type.asArrayType().getElementType())) {
+      FullyQualifiedNameSet elementFQNs = getFQNsFromType(type.asArrayType().getElementType());
+      for (String fqn : elementFQNs.erasedFqns()) {
         result.add(fqn + "[]".repeat(arrayLevel));
       }
 
-      return result;
+      return new FullyQualifiedNameSet(result, elementFQNs.typeArguments());
     }
 
     try {
       ResolvedType resolved = type.resolve();
 
-      return Set.of(resolved.describe());
+      return getFQNsForResolvedType(resolved);
     } catch (UnsolvedSymbolException ex) {
       // continue
     }
@@ -789,16 +817,16 @@ public class FullyQualifiedNameGenerator {
     if (type.isClassOrInterfaceType()) {
       return getFQNsFromClassOrInterfaceType(type.asClassOrInterfaceType());
     }
-    return Set.of();
+    return new FullyQualifiedNameSet(Set.of());
   }
 
   /**
-   * Returns the possible FQNs of the type, with generics removed.
+   * Returns the possible FQNs of the type.
    *
    * @param type The type
    * @return A set of possible FQNs
    */
-  public Set<String> getFQNsFromClassOrInterfaceType(ClassOrInterfaceType type) {
+  public FullyQualifiedNameSet getFQNsFromClassOrInterfaceType(ClassOrInterfaceType type) {
     // If a ClassOrInterfaceType is Map.Entry, we need to find the import with java.util.Map, not
     // java.util.Map.Entry.
     // Hence, look for the import with the "earliest" scope (with Map.Entry, this would be Map).
@@ -811,11 +839,23 @@ public class FullyQualifiedNameGenerator {
       scope = scope.get().getScope();
     }
 
-    return getFQNsFromClassName(
-        JavaParserUtil.erase(getImportedName),
-        JavaParserUtil.erase(type.getNameWithScope()),
-        type.findCompilationUnit().get(),
-        type);
+    Set<String> erasedFQNs =
+        getFQNsFromErasedClassName(
+            JavaParserUtil.erase(getImportedName),
+            JavaParserUtil.erase(type.getNameWithScope()),
+            type.findCompilationUnit().get(),
+            type);
+
+    if (type.getTypeArguments().isPresent()) {
+      List<FullyQualifiedNameSet> typeArguments = new ArrayList<>();
+      for (Type typeArg : type.getTypeArguments().get()) {
+        typeArguments.add(getFQNsFromType(typeArg));
+      }
+
+      return new FullyQualifiedNameSet(erasedFQNs, typeArguments);
+    }
+
+    return new FullyQualifiedNameSet(erasedFQNs);
   }
 
   /**
@@ -824,7 +864,7 @@ public class FullyQualifiedNameGenerator {
    * @param anno The annotation
    * @return A set of possible FQNs
    */
-  public Set<String> getFQNsFromAnnotation(AnnotationExpr anno) {
+  public FullyQualifiedNameSet getFQNsFromAnnotation(AnnotationExpr anno) {
     // If an annotation is @Foo.Bar, we need to find the import with org.example.Foo, not
     // org.example.Foo.Bar.
     // Hence, look for the import with the "earliest" scope (with @Foo.Bar, this would be Foo).
@@ -846,13 +886,15 @@ public class FullyQualifiedNameGenerator {
       parent = JavaParserUtil.getEnclosingClassLikeOptional(anno.getParentNode().get());
     }
 
-    return getFQNsFromClassName(
-        getImportedName, anno.getNameAsString(), anno.findCompilationUnit().get(), parent);
+    return new FullyQualifiedNameSet(
+        getFQNsFromErasedClassName(
+            getImportedName, anno.getNameAsString(), anno.findCompilationUnit().get(), parent));
   }
 
   /**
    * Utility method for generating all possible fully-qualified names given the leftmost identifier
-   * of a class name, the full known name, and the node.
+   * of a class name, the full known name, and the node. Type names must be passed in as their
+   * erasures.
    *
    * <p>For example, if the class was Map.Entry (not fully qualified), the leftmost identifier would
    * be Map, the full known name would be Map.Entry, and the node would be the ClassOrInterfaceType
@@ -868,7 +910,7 @@ public class FullyQualifiedNameGenerator {
    * @param node The node representing the class (if this is null, we won't look at parent types)
    * @return A set of potential FQNs
    */
-  private Set<String> getFQNsFromClassName(
+  private Set<String> getFQNsFromErasedClassName(
       String firstIdentifier,
       String fullName,
       CompilationUnit compilationUnit,
@@ -978,36 +1020,39 @@ public class FullyQualifiedNameGenerator {
    * @return the fully-qualified name of a functional interface that is in-scope, matches the
    *     specified arity, and the specified voidness
    */
-  public static String getNameOfFunctionalInterfaceWithQualifiedParameters(
-      List<String> parameters, boolean isVoid) {
+  public static FullyQualifiedNameSet getSimpleNameOfFunctionalInterfaceWithQualifiedParameters(
+      List<FullyQualifiedNameSet> parameters, boolean isVoid) {
     // check arity:
     int numberOfParams = parameters.size();
     if (numberOfParams == 0 && isVoid) {
-      return "java.lang.Runnable";
+      return new FullyQualifiedNameSet(Set.of("java.lang.Runnable"));
     } else if (numberOfParams == 0 && !isVoid) {
-      return "java.util.function.Supplier<?>";
+      return new FullyQualifiedNameSet(
+          Set.of("java.util.function.Supplier"), List.of(new FullyQualifiedNameSet(Set.of("?"))));
     } else if (numberOfParams == 1 && isVoid) {
-      return "java.util.function.Consumer<" + parameters.get(0) + ">";
+      return new FullyQualifiedNameSet(Set.of("java.util.function.Consumer"), parameters);
     } else if (numberOfParams == 1 && !isVoid) {
-      return "java.util.function.Function<" + parameters.get(0) + ", ?>";
+      return new FullyQualifiedNameSet(
+          Set.of("java.util.function.Function"),
+          List.of(parameters.get(0), new FullyQualifiedNameSet(Set.of("?"))));
     } else if (numberOfParams == 2 && isVoid) {
-      return "java.util.function.BiConsumer<" + String.join(", ", parameters) + ">";
+      return new FullyQualifiedNameSet(Set.of("java.util.function.BiConsumer"), parameters);
     } else if (numberOfParams == 2 && !isVoid) {
-      return "java.util.function.BiFunction<" + String.join(", ", parameters) + ", ?>";
+      return new FullyQualifiedNameSet(
+          Set.of("java.util.function.BiFunction"),
+          List.of(parameters.get(0), parameters.get(1), new FullyQualifiedNameSet(Set.of("?"))));
     } else {
       String funcInterfaceName =
           isVoid ? "SyntheticConsumer" + numberOfParams : "SyntheticFunction" + numberOfParams;
 
-      StringBuilder typeArgs = new StringBuilder();
-      typeArgs.append("<");
-      typeArgs.append(String.join(", ", parameters));
+      if (!isVoid) {
+        List<FullyQualifiedNameSet> typeArgs = new ArrayList<>(parameters);
+        typeArgs.add(new FullyQualifiedNameSet(Set.of("?")));
 
-      if (isVoid) {
-        typeArgs.append(", ?");
+        parameters = typeArgs;
       }
 
-      typeArgs.append(">");
-      return funcInterfaceName + typeArgs;
+      return new FullyQualifiedNameSet(Set.of(funcInterfaceName), parameters);
     }
   }
 
@@ -1021,9 +1066,14 @@ public class FullyQualifiedNameGenerator {
    * @return the fully-qualified name of a functional interface that is in-scope, matches the
    *     specified arity, and the specified voidness
    */
-  public static String getNameOfFunctionalInterface(int numberOfParams, boolean isVoid) {
-    return getNameOfFunctionalInterfaceWithQualifiedParameters(
-        Collections.nCopies(numberOfParams, "Object"), isVoid);
+  public static FullyQualifiedNameSet getSimpleNameOfFunctionalInterface(
+      int numberOfParams, boolean isVoid) {
+    List<FullyQualifiedNameSet> parameters = new ArrayList<>(numberOfParams);
+    for (int i = 0; i < numberOfParams; i++) {
+      parameters.add(new FullyQualifiedNameSet(Set.of("?")));
+    }
+
+    return getSimpleNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);
   }
 
   /**
@@ -1074,7 +1124,7 @@ public class FullyQualifiedNameGenerator {
           }
 
         } catch (UnsolvedSymbolException ex) {
-          map.put(type.getNameWithScope(), getFQNsFromClassOrInterfaceType(type));
+          map.put(type.getNameWithScope(), getFQNsFromClassOrInterfaceType(type).erasedFqns());
         }
       }
     }
@@ -1096,7 +1146,7 @@ public class FullyQualifiedNameGenerator {
           }
 
         } catch (UnsolvedSymbolException ex) {
-          map.put(type.getNameWithScope(), getFQNsFromClassOrInterfaceType(type));
+          map.put(type.getNameWithScope(), getFQNsFromClassOrInterfaceType(type).erasedFqns());
         }
       }
     }

@@ -1,7 +1,7 @@
 package org.example;
 
 public class LambdaUser {
-    public UseReturnType use(java.util.function.Consumer<?> parameter0) {
+    public org.example.UseReturnType use(java.util.function.Consumer<?> parameter0) {
         throw new java.lang.Error();
     }
 }
