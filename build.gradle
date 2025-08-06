@@ -34,6 +34,8 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 
     errorprone("com.google.errorprone:error_prone_core:2.40.0")
+
+    implementation 'com.google.googlejavaformat:google-java-format:1.28.0'
 }
 
 // Use require-javadoc. From https://github.com/plume-lib/require-javadoc.
@@ -71,6 +73,29 @@ task checkExpectedOutputCompilesFor(type: Exec) {
             commandLine "sh", "../../../typecheck_one_test.sh", project.property("testName")
         }
     }
+}
+
+// needed for google-java-format: see https://github.com/google/google-java-format?tab=readme-ov-file#as-a-library
+tasks.withType(JavaExec).configureEach {
+    jvmArgs += [
+        '--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
+    ]
+}
+
+tasks.withType(Test).configureEach {
+    jvmArgs += [
+        '--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
+    ]
 }
 
 tasks.compileJava {

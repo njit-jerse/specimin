@@ -1,7 +1,7 @@
 package com.example;
 
-import org.checkerframework.checker.mustcall.qual.Owning;
 import java.net.Socket;
+import org.checkerframework.checker.mustcall.qual.Owning;
 
 public class Simple {
 

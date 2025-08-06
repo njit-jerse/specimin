@@ -28,11 +28,15 @@ import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclara
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.resolution.types.ResolvedTypeVariable;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionClassDeclaration;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionInterfaceDeclaration;
+import com.github.javaparser.utils.Pair;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -239,49 +243,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       }
 
       if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
-        // If this current method is an override, add the original definition too
-        // Get direct ancestors, since each ancestor method definition will return to this method.
-        List<ClassOrInterfaceType> parents = new ArrayList<>();
-
-        if (type instanceof NodeWithExtends<?> withExtends) {
-          parents.addAll(withExtends.getExtendedTypes());
-        }
-        if (type instanceof NodeWithImplements<?> withImplements) {
-          parents.addAll(withImplements.getImplementedTypes());
-        }
-
-        for (ClassOrInterfaceType parent : parents) {
-          try {
-            ResolvedType parentType = parent.resolve();
-
-            if (!parentType.isReferenceType()
-                || parentType.asReferenceType().getTypeDeclaration().isEmpty()) {
-              continue;
-            }
-
-            ResolvedReferenceTypeDeclaration decl =
-                parentType.asReferenceType().getTypeDeclaration().get();
-
-            TypeDeclaration<?> typeDecl =
-                JavaParserUtil.getTypeFromQualifiedName(
-                    decl.getQualifiedName(), fqnToCompilationUnits);
-            if (typeDecl == null) {
-              continue;
-            }
-
-            for (ResolvedMethodDeclaration method : decl.asReferenceType().getDeclaredMethods()) {
-              if (resolvedMethodDeclaration.getSignature().equals(method.getSignature())) {
-                Node unattached = method.toAst().get();
-                MethodDeclaration methodDecl =
-                    typeDecl.findFirst(MethodDeclaration.class, n -> n.equals(unattached)).get();
-
-                elements.add(methodDecl);
-              }
-            }
-          } catch (UnsolvedSymbolException ex) {
-            // continue
-          }
-        }
+        elements.addAll(getAllOverriddenMethods(resolvedMethodDeclaration, type));
       }
 
       // Rare case: new Foo() but Foo does not contain a constructor
@@ -338,6 +300,85 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     return elements;
+  }
+
+  /**
+   * Gets all overridden methods of the given method declaration, including those in ancestors.
+   *
+   * @param original The original method declaration to find overridden methods for
+   * @param type The type declaration to search for overridden methods in
+   * @return A list of all overridden methods
+   */
+  private List<MethodDeclaration> getAllOverriddenMethods(
+      ResolvedMethodDeclaration original, TypeDeclaration<?> type) {
+    List<MethodDeclaration> result = new ArrayList<>();
+
+    getAllOverriddenMethodsImpl(original, type, result);
+    return result;
+  }
+
+  /**
+   * Helper method for {@link #getAllOverriddenMethods(ResolvedMethodDeclaration, TypeDeclaration)}.
+   * This method recursively finds all overridden methods in the type declaration's ancestors.
+   *
+   * @param original The original method declaration to find overridden methods for
+   * @param type The type declaration to search for overridden methods in
+   * @param result A list to collect all overridden methods found
+   */
+  private void getAllOverriddenMethodsImpl(
+      ResolvedMethodDeclaration original, TypeDeclaration<?> type, List<MethodDeclaration> result) {
+    List<ClassOrInterfaceType> parents = new ArrayList<>();
+
+    if (type instanceof NodeWithExtends<?> withExtends) {
+      parents.addAll(withExtends.getExtendedTypes());
+    }
+    if (type instanceof NodeWithImplements<?> withImplements) {
+      parents.addAll(withImplements.getImplementedTypes());
+    }
+
+    for (ClassOrInterfaceType parent : parents) {
+      ResolvedType parentType;
+      try {
+        parentType = parent.resolve();
+      } catch (UnsolvedSymbolException ex) {
+        continue;
+      }
+
+      if (!parentType.isReferenceType()
+          || parentType.asReferenceType().getTypeDeclaration().isEmpty()) {
+        continue;
+      }
+
+      ResolvedReferenceTypeDeclaration decl =
+          parentType.asReferenceType().getTypeDeclaration().get();
+
+      TypeDeclaration<?> typeDecl =
+          JavaParserUtil.getTypeFromQualifiedName(decl.getQualifiedName(), fqnToCompilationUnits);
+      if (typeDecl == null) {
+        continue;
+      }
+
+      for (MethodDeclaration method : typeDecl.getMethods()) {
+        try {
+          if (original
+              .getSignature()
+              .equals(
+                  getSignatureFromResolvedMethodWithTypeVariablesMap(
+                      method.resolve(), parentType.asReferenceType().getTypeParametersMap()))) {
+            result.add(method);
+          }
+        } catch (UnsolvedSymbolException ex) {
+          // At least one parameter type may not be solvable. In this case, try comparing
+          // simple
+          // names.
+          if (areAstAndResolvedMethodLikelyEqual(original, method)) {
+            result.add(method);
+          }
+        }
+      }
+
+      getAllOverriddenMethodsImpl(original, typeDecl, result);
+    }
   }
 
   /**
@@ -408,27 +449,25 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         }
 
         for (ResolvedMethodDeclaration resolvedMethodDecl : methods) {
-          // Don't preserve equals(Object) and hashCode()
-          if (resolvedMethodDecl.getName().equals("equals")
-              && resolvedMethodDecl.getNumberOfParams() == 1
-              && resolvedMethodDecl.getParam(0).getType().describe().equals("java.lang.Object")) {
-            continue;
-          }
+          for (MethodDeclaration methodInOriginal :
+              originalTypeDecl.findAll(MethodDeclaration.class)) {
+            ResolvedMethodDeclaration methodInOriginalResolved = methodInOriginal.resolve();
 
-          if (resolvedMethodDecl.getName().equals("hashCode")
-              && resolvedMethodDecl.getNumberOfParams() == 0) {
-            continue;
-          }
-
-          for (MethodDeclaration methodDecl : originalTypeDecl.findAll(MethodDeclaration.class)) {
-            if (areAstAndResolvedMethodLikelyEqual(resolvedMethodDecl, methodDecl)) {
+            // TODO: use a better type parameter map; this one only works for direct parents
+            // For example, if current is Foo<String> and Foo<T> extends List<T>, and List is
+            // defined as List<E> then we need to get E --> String, not E --> T.
+            if (methodInOriginalResolved
+                .getSignature()
+                .equals(
+                    getSignatureFromResolvedMethodWithTypeVariablesMap(
+                        resolvedMethodDecl, resolved.asReferenceType().getTypeParametersMap()))) {
               if ((!isInterface && !resolvedMethodDecl.isAbstract())
                   || (isInterface && resolvedMethodDecl.isDefaultMethod())) {
-                alreadyImplemented.add(methodDecl);
+                alreadyImplemented.add(methodInOriginal);
                 break;
               }
 
-              result.add(methodDecl);
+              result.add(methodInOriginal);
               break;
             }
           }
@@ -456,12 +495,52 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
   }
 
   /**
+   * Given a resolved method declaration and its declaring type's type variables map, return the
+   * method's signature with the type variables replaced by their resolved types.
+   *
+   * <p>For example, if the method is part of Foo<T> and the type variables map is T --> String,
+   * then any parameters that match T will be replaced with String in the signature.
+   *
+   * @param method The resolved method declaration in the generic class
+   * @param typeVariablesMap The type variables map, which maps type variable declarations to their
+   *     resolved types
+   * @return The method's signature with the type variables replaced by their resolved types
+   */
+  private String getSignatureFromResolvedMethodWithTypeVariablesMap(
+      ResolvedMethodDeclaration method,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeVariablesMap) {
+    StringBuilder signature = new StringBuilder(method.getName() + "(");
+
+    for (int i = 0; i < method.getNumberOfParams(); i++) {
+      ResolvedParameterDeclaration param = method.getParam(i);
+
+      if (param.getType().isTypeVariable()) {
+        ResolvedTypeVariable typeVariable = param.getType().asTypeVariable();
+        for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> pair : typeVariablesMap) {
+          if (pair.a.equals(typeVariable.asTypeParameter())) {
+            signature.append(pair.b.describe());
+            break;
+          }
+        }
+      } else {
+        signature.append(param.getType().describe());
+      }
+    }
+
+    signature.append(")");
+
+    return signature.toString();
+  }
+
+  /**
    * Checks to see if a resolved method declaration and a method declaration AST node are likely to
-   * be the same method, based on their names and the simple names of their parameters.
+   * be the same method, based on their names and the simple names of their parameters. Use this
+   * method only when {@code ast} is not resolvable and you can't compare with qualified parameter
+   * types.
    *
    * @param resolved The resolved method declaration
    * @param ast The method declaration AST node
-   * @return true if they are likely equal, false otherwise
+   * @return true if the method and AST node are likely to be the same method, false otherwise
    */
   private boolean areAstAndResolvedMethodLikelyEqual(
       ResolvedMethodDeclaration resolved, MethodDeclaration ast) {
@@ -474,7 +553,20 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     for (int i = 0; i < ast.getParameters().size(); i++) {
-      if (!JavaParserUtil.getSimpleNameFromQualifiedName(resolved.getParam(i).getType().describe())
+      String resolvedParamType;
+      try {
+        resolvedParamType = resolved.getParam(i).getType().describe();
+      } catch (UnsolvedSymbolException ex) {
+        // See if the AST version exists, and use that simple name
+        if (resolved.toAst().orElse(null) instanceof MethodDeclaration methodDecl) {
+          resolvedParamType = methodDecl.getParameter(i).getType().toString();
+        } else {
+          // If we cannot compare, we'll return false
+          return false;
+        }
+      }
+
+      if (!JavaParserUtil.getSimpleNameFromQualifiedName(resolvedParamType)
           .equals(
               JavaParserUtil.getSimpleNameFromQualifiedName(
                   ast.getParameter(i).getType().toString()))) {

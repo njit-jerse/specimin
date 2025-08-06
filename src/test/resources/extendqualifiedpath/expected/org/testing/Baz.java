@@ -1,4 +1,4 @@
 package org.testing;
 
-public interface Baz<E> {
+public interface Baz<T> {
 }

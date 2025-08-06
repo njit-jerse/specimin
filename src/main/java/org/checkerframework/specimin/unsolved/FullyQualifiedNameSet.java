@@ -31,4 +31,12 @@ public record FullyQualifiedNameSet(
   public FullyQualifiedNameSet(Set<String> erasedFqns) {
     this(erasedFqns, Collections.emptyList(), null);
   }
+
+  /**
+   * Creates a FullyQualifiedNameSet with erased FQNs and no type arguments.
+   * @param erasedFqns A varargs of erased fully qualified names.
+   */
+  public FullyQualifiedNameSet(String... erasedFqns) {
+    this(Set.of(erasedFqns));
+  }
 }

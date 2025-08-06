@@ -1,7 +1,6 @@
 package com.example;
 
 import java.util.AbstractCollection;
-import java.util.Collection;
 
 public abstract class AbstractLinkedDeque<E> extends AbstractCollection<E> implements LinkedDeque<E> {
 

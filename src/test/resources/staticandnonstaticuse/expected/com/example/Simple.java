@@ -1,7 +1,7 @@
 package com.example;
 
-import org.example.Foo;
 import org.example.Bar;
+import org.example.Foo;
 
 public class Simple {
 

@@ -340,11 +340,11 @@ public class FullyQualifiedNameGenerator {
     } else if (expr.isLiteralExpr()) {
       if (expr.isNullLiteralExpr()) {
         // TODO: more robust handling?
-        return new FullyQualifiedNameSet(Set.of("java.lang.Object"));
+        return new FullyQualifiedNameSet("java.lang.Object");
       }
 
       return new FullyQualifiedNameSet(
-          Set.of(expr.asLiteralExpr().calculateResolvedType().describe()));
+          expr.asLiteralExpr().calculateResolvedType().describe());
     }
     // Special wrapper for method reference scopes
     else if (expr.isTypeExpr()) {
@@ -388,9 +388,8 @@ public class FullyQualifiedNameGenerator {
     String fqnOfStaticMember = JavaParserUtil.getFQNIfStaticMember(expr);
     if (fqnOfStaticMember != null) {
       return new FullyQualifiedNameSet(
-          Set.of(
               generateFQNForTheTypeOfAStaticallyImportedMember(
-                  fqnOfStaticMember, expr.isMethodCallExpr())));
+                  fqnOfStaticMember, expr.isMethodCallExpr()));
     }
 
     if (expr.isNameExpr()) {
@@ -409,9 +408,8 @@ public class FullyQualifiedNameGenerator {
                   expr.toString(), expr.toString(), expr.findCompilationUnit().get(), expr));
         }
         return new FullyQualifiedNameSet(
-            Set.of(
                 generateFQNForTheTypeOfAStaticallyImportedMember(
-                    importDecl.getNameAsString(), false)));
+                    importDecl.getNameAsString(), false));
       }
 
       String exprTypeName = SYNTHETIC_TYPE_FOR + toCapital(name);
@@ -432,9 +430,8 @@ public class FullyQualifiedNameGenerator {
                 .next();
 
         return new FullyQualifiedNameSet(
-            Set.of(
-                generateFQNForTheTypeOfAStaticallyImportedMember(
-                    scopeType + "." + expr.asFieldAccessExpr().getNameAsString(), false)));
+            generateFQNForTheTypeOfAStaticallyImportedMember(
+                scopeType + "." + expr.asFieldAccessExpr().getNameAsString(), false));
       }
 
       // Place in the same package as its scope type
@@ -493,7 +490,7 @@ public class FullyQualifiedNameGenerator {
               .toList());
     }
 
-    return new FullyQualifiedNameSet(Set.of(resolvedType.describe()));
+    return new FullyQualifiedNameSet(resolvedType.describe());
   }
 
   /**
@@ -525,9 +522,9 @@ public class FullyQualifiedNameGenerator {
         // By reflection or jar
         for (int i = 0; i < resolved.getNumberOfParams(); i++) {
           try {
-            parameters.add(new FullyQualifiedNameSet(Set.of(resolved.getParam(i).describeType())));
+            parameters.add(new FullyQualifiedNameSet(resolved.getParam(i).describeType()));
           } catch (UnsolvedSymbolException ex) {
-            parameters.add(new FullyQualifiedNameSet(Set.of("java.lang.Object")));
+            parameters.add(new FullyQualifiedNameSet("java.lang.Object"));
           }
         }
       }
@@ -669,7 +666,7 @@ public class FullyQualifiedNameGenerator {
 
           ResolvedType paramType = resolved.getParam(param).getType();
 
-          return new FullyQualifiedNameSet(Set.of(paramType.describe()));
+          return new FullyQualifiedNameSet(paramType.describe());
         } catch (UnsolvedSymbolException ex) {
           // Argument type is not resolvable; i.e., method is unsolvable
         }
@@ -700,7 +697,7 @@ public class FullyQualifiedNameGenerator {
       NodeWithCondition<?> withCondition = (NodeWithCondition<?>) parentNode;
 
       if (withCondition.getCondition().equals(expr)) {
-        return new FullyQualifiedNameSet(Set.of("boolean"));
+        return new FullyQualifiedNameSet("boolean");
       }
     }
     // If it's in a binary expression (i.e., + - / * == != etc.), then set it to the type of the
@@ -720,7 +717,7 @@ public class FullyQualifiedNameGenerator {
 
       // Boolean
       if (operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR) {
-        return new FullyQualifiedNameSet(Set.of("boolean"));
+        return new FullyQualifiedNameSet("boolean");
       }
       // ==, !=; we don't know the type, since the types on either side are not necessarily equal
       else if (operator != BinaryExpr.Operator.EQUALS
@@ -736,7 +733,7 @@ public class FullyQualifiedNameGenerator {
 
           if (otherType.erasedFqns().size() > 1) {
             // int is safe for all the remaining operators
-            return new FullyQualifiedNameSet(Set.of("int"));
+            return new FullyQualifiedNameSet("int");
           }
         }
         return otherType;
@@ -792,7 +789,7 @@ public class FullyQualifiedNameGenerator {
     if (type.isUnknownType()) {
       // Resolving an unknown type throws an error
       // Return java.lang.Object since we don't know the type
-      return new FullyQualifiedNameSet(Set.of("java.lang.Object"));
+      return new FullyQualifiedNameSet("java.lang.Object");
     }
 
     if (type.isArrayType()) {
@@ -1052,29 +1049,29 @@ public class FullyQualifiedNameGenerator {
     // check arity:
     int numberOfParams = parameters.size();
     if (numberOfParams == 0 && isVoid) {
-      return new FullyQualifiedNameSet(Set.of("java.lang.Runnable"));
+      return new FullyQualifiedNameSet("java.lang.Runnable");
     } else if (numberOfParams == 0 && !isVoid) {
       return new FullyQualifiedNameSet(
-          Set.of("java.util.function.Supplier"), List.of(new FullyQualifiedNameSet(Set.of("?"))));
+          Set.of("java.util.function.Supplier"), List.of(new FullyQualifiedNameSet("?")));
     } else if (numberOfParams == 1 && isVoid) {
       return new FullyQualifiedNameSet(Set.of("java.util.function.Consumer"), parameters);
     } else if (numberOfParams == 1 && !isVoid) {
       return new FullyQualifiedNameSet(
           Set.of("java.util.function.Function"),
-          List.of(parameters.get(0), new FullyQualifiedNameSet(Set.of("?"))));
+          List.of(parameters.get(0), new FullyQualifiedNameSet("?")));
     } else if (numberOfParams == 2 && isVoid) {
       return new FullyQualifiedNameSet(Set.of("java.util.function.BiConsumer"), parameters);
     } else if (numberOfParams == 2 && !isVoid) {
       return new FullyQualifiedNameSet(
           Set.of("java.util.function.BiFunction"),
-          List.of(parameters.get(0), parameters.get(1), new FullyQualifiedNameSet(Set.of("?"))));
+          List.of(parameters.get(0), parameters.get(1), new FullyQualifiedNameSet("?")));
     } else {
       String funcInterfaceName =
           isVoid ? "SyntheticConsumer" + numberOfParams : "SyntheticFunction" + numberOfParams;
 
       if (!isVoid) {
         List<FullyQualifiedNameSet> typeArgs = new ArrayList<>(parameters);
-        typeArgs.add(new FullyQualifiedNameSet(Set.of("?")));
+        typeArgs.add(new FullyQualifiedNameSet("?"));
 
         parameters = typeArgs;
       }
@@ -1097,7 +1094,7 @@ public class FullyQualifiedNameGenerator {
       int numberOfParams, boolean isVoid) {
     List<FullyQualifiedNameSet> parameters = new ArrayList<>(numberOfParams);
     for (int i = 0; i < numberOfParams; i++) {
-      parameters.add(new FullyQualifiedNameSet(Set.of("?")));
+      parameters.add(new FullyQualifiedNameSet("?"));
     }
 
     return getSimpleNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);

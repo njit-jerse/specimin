@@ -180,9 +180,12 @@ public class Slicer {
       boolean generateUnsolvedSymbol = false;
       Object resolved = null;
       try {
-        // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
-        // if there are unresolvable argument types
+        // Do not call resolve on a FieldDeclaration, since it will throw an
+        // UnsupportedOperationException
+        // if the field has multiple declarators. We will resolve the declarators instead.
         if (!(node instanceof FieldDeclaration)) {
+          // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
+          // if there are unresolvable argument types
           resolved = asResolvable.resolve();
         }
       } catch (UnsolvedSymbolException ex) {

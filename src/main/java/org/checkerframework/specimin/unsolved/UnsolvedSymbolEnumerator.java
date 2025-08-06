@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import org.checkerframework.specimin.AmbiguityResolutionPolicy;
+import org.checkerframework.specimin.JavaParserUtil;
 import org.checkerframework.specimin.Slicer;
 
 /**
@@ -215,7 +216,15 @@ public class UnsolvedSymbolEnumerator {
       Map<UnsolvedClassOrInterface, Set<UnsolvedClassOrInterface>> outerTypesToInnerTypes) {
     UnsolvedClassOrInterface alternate = type.getAlternates().get(0);
 
-    if (type.getAlternateDeclaringTypes().isEmpty()) {
+    // Alternate declaring types may not be empty but the first alternate could still be an outer
+    // type. This could happen when Foo is not imported, so Foo could either be located in the
+    // unsolved parent class or in the same package.
+    if (type.getAlternateDeclaringTypes().isEmpty()
+        || (JavaParserUtil.isAClassPath(alternate.getFullyQualifiedName())
+            && JavaParserUtil.isProbablyAPackage(
+                alternate
+                    .getFullyQualifiedName()
+                    .substring(0, alternate.getFullyQualifiedName().lastIndexOf('.'))))) {
       outerTypes.add(alternate);
     } else {
       for (UnsolvedClassOrInterfaceAlternates declaringType : type.getAlternateDeclaringTypes()) {

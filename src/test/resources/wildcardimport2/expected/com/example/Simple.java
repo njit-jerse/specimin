@@ -1,7 +1,7 @@
 package com.example;
 
-import org.example.*;
 import org.anotherexample.*;
+import org.example.*;
 
 class Simple {
     void bar() {

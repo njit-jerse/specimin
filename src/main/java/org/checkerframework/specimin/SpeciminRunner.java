@@ -14,6 +14,8 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.utils.SourceRoot;
+import com.google.googlejavaformat.java.Formatter;
+import com.google.googlejavaformat.java.FormatterException;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -310,6 +312,7 @@ public class SpeciminRunner {
         new UnsolvedSymbolEnumerator(sliceResult.generatedSymbolSlice());
     UnsolvedSymbolEnumeratorResult enumeratorResult =
         alternateOutput.getBestEffort(sliceResult.generatedSymbolDependentSlice());
+    Formatter formatter = new Formatter();
 
     handleUnsolvedSymbolEnumeratorResult(
         sliceResult,
@@ -318,7 +321,8 @@ public class SpeciminRunner {
         root,
         targetFilesAbsolutePaths,
         outputDirectory,
-        createdDirectories);
+        createdDirectories,
+        formatter);
   }
 
   /**
@@ -332,6 +336,7 @@ public class SpeciminRunner {
    * @param targetFilesAbsolutePaths The target files as absolute paths
    * @param outputDirectory The output directory
    * @param createdDirectories A cache of created directories
+   * @param formatter A formatter for the output
    */
   private static void handleUnsolvedSymbolEnumeratorResult(
       Slicer.SliceResult sliceResult,
@@ -340,7 +345,8 @@ public class SpeciminRunner {
       String root,
       Set<String> targetFilesAbsolutePaths,
       String outputDirectory,
-      Set<Path> createdDirectories)
+      Set<Path> createdDirectories,
+      Formatter formatter)
       throws IOException {
     for (CompilationUnit original : sliceResult.solvedSlice()) {
       if (isEmptyCompilationUnit(original)) {
@@ -399,16 +405,18 @@ public class SpeciminRunner {
         createdDirectories.add(dirContainingOutputFile);
       }
       // Write the string representation of CompilationUnit to the file
-      try {
-        PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
-        writer.print(getCompilationUnitWithCommentsTrimmed(cu));
-        writer.close();
-      } catch (IOException e) {
+      try (PrintWriter writer =
+          new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8)) {
+        writer.print(
+            formatter.formatSourceAndFixImports(
+                getCompilationUnitWithCommentsTrimmed(cu).toString()));
+      } catch (IOException | FormatterException e) {
         System.out.println("failed to write output file " + targetOutputPath);
         System.out.println("with error: " + e);
       }
     }
 
+    // Generated files do not have imports, so we don't need to call the formatter.
     for (Entry<String, String> alternate : enumeratorResult.classNamesToFileContent().entrySet()) {
       Path targetOutputPath =
           Path.of(outputDirectory, alternate.getKey().replace('.', '/') + ".java");
