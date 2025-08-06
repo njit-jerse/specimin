@@ -3,19 +3,32 @@ package org.checkerframework.specimin.unsolved;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Represents a set of fully qualified names from FullyQualifiedNameGenerator, representing a single
- * type. This record also holds type arguments.
+ * type. This record also holds type arguments and a wildcard if applicable. The parameter for
+ * wildcard should hold either "?", "? extends", or "? super".
  */
 public record FullyQualifiedNameSet(
-    Set<String> erasedFqns, List<FullyQualifiedNameSet> typeArguments) {
+    Set<String> erasedFqns, List<FullyQualifiedNameSet> typeArguments, @Nullable String wildcard) {
+
+  /**
+   * Creates a FullyQualifiedNameSet with erased FQNs, type arguments, but no wildcard.
+   *
+   * @param erasedFqns A set of erased fully qualified names.
+   * @param typeArguments A list of type arguments
+   */
+  public FullyQualifiedNameSet(Set<String> erasedFqns, List<FullyQualifiedNameSet> typeArguments) {
+    this(erasedFqns, typeArguments, null);
+  }
+
   /**
    * Creates a FullyQualifiedNameSet with erased FQNs and no type arguments.
    *
    * @param erasedFqns A set of erased fully qualified names.
    */
   public FullyQualifiedNameSet(Set<String> erasedFqns) {
-    this(erasedFqns, Collections.emptyList());
+    this(erasedFqns, Collections.emptyList(), null);
   }
 }

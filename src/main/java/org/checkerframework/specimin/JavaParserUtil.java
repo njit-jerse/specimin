@@ -28,7 +28,6 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -579,10 +578,33 @@ public class JavaParserUtil {
    * or if it's another type, so this method helps to differentiate between the two.
    *
    * @param type The type
-   * @return True if the type is probably a package, based on Java naming standards
+   * @return True if the type is probably a package, based on conventions
    */
   public static boolean isProbablyAPackage(ClassOrInterfaceType type) {
-    return !isAClassPath(type.toString()) && !isAClassName(type.toString());
+    if (type.getTypeArguments().isPresent()) {
+      return false;
+    }
+
+    return isProbablyAPackage(type.getNameAsString());
+  }
+
+  /**
+   * Returns true if the given string is probably a package name. This is a heuristic based on
+   * common Java package naming conventions; i.e., all lowercase letters, underscores, and dots.
+   *
+   * @param type The type/package name
+   * @return True if the type is probably a package
+   */
+  public static boolean isProbablyAPackage(String type) {
+    // If all characters are lowercase, a period, or an underscore, it is probably a package
+    // https://docs.oracle.com/javase/tutorial/java/package/namingpkgs.html
+    for (int i = 0; i < type.length(); i++) {
+      char c = type.charAt(i);
+      if (c != '.' && c != '_' && !Character.isLowerCase(c)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -591,7 +613,7 @@ public class JavaParserUtil {
    * differentiate between part of a package and a field name.
    *
    * @param type The type
-   * @return True if the type is probably a package, based on Java naming standards
+   * @return True if the type is probably a package, based on conventions
    */
   public static boolean isProbablyAPackage(Expression type) {
     if (!type.isFieldAccessExpr() && !type.isNameExpr()) {
@@ -858,29 +880,23 @@ public class JavaParserUtil {
 
     if (start instanceof NodeWithExtends<?> withExtends) {
       extendedOrImplemented.addAll(withExtends.getExtendedTypes());
-    } else if (start instanceof NodeWithImplements<?> withImplements) {
+    }
+    if (start instanceof NodeWithImplements<?> withImplements) {
       extendedOrImplemented.addAll(withImplements.getImplementedTypes());
     }
 
     for (ClassOrInterfaceType type : extendedOrImplemented) {
       try {
         ResolvedType resolvedType = type.resolve();
+        TypeDeclaration<?> typeDecl =
+            getTypeFromQualifiedName(resolvedType.describe(), fqnToCompilationUnits);
 
-        if (resolvedType.isReferenceType()
-            && resolvedType.asReferenceType().getTypeDeclaration().isPresent()) {
-          ResolvedReferenceTypeDeclaration resolvedDecl =
-              resolvedType.asReferenceType().getTypeDeclaration().get();
-
-          TypeDeclaration<?> typeDecl =
-              getTypeFromQualifiedName(resolvedDecl.getQualifiedName(), fqnToCompilationUnits);
-
-          if (typeDecl == null) {
-            continue;
-          }
-
-          result.add(typeDecl);
-          getAllSolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
+        if (typeDecl == null) {
+          continue;
         }
+
+        result.add(typeDecl);
+        getAllSolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
       } catch (UnsolvedSymbolException ex) {
         // continue
       }
@@ -899,7 +915,8 @@ public class JavaParserUtil {
       String fqn, Map<String, CompilationUnit> fqnToCompilationUnits) {
     CompilationUnit someCandidate = null;
 
-    String searchFQN = fqn;
+    String erased = erase(fqn);
+    String searchFQN = erased;
 
     while (searchFQN.contains(".") && someCandidate == null) {
       someCandidate = fqnToCompilationUnits.get(searchFQN);
@@ -917,7 +934,7 @@ public class JavaParserUtil {
                 TypeDeclaration.class,
                 n ->
                     n.getFullyQualifiedName().isPresent()
-                        && n.getFullyQualifiedName().get().equals(fqn))
+                        && n.getFullyQualifiedName().get().equals(erased))
             .get();
 
     return type;
@@ -962,21 +979,10 @@ public class JavaParserUtil {
     }
 
     TypeDeclaration<?> declaration = getEnclosingClassLike(detachedNode);
-    TypeDeclaration<?> next = getEnclosingClassLikeOptional(declaration);
 
     TypeDeclaration<?> attached =
         getTypeFromQualifiedName(
             declaration.getFullyQualifiedName().orElse(""), fqnToCompilationUnits);
-
-    // Keep going outward until we find a type declaration that is in the map
-    while (next != null && attached == null) {
-      declaration = next;
-
-      next = getEnclosingClassLikeOptional(declaration);
-      attached =
-          getTypeFromQualifiedName(
-              declaration.getFullyQualifiedName().orElse(""), fqnToCompilationUnits);
-    }
 
     if (attached == null) {
       return null;

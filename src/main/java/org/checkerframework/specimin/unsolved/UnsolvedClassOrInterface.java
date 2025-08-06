@@ -217,7 +217,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   public String toString(
       Collection<UnsolvedMethod> methods,
       Collection<UnsolvedField> fields,
-      Collection<UnsolvedClassOrInterface> innerClasses,
+      Collection<String> innerClassDefinitions,
       boolean isInnerClass) {
     StringBuilder sb = new StringBuilder();
     if (!isInnerClass) {
@@ -270,9 +270,9 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       }
     }
     sb.append(" {\n");
-    if (innerClasses != null) {
-      for (UnsolvedClassOrInterface innerClass : innerClasses) {
-        sb.append(innerClass.toString());
+    if (innerClassDefinitions != null) {
+      for (String innerClass : innerClassDefinitions) {
+        sb.append(innerClass);
       }
     }
     for (UnsolvedField variableDeclarations : fields) {

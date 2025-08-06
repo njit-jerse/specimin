@@ -182,7 +182,9 @@ public class Slicer {
       try {
         // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
         // if there are unresolvable argument types
-        resolved = asResolvable.resolve();
+        if (!(node instanceof FieldDeclaration)) {
+          resolved = asResolvable.resolve();
+        }
       } catch (UnsolvedSymbolException ex) {
         boolean shouldTryToResolve = true;
         if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {

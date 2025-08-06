@@ -31,9 +31,13 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclarati
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionClassDeclaration;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionInterfaceDeclaration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
@@ -95,6 +99,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     if (node instanceof NodeWithExtends<?> withExtends) {
       elements.addAll(withExtends.getExtendedTypes());
     }
+    if (node instanceof TypeDeclaration<?> typeDeclaration) {
+      elements.addAll(getAllMustImplementMethods(typeDeclaration));
+    }
 
     // If the node is a type declaration, exit now, so we don't unintentionally
     // add extra nodes to our worklist.
@@ -129,7 +136,6 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     // If the node is a member declaration, exit now, so we don't unintentionally
     // add extra nodes to our worklist.
     if (node instanceof CallableDeclaration) {
-
       return elements;
     }
 
@@ -138,6 +144,18 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     // Statements
     // ** If a statement is included in the slice, then that means it is in one
     // of the target members. Therefore, its children are always relevant.
+
+    // Never add variable declarators here: this prevents extra variables
+    // from being included when a single field declaration has multiple variable
+    // declarators.
+    if (node instanceof FieldDeclaration fieldDecl) {
+      for (Node child : fieldDecl.getChildNodes()) {
+        if (!(child instanceof VariableDeclarator)) {
+          elements.add(child);
+        }
+      }
+      return elements;
+    }
 
     if (node instanceof VariableDeclarator varDecl
         && varDecl.getInitializer().isPresent()
@@ -291,8 +309,15 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       FieldDeclaration field =
           type.findFirst(FieldDeclaration.class, n -> n.equals(unattached)).get();
 
+      VariableDeclarator variableDeclarator =
+          field.getVariables().stream()
+              .filter(var -> var.getNameAsString().equals(resolvedFieldDeclaration.getName()))
+              .findFirst()
+              .get();
+
       elements.add(type);
       elements.add(field);
+      elements.add(variableDeclarator);
     }
 
     if (resolved instanceof ResolvedEnumConstantDeclaration resolvedEnumConstantDeclaration) {
@@ -313,5 +338,150 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     return elements;
+  }
+
+  /**
+   * Given a type declaration, return all must implement methods to the result list. Must implement
+   * methods are methods that are abstract in JDK superclasses or non-default methods in JDK
+   * interfaces.
+   *
+   * @param typeDecl The type declaration to which the parents belong
+   */
+  private List<MethodDeclaration> getAllMustImplementMethods(TypeDeclaration<?> typeDecl) {
+    List<MethodDeclaration> methods = new ArrayList<>();
+    Set<MethodDeclaration> alreadyImplemented = new HashSet<>();
+
+    List<ClassOrInterfaceType> parents = new ArrayList<>();
+
+    if (typeDecl instanceof NodeWithExtends<?> withExtends) {
+      parents.addAll(withExtends.getExtendedTypes());
+    }
+    if (typeDecl instanceof NodeWithImplements<?> withImplements) {
+      parents.addAll(withImplements.getImplementedTypes());
+    }
+
+    getAllMustImplementMethodsImpl(parents, typeDecl, typeDecl, methods, alreadyImplemented);
+
+    methods.removeAll(alreadyImplemented);
+    return methods;
+  }
+
+  /**
+   * Helper method for getAllMustImplementMethods. This method recursively finds all must implement
+   * methods in the type declaration's parents and ancestors.
+   *
+   * @param parents The parents of the type declaration, i.e., the extended/implemented types
+   * @param originalTypeDecl The original type declaration
+   * @param typeDecl The current type declaration being processed
+   * @param result The result list
+   * @param alreadyImplemented A set of methods that are already implemented in a superclass or
+   *     interface
+   */
+  private void getAllMustImplementMethodsImpl(
+      List<ClassOrInterfaceType> parents,
+      TypeDeclaration<?> originalTypeDecl,
+      TypeDeclaration<?> typeDecl,
+      List<MethodDeclaration> result,
+      Set<MethodDeclaration> alreadyImplemented) {
+    for (ClassOrInterfaceType type : parents) {
+      try {
+        ResolvedType resolved = type.resolve();
+
+        if (!resolved.isReferenceType()) {
+          continue;
+        }
+
+        boolean isInterface = false;
+        ResolvedReferenceTypeDeclaration resolvedTypeDecl =
+            resolved.asReferenceType().getTypeDeclaration().orElse(null);
+
+        Set<ResolvedMethodDeclaration> methods;
+
+        if (resolvedTypeDecl instanceof ReflectionClassDeclaration reflectionClassDeclaration) {
+          methods = reflectionClassDeclaration.getDeclaredMethods();
+        } else if (resolvedTypeDecl
+            instanceof ReflectionInterfaceDeclaration reflectionInterfaceDeclaration) {
+          isInterface = true;
+          methods = reflectionInterfaceDeclaration.getDeclaredMethods();
+        } else {
+          continue;
+        }
+
+        for (ResolvedMethodDeclaration resolvedMethodDecl : methods) {
+          // Don't preserve equals(Object) and hashCode()
+          if (resolvedMethodDecl.getName().equals("equals")
+              && resolvedMethodDecl.getNumberOfParams() == 1
+              && resolvedMethodDecl.getParam(0).getType().describe().equals("java.lang.Object")) {
+            continue;
+          }
+
+          if (resolvedMethodDecl.getName().equals("hashCode")
+              && resolvedMethodDecl.getNumberOfParams() == 0) {
+            continue;
+          }
+
+          for (MethodDeclaration methodDecl : originalTypeDecl.findAll(MethodDeclaration.class)) {
+            if (areAstAndResolvedMethodLikelyEqual(resolvedMethodDecl, methodDecl)) {
+              if ((!isInterface && !resolvedMethodDecl.isAbstract())
+                  || (isInterface && resolvedMethodDecl.isDefaultMethod())) {
+                alreadyImplemented.add(methodDecl);
+                break;
+              }
+
+              result.add(methodDecl);
+              break;
+            }
+          }
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // continue
+      }
+    }
+
+    for (TypeDeclaration<?> ancestor :
+        JavaParserUtil.getAllSolvableAncestors(typeDecl, fqnToCompilationUnits)) {
+      if (ancestor instanceof NodeWithExtends<?> withExtends) {
+        getAllMustImplementMethodsImpl(
+            withExtends.getExtendedTypes(), originalTypeDecl, ancestor, result, alreadyImplemented);
+      }
+      if (ancestor instanceof NodeWithImplements<?> withImplements) {
+        getAllMustImplementMethodsImpl(
+            withImplements.getImplementedTypes(),
+            originalTypeDecl,
+            ancestor,
+            result,
+            alreadyImplemented);
+      }
+    }
+  }
+
+  /**
+   * Checks to see if a resolved method declaration and a method declaration AST node are likely to
+   * be the same method, based on their names and the simple names of their parameters.
+   *
+   * @param resolved The resolved method declaration
+   * @param ast The method declaration AST node
+   * @return true if they are likely equal, false otherwise
+   */
+  private boolean areAstAndResolvedMethodLikelyEqual(
+      ResolvedMethodDeclaration resolved, MethodDeclaration ast) {
+    if (!ast.getNameAsString().equals(resolved.getName())) {
+      return false;
+    }
+
+    if (ast.getParameters().size() != resolved.getNumberOfParams()) {
+      return false;
+    }
+
+    for (int i = 0; i < ast.getParameters().size(); i++) {
+      if (!JavaParserUtil.getSimpleNameFromQualifiedName(resolved.getParam(i).getType().describe())
+          .equals(
+              JavaParserUtil.getSimpleNameFromQualifiedName(
+                  ast.getParameter(i).getType().toString()))) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }

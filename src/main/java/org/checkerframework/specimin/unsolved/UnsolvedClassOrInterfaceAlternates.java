@@ -59,7 +59,7 @@ public class UnsolvedClassOrInterfaceAlternates
       UnsolvedClassOrInterface type = new UnsolvedClassOrInterface(className, packageName);
       alternates.add(type);
 
-      if (packageName.contains(".") && JavaParserUtil.isAClassPath(packageName)) {
+      if (packageName.contains(".") && !JavaParserUtil.isProbablyAPackage(packageName)) {
         potentialDeclaringTypes.add(
             createPotentialContainingClass(packageName, allGenerated, generatedSymbolsMap));
       }
@@ -103,7 +103,7 @@ public class UnsolvedClassOrInterfaceAlternates
       return (UnsolvedClassOrInterfaceAlternates) generatedSymbolsMap.get(qualifier);
     }
 
-    if (qualifier.contains(".") && JavaParserUtil.isAClassPath(qualifier)) {
+    if (qualifier.contains(".") && !JavaParserUtil.isProbablyAPackage(qualifier)) {
       generated =
           new UnsolvedClassOrInterfaceAlternates(
               List.of(
@@ -127,9 +127,16 @@ public class UnsolvedClassOrInterfaceAlternates
   public void updateFullyQualifiedNames(Set<String> updated) {
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
+    fullyQualifiedNames.removeIf(name -> !updated.contains(name));
     getAlternates()
         .removeIf(alternate -> !fullyQualifiedNames.contains(alternate.getFullyQualifiedName()));
-    fullyQualifiedNames.removeIf(name -> !updated.contains(name));
+
+    String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(updated.iterator().next());
+    getAlternateDeclaringTypes()
+        .removeIf(
+            alternateDeclType ->
+                alternateDeclType.getFullyQualifiedNames().stream()
+                    .anyMatch(name -> !fullyQualifiedNames.contains(name + "." + simpleName)));
   }
 
   @Override

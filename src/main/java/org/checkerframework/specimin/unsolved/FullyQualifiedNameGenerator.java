@@ -806,6 +806,24 @@ public class FullyQualifiedNameGenerator {
       return new FullyQualifiedNameSet(result, elementFQNs.typeArguments());
     }
 
+    if (type.isWildcardType()) {
+      if (type.asWildcardType().getExtendedType().isPresent()) {
+        FullyQualifiedNameSet extendedFQNs =
+            getFQNsFromType(type.asWildcardType().getExtendedType().get());
+
+        return new FullyQualifiedNameSet(
+            extendedFQNs.erasedFqns(), extendedFQNs.typeArguments(), "? extends");
+      } else if (type.asWildcardType().getSuperType().isPresent()) {
+        FullyQualifiedNameSet superFQNs =
+            getFQNsFromType(type.asWildcardType().getSuperType().get());
+
+        return new FullyQualifiedNameSet(
+            superFQNs.erasedFqns(), superFQNs.typeArguments(), "? super");
+      } else {
+        return new FullyQualifiedNameSet(Set.of(), List.of(), "?");
+      }
+    }
+
     try {
       ResolvedType resolved = type.resolve();
 
@@ -817,7 +835,8 @@ public class FullyQualifiedNameGenerator {
     if (type.isClassOrInterfaceType()) {
       return getFQNsFromClassOrInterfaceType(type.asClassOrInterfaceType());
     }
-    return new FullyQualifiedNameSet(Set.of());
+
+    throw new RuntimeException("Unexpected type: " + type.getClass() + "; type value: " + type);
   }
 
   /**
@@ -930,7 +949,7 @@ public class FullyQualifiedNameGenerator {
     // Not imported
     boolean shouldAddAfter = false;
     if (JavaParserUtil.isAClassPath(fullName)) {
-      if (JavaParserUtil.isAClassName(fullName)) {
+      if (JavaParserUtil.isAClassName(firstIdentifier)) {
         // Likely an inner class of another class, not a fully-qualified name;
         // put the package FQN first so best effort generates that instead
         shouldAddAfter = true;
@@ -960,8 +979,16 @@ public class FullyQualifiedNameGenerator {
       TypeDeclaration<?> enclosingType = JavaParserUtil.getEnclosingClassLikeOptional(node);
 
       if (enclosingType != null) {
+        // If the node is a ClassOrInterfaceType, find the outermost node, since it could be a
+        // generic, which would cause a StackOverflowError
+        Node outerNode = node;
+        while (outerNode.hasParentNode()
+            && outerNode.getParentNode().get() instanceof ClassOrInterfaceType) {
+          outerNode = outerNode.getParentNode().get();
+        }
+
         // Flatten the map: we only care about the value sets
-        for (Set<String> set : getFQNsOfAllUnresolvableParents(enclosingType, node).values()) {
+        for (Set<String> set : getFQNsOfAllUnresolvableParents(enclosingType, outerNode).values()) {
           for (String fqn : set) {
             fqns.add(fqn + "." + fullName);
           }

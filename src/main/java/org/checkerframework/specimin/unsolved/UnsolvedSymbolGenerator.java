@@ -51,6 +51,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
@@ -269,6 +270,7 @@ public class UnsolvedSymbolGenerator {
    * @param result The result of inferContext
    */
   private void handleAnnotationExpr(AnnotationExpr anno, List<UnsolvedSymbolAlternates<?>> result) {
+    // TODO: handle default values when necessary
     try {
       anno.resolve();
       return;
@@ -1645,7 +1647,16 @@ public class UnsolvedSymbolGenerator {
           generatedSymbols.remove(oldFQN);
         }
 
-        type.updateFullyQualifiedNames(potentialFQNs);
+        Set<String> typeFQNs = potentialFQNs;
+        ;
+        if (!(alreadyGenerated instanceof UnsolvedClassOrInterfaceAlternates)) {
+          typeFQNs =
+              potentialFQNs.stream()
+                  .map(fqn -> fqn.substring(0, fqn.indexOf('#')))
+                  .collect(Collectors.toSet());
+        }
+
+        type.updateFullyQualifiedNames(typeFQNs);
 
         for (String newFQN : alreadyGenerated.getFullyQualifiedNames()) {
           generatedSymbols.put(newFQN, alreadyGenerated);
@@ -1729,6 +1740,27 @@ public class UnsolvedSymbolGenerator {
    */
   private @Nullable MemberType getMemberTypeFromFQNs(
       FullyQualifiedNameSet fqns, boolean createNew) {
+    String wildcard = fqns.wildcard();
+    if (wildcard != null) {
+      if (wildcard.equals("?")) {
+        return WildcardMemberType.UNBOUNDED;
+      }
+
+      if (wildcard.equals("? extends")) {
+        return new WildcardMemberType(
+            getMemberTypeFromFQNs(
+                new FullyQualifiedNameSet(fqns.erasedFqns(), fqns.typeArguments()), createNew),
+            true);
+      } else if (wildcard.equals("? super")) {
+        return new WildcardMemberType(
+            getMemberTypeFromFQNs(
+                new FullyQualifiedNameSet(fqns.erasedFqns(), fqns.typeArguments()), createNew),
+            false);
+      }
+
+      throw new RuntimeException("Unexpected wildcard: " + wildcard);
+    }
+
     List<MemberType> typeArguments = new ArrayList<>();
 
     for (FullyQualifiedNameSet typeArg : fqns.typeArguments()) {
