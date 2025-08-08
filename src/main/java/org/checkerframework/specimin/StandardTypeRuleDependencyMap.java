@@ -49,6 +49,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
@@ -175,7 +176,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             if (!hasDefaultConstructor) {
               elements.add(constructor.getBody());
 
-              // No default constructor = first statement must be super()
+              // No default constructor = first statement must be super()/this()
               Statement firstStatement =
                   constructor.getBody().getStatements().stream()
                       .filter(s -> s.isExplicitConstructorInvocationStmt())
@@ -186,8 +187,20 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             }
           }
         } catch (UnsolvedSymbolException ex) {
-          // No preservation of super() call necessary because the synthetic type will
-          // have a default constructor.
+          // Always preserve super/this if the parent type is not resolvable, since we don't
+          // know if there is a default constructor. See UnsolvedSuperConstructor2Test for an
+          // example of why this is necessary.
+
+          Statement firstStatement =
+              constructor.getBody().getStatements().stream()
+                  .filter(s -> s.isExplicitConstructorInvocationStmt())
+                  .findFirst()
+                  .orElse(null);
+
+          if (firstStatement != null) {
+            elements.add(constructor.getBody());
+            elements.add(firstStatement);
+          }
         }
       }
     }
@@ -259,7 +272,13 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
               && annotation.toString().equals("@Override")) {
             continue;
           }
+
           elements.add(child);
+
+          // By default, variable declarator initializers are not preserved
+          if (child instanceof VariableDeclarator varDecl && varDecl.getInitializer().isPresent()) {
+            elements.add(varDecl.getInitializer().get());
+          }
         }
       }
     }
@@ -565,7 +584,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       parents.addAll(withImplements.getImplementedTypes());
     }
 
-    getAllMustImplementMethodsImpl(parents, typeDecl, typeDecl, methods, alreadyImplemented);
+    getAllMustImplementMethodsImpl(parents, typeDecl, typeDecl, methods, null, alreadyImplemented);
 
     methods.removeAll(alreadyImplemented);
     return methods;
@@ -579,6 +598,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    * @param originalTypeDecl The original type declaration
    * @param typeDecl The current type declaration being processed
    * @param result The result list
+   * @param previousTypeParametersMap A map of type parameters of the parent type, or null if this
+   *     is the first call.
    * @param alreadyImplemented A set of methods that are already implemented in a superclass or
    *     interface
    */
@@ -587,6 +608,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       TypeDeclaration<?> originalTypeDecl,
       TypeDeclaration<?> typeDecl,
       List<MethodDeclaration> result,
+      @Nullable List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>>
+          previousTypeParametersMap,
       Set<MethodDeclaration> alreadyImplemented) {
     for (ClassOrInterfaceType type : parents) {
       try {
@@ -609,7 +632,37 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           isInterface = true;
           methods = reflectionInterfaceDeclaration.getDeclaredMethods();
         } else {
-          continue;
+          methods = Set.of();
+        }
+
+        // Compose previousTypeParametersMap with the current typeParametersMap.
+        // For example, if previousTypeParametersMap is T --> String and current is E --> T,
+        // then the composed map should be E --> String.
+        List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap;
+
+        // Now, substitute previous type parameters through the current map
+        if (previousTypeParametersMap != null) {
+          typeParametersMap = new ArrayList<>();
+          for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> entry :
+              resolved.asReferenceType().getTypeParametersMap()) {
+            // In the above example, this would be T in E --> T
+            ResolvedType typeToReplace = entry.b;
+
+            if (typeToReplace.isTypeVariable()) {
+              ResolvedTypeParameterDeclaration typeVar =
+                  typeToReplace.asTypeVariable().asTypeParameter();
+              for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> pair :
+                  previousTypeParametersMap) {
+                if (pair.a.equals(typeVar)) {
+                  typeToReplace = pair.b;
+                  break;
+                }
+              }
+            }
+            typeParametersMap.add(new Pair<>(entry.a, typeToReplace));
+          }
+        } else {
+          typeParametersMap = resolved.asReferenceType().getTypeParametersMap();
         }
 
         for (ResolvedMethodDeclaration resolvedMethodDecl : methods) {
@@ -622,14 +675,11 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
               originalTypeDecl.findAll(MethodDeclaration.class)) {
             ResolvedMethodDeclaration methodInOriginalResolved = methodInOriginal.resolve();
 
-            // TODO: use a better type parameter map; this one only works for direct parents
-            // For example, if current is Foo<String> and Foo<T> extends List<T>, and List is
-            // defined as List<E> then we need to get E --> String, not E --> T.
             if (methodInOriginalResolved
                 .getSignature()
                 .equals(
                     getSignatureFromResolvedMethodWithTypeVariablesMap(
-                        resolvedMethodDecl, resolved.asReferenceType().getTypeParametersMap()))) {
+                        resolvedMethodDecl, typeParametersMap))) {
               if ((!isInterface && !resolvedMethodDecl.isAbstract())
                   || (isInterface && resolvedMethodDecl.isDefaultMethod())) {
                 alreadyImplemented.add(methodInOriginal);
@@ -641,24 +691,30 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             }
           }
         }
+
+        TypeDeclaration<?> parent =
+            JavaParserUtil.getTypeFromQualifiedName(resolved.describe(), fqnToCompilationUnits);
+
+        if (parent instanceof NodeWithExtends<?> withExtends) {
+          getAllMustImplementMethodsImpl(
+              withExtends.getExtendedTypes(),
+              originalTypeDecl,
+              parent,
+              result,
+              typeParametersMap,
+              alreadyImplemented);
+        }
+        if (parent instanceof NodeWithImplements<?> withImplements) {
+          getAllMustImplementMethodsImpl(
+              withImplements.getImplementedTypes(),
+              originalTypeDecl,
+              parent,
+              result,
+              typeParametersMap,
+              alreadyImplemented);
+        }
       } catch (UnsolvedSymbolException ex) {
         // continue
-      }
-    }
-
-    for (TypeDeclaration<?> ancestor :
-        JavaParserUtil.getAllSolvableAncestors(typeDecl, fqnToCompilationUnits)) {
-      if (ancestor instanceof NodeWithExtends<?> withExtends) {
-        getAllMustImplementMethodsImpl(
-            withExtends.getExtendedTypes(), originalTypeDecl, ancestor, result, alreadyImplemented);
-      }
-      if (ancestor instanceof NodeWithImplements<?> withImplements) {
-        getAllMustImplementMethodsImpl(
-            withImplements.getImplementedTypes(),
-            originalTypeDecl,
-            ancestor,
-            result,
-            alreadyImplemented);
       }
     }
   }

@@ -5,6 +5,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
+import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
@@ -111,7 +112,7 @@ public class FullyQualifiedNameGenerator {
             JavaParserUtil.getSimpleNameFromQualifiedName(holdingType), Set.of(holdingType));
       }
 
-      // If not static, from parent, aka the edge case that makes this method necessary
+      // If not static, from parent
       Map<String, Set<String>> result =
           getFQNsOfAllUnresolvableParents(JavaParserUtil.getEnclosingClassLike(expr), expr);
 
@@ -373,6 +374,11 @@ public class FullyQualifiedNameGenerator {
         }
       }
     } catch (UnsolvedSymbolException ex) {
+      @Nullable FullyQualifiedNameSet findableDeclarationTypeFQNs =
+          getFQNsForExpressionInAnonymousClass(expr);
+      if (findableDeclarationTypeFQNs != null) {
+        return findableDeclarationTypeFQNs;
+      }
       // Not a local variable or field
     }
 
@@ -385,8 +391,7 @@ public class FullyQualifiedNameGenerator {
     }
 
     // Handle binary expressions after surrounding context because the binary expression could be on
-    // the
-    // right-hand side where the left side type is known.
+    // the right-hand side where the left side type is known.
     if (expr.isBinaryExpr()) {
       BinaryExpr binary = expr.asBinaryExpr();
       Operator operator = binary.getOperator();
@@ -407,8 +412,8 @@ public class FullyQualifiedNameGenerator {
         FullyQualifiedNameSet rightType =
             getFQNsForExpressionTypeImpl(binary.getRight(), canRecurse);
 
-        // Remaining operators only work with primitive/String types
-        // Safe to call isJavaLangOrPrimitiveName since any non-primitive/String type would be
+        // Remaining operators only work with primitive/boxed/String types
+        // Safe to call isJavaLangOrPrimitiveName since any non-primitive/boxed/String type would be
         // a synthetic type here
         if (leftType.erasedFqns().size() == 1
             && JavaLangUtils.isJavaLangOrPrimitiveName(leftType.erasedFqns().iterator().next())) {
@@ -682,6 +687,34 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
+   * Given an expression that is in an anonymous class definition, return its FQNs. This method is
+   * necessary for fields that are defined within the anonymous class if the parent class is not
+   * solvable.
+   *
+   * @param expr The expression to analyze
+   * @return A set of FQNs, or null if unfound
+   */
+  private @Nullable FullyQualifiedNameSet getFQNsForExpressionInAnonymousClass(Expression expr) {
+    // Check if the expression is within the anonymous class. This method is necessary because
+    // if the parent class of the anonymous class is not solvable, fields/methods defined within
+    // are also unsolvable
+    BodyDeclaration<?> decl = JavaParserUtil.tryFindCorrespondingDeclarationInAnonymousClass(expr);
+
+    if (decl == null) {
+      return null;
+    }
+
+    if (decl.isFieldDeclaration()) {
+      for (VariableDeclarator var : decl.asFieldDeclaration().getVariables()) {
+        if (var.getName().equals(((NodeWithSimpleName<?>) expr).getName())) {
+          return getFQNsFromType(var.getType());
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Given an expression, try to find its type based on its surrounding context. For example, if an
    * expression is located on the right-hand side of a variable declaration, take the type on the
    * left. If an expression is passed into a known method, return the type of that parameter. This
@@ -855,8 +888,9 @@ public class FullyQualifiedNameGenerator {
    * @return A set of FQNs or primitive names.
    */
   public FullyQualifiedNameSet getFQNsFromType(Type type) {
+    // Unknown type is a lambda parameter: for example x in x -> (int)x + 1
     if (type.isUnknownType()) {
-      // Resolving an unknown type throws an error
+      // Resolving an unknown type throws an IllegalArgumentException
       // Return java.lang.Object since we don't know the type
       return new FullyQualifiedNameSet("java.lang.Object");
     }

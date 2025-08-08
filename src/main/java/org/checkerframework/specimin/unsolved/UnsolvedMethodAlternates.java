@@ -1,6 +1,5 @@
 package org.checkerframework.specimin.unsolved;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -58,6 +57,56 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    * Creates a new unsolved method declaration
    *
    * @param name The name of the method
+   * @param type The return type of the method
+   * @param alternateDeclaringTypes Potential declaring types of the method
+   * @param parameters The parameters of the method
+   * @param exceptions Thrown exceptions of this method
+   * @return The method definition
+   */
+  public static UnsolvedMethodAlternates create(
+      String name,
+      MemberType type,
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
+      List<MemberType> parameters,
+      List<MemberType> exceptions) {
+    return create(name, type, alternateDeclaringTypes, parameters, exceptions, "public");
+  }
+
+  /**
+   * Creates a new unsolved method declaration
+   *
+   * @param name The name of the method
+   * @param type The return type of the method
+   * @param alternateDeclaringTypes Potential declaring types of the method
+   * @param parameters The parameters of the method
+   * @param exceptions Thrown exceptions of this method
+   * @param accessModifier The access modifier of this method
+   * @return The method definition
+   */
+  public static UnsolvedMethodAlternates create(
+      String name,
+      MemberType type,
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
+      List<MemberType> parameters,
+      List<MemberType> exceptions,
+      String accessModifier) {
+    if (alternateDeclaringTypes.isEmpty()) {
+      throw new RuntimeException(
+          "Unsolved method must have at least one potential declaring type.");
+    }
+    UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
+
+    UnsolvedMethod method =
+        new UnsolvedMethod(name, type, parameters, exceptions, Set.of(), accessModifier);
+    result.addAlternate(method);
+
+    return result;
+  }
+
+  /**
+   * Creates a new unsolved method declaration
+   *
+   * @param name The name of the method
    * @param returnTypesToMustPreserveNodes A map of return types to must-preserve nodes. Different
    *     return types may lead to different sets of nodes that need to be conditionally preserved.
    * @param alternateDeclaringTypes Potential declaring types of the method
@@ -89,34 +138,6 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   }
 
   /**
-   * Creates a new unsolved method declaration
-   *
-   * @param name The name of the method
-   * @param type The return type of the method
-   * @param alternateDeclaringTypes Potential declaring types of the method
-   * @param parameters The parameters of the method
-   * @param exceptions Thrown exceptions of this method
-   * @return The method definition
-   */
-  public static UnsolvedMethodAlternates create(
-      String name,
-      MemberType type,
-      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
-      List<MemberType> parameters,
-      List<MemberType> exceptions) {
-    if (alternateDeclaringTypes.isEmpty()) {
-      throw new RuntimeException(
-          "Unsolved method must have at least one potential declaring type.");
-    }
-    UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
-
-    UnsolvedMethod method = new UnsolvedMethod(name, type, parameters, exceptions, Set.of());
-    result.addAlternate(method);
-
-    return result;
-  }
-
-  /**
    * Updates return types and must preserve nodes. Saves the intersection of the previous and the
    * input, since we know more information to narrow potential return types down.
    *
@@ -136,15 +157,13 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       // type
       for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
           returnsToPreserveNodes.entrySet()) {
-        Set<Node> mustPreserve = entry.getValue() == null ? Set.of() : Set.of(entry.getValue());
-
         UnsolvedMethod method =
             new UnsolvedMethod(
                 old.getName(),
                 entry.getKey(),
                 old.getParameterList(),
                 old.getThrownExceptions(),
-                mustPreserve);
+                Set.of(entry.getValue()));
         addAlternate(method);
       }
     }
@@ -252,5 +271,15 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
         alternate.setReturnType(newType);
       }
     }
+  }
+
+  @Override
+  public String getAccessModifier() {
+    return getAlternates().get(0).getAccessModifier();
+  }
+
+  @Override
+  public void setAccessModifier(String accessModifier) {
+    applyToAllAlternates(UnsolvedMethod::setAccessModifier, accessModifier);
   }
 }

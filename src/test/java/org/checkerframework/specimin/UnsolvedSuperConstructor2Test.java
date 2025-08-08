@@ -4,14 +4,14 @@ import java.io.IOException;
 import org.junit.Test;
 
 /**
- * This test checks if Specimin can handle unsolvable interfaces that happens due to the an input
- * file isolated from its codebase.
+ * This test checks that if Specimin will work if there is an unsolved super constructor in a target
+ * method and target constructor.
  */
-public class UnsolvableInterfaceTest {
+public class UnsolvedSuperConstructor2Test {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "unsolvableinterface",
+        "unsolvedsuperconstructor2",
         new String[] {"com/example/Foo.java"},
         new String[] {"com.example.Foo#bar()"});
   }

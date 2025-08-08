@@ -1,5 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
+import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
@@ -215,6 +216,8 @@ public class UnsolvedSymbolGenerator {
 
       handleConstructorCall(
           scope, JavaParserUtil.erase(constructorName), arguments, numberOfTypeParams, result);
+    } else if (node instanceof MethodDeclaration methodDecl) {
+      handleMethodDeclarationWithOverride(methodDecl, result);
     }
     // Method references
     else if (node instanceof MethodReferenceExpr methodRef) {
@@ -590,6 +593,14 @@ public class UnsolvedSymbolGenerator {
         // System, for example, would fail to resolve() but calculateResolvedType() would work.
         return;
       }
+
+      FieldDeclaration field =
+          (FieldDeclaration)
+              JavaParserUtil.tryFindCorrespondingDeclarationInAnonymousClass(nameExpr);
+      if (field != null) {
+        inferContextImpl(field.getElementType(), result);
+        return;
+      }
     }
 
     // class name
@@ -682,7 +693,7 @@ public class UnsolvedSymbolGenerator {
       }
 
       return;
-    } catch (UnsolvedSymbolException ex) {
+    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
       // continue
     }
 
@@ -986,6 +997,121 @@ public class UnsolvedSymbolGenerator {
 
       result.add(generatedMethod);
     }
+  }
+
+  /**
+   * Helper method for {@link #inferContextImpl(Node, List)}. Given an existing method declaration
+   * with {@code @Override}, generates a synthetic method with the same parameter and return types
+   * with potential declaring types in all unsolvable ancestors.
+   *
+   * @param methodDecl The method declaration to process
+   * @param result The result list to add generated symbols to
+   */
+  private void handleMethodDeclarationWithOverride(
+      MethodDeclaration methodDecl, List<UnsolvedSymbolAlternates<?>> result) {
+    Collection<Set<String>> potentialScopeFQNs;
+    if (methodDecl.getParentNode().orElse(null) instanceof ObjectCreationExpr anonClass) {
+      try {
+        ResolvedType resolvedType = anonClass.getType().resolve();
+
+        TypeDeclaration<?> parentClass =
+            JavaParserUtil.getTypeFromQualifiedName(
+                resolvedType.describe(), fqnsToCompilationUnits);
+
+        if (parentClass == null) {
+          return;
+        }
+
+        potentialScopeFQNs =
+            fullyQualifiedNameGenerator
+                .getFQNsOfAllUnresolvableParents(parentClass, methodDecl)
+                .values();
+      } catch (UnsolvedSymbolException ex) {
+        potentialScopeFQNs =
+            Set.of(fullyQualifiedNameGenerator.getFQNsFromType(anonClass.getType()).erasedFqns());
+      }
+    } else {
+      potentialScopeFQNs =
+          fullyQualifiedNameGenerator
+              .getFQNsOfAllUnresolvableParents(
+                  JavaParserUtil.getEnclosingClassLike(methodDecl), methodDecl)
+              .values();
+    }
+
+    if (potentialScopeFQNs.isEmpty()) {
+      // If there are no potential scope FQNs, then this method is likely an override of a method
+      // in an existing class or JDK interface
+      return;
+    }
+
+    String simpleSignature = methodDecl.getNameAsString() + "(";
+
+    for (Parameter param : methodDecl.getParameters()) {
+      simpleSignature +=
+          JavaParserUtil.getSimpleNameFromQualifiedName(
+              JavaParserUtil.erase(param.getTypeAsString()));
+    }
+
+    simpleSignature += ")";
+
+    Set<String> potentialMethodFQNs = new LinkedHashSet<>();
+    for (Set<String> set : potentialScopeFQNs) {
+      for (String fqn : set) {
+        potentialMethodFQNs.add(fqn + "#" + simpleSignature);
+      }
+    }
+
+    UnsolvedMethodAlternates generated =
+        (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(potentialMethodFQNs);
+
+    if (generated != null) {
+      return;
+    }
+
+    List<MemberType> parameters = new ArrayList<>();
+    for (Parameter param : methodDecl.getParameters()) {
+      MemberType paramType =
+          getOrCreateMemberTypeFromFQNs(
+              fullyQualifiedNameGenerator.getFQNsFromType(param.getType()));
+      parameters.add(paramType);
+    }
+
+    List<UnsolvedClassOrInterfaceAlternates> potentialDeclaringTypes = new ArrayList<>();
+
+    for (Set<String> fqns : potentialScopeFQNs) {
+      potentialDeclaringTypes.add(findExistingAndUpdateFQNsOrCreateNewType(fqns));
+    }
+
+    MemberType returnType =
+        getOrCreateMemberTypeFromFQNs(
+            fullyQualifiedNameGenerator.getFQNsFromType(methodDecl.getType()));
+
+    List<MemberType> exceptions = new ArrayList<>();
+    for (ReferenceType exception : methodDecl.getThrownExceptions()) {
+      MemberType exceptionType =
+          getOrCreateMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(exception));
+      exceptions.add(exceptionType);
+    }
+
+    AccessSpecifier specifier = methodDecl.getAccessSpecifier();
+    String accessModifier =
+        switch (specifier) {
+          case PUBLIC -> "public";
+          case PROTECTED -> "protected";
+          case PRIVATE -> "private";
+          case NONE -> "";
+        };
+
+    generated =
+        UnsolvedMethodAlternates.create(
+            methodDecl.getNameAsString(),
+            returnType,
+            potentialDeclaringTypes,
+            parameters,
+            exceptions,
+            accessModifier);
+
+    result.add(generated);
   }
 
   /**
@@ -2055,8 +2181,8 @@ public class UnsolvedSymbolGenerator {
       String name, List<MemberType> typeArguments) {
     if (JavaLangUtils.inJdkPackage(JavaParserUtil.removeArrayBrackets(name))
         || JavaLangUtils.isJavaLangOrPrimitiveName(
-            JavaParserUtil.getSimpleNameFromQualifiedName(
-                JavaParserUtil.removeArrayBrackets(name)))) {
+            JavaParserUtil.getSimpleNameFromQualifiedName(JavaParserUtil.removeArrayBrackets(name)))
+        || name.equals("void")) {
       return new SolvedMemberType(name, typeArguments);
     }
     return null;

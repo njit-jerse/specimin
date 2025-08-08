@@ -16,11 +16,18 @@ public interface UnsolvedMethodCommon {
   public String getName();
 
   /**
-   * Getter for the throws list. Note that the list is read-only.
+   * Getter for the throws list.
    *
    * @return the throws list
    */
   public List<MemberType> getThrownExceptions();
+
+  /**
+   * Gets the access modifier (i.e., public, private)
+   *
+   * @return the access modifier
+   */
+  public String getAccessModifier();
 
   /** Makes this method static. */
   public void setStatic();
@@ -45,4 +52,11 @@ public interface UnsolvedMethodCommon {
    * @param memberType The return type
    */
   public void setReturnType(MemberType memberType);
+
+  /**
+   * Sets the access modifier (i.e., public, private)
+   *
+   * @param accessModifier The access modifier
+   */
+  public void setAccessModifier(String accessModifier);
 }

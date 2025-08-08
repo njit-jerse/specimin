@@ -3,7 +3,9 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
+import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -24,8 +26,10 @@ import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
@@ -35,9 +39,11 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
@@ -729,7 +735,8 @@ public class JavaParserUtil {
 
   /**
    * Given a constructor call, returns all possible constructors that match the arity and known
-   * types of the arguments.
+   * types of the arguments. This returns an empty list if no matching constructors were found or if
+   * the declaring type could not be solved.
    *
    * @param constructorCall The constructor call expression
    * @return All possible constructor declarations
@@ -764,7 +771,8 @@ public class JavaParserUtil {
 
   /**
    * Given a constructor call, returns all possible constructors that match the arity and known
-   * types of the arguments.
+   * types of the arguments. This returns an empty list if no matching constructors were found or if
+   * the declaring type could not be solved.
    *
    * @param constructorCall The constructor call statement (super or this constructor call)
    * @return All possible constructor declarations
@@ -782,18 +790,18 @@ public class JavaParserUtil {
       addAllMatchingCallablesToList(
           enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
     } else {
-      TypeDeclaration<?> ancestor = null;
+      TypeDeclaration<?> parent = null;
       try {
-        ancestor =
+        parent =
             getTypeFromQualifiedName(
                 getSuperClass(constructorCall).resolve().describe(), fqnToCompilationUnits);
       } catch (UnsolvedSymbolException ex) {
         // continue
       }
 
-      if (ancestor != null) {
+      if (parent != null) {
         addAllMatchingCallablesToList(
-            ancestor, parameterTypes, candidates, null, ConstructorDeclaration.class);
+            parent, parameterTypes, candidates, null, ConstructorDeclaration.class);
       }
     }
 
@@ -802,7 +810,8 @@ public class JavaParserUtil {
 
   /**
    * Given a method call, returns all possible methods that match the arity and known types of the
-   * arguments.
+   * arguments. This returns an empty list if no matching methods were found or if the declaring
+   * type could not be solved.
    *
    * @param methodCall The method call expression
    * @return All possible method declarations
@@ -828,8 +837,20 @@ public class JavaParserUtil {
           return List.of();
         }
       } catch (UnsolvedSymbolException ex) {
-        // not relevant
-        return List.of();
+        // Maybe the scope has type arguments; try to resolve without those.
+        String scopeType =
+            getQualifiedNameOfTypeOfExpressionWithUnresolvableTypeArgs(
+                scope, fqnToCompilationUnits);
+
+        if (scopeType == null) {
+          return List.of();
+        }
+
+        enclosingClass = getTypeFromQualifiedName(scopeType, fqnToCompilationUnits);
+
+        if (enclosingClass == null) {
+          return List.of();
+        }
       }
     } else {
       enclosingClass = JavaParserUtil.getEnclosingClassLike(methodCall);
@@ -864,7 +885,8 @@ public class JavaParserUtil {
 
   /**
    * Given an enum constant declaration, returns all possible constructors that match the arity and
-   * known types of the arguments.
+   * known types of the arguments. This returns an empty list if no matching constructors were found
+   * or if the declaring type could not be solved.
    *
    * @param enumConstant The enum constant declaration
    * @return All possible constructor declarations
@@ -897,6 +919,74 @@ public class JavaParserUtil {
         enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
 
     return candidates;
+  }
+
+  /**
+   * Given an expression that has a resolvable definition, return the FQN of its resolved type if
+   * .calculateResolvedType() fails because of unresolvable type arguments. Returns the string
+   * instead of the ResolvedType to prevent unintentional use of the resulting ResolvedType, which
+   * uses a detached node.
+   *
+   * @param expr The expression whose type needs to be resolved
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @return The FQN of the resolved type if found, null otherwise
+   */
+  public static @Nullable String getQualifiedNameOfTypeOfExpressionWithUnresolvableTypeArgs(
+      Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    if (!(expr instanceof Resolvable<?> resolvable)) {
+      return null;
+    }
+    Object resolved = null;
+
+    try {
+      resolved = resolvable.resolve();
+    } catch (UnsolvedSymbolException ex) {
+      return null;
+    }
+
+    ClassOrInterfaceType classOrInterfaceType = null;
+    if (resolved instanceof ResolvedValueDeclaration resolvedValueDecl) {
+      Type type =
+          JavaParserUtil.getTypeFromResolvedValueDeclaration(
+              resolvedValueDecl, fqnToCompilationUnits);
+
+      if (type != null && type.isClassOrInterfaceType()) {
+        classOrInterfaceType = type.asClassOrInterfaceType();
+      }
+    } else if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
+      MethodDeclaration method =
+          (MethodDeclaration) tryFindAttachedNode(resolvedMethodDeclaration, fqnToCompilationUnits);
+
+      if (method != null) {
+        Type type = method.getType();
+        if (type != null && type.isClassOrInterfaceType()) {
+          classOrInterfaceType = type.asClassOrInterfaceType();
+        }
+      }
+    }
+
+    if (classOrInterfaceType == null) {
+      return null;
+    }
+
+    // I tried cloning the type and temporarily adding it to the compilation unit, but doing so
+    // prevents it from being removed, which did change the output of some test cases. We'll
+    // do this instead, but it's definitely not pretty.
+    Optional<NodeList<Type>> typeArgs = classOrInterfaceType.getTypeArguments();
+    classOrInterfaceType.removeTypeArguments();
+
+    try {
+      ResolvedType resolvedType = classOrInterfaceType.resolve();
+      if (typeArgs.isPresent()) {
+        classOrInterfaceType.setTypeArguments(typeArgs.get());
+      }
+      return resolvedType.describe();
+    } catch (UnsolvedSymbolException ex2) {
+      if (typeArgs.isPresent()) {
+        classOrInterfaceType.setTypeArguments(typeArgs.get());
+      }
+      return null;
+    }
   }
 
   /**
@@ -1050,7 +1140,7 @@ public class JavaParserUtil {
    * Gets the corresponding type declaration from a qualified type name. Use this method instead of
    * casting from toAst() to avoid resolve() errors on child nodes.
    *
-   * @param fqn The fully-qualified type name
+   * @param fqn The fully-qualified type name; no need to erase because this method does it.
    * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
    * @return The type declaration; null if not in the project.
    */
@@ -1152,5 +1242,133 @@ public class JavaParserUtil {
       case "boolean" -> "false";
       default -> "null";
     };
+  }
+
+  /**
+   * Get the enclosing anonymous class, if node is in one. If not, then this method returns null.
+   *
+   * @param node The node
+   * @return The enclosing anonymous class, or null if not found
+   */
+  public static @Nullable ObjectCreationExpr getEnclosingAnonymousClassIfExists(Node node) {
+    Node parent = node.getParentNode().orElse(null);
+    Set<Node> parents = new HashSet<>();
+
+    while (parent != null) {
+      if (parent instanceof ObjectCreationExpr objectCreationExpr) {
+        if (objectCreationExpr.getAnonymousClassBody().isEmpty()) {
+          return null;
+        }
+
+        for (BodyDeclaration<?> anonymousBodyDecl :
+            objectCreationExpr.getAnonymousClassBody().get()) {
+          if (parents.contains(anonymousBodyDecl)) {
+            return objectCreationExpr;
+          }
+        }
+
+        return null;
+      }
+      parents.add(parent);
+      parent = parent.getParentNode().orElse(null);
+    }
+
+    return null;
+  }
+
+  /**
+   * Given an expression that may be in an anonymous class, try to resolve it. If it is not in an
+   * anonymous class or cannot be resolved, return null.
+   *
+   * @param expression The expression to resolve
+   * @return The resolved value, or null if not found
+   */
+  public static @Nullable Object tryResolveExpressionIfInAnonymousClass(Expression expression) {
+    ObjectCreationExpr anonymousClassDecl = getEnclosingAnonymousClassIfExists(expression);
+
+    if (anonymousClassDecl == null) {
+      return null;
+    }
+
+    // If in a callable declaration, add a temporary statement above the current
+    Statement current = null;
+
+    Node node = anonymousClassDecl.getParentNode().orElse(null);
+    while (node != null) {
+      if (node instanceof Statement statement) {
+        current = statement;
+        break;
+      }
+      node = node.getParentNode().orElse(null);
+    }
+
+    if (current == null) {
+      return null;
+    }
+
+    // Temporarily insert a copy of the expression outside of the anonymous class and
+    // see if it is resolvable
+    Expression copy = expression.clone();
+    copy.setParentNode(current.getParentNode().get());
+
+    if (copy instanceof Resolvable<?> resolvable) {
+      try {
+        Object result = resolvable.resolve();
+        copy.remove();
+        return result;
+      } catch (UnsolvedSymbolException e) {
+        // Go below and try to see if calculateResolvedType works
+      }
+    }
+
+    try {
+      Object result = copy.calculateResolvedType();
+      copy.remove();
+      return result;
+    } catch (RuntimeException e) {
+      // A RuntimeException can also occur when we try to call calculateResolvedType.
+      // UnsolvedSymbolException is caught by RuntimeException.
+    }
+
+    copy.remove();
+    return null;
+  }
+
+  /**
+   * Tries to find the corresponding declaration in an anonymous class. For example, a NameExpr
+   * would return its FieldDeclaration. This method is necessary since resolve() fails in an
+   * anonymous class with an unsolvable parent class, even if the member is defined within the
+   * anonymous class. Returns null if not found, or if the expression is not in an anonymous class.
+   *
+   * @param expr The expression
+   * @return The corresponding declaration, or null if not found
+   */
+  public static @Nullable BodyDeclaration<?> tryFindCorrespondingDeclarationInAnonymousClass(
+      Expression expr) {
+    ObjectCreationExpr anonymousClass = getEnclosingAnonymousClassIfExists(expr);
+
+    if (anonymousClass == null) {
+      return null;
+    }
+
+    // Check if the expression is within the anonymous class. This method is necessary because
+    // if the parent class of the anonymous class is not solvable, fields/methods defined within
+    // are also unsolvable
+    if (anonymousClass.getAnonymousClassBody().isPresent()) {
+      if (expr.isNameExpr()
+          || (expr.isFieldAccessExpr() && expr.asFieldAccessExpr().getScope().isThisExpr())) {
+        // Try to find the field
+        for (BodyDeclaration<?> bodyDecl : anonymousClass.getAnonymousClassBody().get()) {
+          if (bodyDecl.isFieldDeclaration()) {
+            FieldDeclaration fieldDecl = bodyDecl.asFieldDeclaration();
+            return fieldDecl;
+          }
+        }
+      }
+      // The handling of methods in anonymous classes seems to work right now. If an issue
+      // arises in the future, add it here.
+      // TODO: add method finding based on name and parameter types
+    }
+    return null;
   }
 }

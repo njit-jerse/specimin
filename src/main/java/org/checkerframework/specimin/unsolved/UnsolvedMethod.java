@@ -35,6 +35,9 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   /** The number of type variables for this method. */
   private int numberOfTypeVariables = 0;
 
+  /** The access modifier of the method. */
+  private String accessModifier;
+
   /**
    * Create an instance of UnsolvedMethod.
    *
@@ -49,11 +52,31 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       List<MemberType> parameterList,
       List<MemberType> throwsList,
       Set<Node> mustPreserve) {
+    this(name, returnType, parameterList, throwsList, mustPreserve, "public");
+  }
+
+  /**
+   * Create an instance of UnsolvedMethod.
+   *
+   * @param name the name of the method
+   * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
+   * @param throwsList the list of exceptions thrown by this method
+   * @param accessModifier the access modifier of this method
+   */
+  public UnsolvedMethod(
+      String name,
+      MemberType returnType,
+      List<MemberType> parameterList,
+      List<MemberType> throwsList,
+      Set<Node> mustPreserve,
+      String accessModifier) {
     super(mustPreserve);
     this.name = name;
     this.returnType = returnType;
     this.parameterList = parameterList;
     this.throwsList = throwsList;
+    this.accessModifier = accessModifier;
   }
 
   /**
@@ -170,7 +193,11 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       }
     }
     StringBuilder signature = new StringBuilder();
-    signature.append("public ");
+    if (accessModifier != null || accessModifier.isEmpty()) {
+      signature.append(accessModifier);
+      signature.append(" ");
+    }
+
     if (isStatic) {
       signature.append("static ");
     }
@@ -249,5 +276,15 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       result.append(typeExpression).append(", ");
     }
     result.delete(result.length() - 2, result.length());
+  }
+
+  @Override
+  public String getAccessModifier() {
+    return accessModifier;
+  }
+
+  @Override
+  public void setAccessModifier(String accessModifier) {
+    this.accessModifier = accessModifier;
   }
 }

@@ -7,6 +7,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
@@ -203,7 +204,7 @@ public class Slicer {
           // if there are unresolvable argument types
           resolved = asResolvable.resolve();
         }
-      } catch (UnsolvedSymbolException ex) {
+      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
         boolean shouldTryToResolve = true;
         if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {
           // We may encounter this if the user includes a FQN in their input, since the type rule
@@ -214,9 +215,6 @@ public class Slicer {
 
         // Handle cases where a method/constructor call cannot be resolved because of unresolvable
         // arguments, but its definition exists
-
-        // Casts to ArrayList are necessary to allow contains(null). getArgumentTypeNames uses an
-        // ArrayList so it is safe.
         Resolvable<?> potentiallyResolvableCallable =
             node instanceof NodeWithArguments<?> withArgs
                 ? tryResolveNodeWithUnsolvableArguments(withArgs)
@@ -248,10 +246,18 @@ public class Slicer {
             generateUnsolvedSymbol = true;
           }
         }
+
+        if (generateUnsolvedSymbol && node instanceof Expression expr) {
+          Object result = JavaParserUtil.tryResolveExpressionIfInAnonymousClass(expr);
+          if (result != null) {
+            resolved = result;
+            generateUnsolvedSymbol = false;
+          }
+        }
       }
 
       if (resolved != null) {
-        handleResolvedObject(resolved);
+        generateUnsolvedSymbol = handleResolvedObject(node, resolved);
       }
 
       if (generateUnsolvedSymbol) {
@@ -361,14 +367,13 @@ public class Slicer {
           maybeBestMatch = callable;
         } else {
           // If nulls > 0 and maybeBestMatch is already existing, return null since we have
-          // ambiguities:
-          // handle in UnsolvedSymbolGenerator
+          // ambiguities: handle in UnsolvedSymbolGenerator
           return null;
         }
       }
     }
 
-    return null;
+    return (Resolvable<?>) maybeBestMatch;
   }
 
   /**
@@ -376,8 +381,10 @@ public class Slicer {
    * by {@link #handleElement(Node)}.
    *
    * @param resolved The resolved object
+   * @return true if an unsolved symbol must be generated from this node (if a method is marked with
+   *     {@code @Override} but no override is found); false otherwise
    */
-  private void handleResolvedObject(@Nullable Object resolved) {
+  private boolean handleResolvedObject(Node unresolved, @Nullable Object resolved) {
     if (resolved == null) {
       throw new RuntimeException("Unexpected null value in resolve() call");
     }
@@ -389,6 +396,16 @@ public class Slicer {
     // unit to the output
     resultCompilationUnits.addAll(
         toAddToWorklist.stream().map(n -> n.findCompilationUnit().get()).toList());
+
+    if (unresolved instanceof MethodDeclaration methodDecl
+        && (methodDecl.getAnnotationByName("Override").isPresent()
+            || (methodDecl.getParentNode().orElse(null) instanceof ObjectCreationExpr
+                && methodDecl.isPublic()))) {
+      return !toAddToWorklist.stream()
+          .anyMatch(n -> n instanceof MethodDeclaration && !n.equals(methodDecl));
+    }
+
+    return false;
   }
 
   /**

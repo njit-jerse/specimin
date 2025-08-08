@@ -1,6 +1,5 @@
 package org.checkerframework.specimin.unsolved;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -111,11 +110,13 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
       // If it's now empty and old field types was of size 1, it was probably a synthetic field
       // type
       for (Map.Entry<MemberType, CallableDeclaration<?>> entry : typesToPreserveNodes.entrySet()) {
-        Set<Node> mustPreserve = entry.getValue() == null ? Set.of() : Set.of(entry.getValue());
-
         UnsolvedField field =
             new UnsolvedField(
-                old.getName(), entry.getKey(), old.isStatic(), old.isFinal(), mustPreserve);
+                old.getName(),
+                entry.getKey(),
+                old.isStatic(),
+                old.isFinal(),
+                Set.of(entry.getValue()));
         addAlternate(field);
       }
     }
