@@ -40,6 +40,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.Slicer.SliceResult;
 import org.checkerframework.specimin.modularity.ModularityModel;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolEnumerator;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolEnumeratorResult;
@@ -292,11 +293,12 @@ public class SpeciminRunner {
 
     UnsolvedSymbolGenerator unsolvedSymbolGenerator =
         new UnsolvedSymbolGenerator(fqnToCompilationUnits);
-    Slicer.SliceResult sliceResult =
+    SliceResult sliceResult =
         Slicer.slice(
             new StandardTypeRuleDependencyMap(fqnToCompilationUnits),
             worklist,
-            unsolvedSymbolGenerator);
+            unsolvedSymbolGenerator,
+            fqnToCompilationUnits);
 
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();

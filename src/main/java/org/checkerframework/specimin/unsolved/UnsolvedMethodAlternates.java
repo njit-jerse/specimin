@@ -1,12 +1,11 @@
 package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
-import java.util.HashMap;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
 
 /**
@@ -50,6 +49,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     // TODO: enable alternate methods in case a method reference is an argument
     // For example, Foo::bar may refer to a bar(int) -> void or a bar(String) -> boolean
     // If Foo::bar were an argument, we wouldn't know which is which
+
+    // TODO: alternates for default/abstract methods in interfaces
     return create(name, type, alternateDeclaringTypes, parameters, List.of());
   }
 
@@ -66,7 +67,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    */
   public static UnsolvedMethodAlternates create(
       String name,
-      Map<MemberType, @Nullable Node> returnTypesToMustPreserveNodes,
+      Map<MemberType, CallableDeclaration<?>> returnTypesToMustPreserveNodes,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       List<MemberType> parameters,
       List<MemberType> exceptions) {
@@ -76,11 +77,11 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     }
     UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
 
-    for (Map.Entry<MemberType, @Nullable Node> entry : returnTypesToMustPreserveNodes.entrySet()) {
-      Set<Node> mustPreserve = entry.getValue() == null ? Set.of() : Set.of(entry.getValue());
-
+    for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
+        returnTypesToMustPreserveNodes.entrySet()) {
       UnsolvedMethod method =
-          new UnsolvedMethod(name, entry.getKey(), parameters, exceptions, mustPreserve);
+          new UnsolvedMethod(
+              name, entry.getKey(), parameters, exceptions, Set.of(entry.getValue()));
       result.addAlternate(method);
     }
 
@@ -103,10 +104,16 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       List<MemberType> parameters,
       List<MemberType> exceptions) {
-    // return type map cannot use Map.of() since value cannot be null
-    Map<MemberType, @Nullable Node> map = new HashMap<>();
-    map.put(type, null);
-    return create(name, map, alternateDeclaringTypes, parameters, exceptions);
+    if (alternateDeclaringTypes.isEmpty()) {
+      throw new RuntimeException(
+          "Unsolved method must have at least one potential declaring type.");
+    }
+    UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
+
+    UnsolvedMethod method = new UnsolvedMethod(name, type, parameters, exceptions, Set.of());
+    result.addAlternate(method);
+
+    return result;
   }
 
   /**
@@ -116,7 +123,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    * @param returnsToPreserveNodes A map of return types to nodes that must be preserved
    */
   public void updateReturnTypesAndMustPreserveNodes(
-      Map<MemberType, @Nullable Node> returnsToPreserveNodes) {
+      Map<MemberType, CallableDeclaration<?>> returnsToPreserveNodes) {
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
     UnsolvedMethod old = getAlternates().get(0);
@@ -127,7 +134,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     if (getAlternates().isEmpty() && oldReturnTypes.size() == 1) {
       // If it's now empty and old return types was of size 1, it was probably a synthetic return
       // type
-      for (Map.Entry<MemberType, @Nullable Node> entry : returnsToPreserveNodes.entrySet()) {
+      for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
+          returnsToPreserveNodes.entrySet()) {
         Set<Node> mustPreserve = entry.getValue() == null ? Set.of() : Set.of(entry.getValue());
 
         UnsolvedMethod method =
@@ -204,9 +212,9 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   }
 
   /**
-   * Gets the return type. Note that the return type can also be set via MemberType setter methods.
+   * Gets the return types
    *
-   * @return The return type
+   * @return The return types
    */
   public List<MemberType> getReturnTypes() {
     return getAlternates().stream().map(alternate -> alternate.getReturnType()).toList();
@@ -230,5 +238,19 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   @Override
   public void setReturnType(MemberType memberType) {
     applyToAllAlternates(UnsolvedMethod::setReturnType, memberType);
+  }
+
+  /**
+   * For all the alternates that have oldType as return type, replace it with newType.
+   *
+   * @param oldType The old return type
+   * @param newType The new return type
+   */
+  public void replaceReturnType(MemberType oldType, MemberType newType) {
+    for (UnsolvedMethod alternate : getAlternates()) {
+      if (alternate.getReturnType().equals(oldType)) {
+        alternate.setReturnType(newType);
+      }
+    }
   }
 }

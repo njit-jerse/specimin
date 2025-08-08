@@ -85,6 +85,20 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   }
 
   /**
+   * Replaces the type of a parameter in the parameter list with a new type.
+   *
+   * @param oldType The old type
+   * @param newType The new type
+   */
+  public void replaceParameterType(MemberType oldType, MemberType newType) {
+    for (int i = 0; i < parameterList.size(); i++) {
+      if (parameterList.get(i).equals(oldType)) {
+        parameterList.set(i, newType);
+      }
+    }
+  }
+
+  /**
    * Getter for the throws list. Note that the list is read-only.
    *
    * @return the throws list
@@ -129,17 +143,14 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       return false;
     }
     UnsolvedMethod other = (UnsolvedMethod) o;
-    // This set of fields is based on the JLS' overloading rules. According to the documentation of
-    // Oracle: "You cannot declare more than one method with the same name and the same number and
-    // type of arguments, because the compiler cannot tell them apart. The compiler does not
-    // consider return type when differentiating methods, so you cannot declare two methods with the
-    // same signature even if they have a different return type."
-    return other.name.equals(this.name) && other.parameterList.equals(parameterList);
+    return other.name.equals(this.name)
+        && other.parameterList.equals(parameterList)
+        && other.returnType.equals(this.returnType);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, parameterList);
+    return Objects.hash(name, parameterList, returnType);
   }
 
   /**

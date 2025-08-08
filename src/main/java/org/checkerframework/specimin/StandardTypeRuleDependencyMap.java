@@ -3,8 +3,10 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
+import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -12,6 +14,7 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
@@ -22,8 +25,11 @@ import com.github.javaparser.ast.nodeTypes.NodeWithThrownExceptions;
 import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.nodeTypes.NodeWithTypeArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithTypeParameters;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
@@ -31,8 +37,9 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclarati
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
-import com.github.javaparser.resolution.types.ResolvedTypeVariable;
+import com.github.javaparser.resolution.types.ResolvedWildcard;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionClassDeclaration;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionInterfaceDeclaration;
@@ -137,6 +144,54 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.add(typeDecl.getAnnotationByName("FunctionalInterface").get());
     }
 
+    if (node instanceof ConstructorDeclaration constructor) {
+      TypeDeclaration<?> type = JavaParserUtil.getEnclosingClassLike(node);
+
+      if (type instanceof NodeWithExtends<?> withExtends
+          && withExtends.getExtendedTypes().size() == 1) {
+        // First, check if the superclass is resolvable. If it is, then check to see if there is a
+        // default constructor. If not, then we must preserve the explicit constructor invocation
+        // statement in all constructors that are being preserved.
+
+        ClassOrInterfaceType parentType = withExtends.getExtendedTypes().get(0);
+        try {
+          ResolvedType parentResolvedType = parentType.resolve();
+
+          if (parentResolvedType.isReferenceType()
+              && parentResolvedType.asReferenceType().getTypeDeclaration().isPresent()) {
+            ResolvedReferenceTypeDeclaration parentDecl =
+                parentResolvedType.asReferenceType().getTypeDeclaration().get();
+
+            boolean hasDefaultConstructor = parentDecl.getConstructors().size() == 0;
+
+            for (ResolvedConstructorDeclaration resolvedConstructor :
+                parentDecl.getConstructors()) {
+              if (resolvedConstructor.getNumberOfParams() == 0) {
+                hasDefaultConstructor = true;
+                break;
+              }
+            }
+
+            if (!hasDefaultConstructor) {
+              elements.add(constructor.getBody());
+
+              // No default constructor = first statement must be super()
+              Statement firstStatement =
+                  constructor.getBody().getStatements().stream()
+                      .filter(s -> s.isExplicitConstructorInvocationStmt())
+                      .findFirst()
+                      .get();
+
+              elements.add(firstStatement);
+            }
+          }
+        } catch (UnsolvedSymbolException ex) {
+          // No preservation of super() call necessary because the synthetic type will
+          // have a default constructor.
+        }
+      }
+    }
+
     // If the node is a member declaration, exit now, so we don't unintentionally
     // add extra nodes to our worklist.
     if (node instanceof CallableDeclaration) {
@@ -161,6 +216,15 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       return elements;
     }
 
+    // If a constructor's block statement is included, we shouldn't add all its child statements
+    // because we only want
+    // to preserve super(). If this is the target, TargetMemberFinderVisitor will have added the
+    // statements already.
+    if (node instanceof BlockStmt
+        && node.getParentNode().orElse(null) instanceof ConstructorDeclaration) {
+      return elements;
+    }
+
     if (node instanceof VariableDeclarator varDecl
         && varDecl.getInitializer().isPresent()
         && node.getParentNode().get() instanceof FieldDeclaration) {
@@ -179,6 +243,26 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     elements.addAll(node.getChildNodes());
+
+    if (node instanceof ObjectCreationExpr objectCreationExpr
+        && objectCreationExpr.getAnonymousClassBody().isPresent()) {
+      List<BodyDeclaration<?>> anonymousClassBody =
+          objectCreationExpr.getAnonymousClassBody().get();
+      // Must preserve everything in the anonymous class body
+      for (BodyDeclaration<?> bodyDeclaration : anonymousClassBody) {
+        elements.add(bodyDeclaration);
+
+        // Need to call getChildNodes() since adding a method/field/constructor declaration
+        // will not add its content. Still, we must be careful about adding @Override.
+        for (Node child : bodyDeclaration.getChildNodes()) {
+          if (child instanceof AnnotationExpr annotation
+              && annotation.toString().equals("@Override")) {
+            continue;
+          }
+          elements.add(child);
+        }
+      }
+    }
 
     return elements;
   }
@@ -234,20 +318,53 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     if (resolved instanceof ResolvedMethodLikeDeclaration resolvedMethodLikeDeclaration) {
-      TypeDeclaration<?> type =
-          JavaParserUtil.getTypeFromQualifiedName(
-              resolvedMethodLikeDeclaration.declaringType().getQualifiedName(),
-              fqnToCompilationUnits);
+      TypeDeclaration<?> type;
+      boolean isAnonymousClass = false;
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMapForAnonClass =
+          null;
+      // Check to see if this method is in an anonymous class
+      if (resolvedMethodLikeDeclaration.toAst().isPresent()
+          && resolvedMethodLikeDeclaration.toAst().get().getParentNode().get()
+              instanceof ObjectCreationExpr objCreationExpr) {
+        try {
+          // Try to get the parent class of the anonymous class
+          ResolvedType resolvedAnonParent = objCreationExpr.getType().resolve();
+          type =
+              JavaParserUtil.getTypeFromQualifiedName(
+                  resolvedAnonParent.describe(), fqnToCompilationUnits);
+          typeParametersMapForAnonClass =
+              resolvedAnonParent.asReferenceType().getTypeParametersMap();
+          isAnonymousClass = true;
+        } catch (UnsolvedSymbolException ex) {
+          // Handle in UnsolvedSymbolGenerator
+          return elements;
+        }
+      } else {
+        type =
+            JavaParserUtil.getTypeFromQualifiedName(
+                resolvedMethodLikeDeclaration.declaringType().getQualifiedName(),
+                fqnToCompilationUnits);
+      }
+
       if (type == null) {
         return elements;
       }
 
       if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
+        if (isAnonymousClass && typeParametersMapForAnonClass != null) {
+          // The current type is already a parent class, so we need to add those too
+          List<MethodDeclaration> methods = new ArrayList<>();
+          addOverriddenMethodsToList(
+              type, resolvedMethodDeclaration, typeParametersMapForAnonClass, methods);
+          elements.addAll(methods);
+        }
+
         elements.addAll(getAllOverriddenMethods(resolvedMethodDeclaration, type));
       }
 
-      // Rare case: new Foo() but Foo does not contain a constructor
-      if (!(resolved instanceof DefaultConstructorDeclaration)) {
+      // Case: new Foo() but Foo does not contain a constructor
+      // Anonymous class methods do not need to be re-added
+      if (!(resolved instanceof DefaultConstructorDeclaration) && !isAnonymousClass) {
         Node unattached = resolvedMethodLikeDeclaration.toAst().get();
         CallableDeclaration<?> methodLike =
             type.findFirst(CallableDeclaration.class, n -> n.equals(unattached)).get();
@@ -297,6 +414,36 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
       elements.add(type);
       elements.add(enumConstant);
+
+      List<ResolvedType> argumentTypes = new ArrayList<>();
+      try {
+        for (Expression argument : enumConstant.getArguments()) {
+          argumentTypes.add(argument.calculateResolvedType());
+        }
+      } catch (UnsolvedSymbolException e) {
+        // Handled in UnsolvedSymbolGenerator
+        return elements;
+      }
+
+      for (ConstructorDeclaration constructor : type.getConstructors()) {
+        try {
+          ResolvedConstructorDeclaration resolvedConstructor = constructor.resolve();
+
+          if (resolvedConstructor.getNumberOfParams() != argumentTypes.size()) {
+            continue;
+          }
+
+          for (int i = 0; i < resolvedConstructor.getNumberOfParams(); i++) {
+            ResolvedParameterDeclaration param = resolvedConstructor.getParam(i);
+            if (param.getType().describe().equals(argumentTypes.get(i).describe())) {
+              elements.add(constructor);
+              break;
+            }
+          }
+        } catch (UnsolvedSymbolException e) {
+          // This will be handled in UnsolvedSymbolGenerator
+        }
+      }
     }
 
     return elements;
@@ -358,26 +505,43 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         continue;
       }
 
-      for (MethodDeclaration method : typeDecl.getMethods()) {
-        try {
-          if (original
-              .getSignature()
-              .equals(
-                  getSignatureFromResolvedMethodWithTypeVariablesMap(
-                      method.resolve(), parentType.asReferenceType().getTypeParametersMap()))) {
-            result.add(method);
-          }
-        } catch (UnsolvedSymbolException ex) {
-          // At least one parameter type may not be solvable. In this case, try comparing
-          // simple
-          // names.
-          if (areAstAndResolvedMethodLikelyEqual(original, method)) {
-            result.add(method);
-          }
-        }
-      }
+      addOverriddenMethodsToList(
+          typeDecl, original, parentType.asReferenceType().getTypeParametersMap(), result);
 
       getAllOverriddenMethodsImpl(original, typeDecl, result);
+    }
+  }
+
+  /**
+   * Helper method to add methods of matching signature to {@code original} from {@code typeDecl} to
+   * {@code result}.
+   *
+   * @param typeDecl The type declaration to search for overridden methods in
+   * @param original The original method declaration to find overridden methods for
+   * @param typeParametersMap The type parameters map
+   * @param result A list to collect all overridden methods found
+   */
+  private void addOverriddenMethodsToList(
+      TypeDeclaration<?> typeDecl,
+      ResolvedMethodDeclaration original,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap,
+      List<MethodDeclaration> result) {
+    for (MethodDeclaration method : typeDecl.getMethods()) {
+      try {
+        if (original
+            .getSignature()
+            .equals(
+                getSignatureFromResolvedMethodWithTypeVariablesMap(
+                    method.resolve(), typeParametersMap))) {
+          result.add(method);
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // At least one parameter type may not be solvable. In this case, try comparing
+        // simple names.
+        if (areAstAndResolvedMethodLikelyEqual(original, method)) {
+          result.add(method);
+        }
+      }
     }
   }
 
@@ -449,6 +613,11 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         }
 
         for (ResolvedMethodDeclaration resolvedMethodDecl : methods) {
+          if (JavaLangUtils.isJavaLangObjectMethod(resolvedMethodDecl.getSignature())) {
+            // Skip methods that are already defined in java.lang.Object
+            continue;
+          }
+
           for (MethodDeclaration methodInOriginal :
               originalTypeDecl.findAll(MethodDeclaration.class)) {
             ResolvedMethodDeclaration methodInOriginalResolved = methodInOriginal.resolve();
@@ -514,22 +683,66 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     for (int i = 0; i < method.getNumberOfParams(); i++) {
       ResolvedParameterDeclaration param = method.getParam(i);
 
-      if (param.getType().isTypeVariable()) {
-        ResolvedTypeVariable typeVariable = param.getType().asTypeVariable();
-        for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> pair : typeVariablesMap) {
-          if (pair.a.equals(typeVariable.asTypeParameter())) {
-            signature.append(pair.b.describe());
-            break;
-          }
-        }
-      } else {
-        signature.append(param.getType().describe());
-      }
+      signature.append(getResolvedNameWithSubstitution(param.getType(), typeVariablesMap));
     }
 
     signature.append(")");
 
     return signature.toString();
+  }
+
+  /**
+   * Gets the resolved name of a type, substituting any type variables with their resolved types
+   *
+   * @param type The type to get the name of
+   * @param typeVariablesMap The type variables map
+   * @return The resolved name of the type, with type variables substituted
+   */
+  private String getResolvedNameWithSubstitution(
+      ResolvedType type,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeVariablesMap) {
+    if (type.isTypeVariable()) {
+      for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> pair : typeVariablesMap) {
+        if (pair.a.equals(type.asTypeVariable().asTypeParameter())) {
+          return pair.b.describe();
+        }
+      }
+      return type.asTypeVariable().describe();
+    }
+
+    if (type.isWildcard()) {
+      ResolvedWildcard wildcard = type.asWildcard();
+      if (!wildcard.isBounded()) {
+        return "?";
+      }
+      String bound = getResolvedNameWithSubstitution(wildcard.getBoundedType(), typeVariablesMap);
+      return wildcard.isExtends() ? "? extends " + bound : "? super " + bound;
+    }
+
+    if (type.isReferenceType()) {
+      ResolvedReferenceType ref = type.asReferenceType();
+      StringBuilder sb = new StringBuilder(ref.getQualifiedName());
+
+      List<ResolvedType> typeArgs = ref.typeParametersValues();
+      if (!typeArgs.isEmpty()) {
+        sb.append("<");
+        for (int i = 0; i < typeArgs.size(); i++) {
+          sb.append(getResolvedNameWithSubstitution(typeArgs.get(i), typeVariablesMap));
+          if (i < typeArgs.size() - 1) sb.append(", ");
+        }
+        sb.append(">");
+      }
+
+      return sb.toString();
+    }
+
+    if (type.isArray()) {
+      return getResolvedNameWithSubstitution(
+              type.asArrayType().getComponentType(), typeVariablesMap)
+          + "[]";
+    }
+
+    return type.describe();
   }
 
   /**

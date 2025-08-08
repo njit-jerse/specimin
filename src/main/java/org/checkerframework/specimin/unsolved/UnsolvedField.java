@@ -1,5 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
+import com.github.javaparser.ast.Node;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -10,7 +11,7 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
   private final String name;
 
   /** The type of the field. */
-  private final MemberType type;
+  private MemberType type;
 
   /** This is set to true if this field is a static field */
   private boolean isStatic = false;
@@ -25,10 +26,15 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
    * @param type the type of the field
    * @param isStatic if the field is static
    * @param isFinal if the field is final
+   * @param mustPreserveNodes the nodes that must be preserved
    */
-  public UnsolvedField(String name, MemberType type, boolean isStatic, boolean isFinal) {
-    // Haven't found a case yet where nodes need to be selectively preserved for fields
-    super(Set.of());
+  public UnsolvedField(
+      String name,
+      MemberType type,
+      boolean isStatic,
+      boolean isFinal,
+      Set<Node> mustPreserveNodes) {
+    super(mustPreserveNodes);
     this.name = name;
     this.type = type;
     this.isStatic = isStatic;
@@ -40,9 +46,17 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
    *
    * @return the value of type
    */
-  @Override
   public MemberType getType() {
     return type;
+  }
+
+  /**
+   * Sets the type of this field.
+   *
+   * @param type the new type to set
+   */
+  public void setType(MemberType type) {
+    this.type = type;
   }
 
   /**
@@ -82,11 +96,24 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
     if (!(o instanceof UnsolvedField other)) {
       return false;
     }
-    return other.name.equals(this.name);
+    return other.name.equals(this.name)
+        && other.type.equals(this.type)
+        && other.isStatic == this.isStatic
+        && other.isFinal == this.isFinal;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(name);
+    return Objects.hash(name, type, isStatic, isFinal);
+  }
+
+  @Override
+  public boolean isStatic() {
+    return isStatic;
+  }
+
+  @Override
+  public boolean isFinal() {
+    return isFinal;
   }
 }

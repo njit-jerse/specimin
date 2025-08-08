@@ -6,19 +6,7 @@ public class Foo {
 
     public boolean isBaz;
 
-    public boolean isBar() {
-        throw new java.lang.Error();
-    }
-
-    public int qux() {
-        throw new java.lang.Error();
-    }
-
-    public double razz() {
-        throw new java.lang.Error();
-    }
-
-    public int getX() {
+    public java.lang.Long getBigLong() {
         throw new java.lang.Error();
     }
 
@@ -26,7 +14,19 @@ public class Foo {
         throw new java.lang.Error();
     }
 
-    public Long getBigLong() {
+    public int getX() {
+        throw new java.lang.Error();
+    }
+
+    public double razz() {
+        throw new java.lang.Error();
+    }
+
+    public int qux() {
+        throw new java.lang.Error();
+    }
+
+    public boolean isBar() {
         throw new java.lang.Error();
     }
 }

@@ -7,16 +7,23 @@ package org.checkerframework.specimin.unsolved;
  */
 public interface UnsolvedFieldCommon {
   /**
-   * Get the type of this field
-   *
-   * @return the value of type
-   */
-  public MemberType getType();
-
-  /**
    * Get the name of this field
    *
    * @return the name of this field
    */
   public String getName();
+
+  /**
+   * Check if this field is static
+   *
+   * @return true if this field is static, false otherwise
+   */
+  public boolean isStatic();
+
+  /**
+   * Check if this field is final
+   *
+   * @return true if this field is final, false otherwise
+   */
+  public boolean isFinal();
 }

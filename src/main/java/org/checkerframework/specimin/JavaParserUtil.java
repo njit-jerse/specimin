@@ -7,6 +7,7 @@ import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -27,6 +28,7 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -532,13 +534,99 @@ public class JavaParserUtil {
     Node attached = tryFindAttachedNode(resolved, fqnToCompilationUnits);
 
     if (attached instanceof VariableDeclarationExpr varDecl) {
-      return varDecl.getElementType();
+      Type type = varDecl.getElementType();
+
+      if (!type.isVarType()) {
+        return type;
+      }
+
+      // var can only have one variable
+      return tryGetTypeFromExpression(
+          varDecl.getVariables().get(0).getInitializer().get(), fqnToCompilationUnits);
     } else if (attached instanceof VariableDeclarator varDecl) {
-      return varDecl.getType();
+      Type type = varDecl.getType();
+
+      if (!type.isVarType()) {
+        return type;
+      }
+
+      // var can only have one variable
+      return tryGetTypeFromExpression(varDecl.getInitializer().get(), fqnToCompilationUnits);
     } else if (attached instanceof FieldDeclaration fieldDecl) {
       return fieldDecl.getElementType();
     } else if (attached instanceof Parameter param) {
       return param.getType();
+    }
+
+    return null;
+  }
+
+  /**
+   * Tries to get the type from an expression; useful for var types. If a type cannot be found, this
+   * method returns null.
+   *
+   * @param expression The expression to get the type from
+   * @return The type of the expression, or null if it cannot be found
+   */
+  private static @Nullable Type tryGetTypeFromExpression(
+      Expression expression, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    try {
+      if (expression.isNameExpr()) {
+        ResolvedValueDeclaration resolved = expression.asNameExpr().resolve();
+
+        return getTypeFromResolvedValueDeclaration(resolved, fqnToCompilationUnits);
+      } else if (expression.isFieldAccessExpr()) {
+        ResolvedValueDeclaration resolved = expression.asFieldAccessExpr().resolve();
+
+        return getTypeFromResolvedValueDeclaration(resolved, fqnToCompilationUnits);
+      } else if (expression.isMethodCallExpr()) {
+        ResolvedMethodDeclaration resolved = expression.asMethodCallExpr().resolve();
+
+        if (resolved.toAst().isPresent()) {
+          MethodDeclaration methodDecl = (MethodDeclaration) resolved.toAst().get();
+          return methodDecl.getType();
+        }
+      }
+    } catch (UnsolvedSymbolException ex) {
+      return null;
+    }
+
+    if (expression.isArrayCreationExpr()) {
+      return expression.asArrayCreationExpr().createdType();
+    } else if (expression.isCastExpr()) {
+      return expression.asCastExpr().getType();
+    }
+
+    return null;
+  }
+
+  /**
+   * Tries to get the type from an expression; useful for var types. If a type cannot be found, this
+   * method returns null. This method is similar to {@link #tryGetTypeFromExpression(Expression,
+   * Map)}, but this accounts for slightly more cases when a String version of the type can be
+   * returned, but a corresponding Type in the AST cannot be found.
+   *
+   * @param expression The expression to get the type from
+   * @return The type of the expression, or null if it cannot be found
+   */
+  public static @Nullable String tryGetTypeAsStringFromExpression(
+      Expression expression, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    try {
+      return expression.calculateResolvedType().describe();
+    } catch (UnsolvedSymbolException ex) {
+      // continue
+    }
+
+    Type type = tryGetTypeFromExpression(expression, fqnToCompilationUnits);
+
+    if (type != null) {
+      return type.toString();
+    }
+
+    if (expression.isClassExpr()) {
+      return "java.lang.Class<" + expression.asClassExpr().getTypeAsString() + ">";
+    } else if (expression.isInstanceOfExpr()) {
+      return "boolean";
     }
 
     return null;
@@ -694,8 +782,16 @@ public class JavaParserUtil {
       addAllMatchingCallablesToList(
           enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
     } else {
-      for (TypeDeclaration<?> ancestor :
-          getAllSolvableAncestors(enclosingClass, fqnToCompilationUnits)) {
+      TypeDeclaration<?> ancestor = null;
+      try {
+        ancestor =
+            getTypeFromQualifiedName(
+                getSuperClass(constructorCall).resolve().describe(), fqnToCompilationUnits);
+      } catch (UnsolvedSymbolException ex) {
+        // continue
+      }
+
+      if (ancestor != null) {
         addAllMatchingCallablesToList(
             ancestor, parameterTypes, candidates, null, ConstructorDeclaration.class);
       }
@@ -767,13 +863,50 @@ public class JavaParserUtil {
   }
 
   /**
+   * Given an enum constant declaration, returns all possible constructors that match the arity and
+   * known types of the arguments.
+   *
+   * @param enumConstant The enum constant declaration
+   * @return All possible constructor declarations
+   */
+  public static List<ConstructorDeclaration>
+      tryResolveEnumConstantDeclarationWithUnresolvableArguments(
+          EnumConstantDeclaration enumConstant,
+          Map<String, CompilationUnit> fqnToCompilationUnits) {
+    List<@Nullable ResolvedType> parameterTypes =
+        getArgumentTypesAsResolved(enumConstant.getArguments());
+
+    TypeDeclaration<?> enclosingClass;
+
+    try {
+      ResolvedType type = enumConstant.resolve().getType();
+
+      enclosingClass = getTypeFromQualifiedName(type.describe(), fqnToCompilationUnits);
+
+      if (enclosingClass == null) {
+        return List.of();
+      }
+    } catch (UnsolvedSymbolException ex) {
+      // not relevant
+      return List.of();
+    }
+
+    List<ConstructorDeclaration> candidates = new ArrayList<>();
+
+    addAllMatchingCallablesToList(
+        enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
+
+    return candidates;
+  }
+
+  /**
    * Helper method for {@link #tryResolveConstructorCallWithUnresolvableArguments}. Gets argument
    * types as their resolved counterparts and null if unresolvable.
    *
    * @param arguments The arguments, as a list of expressions
    * @return The list of resolved types, or null if unresolvable
    */
-  private static List<@Nullable ResolvedType> getArgumentTypesAsResolved(
+  public static List<@Nullable ResolvedType> getArgumentTypesAsResolved(
       List<Expression> arguments) {
     List<@Nullable ResolvedType> parameterTypes = new ArrayList<>();
 
@@ -794,7 +927,8 @@ public class JavaParserUtil {
    * match the given parameterTypes to the output list.
    *
    * @param typeDecl The type declaration to search through
-   * @param parameterTypes The resolved parameter types. If unresolvable, it is null.
+   * @param parameterTypes The resolved parameter types. Fully qualified names if resolvable, simple
+   *     names if not, and null if no type could be found at all.
    * @param result The list to append to
    * @param methodName The method name, if the callable is a method (it is ignored otherwise)
    * @param callableType The type of callable (i.e., ConstructorDeclaration or MethodDeclaration)
@@ -829,13 +963,22 @@ public class JavaParserUtil {
 
       for (int i = 0; i < callable.getParameters().size(); i++) {
         ResolvedType typeInCall = parameterTypes.get(i);
+
         try {
-          if (!callable.getParameter(i).resolve().getType().equals(typeInCall)) {
-            isAMatch = false;
-            break;
+          ResolvedType resolvedParameterType = callable.getParameter(i).resolve().getType();
+
+          if (typeInCall == null) {
+            continue;
+          }
+
+          if (resolvedParameterType.isReferenceType() && typeInCall.isReferenceType()) {
+            if (!resolvedParameterType.isAssignableBy(typeInCall)) {
+              isAMatch = false;
+              break;
+            }
           }
         } catch (UnsolvedSymbolException ex) {
-          if (parameterTypes.get(i) != null) {
+          if (typeInCall != null) {
             isAMatch = false;
             break;
           }
@@ -913,14 +1056,14 @@ public class JavaParserUtil {
    */
   public static @Nullable TypeDeclaration<?> getTypeFromQualifiedName(
       String fqn, Map<String, CompilationUnit> fqnToCompilationUnits) {
-    CompilationUnit someCandidate = null;
 
     String erased = erase(fqn);
     String searchFQN = erased;
 
+    CompilationUnit someCandidate = fqnToCompilationUnits.get(searchFQN);
     while (searchFQN.contains(".") && someCandidate == null) {
-      someCandidate = fqnToCompilationUnits.get(searchFQN);
       searchFQN = searchFQN.substring(0, searchFQN.lastIndexOf('.'));
+      someCandidate = fqnToCompilationUnits.get(searchFQN);
     }
 
     if (someCandidate == null) {
@@ -935,7 +1078,7 @@ public class JavaParserUtil {
                 n ->
                     n.getFullyQualifiedName().isPresent()
                         && n.getFullyQualifiedName().get().equals(erased))
-            .get();
+            .orElse(null);
 
     return type;
   }

@@ -3,6 +3,7 @@ package org.checkerframework.specimin.unsolved;
 import com.github.javaparser.ast.Node;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -43,6 +44,13 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    */
   public List<T> getAlternates() {
     return alternates;
+  }
+
+  /** Removes duplicate alternates. */
+  public void removeDuplicateAlternates() {
+    Set<T> uniqueAlternates = new LinkedHashSet<>(alternates);
+    alternates.clear();
+    alternates.addAll(uniqueAlternates);
   }
 
   /**

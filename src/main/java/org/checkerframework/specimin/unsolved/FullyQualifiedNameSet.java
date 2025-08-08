@@ -34,6 +34,7 @@ public record FullyQualifiedNameSet(
 
   /**
    * Creates a FullyQualifiedNameSet with erased FQNs and no type arguments.
+   *
    * @param erasedFqns A varargs of erased fully qualified names.
    */
   public FullyQualifiedNameSet(String... erasedFqns) {

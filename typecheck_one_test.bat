@@ -24,6 +24,7 @@ for /r %%F in (*.java) do (
   set "JAVA_FILES=!JAVA_FILES! %%F"
 )
 
+set returnval=0
 javac -classpath "../../shared/checker-qual-3.42.0.jar" !JAVA_FILES!
 if errorlevel 1 (
   echo Running javac on %testcase% resulted in one or more errors, which are printed above.
@@ -34,6 +35,6 @@ rem clean up
 for /r %%F in (*.class) do (
   del "%%F"
 )
-endlocal
 
-exit /b 0
+exit /b !returnval!
+endlocal

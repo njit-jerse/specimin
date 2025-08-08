@@ -1,11 +1,15 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
@@ -159,23 +163,52 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
     }
   }
 
+  @Override
+  public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+    return handleClassLikeDeclaration(decl, p);
+  }
+
+  @Override
+  public Visitable visit(EnumDeclaration decl, Void p) {
+    return handleClassLikeDeclaration(decl, p);
+  }
+
+  @Override
+  public Visitable visit(AnnotationDeclaration decl, Void p) {
+    return handleClassLikeDeclaration(decl, p);
+  }
+
+  @Override
+  public Visitable visit(RecordDeclaration decl, Void p) {
+    return handleClassLikeDeclaration(decl, p);
+  }
+
   /*
    * The purpose of this method is to help find the fully qualified name, not to do any modification
    * to the worklist/slice.
    */
-  @Override
-  public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
+  private Visitable handleClassLikeDeclaration(TypeDeclaration<?> decl, Void p) {
     if (decl.isNestedType()) {
       this.currentClassQualifiedName += "." + decl.getName().asString();
     } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
       // the purpose of keeping track of class name is to recognize the signatures of target
       // methods. Since we don't support methods inside local classes as target methods, we don't
-      // need
-      // to keep track of class name in this case.
+      // need to keep track of class name in this case.
       this.currentClassQualifiedName = decl.getFullyQualifiedName().orElseThrow();
     }
 
-    Visitable result = super.visit(decl, p);
+    Visitable result;
+    if (decl instanceof ClassOrInterfaceDeclaration cid) {
+      result = super.visit(cid, p);
+    } else if (decl instanceof EnumDeclaration ed) {
+      result = super.visit(ed, p);
+    } else if (decl instanceof AnnotationDeclaration ad) {
+      result = super.visit(ad, p);
+    } else if (decl instanceof RecordDeclaration rd) {
+      result = super.visit(rd, p);
+    } else {
+      throw new IllegalArgumentException("Unsupported TypeDeclaration: " + decl.getClass());
+    }
 
     if (decl.isNestedType()) {
       this.currentClassQualifiedName =
@@ -243,6 +276,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
 
     if (method instanceof ConstructorDeclaration constructor) {
       worklist.add(constructor.getBody());
+      worklist.addAll(constructor.getBody().getStatements());
     } else {
       Optional<BlockStmt> body = ((MethodDeclaration) method).getBody();
 

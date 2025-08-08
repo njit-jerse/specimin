@@ -1,7 +1,10 @@
 package org.checkerframework.specimin.unsolved;
 
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -32,6 +35,40 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
    * there could potentially be many different declaring types.
    *
    * @param name The name of the field
+   * @param typesToMustPreserveNodes A map of field types to must-preserve nodes. Different field
+   *     types may lead to different sets of nodes that need to be conditionally preserved.
+   * @param alternateDeclaringTypes Potential declaring types
+   * @param isStatic Whether the field is static or not
+   * @param isFinal Whether the field is final or not
+   * @return The generated field
+   */
+  public static UnsolvedFieldAlternates create(
+      String name,
+      Map<MemberType, CallableDeclaration<?>> typesToMustPreserveNodes,
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
+      boolean isStatic,
+      boolean isFinal) {
+    if (alternateDeclaringTypes.isEmpty()) {
+      throw new RuntimeException("Unsolved field must have at least one potential declaring type.");
+    }
+
+    UnsolvedFieldAlternates result = new UnsolvedFieldAlternates(alternateDeclaringTypes);
+
+    for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
+        typesToMustPreserveNodes.entrySet()) {
+      UnsolvedField field =
+          new UnsolvedField(name, entry.getKey(), isStatic, isFinal, Set.of(entry.getValue()));
+      result.addAlternate(field);
+    }
+
+    return result;
+  }
+
+  /**
+   * Creates a new instance of a field. Note that there is only one alternate generated here, but
+   * there could potentially be many different declaring types.
+   *
+   * @param name The name of the field
    * @param type The type of the field
    * @param alternateDeclaringTypes Potential declaring types
    * @param isStatic Whether the field is static or not
@@ -50,10 +87,38 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
 
     UnsolvedFieldAlternates result = new UnsolvedFieldAlternates(alternateDeclaringTypes);
 
-    UnsolvedField field = new UnsolvedField(name, type, isStatic, isFinal);
+    UnsolvedField field = new UnsolvedField(name, type, isStatic, isFinal, Set.of());
     result.addAlternate(field);
 
     return result;
+  }
+
+  /**
+   * Updates field types and must preserve nodes. Saves the intersection of the previous and the
+   * input, since we know more information to narrow potential field types down.
+   *
+   * @param typesToPreserveNodes A map of field types to nodes that must be preserved
+   */
+  public void updateFieldTypesAndMustPreserveNodes(
+      Map<MemberType, CallableDeclaration<?>> typesToPreserveNodes) {
+    // Update in-place; intersection = removing all elements in the original set
+    // that isn't found in the updated set
+    UnsolvedField old = getAlternates().get(0);
+    List<MemberType> oldFieldTypes = getTypes();
+    getAlternates().removeIf(alternate -> !typesToPreserveNodes.containsKey(alternate.getType()));
+
+    if (getAlternates().isEmpty() && oldFieldTypes.size() == 1) {
+      // If it's now empty and old field types was of size 1, it was probably a synthetic field
+      // type
+      for (Map.Entry<MemberType, CallableDeclaration<?>> entry : typesToPreserveNodes.entrySet()) {
+        Set<Node> mustPreserve = entry.getValue() == null ? Set.of() : Set.of(entry.getValue());
+
+        UnsolvedField field =
+            new UnsolvedField(
+                old.getName(), entry.getKey(), old.isStatic(), old.isFinal(), mustPreserve);
+        addAlternate(field);
+      }
+    }
   }
 
   @Override
@@ -69,13 +134,35 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
     return fqns;
   }
 
-  @Override
-  public MemberType getType() {
-    return getAlternates().get(0).getType();
+  /**
+   * Gets the field types.
+   *
+   * @return The field types
+   */
+  public List<MemberType> getTypes() {
+    return getAlternates().stream().map(alternate -> alternate.getType()).toList();
+  }
+
+  public void replaceFieldType(MemberType oldType, MemberType newType) {
+    for (UnsolvedField alternate : getAlternates()) {
+      if (alternate.getType().equals(oldType)) {
+        alternate.setType(newType);
+      }
+    }
   }
 
   @Override
   public String getName() {
     return getAlternates().get(0).getName();
+  }
+
+  @Override
+  public boolean isStatic() {
+    return doAllAlternatesReturnTrueFor(UnsolvedField::isStatic);
+  }
+
+  @Override
+  public boolean isFinal() {
+    return doAllAlternatesReturnTrueFor(UnsolvedField::isFinal);
   }
 }

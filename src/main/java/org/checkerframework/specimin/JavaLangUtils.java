@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -53,6 +54,22 @@ public final class JavaLangUtils {
 
   /** A map of primitive names (int, short, etc.) to their object representations */
   private static final Map<String, String> primitivesToObjects = new HashMap<>();
+
+  /**
+   * A set of methods signatures in java.lang.Object. Parameter types are fully qualified (if not
+   * primitive) and there are spaces after each comma.
+   */
+  private static Set<String> javaLangObjectMethods = new HashSet<>();
+
+  /**
+   * A map of method signatures in java.lang.Throwable to their return types. The method signatures
+   * are not fully qualified (do not contain the declaring type), but its parameter types are fully
+   * qualified and contain spaces after each comma.
+   *
+   * <p>Note that Exception and Error do not have a separate map because they do not add any
+   * additional methods beyond those in Throwable.
+   */
+  private static Map<String, String> javaLangThrowableMethods;
 
   static {
     primitives.add("int");
@@ -198,6 +215,11 @@ public final class JavaLangUtils {
     javaLangClassesAndInterfaces.add("VirtualMachineError");
     javaLangClassesAndInterfaces.add("Void");
     javaLangClassesAndInterfaces.add("WrongThreadException");
+    Set<String> withJavaLang = new HashSet<>(javaLangClassesAndInterfaces.size());
+    for (String s : javaLangClassesAndInterfaces) {
+      withJavaLang.add("java.lang." + s);
+    }
+    javaLangClassesAndInterfaces.addAll(withJavaLang);
 
     // I made this list by going through the members of
     // java.lang and checking which were final classes. We
@@ -223,11 +245,39 @@ public final class JavaLangUtils {
     knownFinalJdkTypes.add("StringBuilder");
     knownFinalJdkTypes.add("System");
     knownFinalJdkTypes.add("Void");
-    Set<String> withJavaLang = new HashSet<>(knownFinalJdkTypes.size());
+    withJavaLang = new HashSet<>(knownFinalJdkTypes.size());
     for (String s : knownFinalJdkTypes) {
       withJavaLang.add("java.lang." + s);
     }
     knownFinalJdkTypes.addAll(withJavaLang);
+
+    javaLangObjectMethods.add("getClass()");
+    javaLangObjectMethods.add("toString()");
+    javaLangObjectMethods.add("hashCode()");
+    javaLangObjectMethods.add("equals(java.lang.Object)");
+    javaLangObjectMethods.add("notifyAll()");
+    javaLangObjectMethods.add("notify()");
+    javaLangObjectMethods.add("wait()");
+    javaLangObjectMethods.add("wait(long)");
+    javaLangObjectMethods.add("wait(long, int)");
+
+    Map<String, String> javaLangThrowableMethods = new HashMap<>();
+    // https://docs.oracle.com/javase/8/docs/api/java/lang/Throwable.html
+    javaLangThrowableMethods.put("addSuppressed()", "void");
+    javaLangThrowableMethods.put("fillInStackTrace()", "java.lang.Throwable");
+    javaLangThrowableMethods.put("getCause()", "java.lang.Throwable");
+    javaLangThrowableMethods.put("getLocalizedMessage()", "java.lang.String");
+    javaLangThrowableMethods.put("getMessage()", "java.lang.String");
+    javaLangThrowableMethods.put("getStackTrace()", "java.lang.StackTraceElement[]");
+    javaLangThrowableMethods.put("getSuppressed()", "java.lang.Throwable[]");
+    javaLangThrowableMethods.put("initCause()", "java.lang.Throwable");
+    javaLangThrowableMethods.put("printStackTrace()", "void");
+    javaLangThrowableMethods.put("printStackTrace(java.io.PrintStream)", "void");
+    javaLangThrowableMethods.put("printStackTrace(java.io.PrintWriter)", "void");
+    javaLangThrowableMethods.put("setStackTrace(java.lang.StackTraceElement[])", "void");
+    javaLangThrowableMethods.put("toString()", "java.lang.String");
+
+    JavaLangUtils.javaLangThrowableMethods = Collections.unmodifiableMap(javaLangThrowableMethods);
   }
 
   /** The integral primitives. */
@@ -370,5 +420,27 @@ public final class JavaLangUtils {
    */
   public static boolean isFinalJdkClass(String name) {
     return knownFinalJdkTypes.contains(name);
+  }
+
+  /**
+   * Checks if the given method signature is a method in java.lang.Object. For example,
+   * equals(java.lang.Object).
+   *
+   * @param methodSignature A method signature, not including the declaring type
+   * @return true if the method is defined in java.lang.Object
+   */
+  public static boolean isJavaLangObjectMethod(String methodSignature) {
+    return javaLangObjectMethods.contains(methodSignature);
+  }
+
+  /**
+   * Gets the map of methods in java.lang.Throwable, where the keys are method signatures (parameter
+   * types are fully qualified, with spaces after each comma, no declaring type) and the values are
+   * the return types of each method.
+   *
+   * @return A map of method signatures to their return types
+   */
+  public static Map<String, String> getJavaLangThrowableMethods() {
+    return javaLangThrowableMethods;
   }
 }
