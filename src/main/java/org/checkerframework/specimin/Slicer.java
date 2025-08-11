@@ -204,7 +204,25 @@ public class Slicer {
           // if there are unresolvable argument types
           resolved = asResolvable.resolve();
         }
-      } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+      } catch (UnsupportedOperationException ex) {
+        // java.lang.UnsupportedOperationException: The type declaration cannot be found on
+        // constraint T
+        // Workaround for resolving methods/fields with a qualifier that is resolvable, but returns
+        // a lambda constraint type with a type parameter instead of a type
+
+        // If not this case, then throw the error.
+        if (!(node instanceof Expression)) {
+          throw ex;
+        }
+
+        resolved =
+            JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
+                (Expression) node);
+
+        if (resolved == null) {
+          throw ex;
+        }
+      } catch (UnsolvedSymbolException ex) {
         boolean shouldTryToResolve = true;
         if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {
           // We may encounter this if the user includes a FQN in their input, since the type rule
@@ -324,8 +342,7 @@ public class Slicer {
     }
 
     // If there is only one callable where the rest of the parameters match and a few others that
-    // are null,
-    // return this maybe best match
+    // are null, return this maybe best match
     CallableDeclaration<?> maybeBestMatch = null;
     // If there are multiple callables, find the best match, i.e., FQNs = FQNs and simple names =
     // simple names

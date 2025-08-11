@@ -526,6 +526,8 @@ public class SpeciminRunner {
       typeSolver.add(new JarTypeSolver(path));
     }
 
+    JavaParserUtil.setTypeSolver(typeSolver);
+
     JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
 
     ParserConfiguration config =

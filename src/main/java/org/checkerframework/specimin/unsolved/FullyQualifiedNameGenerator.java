@@ -91,8 +91,7 @@ public class FullyQualifiedNameGenerator {
    * <p>Thus, a static field b could be in any of the interfaces C, D, E, F, and we need to
    * differentiate between these interfaces.
    *
-   * <p>This method may also return an empty map if the method/field is located in a built-in Java
-   * class.
+   * <p>This method may also return an empty map if the method/field is located in a solvable type.
    *
    * @param expr The expression to do the analysis upon
    * @return A map of simple class names to a set of potential FQNs. Each Map.Entry represents a
@@ -116,7 +115,7 @@ public class FullyQualifiedNameGenerator {
       Map<String, Set<String>> result =
           getFQNsOfAllUnresolvableParents(JavaParserUtil.getEnclosingClassLike(expr), expr);
 
-      if (result.isEmpty() && expr.isNameExpr()) {
+      if (result.isEmpty() && expr.isNameExpr() && JavaParserUtil.isAClassName(expr.toString())) {
         // All parent classes/interfaces are solvable, and do not contain this field. In this case,
         // it's also likely that this could be a type
 

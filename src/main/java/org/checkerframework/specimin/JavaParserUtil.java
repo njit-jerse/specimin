@@ -17,28 +17,40 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
+import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
+import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
+import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.Resolvable;
+import com.github.javaparser.resolution.TypeSolver;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
+import com.github.javaparser.utils.Pair;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +74,35 @@ public class JavaParserUtil {
    */
   private JavaParserUtil() {
     throw new UnsupportedOperationException("This class cannot be instantiated.");
+  }
+
+  /**
+   * Set this TypeSolver instance to be used by the JavaParserFacade, so we don't have to find it
+   * through reflection in JavaParserSymbolSolver. This field is initialized once in SpeciminRunner.
+   * Note that by the time you evaluate the value of this field, it should already be non-null.
+   */
+  private static @Nullable TypeSolver typeSolver = null;
+
+  /**
+   * Set the TypeSolver instance to be used by the JavaParserFacade.
+   *
+   * @param typeSolver the TypeSolver instance to set
+   */
+  public static void setTypeSolver(TypeSolver typeSolver) {
+    JavaParserUtil.typeSolver = typeSolver;
+  }
+
+  /**
+   * Gets the type solver, and ensures it is non-null.
+   *
+   * @return The type solver
+   */
+  public static TypeSolver getTypeSolver() {
+    if (JavaParserUtil.typeSolver == null) {
+      throw new RuntimeException(
+          "TypeSolver is not set. Make sure to call setTypeSolver() in SpeciminRunner.");
+    }
+    return JavaParserUtil.typeSolver;
   }
 
   /**
@@ -1365,10 +1406,269 @@ public class JavaParserUtil {
           }
         }
       }
-      // The handling of methods in anonymous classes seems to work right now. If an issue
+      // The current handling of methods in anonymous classes seems to work for now. If an issue
       // arises in the future, add it here.
       // TODO: add method finding based on name and parameter types
     }
+    return null;
+  }
+
+  /**
+   * Returns the resolved declaration of the expression if expression.resolve() throws an
+   * UnsupportedOperationException due to its qualifying expression being a constraint type. Returns
+   * null if any solving fails.
+   *
+   * <p>An example: resolving {@code foo.method()}, where {@code foo} is of type {@code ? extends
+   * T}. Resolving the method call will fail because T is a type parameter, not a declaration. This
+   * could occur in a lambda, where foo is a lambda parameter that is of type {@code ? extends T},
+   * but this specific lambda has a type argument for T (like Foo). In this case, we'll want to find
+   * the corresponding method declaration from {@code Foo}. A similar case can be found in
+   * LambdaBodyStaticUnsolved2Test.
+   *
+   * <p>This method works under the assumption that the type argument type is solvable; if not, this
+   * will return null.
+   *
+   * @param expression The expression to find the declaration of (method, field)
+   * @return The resolved object, if it exists; null otherwise
+   */
+  public static @Nullable Object tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
+      Expression expression) {
+    if (!expression.hasScope()) {
+      return null;
+    }
+
+    Expression scope = ((NodeWithTraversableScope) expression).traverseScope().get();
+    ResolvedTypeParameterDeclaration bound;
+
+    try {
+      ResolvedType resolvedType = scope.calculateResolvedType();
+      if (resolvedType.isConstraint()) {
+        ResolvedLambdaConstraintType constraintType = resolvedType.asConstraintType();
+        ResolvedType anyBound = constraintType.getBound();
+        if (anyBound.isTypeVariable()) {
+          bound = anyBound.asTypeParameter();
+        } else {
+          return anyBound;
+        }
+      } else {
+        return null;
+      }
+    } catch (UnsolvedSymbolException ex) {
+      return null;
+    }
+
+    LambdaExpr parentLambda = null;
+    Node parent = expression.getParentNode().orElse(null);
+
+    while (parent != null && parentLambda == null) {
+      if (parent instanceof LambdaExpr) {
+        parentLambda = (LambdaExpr) parent;
+        break;
+      }
+      parent = parent.getParentNode().orElse(null);
+    }
+
+    if (parentLambda == null) {
+      return null;
+    }
+
+    Node parentOfLambda = parentLambda.getParentNode().orElse(null);
+
+    if (parentOfLambda instanceof MethodCallExpr methodCallParent) {
+      MethodUsage methodUsage;
+      ResolvedMethodDeclaration method;
+      try {
+        // Must use JavaParserFacade instead of .resolve() here, since we need to get the
+        // type parameters map: https://github.com/javaparser/javaparser/issues/2135
+        JavaParserFacade parserFacade = JavaParserFacade.get(getTypeSolver());
+        methodUsage = parserFacade.solveMethodAsUsage(methodCallParent);
+        method = methodUsage.getDeclaration();
+
+        // bound contains the type variable in the declaration of the parameter type, not the type
+        // variable in the method
+
+        for (ResolvedType paramType : methodUsage.getParamTypes()) {
+          if (!paramType.isReferenceType()) {
+            continue;
+          }
+
+          for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> typeParamMapPair :
+              paramType.asReferenceType().getTypeParametersMap()) {
+            // Can't trust bound.getQualifiedName(), because it gives the wrong qualified name
+            // if the parameter type declares a type parameter of the same name
+            if (typeParamMapPair.a.getName().equals(bound.getName())) {
+              if (typeParamMapPair.b.isTypeVariable()) {
+                // If the type variable is a type variable, we can use it directly
+                bound = typeParamMapPair.b.asTypeParameter();
+              } else if (typeParamMapPair.b.isWildcard()
+                  && typeParamMapPair.b.asWildcard().getBoundedType().isTypeVariable()) {
+                // If the type variable is a wildcard and is bounded, we can use it as well
+                bound = typeParamMapPair.b.asWildcard().getBoundedType().asTypeParameter();
+              }
+              break;
+            }
+          }
+        }
+      } catch (UnsolvedSymbolException ex) {
+        return null;
+      }
+
+      // Using what we already know, let's try to find the value of the implicit type argument
+
+      // First, try to find a Type node that corresponds with the return type of methodCallParent.
+      // This could be a variable declarator, a return type in a method declaration, or a parameter
+      // type from another declaration.
+
+      // Don't use a map here: in case a ResolvedType is the same for different parameters, we could
+      // have different pieces of information (i.e., two parameters are both resolved type T, but
+      // the args
+      // could be different in the method call)
+      List<Pair<ResolvedType, ResolvedType>> resolvedTypeToPotentialASTTypes = new ArrayList<>();
+
+      if (methodCallParent.getParentNode().orElse(null) instanceof ReturnStmt returnStmt
+          && returnStmt.getParentNode().orElse(null) instanceof BlockStmt blockStmt
+          && blockStmt.getParentNode().orElse(null) instanceof MethodDeclaration methodDecl) {
+        try {
+          ResolvedType returnTypeResolved = methodDecl.getType().resolve();
+
+          resolvedTypeToPotentialASTTypes.add(
+              new Pair<>(method.getReturnType(), returnTypeResolved));
+        } catch (UnsolvedSymbolException ex) {
+          // continue
+        }
+      } else if (methodCallParent.getParentNode().orElse(null) instanceof VariableDeclarator varDecl
+          && varDecl.getInitializer().isPresent()
+          && varDecl.getInitializer().get().equals(methodCallParent)) {
+        try {
+          ResolvedType typeResolved = varDecl.getType().resolve();
+
+          resolvedTypeToPotentialASTTypes.add(new Pair<>(method.getReturnType(), typeResolved));
+        } catch (UnsolvedSymbolException ex) {
+          // continue
+        }
+      } else if (methodCallParent.getParentNode().orElse(null) instanceof AssignExpr assignExpr
+          && assignExpr.getValue().equals(methodCallParent)) {
+        try {
+          if (assignExpr.getTarget().isNameExpr()) {
+            resolvedTypeToPotentialASTTypes.add(
+                new Pair<>(
+                    method.getReturnType(),
+                    assignExpr.getTarget().asNameExpr().resolve().getType()));
+          } else if (assignExpr.getTarget().isFieldAccessExpr()) {
+            resolvedTypeToPotentialASTTypes.add(
+                new Pair<>(
+                    method.getReturnType(),
+                    assignExpr.getTarget().asFieldAccessExpr().resolve().getType()));
+          }
+        } catch (UnsolvedSymbolException ex) {
+          // continue
+        }
+      } else if (methodCallParent.getParentNode().orElse(null) instanceof MethodCallExpr methodCall
+          && methodCall.getArguments().contains(methodCallParent)) {
+        try {
+          ResolvedMethodDeclaration methodDecl = methodCall.resolve();
+
+          int argPos = methodCall.getArgumentPosition(methodCallParent);
+
+          resolvedTypeToPotentialASTTypes.add(
+              new Pair<>(method.getReturnType(), methodDecl.getParam(argPos).getType()));
+        } catch (UnsolvedSymbolException ex) {
+          // continue
+        }
+      }
+
+      for (int i = 0; i < methodCallParent.getArguments().size(); i++) {
+        Expression argument = methodCallParent.getArguments().get(i);
+        if (isExprTypeResolvable(argument)) {
+          ResolvedType argType = argument.calculateResolvedType();
+          resolvedTypeToPotentialASTTypes.add(new Pair<>(method.getParam(i).getType(), argType));
+        }
+      }
+
+      Map<ResolvedTypeParameterDeclaration, ResolvedType> typeVariableToTypesMap = new HashMap<>();
+      for (Pair<ResolvedType, ResolvedType> pair : resolvedTypeToPotentialASTTypes) {
+        if (pair.a instanceof ResolvedTypeParameterDeclaration typeVar) {
+          typeVariableToTypesMap.put(typeVar, pair.b);
+        }
+
+        // If the parameter type is a reference type, then the argument type must also be one
+        // Importantly, the type variable names should be the same (but not the values)
+
+        // An example pair might look like this:
+        // a: ReferenceType{java.lang.Iterable,
+        // typeParametersMap=TypeParametersMap{nameToValue={java.lang.Iterable.T=TypeVariable
+        // {JPTypeParameter(T, bounds=[])}}}}
+        // b: ReferenceType{java.lang.Iterable,
+        // typeParametersMap=TypeParametersMap{nameToValue={java.lang.Iterable.T=ReferenceType{com.example.sql.SqlParserPos, typeParametersMap=TypeParametersMap{nameToValue={}}}}}}
+
+        // In this case, look at the type parameters map and see where the type variables can be
+        // mapped (i.e., JPTypeParameter(T) --> SqlParserPos)
+        if (pair.a instanceof ResolvedReferenceType refType) {
+          ResolvedReferenceType otherRefType = (ResolvedReferenceType) pair.b;
+
+          for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> typeParamMapPair :
+              refType.getTypeParametersMap()) {
+            Pair<ResolvedTypeParameterDeclaration, ResolvedType> other =
+                otherRefType.getTypeParametersMap().stream()
+                    .filter(t -> t.a.equals(typeParamMapPair.a))
+                    .findFirst()
+                    .orElse(null);
+
+            if (other == null) {
+              continue;
+            }
+
+            if (typeParamMapPair.b.isTypeVariable()) {
+              typeVariableToTypesMap.put(typeParamMapPair.b.asTypeParameter(), other.b);
+            } else if (typeParamMapPair.b.isWildcard()
+                && typeParamMapPair.b.asWildcard().getBoundedType().isTypeVariable()
+                && other.b.isWildcard()) {
+              typeVariableToTypesMap.put(
+                  typeParamMapPair.b.asWildcard().getBoundedType().asTypeParameter(),
+                  other.b.asWildcard().getBoundedType());
+            }
+          }
+        }
+      }
+
+      ResolvedType type = typeVariableToTypesMap.get(bound);
+
+      if (type instanceof ResolvedReferenceType declaringType
+          && declaringType.getTypeDeclaration().isPresent()) {
+        if (expression.isMethodCallExpr())
+          for (ResolvedMethodDeclaration potentialMethod :
+              declaringType.getTypeDeclaration().get().getDeclaredMethods()) {
+            if (!potentialMethod
+                .getName()
+                .equals(expression.asMethodCallExpr().getNameAsString())) {
+              continue;
+            }
+
+            List<@Nullable ResolvedType> argumentTypes =
+                getArgumentTypesAsResolved(expression.asMethodCallExpr().getArguments());
+
+            if (argumentTypes.size() != potentialMethod.getNumberOfParams()) {
+              continue;
+            }
+
+            boolean match = true;
+            for (int i = 0; i < argumentTypes.size(); i++) {
+              ResolvedType argType = argumentTypes.get(i);
+              ResolvedType paramType = potentialMethod.getParam(i).getType();
+
+              if (argType == null || !paramType.isAssignableBy(argType)) {
+                match = false;
+                break;
+              }
+            }
+
+            if (match) {
+              return potentialMethod;
+            }
+          }
+      }
+    }
+
     return null;
   }
 }

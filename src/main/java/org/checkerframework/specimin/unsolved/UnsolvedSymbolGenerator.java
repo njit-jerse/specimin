@@ -1582,6 +1582,12 @@ public class UnsolvedSymbolGenerator {
         return UnsolvedGenerationResult.EMPTY;
       } catch (UnsolvedSymbolException ex) {
         // continue
+      } catch (UnsupportedOperationException ex) {
+        if (JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
+                methodCall)
+            != null) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
       }
 
       Collection<Set<String>> potentialScopeFQNs = getMethodLocationFQNs(methodCall);
