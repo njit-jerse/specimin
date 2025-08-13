@@ -229,6 +229,10 @@ public class SpeciminRunner {
       root = root + "/";
     }
 
+    if (!Path.of(root).isAbsolute()) {
+      root = Paths.get(root).toAbsolutePath().normalize().toString();
+    }
+
     ParserConfiguration config = updateStaticSolver(root, jarPaths);
     decompileJarFiles(root, jarPaths, createdClass);
 

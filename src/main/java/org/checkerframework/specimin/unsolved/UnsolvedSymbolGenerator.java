@@ -582,6 +582,12 @@ public class UnsolvedSymbolGenerator {
 
       if (type != null) {
         inferContextImpl(type, result);
+
+        if (type.isUnknownType()) {
+          // If unknown type, generate a synthetic type for it
+          findExistingAndUpdateFQNsOrCreateNewType(
+              fullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr).erasedFqns());
+        }
       }
 
       return;

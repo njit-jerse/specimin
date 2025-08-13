@@ -301,7 +301,7 @@ public class FullyQualifiedNameGenerator {
    * @param canRecurse Whether or not this method can call itself
    * @return The potential FQNs of the type of the given expression.
    */
-  public FullyQualifiedNameSet getFQNsForExpressionTypeImpl(Expression expr, boolean canRecurse) {
+  private FullyQualifiedNameSet getFQNsForExpressionTypeImpl(Expression expr, boolean canRecurse) {
     // If the type of the expression can already be calculated, return it
     // Throws UnsupportedOperationException for annotation expressions
     if (!expr.isAnnotationExpr() && JavaParserUtil.isExprTypeResolvable(expr)) {
@@ -672,14 +672,18 @@ public class FullyQualifiedNameGenerator {
     if (node instanceof NodeWithVariables<?> withVariables) {
       Type type = withVariables.getElementType();
 
-      if (!type.isVarType()) {
-        // Keep going if var type
+      if (!type.isVarType() && !type.isUnknownType()) {
+        // Keep going if var/unknown type
         return getFQNsFromType(type);
       }
     }
     // methods, new ClassName()
     else if (node instanceof NodeWithType<?, ?> withType) {
-      return getFQNsFromType(withType.getType());
+      Type type = withType.getType();
+      if (!type.isUnknownType()) {
+        // Keep going if unknown type: note this is only possible with Parameter
+        return getFQNsFromType(type);
+      }
     }
 
     return null;
@@ -774,9 +778,7 @@ public class FullyQualifiedNameGenerator {
       }
     }
     // Check if it's the conditional of an if, while, do, ?:; if so, its type is boolean
-    else if (parentNode instanceof NodeWithCondition) {
-      NodeWithCondition<?> withCondition = (NodeWithCondition<?>) parentNode;
-
+    else if (parentNode instanceof NodeWithCondition<?> withCondition) {
       if (withCondition.getCondition().equals(expr)) {
         return new FullyQualifiedNameSet("boolean");
       }
@@ -809,10 +811,10 @@ public class FullyQualifiedNameGenerator {
           return otherType;
         }
 
-        if (operator != BinaryExpr.Operator.EQUALS && operator != BinaryExpr.Operator.NOT_EQUALS) {
+        if (operator == BinaryExpr.Operator.EQUALS || operator == BinaryExpr.Operator.NOT_EQUALS) {
           // ==, != work with any reference types, so we cannot know for certain the types on
-          // either side.
-          return null;
+          // either side. Return the synthetic type generated above.
+          return otherType;
         }
 
         // Try getting the type of the LHS; i.e. if looking at getA() + getB() in String x =
@@ -889,9 +891,7 @@ public class FullyQualifiedNameGenerator {
   public FullyQualifiedNameSet getFQNsFromType(Type type) {
     // Unknown type is a lambda parameter: for example x in x -> (int)x + 1
     if (type.isUnknownType()) {
-      // Resolving an unknown type throws an IllegalArgumentException
-      // Return java.lang.Object since we don't know the type
-      return new FullyQualifiedNameSet("java.lang.Object");
+      throw new RuntimeException("Do not pass in an unknown type to this method.");
     }
 
     if (type.isArrayType()) {
