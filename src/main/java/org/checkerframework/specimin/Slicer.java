@@ -10,6 +10,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -24,7 +25,10 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
@@ -69,7 +73,7 @@ public class Slicer {
    * are guaranteed to be generated. Contains only select Nodes, determined by {@link
    * UnsolvedSymbolGenerator#needToPostProcess(Node)}.
    */
-  private final Set<Node> postProcessingWorklist = new LinkedHashSet<>();
+  private final Deque<Node> postProcessingWorklist = new ArrayDeque<>();
 
   /** The result of the slice, not including generated symbols. */
   private final Set<CompilationUnit> resultCompilationUnits = new HashSet<>();
@@ -129,6 +133,8 @@ public class Slicer {
       }
     }
 
+    unsolvedSymbolGenerator.generateAllAlternatesBasedOnSuperTypeRelationships();
+
     slicer.prune();
 
     return new SliceResult(
@@ -145,6 +151,8 @@ public class Slicer {
       Node element = worklist.removeLast();
       handleElement(element);
     }
+
+    generatedSymbolSlice.addAll(unsolvedSymbolGenerator.clearMethodsWithNull());
 
     if (!generatedSymbolSlice.isEmpty()) {
       // Step 2: Add more information to generated symbols based on context
@@ -450,6 +458,66 @@ public class Slicer {
       List<Node> copy = new ArrayList<>(node.getChildNodes());
       for (Node child : copy) {
         removeNonSliceNodes(child);
+      }
+
+      // If we encounter an empty final field, try to see if we've included an assignment expression
+      // that sets it in the slice. If not, then we need to add a default initializer.
+      if (node instanceof VariableDeclarator fieldDeclarator
+          && fieldDeclarator.getInitializer().isEmpty()
+          && fieldDeclarator.getParentNode().get() instanceof FieldDeclaration fieldDecl
+          && fieldDecl.isFinal()) {
+        ResolvedFieldDeclaration resolved = (ResolvedFieldDeclaration) fieldDeclarator.resolve();
+
+        boolean isSet =
+            slice.stream()
+                .filter(n -> n instanceof AssignExpr)
+                .map(n -> (AssignExpr) n)
+                .filter(
+                    assignExpr -> {
+                      if (assignExpr.getTarget().isFieldAccessExpr()) {
+                        try {
+                          ResolvedValueDeclaration target =
+                              assignExpr.getTarget().asFieldAccessExpr().resolve();
+
+                          if (target.isField()) {
+                            return target
+                                    .asField()
+                                    .declaringType()
+                                    .getQualifiedName()
+                                    .equals(resolved.declaringType().getQualifiedName())
+                                && target.getName().equals(resolved.getName());
+                          }
+                        } catch (UnsolvedSymbolException e) {
+                          return false;
+                        }
+                      } else if (assignExpr.getTarget().isNameExpr()) {
+                        try {
+                          ResolvedValueDeclaration target =
+                              assignExpr.getTarget().asNameExpr().resolve();
+
+                          if (target.isField()) {
+                            return target
+                                    .asField()
+                                    .declaringType()
+                                    .getQualifiedName()
+                                    .equals(resolved.declaringType().getQualifiedName())
+                                && target.getName().equals(resolved.getName());
+                          }
+                          return target.equals(resolved);
+                        } catch (UnsolvedSymbolException e) {
+                          return false;
+                        }
+                      }
+
+                      return false;
+                    })
+                .findFirst()
+                .isPresent();
+
+        if (!isSet) {
+          fieldDeclarator.setInitializer(
+              JavaParserUtil.getInitializerRHS(fieldDeclarator.getType().toString()));
+        }
       }
     }
     // If a BlockStmt is being removed, it's a method/constructor to be trimmed

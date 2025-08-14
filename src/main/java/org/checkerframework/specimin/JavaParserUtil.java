@@ -50,6 +50,7 @@ import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,6 +58,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 
@@ -81,13 +84,14 @@ public class JavaParserUtil {
    * through reflection in JavaParserSymbolSolver. This field is initialized once in SpeciminRunner.
    * Note that by the time you evaluate the value of this field, it should already be non-null.
    */
-  private static @Nullable TypeSolver typeSolver = null;
+  private static @MonotonicNonNull TypeSolver typeSolver = null;
 
   /**
    * Set the TypeSolver instance to be used by the JavaParserFacade.
    *
    * @param typeSolver the TypeSolver instance to set
    */
+  @EnsuresNonNull("JavaParserUtil.typeSolver")
   public static void setTypeSolver(TypeSolver typeSolver) {
     JavaParserUtil.typeSolver = typeSolver;
   }
@@ -1521,8 +1525,7 @@ public class JavaParserUtil {
 
       // Don't use a map here: in case a ResolvedType is the same for different parameters, we could
       // have different pieces of information (i.e., two parameters are both resolved type T, but
-      // the args
-      // could be different in the method call)
+      // the args could be different in the method call)
       List<Pair<ResolvedType, ResolvedType>> resolvedTypeToPotentialASTTypes = new ArrayList<>();
 
       if (methodCallParent.getParentNode().orElse(null) instanceof ReturnStmt returnStmt
@@ -1667,6 +1670,144 @@ public class JavaParserUtil {
             }
           }
       }
+    }
+
+    return null;
+  }
+
+  /**
+   * Given a list, return all subsets.
+   *
+   * @param original The original list
+   * @return A list of all subsets
+   */
+  public static <T> List<List<T>> generateSubsets(List<T> original) {
+    List<List<T>> subsets = new ArrayList<>();
+    // There are 2^n - 1 subsets; each bit will determine if an element is included
+    int totalSubsets = 1 << original.size();
+
+    for (int i = 0; i < totalSubsets; i++) {
+      List<T> subset = new ArrayList<>();
+      for (int j = 0; j < original.size(); j++) {
+        if ((i & (1 << j)) != 0) {
+          subset.add(original.get(j));
+        }
+      }
+      subsets.add(subset);
+    }
+
+    return subsets;
+  }
+
+  /**
+   * Given a list of collections, return all combinations of elements where one element is picked
+   * from each collection. For example, if you input a list [[1, 2], [3]], then output [[1, 3], [2,
+   * 3]].
+   *
+   * @param collections The list of collections to combine
+   * @return A list of all combinations of elements
+   */
+  public static <T> List<List<T>> generateAllCombinations(
+      List<? extends Collection<T>> collections) {
+    List<List<T>> combos = new ArrayList<>();
+    combos.add(new ArrayList<>());
+
+    for (Collection<T> set : collections) {
+      int stop = combos.size();
+      for (int i = 0; i < stop; i++) {
+        List<T> combination = combos.get(i);
+        for (T element : set) {
+          List<T> newCombination = new ArrayList<>(combination);
+          newCombination.add(element);
+          combos.add(newCombination);
+        }
+      }
+    }
+
+    // The first element will always be an empty list, so we'll remove it
+    combos.remove(0);
+
+    return combos;
+  }
+
+  /**
+   * Finds the closest method or lambda ancestor of a return statement. Will throw if neither is
+   * found, since a return statement is always located in one of these contexts.
+   *
+   * @param returnStmt The return statement
+   * @return The closest method or lambda ancestor (either of type MethodDeclaration or LambdaExpr)
+   */
+  public static Node findClosestMethodOrLambdaAncestor(ReturnStmt returnStmt) {
+    @SuppressWarnings("unchecked")
+    Node ancestor =
+        returnStmt
+            .<Node>findAncestor(
+                n -> {
+                  return n instanceof MethodDeclaration || n instanceof LambdaExpr;
+                },
+                Node.class)
+            .get();
+    return ancestor;
+  }
+
+  /**
+   * This method handles a very specific case: if an unsolved method call has a scope whose type is
+   * a supertype of the type this method is being called in, then it will try to find a method with
+   * the same signature in the current type or a solvable supertype.
+   *
+   * @param methodCall The method call, unsolved
+   * @param fqnToCompilationUnit The map of FQNs to compilation units
+   * @return A method declaration if found, or null if not
+   */
+  public static @Nullable MethodDeclaration tryFindMethodDeclarationWithSameSignatureFromThisType(
+      MethodCallExpr methodCall, Map<String, CompilationUnit> fqnToCompilationUnit) {
+    if (!methodCall.hasScope()) {
+      return null;
+    }
+
+    Expression scope = methodCall.getScope().get();
+
+    Type scopeType = tryGetTypeFromExpression(scope, fqnToCompilationUnit);
+
+    if (scopeType == null) {
+      return null;
+    }
+
+    TypeDeclaration<?> enclosingClass = getEnclosingClassLike(methodCall);
+
+    List<TypeDeclaration<?>> solvableAncestors =
+        getAllSolvableAncestors(enclosingClass, fqnToCompilationUnit);
+
+    solvableAncestors.add(enclosingClass);
+
+    boolean isScopeTypeAnAncestor = false;
+    for (TypeDeclaration<?> thisOrAncestor : solvableAncestors) {
+      if (thisOrAncestor instanceof NodeWithExtends<?> withExtends
+          && withExtends.getExtendedTypes().contains(scopeType)) {
+        isScopeTypeAnAncestor = true;
+        break;
+      } else if (thisOrAncestor instanceof NodeWithImplements<?> withImplements
+          && withImplements.getImplementedTypes().contains(scopeType)) {
+        isScopeTypeAnAncestor = true;
+        break;
+      }
+    }
+
+    if (!isScopeTypeAnAncestor) {
+      return null;
+    }
+
+    MethodCallExpr clone = methodCall.clone();
+    clone.removeScope();
+    clone.setParentNode(methodCall.getParentNode().get());
+
+    List<MethodDeclaration> methods =
+        tryResolveMethodCallWithUnresolvableArguments(clone, fqnToCompilationUnit);
+
+    clone.remove();
+
+    if (methods.size() == 1) {
+      return methods.get(0);
     }
 
     return null;

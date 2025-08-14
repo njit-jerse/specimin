@@ -1,3 +1,3 @@
 package com.example;
-public interface SortedSet<T> extends com.example.Set<T> {
+public interface SortedSet<E> extends com.example.Set<E> {
 }

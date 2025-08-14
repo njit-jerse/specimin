@@ -1,5 +1,5 @@
 package com.example;
-public class TreeSet<T> implements com.example.NavigableSet<T> {
+public class TreeSet<E> implements com.example.NavigableSet<E> {
 
     public TreeSet() {
         throw new java.lang.Error();

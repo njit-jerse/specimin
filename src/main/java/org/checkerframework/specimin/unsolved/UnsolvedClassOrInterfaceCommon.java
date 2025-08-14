@@ -1,5 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
+import java.util.List;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
@@ -24,13 +26,6 @@ public interface UnsolvedClassOrInterfaceCommon {
   public void setType(UnsolvedClassOrInterfaceType type);
 
   /**
-   * Extends this class based on a MemberType.
-   *
-   * @param extendsType The type to extend
-   */
-  public void extend(MemberType extendsType);
-
-  /**
    * Returns true if this class has an extends clause.
    *
    * @return True if this class has an extends clause.
@@ -38,10 +33,10 @@ public interface UnsolvedClassOrInterfaceCommon {
   public boolean hasExtends();
 
   /**
-   * Returns true if this class extends the given extendsType.
+   * Returns true if any alternate extends the given extendsType.
    *
-   * @param extendsType The type to extend
-   * @return True if this type extends the given extendsType.
+   * @param extendsType The superclass
+   * @return True if any alternate extends the given extendsType.
    */
   public boolean doesExtend(MemberType extendsType);
 
@@ -53,19 +48,12 @@ public interface UnsolvedClassOrInterfaceCommon {
   public void addAnnotation(String annotation);
 
   /**
-   * Implements this class based on a MemberType.
+   * Returns true if any alternate implements the given interface.
    *
-   * @param interfaceName The type to implement
-   */
-  public void implement(String interfaceName);
-
-  /**
-   * Returns true if this class implements the given interface.
-   *
-   * @param interfaceName The type to implement
+   * @param interfaceType The type of the interface
    * @return True if this type implements the given interface.
    */
-  public boolean doesImplement(String interfaceName);
+  public boolean doesImplement(MemberType interfaceType);
 
   /**
    * Sets the number of type variables.
@@ -73,6 +61,20 @@ public interface UnsolvedClassOrInterfaceCommon {
    * @param number The number of type variables.
    */
   public void setNumberOfTypeVariables(int number);
+
+  /**
+   * Sets the preferred type variables.
+   *
+   * @param preferredTypeVariables The preferred type variables.
+   */
+  public void setPreferredTypeVariables(@Nullable List<String> preferredTypeVariables);
+
+  /**
+   * Gets the preferred type variables.
+   *
+   * @return The preferred type variables.
+   */
+  public @Nullable List<String> getPreferredTypeVariables();
 
   /**
    * Gets the type variables as a String without brackets (i.e., <T1, T2> --> T1, T2)

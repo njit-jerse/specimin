@@ -12,6 +12,10 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * <p>See {@link MemberType} for more details.
  */
 public class SolvedMemberType extends MemberType {
+  public static final SolvedMemberType JAVA_LANG_EXCEPTION =
+      new SolvedMemberType("java.lang.Exception");
+  public static final SolvedMemberType JAVA_LANG_ERROR = new SolvedMemberType("java.lang.Error");
+
   private String fqn;
 
   /**

@@ -1,10 +1,14 @@
 package org.checkerframework.specimin.unsolved;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
 
@@ -22,8 +26,23 @@ import org.checkerframework.specimin.JavaParserUtil;
 public class UnsolvedClassOrInterfaceAlternates
     extends UnsolvedSymbolAlternates<UnsolvedClassOrInterface>
     implements UnsolvedClassOrInterfaceCommon {
+  /**
+   * Represents a relationship between this type to a super type. If we find eventually that this
+   * UnsolvedClassOrInterfaceAlternates is an interface, all these relationships do not matter since
+   * all interfaces can only extend other interfaces. This enum is primarily used for
+   * SolvedMemberType since we don't know if the solved type is an interface or not.
+   */
+  private enum SuperTypeRelationship {
+    UNKNOWN,
+    EXTENDS,
+    IMPLEMENTS
+  }
 
   private Set<String> fullyQualifiedNames = new LinkedHashSet<>();
+
+  /** A map of super types to their relationships to the type represented by this object. */
+  private Map<Set<MemberType>, SuperTypeRelationship> superTypeRelationships =
+      new LinkedHashMap<>();
 
   private UnsolvedClassOrInterfaceAlternates(
       List<UnsolvedClassOrInterfaceAlternates> potentialDeclaringTypes) {
@@ -151,13 +170,345 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
-   * Extends this class based on a MemberType.
+   * Adds a set of mutually exclusive super type to this class, with an unknown relationship
+   * (superclass/superinterface).
    *
-   * @param extendsType The type to extend
+   * @param superTypes The mutually exclusive super types
    */
-  @Override
-  public void extend(MemberType extendsType) {
-    applyToAllAlternates(UnsolvedClassOrInterface::extend, extendsType);
+  public void addSuperType(Set<MemberType> superTypes) {
+    // If superTypes contains this instance, remove it
+    // Also, never extend java.lang.Object
+    if (superTypes.contains(new UnsolvedMemberType(this))
+        || superTypes.contains(new SolvedMemberType("java.lang.Object"))) {
+      superTypes = new HashSet<>(superTypes);
+      superTypes.remove(new UnsolvedMemberType(this));
+      superTypes.remove(new SolvedMemberType("java.lang.Object"));
+    }
+
+    if (superTypes.isEmpty()) {
+      return;
+    }
+
+    if (getType() == UnsolvedClassOrInterfaceType.INTERFACE) {
+      // If we encounter a super type but we're an interface, make it an interface as well
+      for (MemberType superType : superTypes) {
+        if (superType instanceof UnsolvedMemberType unsolvedMemberType) {
+          unsolvedMemberType.getUnsolvedType().setType(UnsolvedClassOrInterfaceType.INTERFACE);
+        }
+      }
+    }
+
+    UnsolvedClassOrInterfaceType commonType = null;
+    for (MemberType superType : superTypes) {
+      if (superType instanceof UnsolvedMemberType unsolvedMemberType) {
+        UnsolvedClassOrInterfaceType type = unsolvedMemberType.getUnsolvedType().getType();
+        if (commonType == null) {
+          commonType = type;
+        }
+
+        if (commonType != type) {
+          commonType = null;
+          break;
+        }
+      }
+    }
+
+    if (commonType == UnsolvedClassOrInterfaceType.CLASS) {
+      superTypeRelationships.put(superTypes, SuperTypeRelationship.EXTENDS);
+    } else if (commonType == UnsolvedClassOrInterfaceType.INTERFACE) {
+      superTypeRelationships.put(superTypes, SuperTypeRelationship.IMPLEMENTS);
+    } else if (superTypeRelationships.get(superTypes) == null) {
+      superTypeRelationships.put(superTypes, SuperTypeRelationship.UNKNOWN);
+    }
+  }
+
+  /**
+   * Forces a super class relationship for this type.
+   *
+   * @param superClass The super class to force
+   */
+  public void forceSuperClass(MemberType superClass) {
+    if ((superClass instanceof UnsolvedMemberType unsolved
+            && unsolved.getUnsolvedType().equals(this))
+        || superClass.equals(new SolvedMemberType("java.lang.Object"))) {
+      return;
+    }
+
+    if (getType() == UnsolvedClassOrInterfaceType.INTERFACE) {
+      throw new RuntimeException("Cannot force a super class relationship on an interface.");
+    }
+
+    if (getType() == UnsolvedClassOrInterfaceType.UNKNOWN) {
+      setType(UnsolvedClassOrInterfaceType.CLASS);
+    }
+
+    superTypeRelationships.put(Set.of(superClass), SuperTypeRelationship.EXTENDS);
+  }
+
+  /**
+   * Removes a the set containing only superClass from superTypeRelationships. Right now, this
+   * method serves no purpose other than placing Exception before Error to generate a checked
+   * exception as a best-effort result.
+   *
+   * @param superClass The super class to remove
+   */
+  public void removeSuperClass(MemberType superClass) {
+    superTypeRelationships.remove(Set.of(superClass));
+  }
+
+  /**
+   * Forces a super interface relationship for this type.
+   *
+   * @param superInterface The super interface to force
+   */
+  public void forceSuperInterface(MemberType superInterface) {
+    if (superInterface instanceof UnsolvedMemberType unsolved
+        && unsolved.getUnsolvedType().equals(this)) {
+      return;
+    }
+
+    superTypeRelationships.put(Set.of(superInterface), SuperTypeRelationship.IMPLEMENTS);
+  }
+
+  /**
+   * This method creates alternate types based on super type relationships collected during unsolved
+   * symbol generation. This should be the very last step in the process, and should only be called
+   * once on each UnsolvedClassOrInterfaceAlternates.
+   */
+  public void createAlternatesBasedOnSuperTypeRelationships() {
+    if (superTypeRelationships.isEmpty()) {
+      // No super types; nothing to do
+      return;
+    }
+    UnsolvedClassOrInterfaceType type = getType();
+
+    // If the type is unknown, but any super type is a class, then this must also be a class as
+    // well.
+    if (type == UnsolvedClassOrInterfaceType.UNKNOWN && isAnySuperTypeAClass(this)) {
+      type = UnsolvedClassOrInterfaceType.CLASS;
+      setType(type);
+    }
+
+    switch (type) {
+      case INTERFACE -> createAlternatesBasedOnSuperTypeRelationshipsForInterface(getAlternates());
+      case CLASS, ENUM -> createAlternatesBasedOnSuperTypeRelationshipsForClass(getAlternates());
+      case ANNOTATION -> {
+        // An annotation cannot extend or implement other types
+      }
+      case UNKNOWN -> {
+        // If the type is unknown, create alternates for both classes and interfaces, and pass
+        // in those respective lists
+
+        List<UnsolvedClassOrInterface> classAlternates = new ArrayList<>();
+        List<UnsolvedClassOrInterface> interfaceAlternates = new ArrayList<>();
+
+        for (UnsolvedClassOrInterface alternate : getAlternates()) {
+          UnsolvedClassOrInterface asInterface = alternate.copy();
+          alternate.setType(UnsolvedClassOrInterfaceType.CLASS);
+          asInterface.setType(UnsolvedClassOrInterfaceType.INTERFACE);
+
+          classAlternates.add(alternate);
+          interfaceAlternates.add(asInterface);
+        }
+
+        createAlternatesBasedOnSuperTypeRelationshipsForClass(classAlternates);
+        createAlternatesBasedOnSuperTypeRelationshipsForInterface(interfaceAlternates);
+
+        getAlternates().clear();
+        getAlternates().addAll(classAlternates);
+        getAlternates().addAll(interfaceAlternates);
+      }
+    }
+  }
+
+  /**
+   * This helper method creates alternates based on super type relationships for interfaces.
+   *
+   * @param alternates The initial list of alternates. If {@link #getType()} returns INTERFACE, you
+   *     should pass getAlternates() here. This list will be modified as a side effect, and its
+   *     values may be cleared and overwritten after a call to this method.
+   */
+  private void createAlternatesBasedOnSuperTypeRelationshipsForInterface(
+      List<UnsolvedClassOrInterface> alternates) {
+    // Must implement means that all alternates must implement this interface, because
+    // no superinterfaces also implement this interface.
+    List<MemberType> mustImplement = new ArrayList<>();
+    List<Set<MemberType>> optionalImplement = new ArrayList<>();
+
+    for (Set<MemberType> superTypeSet : superTypeRelationships.keySet()) {
+      if (superTypeSet.size() > 1) {
+        optionalImplement.add(superTypeSet);
+        continue;
+      }
+
+      MemberType superType = superTypeSet.iterator().next();
+
+      boolean isImplementedByAnother = false;
+      for (Set<MemberType> superTypes2 : superTypeRelationships.keySet()) {
+        if (!superTypeSet.equals(superTypes2)
+            && superTypes2.stream()
+                .allMatch(type -> doesASuperTypeImplementOrExtend(type, superType))) {
+          isImplementedByAnother = true;
+          break;
+        }
+      }
+
+      if (!isImplementedByAnother) {
+        mustImplement.add(superType);
+      } else {
+        optionalImplement.add(superTypeSet);
+      }
+    }
+
+    for (UnsolvedClassOrInterface alternate : alternates) {
+      alternate.implement(mustImplement);
+    }
+
+    // If mustImplement is not empty, then it is possible that those interfaces are enough,
+    // so we'll keep those alternates without adding additional interfaces. However, if it
+    // is empty, then we should not preserve the alternates without any interfaces.
+
+    List<UnsolvedClassOrInterface> originalAlternates = List.copyOf(alternates);
+    if (mustImplement.isEmpty()) {
+      alternates.clear();
+    }
+
+    for (List<Set<MemberType>> subset : JavaParserUtil.generateSubsets(optionalImplement)) {
+      for (List<MemberType> combination : JavaParserUtil.generateAllCombinations(subset)) {
+        for (UnsolvedClassOrInterface alternate : originalAlternates) {
+          UnsolvedClassOrInterface copy = alternate.copy();
+          copy.implement(combination);
+
+          alternates.add(copy);
+        }
+      }
+    }
+  }
+
+  /**
+   * This helper method creates alternates based on super type relationships for classes.
+   *
+   * @param alternates The initial list of alternates. If {@link #getType()} returns CLASS/ENUM, you
+   *     should pass getAlternates() here. This list will be modified as a side effect, and its
+   *     values may be cleared and overwritten after a call to this method.
+   */
+  private void createAlternatesBasedOnSuperTypeRelationshipsForClass(
+      List<UnsolvedClassOrInterface> alternates) {
+    List<UnsolvedClassOrInterface> originalAlternates = List.copyOf(alternates);
+
+    alternates.clear();
+
+    List<UnsolvedClassOrInterface> withExtends = new ArrayList<>();
+    List<Set<MemberType>> toImplement = new ArrayList<>();
+
+    for (Entry<Set<MemberType>, SuperTypeRelationship> entry : superTypeRelationships.entrySet()) {
+      if (entry.getValue() == SuperTypeRelationship.IMPLEMENTS
+          || entry.getKey().stream()
+              .allMatch(
+                  type ->
+                      type instanceof UnsolvedMemberType unsolved
+                          && unsolved.getUnsolvedType().getType()
+                              == UnsolvedClassOrInterfaceType.INTERFACE)) {
+        toImplement.add(entry.getKey());
+        continue;
+      }
+
+      for (UnsolvedClassOrInterface originalAlternate : originalAlternates) {
+        for (MemberType potentialExtend : entry.getKey()) {
+          UnsolvedClassOrInterface copy = originalAlternate.copy();
+          copy.extend(potentialExtend);
+          withExtends.add(copy);
+        }
+      }
+
+      // If unknown, it could also be an interface
+      if (entry.getValue() == SuperTypeRelationship.UNKNOWN) {
+        toImplement.add(entry.getKey());
+      }
+    }
+
+    if (toImplement.isEmpty()) {
+      alternates.addAll(withExtends);
+    } else {
+      for (List<MemberType> combination : JavaParserUtil.generateAllCombinations(toImplement)) {
+        for (UnsolvedClassOrInterface originalAlternate :
+            withExtends.isEmpty() ? originalAlternates : withExtends) {
+          UnsolvedClassOrInterface copy = originalAlternate.copy();
+
+          for (MemberType interfaceType : combination) {
+            if (copy.doesExtend(interfaceType)) {
+              continue;
+            }
+
+            copy.implement(interfaceType);
+          }
+
+          alternates.add(copy);
+        }
+      }
+    }
+  }
+
+  /**
+   * Recursively checks if a super type implements or extends a target type. For example, if given a
+   * supertype com.example.Foo and a target of com.example.Bar, this method will return true if
+   * com.example.Foo or any of its ancestors implement or extend com.example.Bar.
+   *
+   * @param superType The super type to check
+   * @param target The target type to find
+   * @return True if the super type implements or extends the target type, false otherwise.
+   */
+  private boolean doesASuperTypeImplementOrExtend(MemberType superType, MemberType target) {
+    if (superType.equals(target)) {
+      return true;
+    }
+
+    if (superType instanceof UnsolvedMemberType unsolved) {
+      UnsolvedClassOrInterfaceAlternates type = unsolved.getUnsolvedType();
+
+      for (Set<MemberType> superTypeOfSuperType : type.superTypeRelationships.keySet()) {
+        if (superTypeOfSuperType.stream()
+            .allMatch(s -> doesASuperTypeImplementOrExtend(s, target))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Recursively checks if any super type is a class.
+   *
+   * @param unsolvedAlternates The super type to check
+   * @return True if any super type is a class.
+   */
+  private boolean isAnySuperTypeAClass(UnsolvedClassOrInterfaceAlternates unsolvedAlternates) {
+    for (Entry<Set<MemberType>, SuperTypeRelationship> superType :
+        unsolvedAlternates.superTypeRelationships.entrySet()) {
+      if (superType.getValue() == SuperTypeRelationship.EXTENDS) {
+        return true;
+      }
+
+      boolean allTrue = true;
+      for (MemberType potentialMemberType : superType.getKey()) {
+        if (potentialMemberType instanceof UnsolvedMemberType unsolved) {
+          allTrue &=
+              unsolved.getUnsolvedType().getType() == UnsolvedClassOrInterfaceType.CLASS
+                  || isAnySuperTypeAClass(unsolved.getUnsolvedType());
+
+          if (!allTrue) {
+            break;
+          }
+        }
+      }
+
+      if (allTrue) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -178,7 +529,7 @@ public class UnsolvedClassOrInterfaceAlternates
    */
   @Override
   public boolean doesExtend(MemberType extendsType) {
-    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::doesExtend, extendsType);
+    return getSuperTypeRelationship(extendsType) == SuperTypeRelationship.EXTENDS;
   }
 
   @Override
@@ -187,25 +538,48 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
-   * Implements this class based on a MemberType.
-   *
-   * @param interfaceName The type to implement
-   */
-  @Override
-  public void implement(String interfaceName) {
-    // TODO: make this MemberType also
-    applyToAllAlternates(UnsolvedClassOrInterface::implement, interfaceName);
-  }
-
-  /**
    * Returns true if this class implements the given interface.
    *
-   * @param interfaceName The type to implement
+   * @param interfaceType The type to implement
    * @return True if this type implements the given interface.
    */
   @Override
-  public boolean doesImplement(String interfaceName) {
-    return doAllAlternatesReturnTrueFor(UnsolvedClassOrInterface::doesImplement, interfaceName);
+  public boolean doesImplement(MemberType interfaceType) {
+    return getSuperTypeRelationship(interfaceType) == SuperTypeRelationship.IMPLEMENTS;
+  }
+
+  /**
+   * Returns true if the given superType is indeed a super type of this current class (does not
+   * matter if the relationship is extends, implements, or unknown).
+   *
+   * @param superType The super type
+   * @return True if this instance is a child of the given superType
+   */
+  public boolean isAChildOf(MemberType superType) {
+    return getSuperTypeRelationship(superType) != null;
+  }
+
+  /**
+   * Checks to see if the given superType is in any mutually exclusive set key of the
+   * superTypeRelationships map.
+   *
+   * @param superType The super type to check
+   * @return The relationship if found, null otherwise
+   */
+  private @Nullable SuperTypeRelationship getSuperTypeRelationship(MemberType superType) {
+    SuperTypeRelationship result = superTypeRelationships.get(Set.of(superType));
+
+    if (result != null) {
+      return result;
+    }
+
+    for (Set<MemberType> mutuallyExclusiveSet : superTypeRelationships.keySet()) {
+      if (mutuallyExclusiveSet.contains(superType)) {
+        return superTypeRelationships.get(mutuallyExclusiveSet);
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -245,20 +619,58 @@ public class UnsolvedClassOrInterfaceAlternates
 
   @Override
   public UnsolvedClassOrInterfaceType getType() {
-    return getAlternates().get(0).getType();
+    UnsolvedClassOrInterfaceType typeOfLast = null;
+    // All the types will be the same if we know with certainty what type of type it is. If
+    // there are multiple different types, then the overall type of this type is unknown.
+    for (UnsolvedClassOrInterface alternate : getAlternates()) {
+      if (typeOfLast == null) {
+        typeOfLast = alternate.getType();
+        continue;
+      }
+
+      if (alternate.getType() != typeOfLast) {
+        return UnsolvedClassOrInterfaceType.UNKNOWN;
+      }
+    }
+
+    if (typeOfLast == null) {
+      throw new RuntimeException(
+          "Cannot have an UnsolvedClassOrInterfaceAlternates without any alternates.");
+    }
+
+    return typeOfLast;
   }
 
   @Override
   public void setType(UnsolvedClassOrInterfaceType type) {
-    boolean wasOriginallyAnAnnotation = getType() == UnsolvedClassOrInterfaceType.ANNOTATION;
+    UnsolvedClassOrInterfaceType originalType = getType();
 
-    applyToAllAlternates(UnsolvedClassOrInterface::setType, type);
-
-    if (type != UnsolvedClassOrInterfaceType.ANNOTATION) {
+    if (originalType == type) {
       return;
     }
 
-    if (!wasOriginallyAnAnnotation) {
+    boolean areAllAlternatesOfSameType =
+        doAllAlternatesReturnTrueFor((alt) -> alt.getType() == type);
+
+    applyToAllAlternates(UnsolvedClassOrInterface::setType, type);
+
+    // If all alternates were already the same type, we don't need to remove duplicates
+    if (areAllAlternatesOfSameType) {
+      removeDuplicateAlternates();
+    }
+
+    if (type == UnsolvedClassOrInterfaceType.INTERFACE) {
+      // All supertypes must also be interfaces
+      for (MemberType superType :
+          superTypeRelationships.keySet().stream().flatMap(Set::stream).toList()) {
+        if (superType instanceof UnsolvedMemberType unsolved) {
+          unsolved.getUnsolvedType().setType(UnsolvedClassOrInterfaceType.INTERFACE);
+        }
+      }
+    }
+
+    if (originalType != UnsolvedClassOrInterfaceType.ANNOTATION
+        && type == UnsolvedClassOrInterfaceType.ANNOTATION) {
       for (UnsolvedClassOrInterface alternate : List.copyOf(getAlternates())) {
         UnsolvedClassOrInterface typeUseAnnos = alternate.copy();
         UnsolvedClassOrInterface typeAnnos = alternate.copy();
@@ -289,5 +701,16 @@ public class UnsolvedClassOrInterfaceAlternates
         addAlternate(typeAnnos);
       }
     }
+  }
+
+  @Override
+  public void setPreferredTypeVariables(@Nullable List<String> preferredTypeVariables) {
+    applyToAllAlternates(
+        UnsolvedClassOrInterface::setPreferredTypeVariables, preferredTypeVariables);
+  }
+
+  @Override
+  public @Nullable List<String> getPreferredTypeVariables() {
+    return getAlternates().get(0).getPreferredTypeVariables();
   }
 }

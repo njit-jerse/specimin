@@ -135,9 +135,6 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    * @param alternate The alternate to add
    */
   protected void addAlternate(T alternate) {
-    if (this.alternates == null) {
-      this.alternates = new ArrayList<>();
-    }
     this.alternates.add(alternate);
   }
 }

@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Given a name, field type, and a set of potential encapsulating classes, this class allows for
@@ -103,7 +104,7 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
     UnsolvedField old = getAlternates().get(0);
-    List<MemberType> oldFieldTypes = getTypes();
+    Set<MemberType> oldFieldTypes = getTypes();
     getAlternates().removeIf(alternate -> !typesToPreserveNodes.containsKey(alternate.getType()));
 
     if (getAlternates().isEmpty() && oldFieldTypes.size() == 1) {
@@ -140,8 +141,10 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
    *
    * @return The field types
    */
-  public List<MemberType> getTypes() {
-    return getAlternates().stream().map(alternate -> alternate.getType()).toList();
+  public Set<MemberType> getTypes() {
+    return getAlternates().stream()
+        .map(alternate -> alternate.getType())
+        .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
   public void replaceFieldType(MemberType oldType, MemberType newType) {

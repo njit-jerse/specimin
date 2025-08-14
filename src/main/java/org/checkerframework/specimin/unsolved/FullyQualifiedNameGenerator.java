@@ -19,6 +19,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.Name;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithCondition;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
@@ -360,6 +361,13 @@ public class FullyQualifiedNameGenerator {
         }
       }
       return new FullyQualifiedNameSet(result, fqns.typeArguments());
+    } else if (expr.isObjectCreationExpr()) {
+      return getFQNsFromClassOrInterfaceType(expr.asObjectCreationExpr().getType());
+    } else if (expr.isConditionalExpr()) {
+      // TODO: it is also possible for the else expression to have a different type, so
+      // account for this as well if we change the return type of FullyQualifiedNameSet
+      // to Collection<FullyQualifiedNameSet> in the future
+      return getFQNsForExpressionType(expr.asConditionalExpr().getThenExpr());
     }
 
     // local variable / field / method call / object creation expression / any other case
@@ -543,7 +551,6 @@ public class FullyQualifiedNameGenerator {
     }
 
     if (resolvedType.isNull()) {
-      // For now, return java.lang.Object. TODO: handle null types better
       return new FullyQualifiedNameSet("java.lang.Object");
     }
 
@@ -640,6 +647,34 @@ public class FullyQualifiedNameGenerator {
     FullyQualifiedNameSet functionalInterface =
         getSimpleNameOfFunctionalInterface(lambda.getParameters().size(), isVoid);
 
+    Node body = lambda.getBody();
+    List<NameExpr> usedNameExprs = body.findAll(NameExpr.class);
+
+    List<FullyQualifiedNameSet> newTypeArguments =
+        new ArrayList<>(functionalInterface.typeArguments());
+
+    for (int i = 0; i < lambda.getParameters().size(); i++) {
+      Parameter param = lambda.getParameters().get(i);
+      // If the param has no type defined, then we need to use a bounded wildcard
+      // so the output program compiles
+      if (!param.getType().isUnknownType()) {
+        continue;
+      }
+
+      String paramName = param.getNameAsString();
+      NameExpr use =
+          usedNameExprs.stream()
+              .filter(nameExpr -> nameExpr.getNameAsString().equals(paramName))
+              .findFirst()
+              .orElse(null);
+      if (use != null) {
+        FullyQualifiedNameSet useType = getFQNsForExpressionType(use);
+        newTypeArguments.set(
+            i,
+            new FullyQualifiedNameSet(useType.erasedFqns(), useType.typeArguments(), "? extends"));
+      }
+    }
+
     // firstIdentifier is used to check imports. Since functionalInterface is always either
     // java.____ or a simple synthetic class name, we know it's never required to import.
     return new FullyQualifiedNameSet(
@@ -648,7 +683,7 @@ public class FullyQualifiedNameGenerator {
             functionalInterface.erasedFqns().iterator().next(),
             lambda.findCompilationUnit().get(),
             lambda),
-        functionalInterface.typeArguments());
+        newTypeArguments);
   }
 
   /**
@@ -671,6 +706,14 @@ public class FullyQualifiedNameGenerator {
     // Field declaration and variable declaration expressions
     if (node instanceof NodeWithVariables<?> withVariables) {
       Type type = withVariables.getElementType();
+
+      // See if we can find the exact variable, because ElementType gets rid of arrays
+      for (VariableDeclarator varDecl : withVariables.getVariables()) {
+        if (varDecl.getName().equals(((NodeWithSimpleName<?>) resolvable).getName())) {
+          type = varDecl.getType();
+          break;
+        }
+      }
 
       if (!type.isVarType() && !type.isUnknownType()) {
         // Keep going if var/unknown type
@@ -828,18 +871,9 @@ public class FullyQualifiedNameGenerator {
           return otherType;
         }
       }
-    } else if (parentNode instanceof ReturnStmt) {
-      @SuppressWarnings("unchecked")
-      Node ancestor =
-          parentNode
-              .<Node>findAncestor(
-                  n -> {
-                    return n instanceof MethodDeclaration || n instanceof LambdaExpr;
-                  },
-                  Node.class)
-              .get();
-
-      if (ancestor instanceof MethodDeclaration methodDecl) {
+    } else if (parentNode instanceof ReturnStmt returnStmt) {
+      if (JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt)
+          instanceof MethodDeclaration methodDecl) {
         return getFQNsFromType(methodDecl.getType());
       }
     } else if (parentNode instanceof ForEachStmt) {

@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.checkerframework.specimin.JavaParserUtil;
 
 /**
@@ -148,7 +149,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
     UnsolvedMethod old = getAlternates().get(0);
-    List<MemberType> oldReturnTypes = getReturnTypes();
+    Set<MemberType> oldReturnTypes = getReturnTypes();
     getAlternates()
         .removeIf(alternate -> !returnsToPreserveNodes.containsKey(alternate.getReturnType()));
 
@@ -235,8 +236,10 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    *
    * @return The return types
    */
-  public List<MemberType> getReturnTypes() {
-    return getAlternates().stream().map(alternate -> alternate.getReturnType()).toList();
+  public Set<MemberType> getReturnTypes() {
+    return getAlternates().stream()
+        .map(alternate -> alternate.getReturnType())
+        .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
   @Override

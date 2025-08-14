@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -26,16 +27,19 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   /** The number of type variables for this class */
   private int numberOfTypeVariables = 0;
 
+  /** The preferred type variables, if any exist. */
+  private @Nullable List<String> preferredTypeVariables;
+
   /** The extends clause, if one exists. */
   private @Nullable MemberType extendsClause;
 
   /** The implements clauses, if they exist. */
-  private Set<String> implementsClauses = new LinkedHashSet<>(0);
+  private Set<MemberType> implementsClauses = new LinkedHashSet<>(0);
 
   private Set<String> annotations = new HashSet<>();
 
   /** The type of this type; i.e., is it a class, interface, annotation, enum? */
-  private UnsolvedClassOrInterfaceType typeOfType = UnsolvedClassOrInterfaceType.CLASS;
+  private UnsolvedClassOrInterfaceType typeOfType = UnsolvedClassOrInterfaceType.UNKNOWN;
 
   /**
    * This constructor correctly splits apart the class name and any generics attached to it.
@@ -107,23 +111,31 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   }
 
   /**
-   * Adds a new interface to the list of implemented interfaces.
+   * Adds new interfaces to the set of implemented interfaces.
    *
-   * @param interfaceName the fqn of the interface
+   * @param interfaceTypes The interface types
    */
-  @Override
-  public void implement(String interfaceName) {
-    implementsClauses.add(interfaceName);
+  public void implement(Collection<MemberType> interfaceTypes) {
+    implementsClauses.addAll(interfaceTypes);
+  }
+
+  /**
+   * Adds a new interface to the set of implemented interfaces.
+   *
+   * @param interfaceType The interface type
+   */
+  public void implement(MemberType interfaceType) {
+    implementsClauses.add(interfaceType);
   }
 
   /**
    * Checks if an interface is implemented or not.
    *
-   * @param interfaceName the fqn of the interface
+   * @param interfaceType the fqn of the interface
    */
   @Override
-  public boolean doesImplement(String interfaceName) {
-    return implementsClauses.contains(interfaceName);
+  public boolean doesImplement(MemberType interfaceType) {
+    return implementsClauses.contains(interfaceType);
   }
 
   /**
@@ -132,7 +144,6 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    * @param extendsType a {@link MemberType} of the extended type, represented with fully qualified
    *     names.
    */
-  @Override
   public void extend(MemberType extendsType) {
     this.extendsClause = extendsType;
   }
@@ -257,11 +268,16 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       sb.append(" extends ").append(nonNullExtends).append(" ");
     }
     if (implementsClauses.size() > 0) {
-      if (extendsClause != null) {
-        sb.append(", ");
+      if (typeOfType == UnsolvedClassOrInterfaceType.INTERFACE) {
+        if (extendsClause != null) {
+          sb.append(", ");
+        } else {
+          sb.append(" extends ");
+        }
+      } else {
+        sb.append(" implements ");
       }
-      sb.append(" implements ");
-      Iterator<String> interfaces = implementsClauses.iterator();
+      Iterator<MemberType> interfaces = implementsClauses.iterator();
       while (interfaces.hasNext()) {
         sb.append(interfaces.next());
         if (interfaces.hasNext()) {
@@ -326,6 +342,11 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    * @param result a string builder. Will be side-effected.
    */
   private void getTypeVariablesImpl(StringBuilder result) {
+    if (preferredTypeVariables != null) {
+      result.append(String.join(", ", preferredTypeVariables));
+      return;
+    }
+
     for (int i = 0; i < numberOfTypeVariables; i++) {
       String typeExpression = "T" + ((i > 0) ? i : "");
       result.append(typeExpression).append(", ");
@@ -341,5 +362,15 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   @Override
   public void setType(UnsolvedClassOrInterfaceType type) {
     typeOfType = type;
+  }
+
+  @Override
+  public void setPreferredTypeVariables(@Nullable List<String> preferredTypeVariables) {
+    this.preferredTypeVariables = preferredTypeVariables;
+  }
+
+  @Override
+  public @Nullable List<String> getPreferredTypeVariables() {
+    return preferredTypeVariables;
   }
 }

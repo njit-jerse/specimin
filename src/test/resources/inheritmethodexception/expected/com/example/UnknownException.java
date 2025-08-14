@@ -1,4 +1,4 @@
 package com.example;
 
-public class UnknownException extends java.lang.Throwable {
+public class UnknownException extends java.lang.Exception {
 }

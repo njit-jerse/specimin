@@ -4,6 +4,7 @@ import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -17,6 +18,7 @@ import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.ClassExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
@@ -42,20 +44,25 @@ import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
@@ -88,6 +95,14 @@ public class UnsolvedSymbolGenerator {
    * symbol alternates
    */
   private final Map<String, UnsolvedSymbolAlternates<?>> generatedSymbols = new HashMap<>();
+
+  /**
+   * Contains all methods that still have null as a parameter type. When encountering a new method
+   * signature that replaces each null with a type, remove it from this list and also from
+   * generatedSymbols. If one is never found, then replace all instances of null with
+   * java.lang.Object.
+   */
+  private final Set<UnsolvedMethodAlternates> methodsWithNullInSignature = new HashSet<>();
 
   /**
    * Given an unresolvable Node, generate a corresponding synthetic definition. In cases where
@@ -214,6 +229,9 @@ public class UnsolvedSymbolGenerator {
             "Scope was not generated in constructor call when it should have been.");
       }
 
+      // A constructor call indicates a class
+      scope.setType(UnsolvedClassOrInterfaceType.CLASS);
+
       handleConstructorCall(
           scope, JavaParserUtil.erase(constructorName), arguments, numberOfTypeParams, result);
     } else if (node instanceof MethodDeclaration methodDecl) {
@@ -281,6 +299,32 @@ public class UnsolvedSymbolGenerator {
 
     if (type.getTypeArguments().isPresent()) {
       generated.setNumberOfTypeVariables(type.getTypeArguments().get().size());
+
+      NodeList<Type> typeArgs = type.getTypeArguments().get();
+      List<String> typeArgsPreferred =
+          new ArrayList<>(List.of(generated.getTypeVariablesAsString().split(",\\s*", -1)));
+
+      boolean changed = false;
+
+      for (int i = 0; i < typeArgs.size(); i++) {
+        Type typeArg = typeArgs.get(i);
+
+        boolean isTypeParameter = false;
+        try {
+          isTypeParameter = typeArg.resolve().isTypeVariable();
+        } catch (UnsolvedSymbolException ex) {
+          // Ok to continue
+        }
+
+        if (isTypeParameter) {
+          typeArgsPreferred.set(i, typeArg.resolve().asTypeParameter().getName());
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        generated.setPreferredTypeVariables(typeArgsPreferred);
+      }
     }
 
     result.add(generated);
@@ -479,8 +523,8 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
-    Map<String, Set<String>> potentialScopeFQNs =
-        fullyQualifiedNameGenerator.getFQNsForExpressionLocation(field);
+    Collection<Set<String>> potentialScopeFQNs =
+        getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(field);
 
     Expression scope = field.getScope();
 
@@ -488,7 +532,7 @@ public class UnsolvedSymbolGenerator {
     // provides more information than a this/super expression alone in
     // inferContextImpl
     if (scope.isThisExpr() || scope.isSuperExpr()) {
-      handleThisOrSuperExpr(potentialScopeFQNs.values());
+      handleThisOrSuperExpr(potentialScopeFQNs);
     } else {
       // Generate everything in the scopes before
       inferContextImpl(scope, result);
@@ -502,7 +546,7 @@ public class UnsolvedSymbolGenerator {
 
     Set<String> potentialFQNs = new LinkedHashSet<>();
 
-    for (Set<String> set : potentialScopeFQNs.values()) {
+    for (Set<String> set : potentialScopeFQNs) {
       for (String potentialScopeFQN : set) {
         potentialFQNs.add(potentialScopeFQN + "#" + field.getNameAsString());
       }
@@ -519,7 +563,7 @@ public class UnsolvedSymbolGenerator {
 
       // Since we called inferContextImpl(scope), the field's parents are created
       List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
-      for (Set<String> set : potentialScopeFQNs.values()) {
+      for (Set<String> set : potentialScopeFQNs) {
         UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(set);
 
         if (generated == null) {
@@ -621,11 +665,11 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
-    Map<String, Set<String>> parentClassFQNs =
-        fullyQualifiedNameGenerator.getFQNsForExpressionLocation(nameExpr);
+    Collection<Set<String>> parentClassFQNs =
+        getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(nameExpr);
     Set<String> fieldFQNs = new LinkedHashSet<>();
 
-    for (Set<String> set : parentClassFQNs.values()) {
+    for (Set<String> set : parentClassFQNs) {
       for (String parentClassFQN : set) {
         fieldFQNs.add(parentClassFQN + "#" + nameExpr.getNameAsString());
       }
@@ -640,7 +684,7 @@ public class UnsolvedSymbolGenerator {
       // Generate/find the class that will hold the field
       List<UnsolvedClassOrInterfaceAlternates> generatedClasses = new ArrayList<>();
 
-      for (Set<String> fqns : parentClassFQNs.values()) {
+      for (Set<String> fqns : parentClassFQNs) {
         generatedClasses.add(findExistingAndUpdateFQNsOrCreateNewType(fqns));
       }
 
@@ -704,7 +748,8 @@ public class UnsolvedSymbolGenerator {
     }
 
     // A collection of sets of fqns. Each set represents potentially a different class/interface.
-    Collection<Set<String>> potentialScopeFQNs = getMethodLocationFQNs(methodCall);
+    Collection<Set<String>> potentialScopeFQNs =
+        getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(methodCall);
 
     // Special case: handle this/super separately since potentialScopeFQNs
     // provides more information than a this/super expression alone in
@@ -740,7 +785,64 @@ public class UnsolvedSymbolGenerator {
 
     Set<String> potentialFQNs =
         getMethodFQNsWithSideEffect(
-            methodCall, potentialScopeFQNs, argumentToParameterPotentialFQNs);
+            methodCall, potentialScopeFQNs, argumentToParameterPotentialFQNs, true);
+    boolean hasNullInSignature =
+        argumentToParameterPotentialFQNs.keySet().stream().anyMatch(Expression::isNullLiteralExpr);
+
+    if (hasNullInSignature) {
+      Set<String> scopesFlattened =
+          potentialScopeFQNs.stream().flatMap(Set::stream).collect(Collectors.toSet());
+
+      // If we see null, try to find an existing generated method which has an object instead
+      for (String fqn : generatedSymbols.keySet()) {
+        UnsolvedSymbolAlternates<?> gen = generatedSymbols.get(fqn);
+        if (gen instanceof UnsolvedMethodAlternates) {
+          String qualifiedMethodName = fqn.substring(0, fqn.indexOf('('));
+          String methodName =
+              qualifiedMethodName.substring(qualifiedMethodName.lastIndexOf('#') + 1);
+          String className = qualifiedMethodName.substring(0, qualifiedMethodName.lastIndexOf('#'));
+
+          if (!methodName.equals(methodCall.getNameAsString())
+              || !scopesFlattened.contains(className)) {
+            continue;
+          }
+
+          String[] parameterList =
+              fqn.substring(fqn.indexOf('(') + 1).replace(")", "").split(",\\s*", -1);
+
+          if (parameterList.length != methodCall.getArguments().size()) {
+            continue;
+          }
+
+          boolean valid = true;
+          for (int i = 0; i < parameterList.length; i++) {
+            String parameter = parameterList[i];
+            if (parameter.trim().equals("null")) {
+              valid = false;
+              break;
+            }
+
+            if (methodCall.getArgument(i).isNullLiteralExpr()
+                && JavaLangUtils.isPrimitive(parameter)) {
+              valid = false;
+              break;
+            }
+
+            FullyQualifiedNameSet fqns =
+                argumentToParameterPotentialFQNs.get(methodCall.getArgument(i));
+            if (fqns == null || !fqns.erasedFqns().contains(JavaParserUtil.erase(parameter))) {
+              valid = false;
+              break;
+            }
+          }
+
+          if (valid) {
+            // If any exists, we don't have to create any method
+            return;
+          }
+        }
+      }
+    }
 
     UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
 
@@ -787,9 +889,21 @@ public class UnsolvedSymbolGenerator {
       }
 
       if (returnTypeToMustPreserveNode.isEmpty()) {
-        MemberType returnType =
-            getOrCreateMemberTypeFromFQNs(
-                fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall));
+        MethodDeclaration declarationInThisTypeWithSameSignature =
+            JavaParserUtil.tryFindMethodDeclarationWithSameSignatureFromThisType(
+                methodCall, fqnsToCompilationUnits);
+
+        MemberType returnType;
+        if (declarationInThisTypeWithSameSignature != null) {
+          returnType =
+              getOrCreateMemberTypeFromFQNs(
+                  fullyQualifiedNameGenerator.getFQNsFromType(
+                      declarationInThisTypeWithSameSignature.getType()));
+        } else {
+          returnType =
+              getOrCreateMemberTypeFromFQNs(
+                  fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall));
+        }
 
         generatedMethod =
             UnsolvedMethodAlternates.create(
@@ -804,6 +918,75 @@ public class UnsolvedSymbolGenerator {
                 List.of());
       }
 
+      if (hasNullInSignature) {
+        methodsWithNullInSignature.add(generatedMethod);
+      } else if (!methodsWithNullInSignature.isEmpty()) {
+        Set<String> scopesFlattened =
+            potentialScopeFQNs.stream().flatMap(Set::stream).collect(Collectors.toSet());
+
+        UnsolvedMethodAlternates toRemove = null;
+        for (UnsolvedMethodAlternates method : methodsWithNullInSignature) {
+          for (String fqn : method.getFullyQualifiedNames()) {
+            String qualifiedMethodName = fqn.substring(0, fqn.indexOf('('));
+            String methodName =
+                qualifiedMethodName.substring(qualifiedMethodName.lastIndexOf('#') + 1);
+            String className =
+                qualifiedMethodName.substring(0, qualifiedMethodName.lastIndexOf('#'));
+
+            if (!methodName.equals(methodCall.getNameAsString())
+                || !scopesFlattened.contains(className)) {
+              continue;
+            }
+
+            String[] parameterList =
+                fqn.substring(fqn.indexOf('(') + 1).replace(")", "").split(",\\s*", -1);
+
+            if (parameterList.length != methodCall.getArguments().size()) {
+              continue;
+            }
+
+            boolean valid = true;
+            for (int i = 0; i < parameterList.length; i++) {
+              String parameter = parameterList[i];
+              Expression arg = methodCall.getArgument(i);
+
+              FullyQualifiedNameSet argumentFQNs = argumentToParameterPotentialFQNs.get(arg);
+
+              if (argumentFQNs == null) {
+                valid = false;
+                break;
+              }
+
+              if (parameter.equals("null")) {
+                if (argumentFQNs.erasedFqns().stream().anyMatch(JavaLangUtils::isPrimitive)) {
+                  valid = false;
+                  break;
+                }
+                continue;
+              }
+
+              if (!argumentFQNs.erasedFqns().contains(JavaParserUtil.erase(parameter))) {
+                valid = false;
+                break;
+              }
+            }
+
+            if (valid) {
+              toRemove = method;
+              break;
+            }
+          }
+
+          if (toRemove != null) {
+            break;
+          }
+        }
+
+        if (toRemove != null) {
+          methodsWithNullInSignature.remove(toRemove);
+          removeSymbolFromGeneratedSymbolsMap(toRemove);
+        }
+      }
       addNewSymbolToGeneratedSymbolsMap(generatedMethod);
 
       if (methodCall.getTypeArguments().isPresent()) {
@@ -815,25 +998,43 @@ public class UnsolvedSymbolGenerator {
       generatedMethod.setStatic();
     }
 
-    result.add(generatedMethod);
+    if (!hasNullInSignature) {
+      // Never add a method with a null parameter
+      result.add(generatedMethod);
+    }
   }
 
   /**
-   * Utility method to get the FQNs of a method location. If the method's scope is another
-   * field/type, this method returns the field type/method return type instead of a synthetic type
-   * that could be returned from {@link
+   * Utility method to get the FQNs of a method/field location. If the member's declaring scope is
+   * another field/type, this method returns the field type/method return type instead of a
+   * synthetic type that could be returned from {@link
    * fullyQualifiedNameGenerator#getFQNsForExpressionLocation(Expression)}.
    *
-   * @param methodCall The method call
+   * @param expr The method call or field access expression. Takes in any type of expression, but
+   *     functionality only differs if the expression is a FieldAccess/Name/MethodCallExpr
    * @return A collection of FQN sets, each set representing a different type
    */
-  private Collection<Set<String>> getMethodLocationFQNs(MethodCallExpr methodCall) {
-    String methodName = methodCall.getNameAsString();
+  private Collection<Set<String>> getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(
+      Expression expr) {
+    String name;
+    Expression scope;
+
+    if (expr.isFieldAccessExpr()) {
+      name = expr.asFieldAccessExpr().getNameAsString();
+      scope = expr.asFieldAccessExpr().getScope();
+    } else if (expr.isMethodCallExpr()) {
+      name = expr.asMethodCallExpr().getNameAsString();
+      scope = expr.asMethodCallExpr().getScope().orElse(null);
+    } else if (expr.isNameExpr()) {
+      name = expr.asNameExpr().getNameAsString();
+      scope = null;
+    } else {
+      return fullyQualifiedNameGenerator.getFQNsForExpressionLocation(expr).values();
+    }
 
     // Static import
-    if (!methodCall.hasScope()) {
-      ImportDeclaration importDecl =
-          getImportDeclaration(methodName, methodCall.findCompilationUnit().get());
+    if (!expr.hasScope()) {
+      ImportDeclaration importDecl = getImportDeclaration(name, expr.findCompilationUnit().get());
 
       if (importDecl != null && importDecl.isStatic()) {
         String location = importDecl.getName().getQualifier().get().toString();
@@ -842,13 +1043,16 @@ public class UnsolvedSymbolGenerator {
         findExistingAndUpdateFQNsOrCreateNewType(Set.of(location));
         return List.of(Set.of(location));
       }
-    } else if (methodCall.getScope().get() instanceof MethodCallExpr scopeAsMethodCall) {
+    } else if (scope instanceof MethodCallExpr scopeAsMethodCall) {
       // If the scope is a field or a method that's been generated already, we can use that type
 
       // Get the FQNs of the scope of the scope
       Set<String> potentialScopeScopeFQNs =
           getMethodFQNsWithSideEffect(
-              scopeAsMethodCall, getMethodLocationFQNs(scopeAsMethodCall), null);
+              scopeAsMethodCall,
+              getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(scopeAsMethodCall),
+              null,
+              !methodsWithNullInSignature.isEmpty());
 
       UnsolvedMethodAlternates genMethod =
           (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(potentialScopeScopeFQNs);
@@ -859,15 +1063,12 @@ public class UnsolvedSymbolGenerator {
       }
     }
     // Handle FieldAccessExpr/NameExpr together here
-    else if (methodCall.getScope().get() instanceof FieldAccessExpr
-        || methodCall.getScope().get() instanceof NameExpr) {
+    else if (scope instanceof FieldAccessExpr || scope instanceof NameExpr) {
       Set<String> potentialScopeScopeFQNs = new LinkedHashSet<>();
 
-      String fieldName = ((NodeWithSimpleName<?>) methodCall.getScope().get()).getNameAsString();
+      String fieldName = ((NodeWithSimpleName<?>) scope).getNameAsString();
       for (Set<String> set :
-          fullyQualifiedNameGenerator
-              .getFQNsForExpressionLocation(methodCall.getScope().get())
-              .values()) {
+          fullyQualifiedNameGenerator.getFQNsForExpressionLocation(scope).values()) {
         for (String potentialScopeFQN : set) {
           potentialScopeScopeFQNs.add(potentialScopeFQN + "#" + fieldName);
         }
@@ -880,7 +1081,7 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    return fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall).values();
+    return fullyQualifiedNameGenerator.getFQNsForExpressionLocation(expr).values();
   }
 
   /**
@@ -894,15 +1095,26 @@ public class UnsolvedSymbolGenerator {
    * @param potentialScopeFQNs Potential scope FQNs
    * @param argumentToParameterPotentialFQNs A map of arguments to their type FQNs; pass in null if
    *     no side effect is desired.
+   * @param useNullInsteadOfObject True if you want to use null instead of Object as part of the
+   *     signature
    * @return The set of strings representing the potential FQNs of this method
    */
   private Set<String> getMethodFQNsWithSideEffect(
       MethodCallExpr methodCall,
       Collection<Set<String>> potentialScopeFQNs,
-      @Nullable Map<Expression, FullyQualifiedNameSet> argumentToParameterPotentialFQNs) {
+      @Nullable Map<Expression, FullyQualifiedNameSet> argumentToParameterPotentialFQNs,
+      boolean useNullInsteadOfObject) {
     List<String> simpleNames = new ArrayList<>();
 
     for (Expression argument : methodCall.getArguments()) {
+      if (argument.isNullLiteralExpr() && useNullInsteadOfObject) {
+        simpleNames.add("null");
+        if (argumentToParameterPotentialFQNs != null) {
+          argumentToParameterPotentialFQNs.put(argument, new FullyQualifiedNameSet("null"));
+        }
+        continue;
+      }
+
       FullyQualifiedNameSet fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
       String first = fqns.erasedFqns().iterator().next();
       String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(first);
@@ -1104,7 +1316,7 @@ public class UnsolvedSymbolGenerator {
         switch (specifier) {
           case PUBLIC -> "public";
           case PROTECTED -> "protected";
-          case PRIVATE -> "private";
+          case PRIVATE -> throw new RuntimeException("Cannot override with a private method.");
           case NONE -> "";
         };
 
@@ -1299,6 +1511,35 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Returns a list of existing callable declarations (methods, constructors, or enum constants)
+   * that match the given node with arguments, even if some arguments are unresolvable.
+   *
+   * @param withArgs The node representing a method call, constructor call, or enum constant
+   *     declaration with arguments
+   * @return A list of matching {@link CallableDeclaration} instances, or an empty list if none are
+   *     found
+   */
+  private List<? extends CallableDeclaration<?>> getExistingCallsWithUnresolvableArguments(
+      NodeWithArguments<?> withArgs) {
+    if (withArgs instanceof MethodCallExpr parentMethodCall) {
+      return JavaParserUtil.tryResolveMethodCallWithUnresolvableArguments(
+          parentMethodCall, fqnsToCompilationUnits);
+    } else if (withArgs instanceof ExplicitConstructorInvocationStmt parentConstructorCall) {
+      return JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
+          parentConstructorCall, fqnsToCompilationUnits);
+    } else if (withArgs instanceof ObjectCreationExpr parentConstructorCall) {
+      return JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
+          parentConstructorCall, fqnsToCompilationUnits);
+    } else if (withArgs instanceof EnumConstantDeclaration parentEnumConstantDeclaration) {
+      return JavaParserUtil.tryResolveEnumConstantDeclarationWithUnresolvableArguments(
+          parentEnumConstantDeclaration, fqnsToCompilationUnits);
+    }
+    // Not possible:
+    // https://javadoc.io/doc/com.github.javaparser/javaparser-core/latest/com/github/javaparser/ast/nodeTypes/NodeWithArguments.html
+    throw new RuntimeException("Unexpected NodeWithArguments type: " + withArgs.getClass());
+  }
+
+  /**
    * Given a potential argument expression, this method returns a map of MemberType to
    * CallableDeclaration. For example, if the argument is a method call expression, foo(), as an
    * argument of another method call, bar(foo()), this method will return a map of potential return
@@ -1314,45 +1555,30 @@ public class UnsolvedSymbolGenerator {
   private Map<MemberType, CallableDeclaration<?>> getTypeToCallableDeclarationFromArgument(
       Expression argument) {
     // If this expression is an argument of a solvable method call, we have multiple potential field
-    // types to
-    // choose from, based on each definition
+    // types to choose from, based on each definition
     Node parent = argument.getParentNode().get();
     int paramNum = -1;
+    Map<MemberType, CallableDeclaration<?>> returnTypeToMustPreserveNode = new LinkedHashMap<>();
 
-    if (parent instanceof NodeWithArguments<?> withArgs) {
-      for (int i = 0; i < withArgs.getArguments().size(); i++) {
-        if (withArgs.getArgument(i).equals(argument)) {
-          paramNum = i;
-          break;
-        }
-      }
+    if (!(parent instanceof NodeWithArguments<?> withArgs)) {
+      return returnTypeToMustPreserveNode;
     }
 
-    List<? extends CallableDeclaration<?>> parentCallableDeclarations = Collections.emptyList();
+    for (int i = 0; i < withArgs.getArguments().size(); i++) {
+      if (withArgs.getArgument(i).equals(argument)) {
+        paramNum = i;
+        break;
+      }
+    }
 
     // paramNum could still be -1 if methodCall is the scope of another method call,
     // not an argument
-    if (paramNum != -1) {
-      if (parent instanceof MethodCallExpr parentMethodCall) {
-        parentCallableDeclarations =
-            JavaParserUtil.tryResolveMethodCallWithUnresolvableArguments(
-                parentMethodCall, fqnsToCompilationUnits);
-      } else if (parent instanceof ExplicitConstructorInvocationStmt parentConstructorCall) {
-        parentCallableDeclarations =
-            JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
-                parentConstructorCall, fqnsToCompilationUnits);
-      } else if (parent instanceof ObjectCreationExpr parentConstructorCall) {
-        parentCallableDeclarations =
-            JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
-                parentConstructorCall, fqnsToCompilationUnits);
-      } else if (parent instanceof EnumConstantDeclaration parentEnumConstantDeclaration) {
-        parentCallableDeclarations =
-            JavaParserUtil.tryResolveEnumConstantDeclarationWithUnresolvableArguments(
-                parentEnumConstantDeclaration, fqnsToCompilationUnits);
-      }
+    if (paramNum == -1) {
+      return returnTypeToMustPreserveNode;
     }
 
-    Map<MemberType, CallableDeclaration<?>> returnTypeToMustPreserveNode = new LinkedHashMap<>();
+    List<? extends CallableDeclaration<?>> parentCallableDeclarations =
+        getExistingCallsWithUnresolvableArguments(withArgs);
 
     for (CallableDeclaration<?> callable : parentCallableDeclarations) {
       Parameter param = callable.getParameter(paramNum);
@@ -1365,6 +1591,26 @@ public class UnsolvedSymbolGenerator {
     }
 
     return returnTypeToMustPreserveNode;
+  }
+
+  /**
+   * Replaces all methods with null in their signature to use java.lang.Object instead, and returns
+   * the updated methods.
+   */
+  public Set<UnsolvedMethodAlternates> clearMethodsWithNull() {
+    for (UnsolvedMethodAlternates unsolvedMethodAlternates : methodsWithNullInSignature) {
+      for (UnsolvedMethod alternate : unsolvedMethodAlternates.getAlternates()) {
+        alternate.replaceParameterType(
+            new SolvedMemberType("null"), new SolvedMemberType("java.lang.Object"));
+      }
+
+      removeSymbolFromGeneratedSymbolsMap(unsolvedMethodAlternates);
+      addNewSymbolToGeneratedSymbolsMap(unsolvedMethodAlternates);
+    }
+
+    Set<UnsolvedMethodAlternates> result = Set.copyOf(methodsWithNullInSignature);
+    methodsWithNullInSignature.clear();
+    return result;
   }
 
   /**
@@ -1391,16 +1637,17 @@ public class UnsolvedSymbolGenerator {
           syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
         }
       }
-      if (decl.isInterface()) {
-        for (ClassOrInterfaceType implemented : decl.getExtendedTypes()) {
-          UnsolvedClassOrInterfaceAlternates syntheticType =
-              (UnsolvedClassOrInterfaceAlternates)
-                  findExistingAndUpdateFQNs(
-                      fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(implemented));
+      for (ClassOrInterfaceType extended : decl.getExtendedTypes()) {
+        UnsolvedClassOrInterfaceAlternates syntheticType =
+            (UnsolvedClassOrInterfaceAlternates)
+                findExistingAndUpdateFQNs(
+                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(extended));
 
-          if (syntheticType != null) {
-            syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
-          }
+        if (syntheticType != null) {
+          syntheticType.setType(
+              decl.isInterface()
+                  ? UnsolvedClassOrInterfaceType.INTERFACE
+                  : UnsolvedClassOrInterfaceType.CLASS);
         }
       }
     } else if (node instanceof EnumDeclaration decl) {
@@ -1426,15 +1673,17 @@ public class UnsolvedSymbolGenerator {
                     fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
                         thrownException.asClassOrInterfaceType()));
 
-        // Test cases prefer Throwable to RuntimeException; TODO: see if this is a good idea
+        // Method declaration throws clauses could be either checked or unchecked, but are typically
+        // checked exceptions. We'll force checked exceptions (java.lang.Exception) to be first so
+        // best-effort generates this as the alternate.
         if (syntheticType != null
-            && (!syntheticType.hasExtends()
-                || syntheticType.doesExtend(new SolvedMemberType("java.lang.RuntimeException")))) {
-          boolean isFirstTime = !syntheticType.hasExtends();
-          syntheticType.extend(new SolvedMemberType("java.lang.Throwable"));
-          if (isFirstTime) {
-            toRemove.addAll(handleExtendThrowable(syntheticType));
-          }
+            && !syntheticType.doesExtend(SolvedMemberType.JAVA_LANG_EXCEPTION)) {
+          // Remove java.lang.Error in case it was added as part of a throw statement (we want
+          // the alternate with Exception to generate first)
+          syntheticType.removeSuperClass(SolvedMemberType.JAVA_LANG_ERROR);
+          syntheticType.forceSuperClass(SolvedMemberType.JAVA_LANG_EXCEPTION);
+          syntheticType.forceSuperClass(SolvedMemberType.JAVA_LANG_ERROR);
+          toRemove.addAll(handleExtendThrowable(syntheticType));
         }
       }
     } else if (node instanceof ThrowStmt throwStmt) {
@@ -1443,13 +1692,10 @@ public class UnsolvedSymbolGenerator {
               findExistingAndUpdateFQNs(
                   fullyQualifiedNameGenerator.getFQNsForExpressionType(throwStmt.getExpression()));
 
-      // The type rule dependency map will add method/type declarations to the worklist
-      // way before any throw statements will be added. So, if they've already extended the
-      // type, we know it is not an uncaught exception.
-
+      // If we only see a throw statement, assume it's an unchecked exception until we encounter
+      // evidence otherwise (catch, throws clauses)
       if (syntheticType != null && !syntheticType.hasExtends()) {
-        // TODO: Maybe we should use java.lang.Error here?
-        syntheticType.extend(new SolvedMemberType("java.lang.RuntimeException"));
+        syntheticType.forceSuperClass(SolvedMemberType.JAVA_LANG_ERROR);
         toRemove.addAll(handleExtendThrowable(syntheticType));
       }
     } else if (node instanceof TryStmt tryStmt) {
@@ -1509,20 +1755,24 @@ public class UnsolvedSymbolGenerator {
       }
 
       for (UnsolvedClassOrInterfaceAlternates exception : exceptions) {
-        MemberType type = new SolvedMemberType("java.lang.Exception");
-        if (exception == null || exception.doesExtend(type)) {
+        if (exception == null || exception.doesExtend(SolvedMemberType.JAVA_LANG_EXCEPTION)) {
           continue;
         }
-        exception.extend(type);
+        // Remove java.lang.Error in case it was added as part of a throw statement (we want
+        // the alternate with Exception to generate first)
+        exception.removeSuperClass(SolvedMemberType.JAVA_LANG_ERROR);
+        exception.forceSuperClass(SolvedMemberType.JAVA_LANG_EXCEPTION);
+        exception.forceSuperClass(SolvedMemberType.JAVA_LANG_ERROR);
         toRemove.addAll(handleExtendThrowable(exception));
       }
 
       for (UnsolvedClassOrInterfaceAlternates type : types) {
-        if (type == null || type.doesImplement("java.lang.AutoCloseable")) {
+        MemberType autoCloseable = new SolvedMemberType("java.lang.AutoCloseable");
+        if (type == null || type.doesImplement(autoCloseable)) {
           continue;
         }
 
-        type.implement("java.lang.AutoCloseable");
+        type.forceSuperInterface(autoCloseable);
 
         UnsolvedMethodAlternates unsolvedMethodAlternates =
             UnsolvedMethodAlternates.create(
@@ -1530,7 +1780,7 @@ public class UnsolvedSymbolGenerator {
                 new SolvedMemberType("void"),
                 List.of(type),
                 List.of(),
-                List.of(new SolvedMemberType("java.lang.Exception")));
+                List.of(SolvedMemberType.JAVA_LANG_EXCEPTION));
 
         addNewSymbolToGeneratedSymbolsMap(unsolvedMethodAlternates);
         toAdd.add(unsolvedMethodAlternates);
@@ -1570,8 +1820,7 @@ public class UnsolvedSymbolGenerator {
             "Unsolved instanceof type when all unsolved symbols should be generated.");
       }
 
-      // TODO: if extend is filled, put it into implements
-      referenceType.extend(relational);
+      referenceType.addSuperType(Set.of(relational));
     }
 
     // This condition checks to see if the return type of a synthetic method definition
@@ -1596,7 +1845,8 @@ public class UnsolvedSymbolGenerator {
         }
       }
 
-      Collection<Set<String>> potentialScopeFQNs = getMethodLocationFQNs(methodCall);
+      Collection<Set<String>> potentialScopeFQNs =
+          getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(methodCall);
 
       // Could be empty if the method is called on a NameExpr with a union type,
       // but the method is located in a known class.
@@ -1610,7 +1860,8 @@ public class UnsolvedSymbolGenerator {
         }
       }
 
-      Set<String> potentialFQNs = getMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null);
+      Set<String> potentialFQNs =
+          getMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, false);
 
       UnsolvedMethodAlternates alt =
           (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(potentialFQNs);
@@ -1620,10 +1871,8 @@ public class UnsolvedSymbolGenerator {
           UnsolvedClassOrInterfaceAlternates generatedType =
               (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
           if (generatedType != null
-              && (generatedType.doesExtend(new SolvedMemberType("java.lang.Exception"))
-                  || generatedType.doesExtend(new SolvedMemberType("java.lang.Throwable"))
-                  || generatedType.doesExtend(
-                      new SolvedMemberType("java.lang.RuntimeException")))) {
+              && (generatedType.doesExtend(SolvedMemberType.JAVA_LANG_EXCEPTION)
+                  || generatedType.doesExtend(SolvedMemberType.JAVA_LANG_ERROR))) {
             if (potentialFQNs.stream()
                 .map(fqn -> fqn.substring(fqn.indexOf('#') + 1))
                 .anyMatch(fqn -> JavaLangUtils.getJavaLangThrowableMethods().containsKey(fqn))) {
@@ -1632,13 +1881,18 @@ public class UnsolvedSymbolGenerator {
           }
         }
 
+        // If there is a null, and the Object version is not findable, then another call to the same
+        // method exists, and we'll get the signature from there instead
+        if (methodCall.getArguments().stream().anyMatch(Expression::isNullLiteralExpr)) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
         throw new RuntimeException(
             "Unresolvable method is not generated when all unsolved symbols should be: "
                 + potentialFQNs);
       }
 
       if (alt.getReturnTypes().size() > 1
-          || !(alt.getReturnTypes().get(0) instanceof UnsolvedMemberType)) {
+          || !(alt.getReturnTypes().iterator().next() instanceof UnsolvedMemberType)) {
         // Return type is not synthetic
         return UnsolvedGenerationResult.EMPTY;
       }
@@ -1732,7 +1986,7 @@ public class UnsolvedSymbolGenerator {
 
               if (signature.equals(methodSignature)) {
                 UnsolvedClassOrInterfaceAlternates oldReturn =
-                    ((UnsolvedMemberType) alt.getReturnTypes().get(0)).getUnsolvedType();
+                    ((UnsolvedMemberType) alt.getReturnTypes().iterator().next()).getUnsolvedType();
                 try {
                   ResolvedType resolvedType = methodDecl.getReturnType();
 
@@ -1775,7 +2029,535 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
+    // Get super classes: type of LHS is a super type of the type of the RHS
+    if (node instanceof AssignExpr
+        || (node instanceof VariableDeclarator varDecl && varDecl.getInitializer().isPresent())
+        || (node instanceof ReturnStmt returnStmt && returnStmt.getExpression().isPresent())
+        || node instanceof LambdaExpr) {
+      Set<MemberType> lhsType;
+      Set<MemberType> rhsType;
+
+      Supplier<ResolvedType> getResolvedTypeOfLHS;
+
+      if (node instanceof AssignExpr assignExpr) {
+        Expression lhs = assignExpr.getTarget();
+        Expression rhs = assignExpr.getValue();
+        lhsType = getExpressionTypesIfRepresentsGeneratedOrElseDefault(lhs);
+        rhsType = getExpressionTypesIfRepresentsGeneratedOrElseDefault(rhs);
+
+        getResolvedTypeOfLHS = () -> lhs.calculateResolvedType();
+      } else if (node instanceof VariableDeclarator varDecl) {
+        Type lhs = varDecl.getType();
+
+        if (lhs.isVarType()) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
+
+        Expression rhs = varDecl.getInitializer().get();
+        MemberType lhsMemberType =
+            getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(lhs), false);
+        lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
+        rhsType = getExpressionTypesIfRepresentsGeneratedOrElseDefault(rhs);
+
+        getResolvedTypeOfLHS = () -> lhs.resolve();
+      } else if (node instanceof ReturnStmt returnStmt) {
+        Node methodOrLambda = JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt);
+
+        if (methodOrLambda instanceof MethodDeclaration methodDecl) {
+          Type lhs = methodDecl.getType();
+          Expression rhs = returnStmt.getExpression().get();
+          MemberType lhsMemberType =
+              getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(lhs), false);
+          lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
+          rhsType = getExpressionTypesIfRepresentsGeneratedOrElseDefault(rhs);
+          getResolvedTypeOfLHS = () -> lhs.resolve();
+        } else {
+          // Do not handle here: handle when we encounter the ancestor LambdaExpr node
+          return UnsolvedGenerationResult.EMPTY;
+        }
+      } else if (node instanceof LambdaExpr lambdaExpr) {
+        // See if the lambda expression type is available. If not, we can't get a relationship
+
+        ResolvedType solvableTypeFromLambda;
+        try {
+          ResolvedType functionalInterface = lambdaExpr.calculateResolvedType();
+
+          if (!functionalInterface.isReferenceType()
+              || !functionalInterface.asReferenceType().getTypeDeclaration().isPresent()) {
+            return UnsolvedGenerationResult.EMPTY;
+          }
+
+          ResolvedReferenceTypeDeclaration functionalInterfaceDecl =
+              functionalInterface.asReferenceType().getTypeDeclaration().get();
+
+          if (!functionalInterfaceDecl.isFunctionalInterface()) {
+            return UnsolvedGenerationResult.EMPTY;
+          }
+
+          solvableTypeFromLambda =
+              functionalInterfaceDecl.getAllMethods().iterator().next().returnType();
+        } catch (UnsolvedSymbolException ex) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
+
+        if (lambdaExpr.getExpressionBody().isPresent()) {
+          MemberType lhsMemberType =
+              getMemberTypeFromFQNs(
+                  fullyQualifiedNameGenerator.getFQNsForResolvedType(solvableTypeFromLambda),
+                  false);
+          lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
+          rhsType =
+              getExpressionTypesIfRepresentsGeneratedOrElseDefault(
+                  lambdaExpr.getExpressionBody().get());
+          getResolvedTypeOfLHS = () -> solvableTypeFromLambda;
+        } else {
+          ReturnStmt returnStmt =
+              (ReturnStmt)
+                  lambdaExpr.getBody().asBlockStmt().stream()
+                      .filter(n -> n instanceof ReturnStmt)
+                      .findFirst()
+                      .orElse(null);
+
+          if (returnStmt == null || !returnStmt.getExpression().isPresent()) {
+            return UnsolvedGenerationResult.EMPTY;
+          }
+
+          MemberType lhsMemberType =
+              getMemberTypeFromFQNs(
+                  fullyQualifiedNameGenerator.getFQNsForResolvedType(solvableTypeFromLambda),
+                  false);
+          lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
+          rhsType =
+              getExpressionTypesIfRepresentsGeneratedOrElseDefault(
+                  returnStmt.getExpression().get());
+          getResolvedTypeOfLHS = () -> solvableTypeFromLambda;
+        }
+      } else {
+        throw new RuntimeException("Impossible error");
+      }
+
+      if (rhsType.isEmpty()) {
+        throw new RuntimeException("Type has not been generated for the RHS of " + node);
+      }
+
+      if (lhsType.isEmpty()) {
+        throw new RuntimeException("Type has not been generated for the LHS of " + node);
+      }
+
+      handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+    } else if (node instanceof MethodCallExpr
+        || node instanceof ObjectCreationExpr
+        || node instanceof ExplicitConstructorInvocationStmt) {
+      NodeWithArguments<?> nodeWithArgs = (NodeWithArguments<?>) node;
+
+      try {
+        ResolvedMethodLikeDeclaration resolved =
+            (ResolvedMethodLikeDeclaration) ((Resolvable<?>) nodeWithArgs).resolve();
+
+        if (resolved == null) {
+          throw new RuntimeException("Resolved declaration is null when it shouldn't be");
+        }
+
+        CallableDeclaration<?> asAst =
+            (CallableDeclaration<?>)
+                JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
+
+        for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
+          MemberType lhsType;
+          Set<MemberType> rhsType =
+              getExpressionTypesIfRepresentsGeneratedOrElseDefault(nodeWithArgs.getArgument(i));
+
+          Supplier<ResolvedType> getResolvedTypeOfLHS;
+
+          try {
+            ResolvedParameterDeclaration param = resolved.getParam(i);
+
+            lhsType =
+                getMemberTypeFromFQNs(
+                    fullyQualifiedNameGenerator.getFQNsForResolvedType(param.getType()), false);
+            getResolvedTypeOfLHS = () -> param.getType();
+          } catch (UnsolvedSymbolException ex) {
+            if (asAst == null) {
+              // asAst cannot be null here: if the parameter type is unresolvable, then it must be
+              // in
+              // the project because JDK parameters will always be resolvable
+              throw new RuntimeException("asAst cannot be null");
+            }
+
+            Type type = asAst.getParameter(i).getType();
+
+            lhsType =
+                getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(type), false);
+            getResolvedTypeOfLHS = () -> type.resolve();
+          }
+
+          if (rhsType.isEmpty()) {
+            throw new RuntimeException(
+                "Type has not been generated for " + nodeWithArgs.getArgument(i));
+          }
+
+          if (lhsType == null) {
+            throw new RuntimeException(
+                "Type has not been generated for the LHS of parameter " + i + " of " + node);
+          }
+
+          handleLHSAndRHSRelationship(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
+        }
+      } catch (UnsolvedSymbolException ex) {
+        List<? extends CallableDeclaration<?>> withUnresolvableArgs =
+            getExistingCallsWithUnresolvableArguments(nodeWithArgs);
+
+        if (withUnresolvableArgs.isEmpty()) {
+          UnsolvedMethodAlternates genMethod = null;
+          if (node instanceof MethodCallExpr methodCall) {
+            Collection<Set<String>> methodScope =
+                getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(methodCall);
+            Set<String> methodFqns =
+                getMethodFQNsWithSideEffect(methodCall, methodScope, null, false);
+            genMethod = (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(methodFqns);
+          } else {
+            genMethod =
+                (UnsolvedMethodAlternates)
+                    findExistingAndUpdateFQNs(getFQNsForUnsolvableConstructor(node));
+          }
+
+          if (genMethod == null) {
+            throw new RuntimeException("Method alternates for " + node + " could not be found");
+          }
+
+          for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
+            final int iCopy = i;
+            Set<MemberType> lhsType =
+                genMethod.getAlternates().stream()
+                    .map(alt -> alt.getParameterList().get(iCopy))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            Set<MemberType> rhsType =
+                getExpressionTypesIfRepresentsGeneratedOrElseDefault(nodeWithArgs.getArgument(i));
+
+            // If the method is a synthetic definition, there is no resolved type of the LHS
+            Supplier<ResolvedType> getResolvedTypeOfLHS =
+                () -> {
+                  throw new UnsolvedSymbolException("");
+                };
+
+            if (rhsType.isEmpty()) {
+              throw new RuntimeException(
+                  "Type has not been generated for " + nodeWithArgs.getArgument(i));
+            }
+
+            if (lhsType.isEmpty()) {
+              throw new RuntimeException(
+                  "Type has not been generated for the LHS of parameter " + i + " of " + node);
+            }
+
+            handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+          }
+        } else {
+          for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
+            final int iCopy = i;
+            Set<MemberType> lhsType =
+                withUnresolvableArgs.stream()
+                    .map(
+                        alt -> {
+                          MemberType paramType =
+                              getMemberTypeFromFQNs(
+                                  fullyQualifiedNameGenerator.getFQNsFromType(
+                                      alt.getParameter(iCopy).getType()),
+                                  false);
+
+                          if (paramType == null) {
+                            throw new RuntimeException(
+                                "Parameter type could not be resolved for "
+                                    + alt.getParameter(iCopy));
+                          }
+
+                          return paramType;
+                        })
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+
+            Set<MemberType> rhsType =
+                getExpressionTypesIfRepresentsGeneratedOrElseDefault(nodeWithArgs.getArgument(i));
+
+            // Unless there is only one LHS possibility, we cannot resolve the type
+            Supplier<ResolvedType> getResolvedTypeOfLHS;
+
+            if (withUnresolvableArgs.size() == 1) {
+              getResolvedTypeOfLHS =
+                  () -> withUnresolvableArgs.get(0).getParameter(iCopy).getType().resolve();
+            } else {
+              getResolvedTypeOfLHS =
+                  () -> {
+                    throw new UnsolvedSymbolException("");
+                  };
+            }
+
+            if (rhsType.isEmpty()) {
+              throw new RuntimeException(
+                  "Type has not been generated for " + nodeWithArgs.getArgument(i));
+            }
+
+            if (lhsType.isEmpty()) {
+              throw new RuntimeException(
+                  "Type has not been generated for the LHS of parameter " + i + " of " + node);
+            }
+
+            handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+          }
+        }
+      }
+    }
+
     return new UnsolvedGenerationResult(toAdd, toRemove);
+  }
+
+  /**
+   * Handles the relationship between the LHS and RHS types by making the type of the LHS a
+   * supertype of the type of the RHS, if the type of the RHS is unsolved.
+   *
+   * @param lhsTypes The type(s) of the LHS
+   * @param rhsTypes The type(s) of the RHS
+   * @param getResolvedTypeOfLHS A supplier for the resolved type of the LHS. Typically a call to
+   *     resolve() or calculateResolvedType().
+   */
+  private void handleLHSAndRHSRelationship(
+      Set<MemberType> lhsTypes,
+      Set<MemberType> rhsTypes,
+      Supplier<ResolvedType> getResolvedTypeOfLHS) {
+    for (MemberType rhsType : rhsTypes) {
+      // If RHS is solvable, do not continue
+      if (!(rhsType instanceof UnsolvedMemberType unsolved)) {
+        return;
+      }
+
+      try {
+        ResolvedType resolved = getResolvedTypeOfLHS.get();
+
+        if (resolved.isReferenceType()
+            && resolved.asReferenceType().getTypeDeclaration().isPresent()) {
+          ResolvedReferenceTypeDeclaration decl =
+              resolved.asReferenceType().getTypeDeclaration().get();
+
+          // If LHS is solvable, there is only one
+          if (decl.isClass()) {
+            unsolved.getUnsolvedType().forceSuperClass(lhsTypes.iterator().next());
+          } else if (decl.isInterface()) {
+            unsolved.getUnsolvedType().forceSuperInterface(lhsTypes.iterator().next());
+          } else {
+            throw new RuntimeException("Invalid LHS type: " + resolved.describe());
+          }
+        }
+      } catch (UnsolvedSymbolException e) {
+        unsolved.getUnsolvedType().addSuperType(lhsTypes);
+      }
+    }
+  }
+
+  /**
+   * Returns the FQNs for an unsolvable constructor call.
+   *
+   * @param node The node representing the constructor call; either an ObjectCreationExpr or
+   *     ExplicitConstructorInvocationStmt
+   * @return A set of FQNs representing the constructor
+   */
+  private Set<String> getFQNsForUnsolvableConstructor(Node node) {
+    UnsolvedClassOrInterfaceAlternates scope;
+    String constructorName;
+    List<Expression> arguments;
+
+    if (node instanceof ObjectCreationExpr constructor) {
+      scope =
+          (UnsolvedClassOrInterfaceAlternates)
+              findExistingAndUpdateFQNs(
+                  fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
+                      constructor.getType()));
+
+      constructorName = constructor.getTypeAsString();
+      arguments = constructor.getArguments();
+    } else if (node instanceof ExplicitConstructorInvocationStmt constructor) {
+      // If it's unresolvable, it's a constructor in the unsolved parent class
+      if (!constructor.isThis()) {
+        // There can only be one extends in a class
+        ClassOrInterfaceType superClass = JavaParserUtil.getSuperClass(node);
+
+        scope =
+            (UnsolvedClassOrInterfaceAlternates)
+                findExistingAndUpdateFQNs(
+                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(superClass));
+
+        constructorName = superClass.getNameAsString();
+        arguments = constructor.getArguments();
+      } else {
+        // We should never reach this case unless the user inputted a bad program (i.e.
+        // this(...) constructor call when a definition is not there, or super() without a parent
+        // class)
+        throw new RuntimeException("Unexpected explicit constructor invocation statement call.");
+      }
+    } else {
+      throw new RuntimeException(
+          "Parameter node must be an ObjectCreationExpr or an ExplicitConstructorInvocationStmt");
+    }
+
+    if (scope == null) {
+      throw new RuntimeException("Scope not created when it should've been");
+    }
+
+    constructorName =
+        JavaParserUtil.getSimpleNameFromQualifiedName(JavaParserUtil.erase(constructorName));
+
+    List<String> simpleNames = new ArrayList<>();
+
+    for (Expression argument : arguments) {
+      FullyQualifiedNameSet fqns = fullyQualifiedNameGenerator.getFQNsForExpressionType(argument);
+      String first = fqns.erasedFqns().iterator().next();
+      simpleNames.add(JavaParserUtil.getSimpleNameFromQualifiedName(first));
+    }
+
+    Set<String> potentialFQNs = new LinkedHashSet<>();
+
+    for (String potentialScopeFQN : scope.getFullyQualifiedNames()) {
+      potentialFQNs.add(
+          potentialScopeFQN + "#" + constructorName + "(" + String.join(", ", simpleNames) + ")");
+    }
+
+    return potentialFQNs;
+  }
+
+  /**
+   * Gets the type of a generated symbol if it exists, or else returns the default from
+   * FullyQualifiedNameGenerator.
+   *
+   * @param expression The expression to check
+   * @return The set of member types
+   */
+  private Set<MemberType> getExpressionTypesIfRepresentsGeneratedOrElseDefault(
+      Expression expression) {
+    if (expression.isMethodCallExpr()) {
+      MethodCallExpr methodCall = expression.asMethodCallExpr();
+      Collection<Set<String>> potentialScopeFQNs =
+          getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(methodCall);
+      Set<String> methodFQNs =
+          getMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, false);
+
+      UnsolvedMethodAlternates unsolvedMethodAlternates =
+          (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(methodFQNs);
+
+      if (unsolvedMethodAlternates != null) {
+        return unsolvedMethodAlternates.getReturnTypes();
+      }
+
+      if (!methodFQNs.isEmpty()) {
+        // For purposes of seeing if the method is part of Throwable/Exception/RuntimeException,
+        // getting the signature of the first is enough since they should all be the same if their
+        // declaring
+        // type extends it
+        String methodSignature = methodFQNs.iterator().next();
+        methodSignature = methodSignature.substring(methodSignature.indexOf('#') + 1);
+
+        for (Set<String> declaringTypeFQNs : potentialScopeFQNs) {
+          UnsolvedClassOrInterfaceAlternates declaringType =
+              (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(declaringTypeFQNs);
+
+          if (declaringType == null) {
+            continue;
+          }
+          if (declaringType.doesExtend(SolvedMemberType.JAVA_LANG_EXCEPTION)
+              || declaringType.doesExtend(SolvedMemberType.JAVA_LANG_ERROR)) {
+            if (JavaLangUtils.getJavaLangThrowableMethods().containsKey(methodSignature)) {
+              return Set.of(
+                  new SolvedMemberType(
+                      JavaLangUtils.getJavaLangThrowableMethods().get(methodSignature)));
+            }
+          }
+        }
+      }
+    } else if (expression.isFieldAccessExpr()) {
+      FieldAccessExpr fieldAccess = expression.asFieldAccessExpr();
+      Collection<Set<String>> potentialScopeFQNs =
+          getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(fieldAccess);
+      Set<String> potentialFQNs = new HashSet<>();
+
+      for (Set<String> scopeFQNs : potentialScopeFQNs) {
+        for (String fqn : scopeFQNs) {
+          potentialFQNs.add(fqn + "#" + fieldAccess.getNameAsString());
+        }
+      }
+
+      UnsolvedFieldAlternates unsolvedFieldAlternates =
+          (UnsolvedFieldAlternates) findExistingAndUpdateFQNs(potentialFQNs);
+
+      if (unsolvedFieldAlternates != null) {
+        return unsolvedFieldAlternates.getTypes();
+      }
+    } else if (expression.isNameExpr()) {
+      NameExpr nameExpr = expression.asNameExpr();
+      Collection<Set<String>> potentialScopeFQNs =
+          getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(nameExpr);
+      Set<String> potentialFQNs = new HashSet<>();
+
+      for (Set<String> scopeFQNs : potentialScopeFQNs) {
+        for (String fqn : scopeFQNs) {
+          potentialFQNs.add(fqn + "#" + nameExpr.getNameAsString());
+        }
+      }
+
+      UnsolvedFieldAlternates unsolvedFieldAlternates =
+          (UnsolvedFieldAlternates) findExistingAndUpdateFQNs(potentialFQNs);
+
+      if (unsolvedFieldAlternates != null) {
+        return unsolvedFieldAlternates.getTypes();
+      }
+    } else if (expression.isConditionalExpr()) {
+      ConditionalExpr conditionalExpr = expression.asConditionalExpr();
+      Collection<Set<String>> potentialScopeFQNs1 =
+          getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(
+              conditionalExpr.getThenExpr());
+      Collection<Set<String>> potentialScopeFQNs2 =
+          getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(
+              conditionalExpr.getElseExpr());
+      Set<String> potentialFQNs = new HashSet<>();
+
+      for (Set<String> scopeFQNs : potentialScopeFQNs1) {
+        for (String fqn : scopeFQNs) {
+          potentialFQNs.add(fqn + "#" + conditionalExpr.getCondition().toString());
+        }
+      }
+      for (Set<String> scopeFQNs : potentialScopeFQNs2) {
+        for (String fqn : scopeFQNs) {
+          potentialFQNs.add(fqn + "#" + conditionalExpr.getCondition().toString());
+        }
+      }
+
+      UnsolvedFieldAlternates unsolvedFieldAlternates =
+          (UnsolvedFieldAlternates) findExistingAndUpdateFQNs(potentialFQNs);
+
+      if (unsolvedFieldAlternates != null) {
+        return unsolvedFieldAlternates.getTypes();
+      }
+    }
+
+    MemberType type =
+        getMemberTypeFromFQNs(
+            fullyQualifiedNameGenerator.getFQNsForExpressionType(expression), false);
+
+    if (type == null) {
+      return Set.of();
+    }
+
+    return Set.of(type);
+  }
+
+  /**
+   * Once {@link #addInformation(Node)} is done, call this method to make sure all generated symbols
+   * are consistent with their super type relationships.
+   */
+  public void generateAllAlternatesBasedOnSuperTypeRelationships() {
+    // This method is called after all unsolved symbols are generated and all information is added
+    // to ensure that all symbols are consistent with their super type relationships.
+    for (UnsolvedSymbolAlternates<?> symbol : generatedSymbols.values()) {
+      if (symbol instanceof UnsolvedClassOrInterfaceAlternates type) {
+        type.createAlternatesBasedOnSuperTypeRelationships();
+      }
+    }
   }
 
   /**
@@ -1897,7 +2679,13 @@ public class UnsolvedSymbolGenerator {
         || node instanceof ThrowStmt
         || node instanceof InstanceOfExpr
         || node instanceof MethodCallExpr
-        || node instanceof TypeParameter;
+        || node instanceof TypeParameter
+        || node instanceof AssignExpr
+        || node instanceof ReturnStmt
+        || node instanceof VariableDeclarator
+        || node instanceof LambdaExpr
+        || node instanceof ObjectCreationExpr
+        || node instanceof ExplicitConstructorInvocationStmt;
   }
 
   /**
