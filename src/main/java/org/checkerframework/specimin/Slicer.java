@@ -109,6 +109,8 @@ public class Slicer {
    *
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
+   * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
+   * @param fqnToCompilationUnits The map of type FQNs to their compilation units.
    * @return A {@link SliceResult} representing the output of the slice.
    */
   public static SliceResult slice(

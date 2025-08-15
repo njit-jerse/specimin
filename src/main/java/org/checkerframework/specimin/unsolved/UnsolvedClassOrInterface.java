@@ -1,5 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -12,6 +13,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
+/** Represents a single unsolved class or interface alternate. */
 public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
     implements UnsolvedClassOrInterfaceCommon {
 
@@ -223,6 +225,10 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   /**
    * Return the content of the class as a compilable Java file.
    *
+   * @param methods the methods of the class
+   * @param fields the fields of the class
+   * @param innerClassDefinitions the inner classes of the class
+   * @param isInnerClass whether this class is an inner class
    * @return the content of the class
    */
   public String toString(
@@ -308,15 +314,11 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    */
   @Override
   public String getTypeVariablesAsString() {
-    if (numberOfTypeVariables == 0) {
+    List<String> typeVariables = getTypeVariables();
+    if (typeVariables.isEmpty()) {
       return "";
     }
-    StringBuilder result = new StringBuilder();
-    // if class A has three type variables, the expression will be A<T, T1, T2>
-    result.append("<");
-    getTypeVariablesImpl(result);
-    result.append(">");
-    return result.toString();
+    return "<" + String.join(", ", typeVariables) + ">";
   }
 
   /**
@@ -326,32 +328,17 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    * @return the synthetic representation for type variables
    */
   @Override
-  public String getTypeVariablesAsStringWithoutBrackets() {
-    if (numberOfTypeVariables == 0) {
-      return "";
-    }
-    StringBuilder result = new StringBuilder();
-    getTypeVariablesImpl(result);
-    return result.toString();
-  }
-
-  /**
-   * Helper method for {@link #getTypeVariablesAsStringWithoutBrackets()} and {@link
-   * #getTypeVariablesAsString()}.
-   *
-   * @param result a string builder. Will be side-effected.
-   */
-  private void getTypeVariablesImpl(StringBuilder result) {
+  public List<String> getTypeVariables() {
     if (preferredTypeVariables != null) {
-      result.append(String.join(", ", preferredTypeVariables));
-      return;
+      return preferredTypeVariables;
     }
+    List<String> result = new ArrayList<>();
 
     for (int i = 0; i < numberOfTypeVariables; i++) {
       String typeExpression = "T" + ((i > 0) ? i : "");
-      result.append(typeExpression).append(", ");
+      result.add(typeExpression);
     }
-    result.delete(result.length() - 2, result.length());
+    return result;
   }
 
   @Override

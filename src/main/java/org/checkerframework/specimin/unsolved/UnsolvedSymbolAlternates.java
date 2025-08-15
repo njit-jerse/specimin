@@ -16,6 +16,11 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
   private final List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes;
   private List<T> alternates = new ArrayList<>();
 
+  /**
+   * Base constructor for setting alternate declaring types.
+   *
+   * @param alternateDeclaringTypes The set of potential declaring types
+   */
   protected UnsolvedSymbolAlternates(
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes) {
     this.alternateDeclaringTypes = alternateDeclaringTypes;
@@ -70,6 +75,7 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    * Utility method to apply a transformation to all alternates. For example, if you want all
    * alternates to extend type "Foo", pass in {@code UnsolvedClassOrInterface::extend} and "Foo".
    *
+   * @param <U> The type of the input parameter to the BiConsumer
    * @param apply A BiConsumer that modifies each alternate. Pass in an instance method from {@link
    *     T} with one parameter.
    * @param input The input to use to set all alternates.
@@ -102,7 +108,9 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    * (like UnsolvedClassOrInterface::doesImplement) and an interface "MyInterface" to check if all
    * alternates implement the "MyInterface" interface.
    *
+   * @param <U> The type of the input parameter to the BiPredicate
    * @param predicate A BiPredicate; pass in an instance method from {@link T} with one parameter.
+   * @param input The input to use for the predicate
    * @return True if all alternates return true for the predicate
    */
   public <U> boolean doAllAlternatesReturnTrueFor(BiPredicate<T, U> predicate, U input) {

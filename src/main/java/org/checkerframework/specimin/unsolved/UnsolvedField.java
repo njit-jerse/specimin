@@ -6,6 +6,7 @@ import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
 
+/** Represents a single unsolved field alternate. */
 public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFieldCommon {
   /** The name of the field */
   private final String name;

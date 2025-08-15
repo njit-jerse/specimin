@@ -77,11 +77,11 @@ public interface UnsolvedClassOrInterfaceCommon {
   public @Nullable List<String> getPreferredTypeVariables();
 
   /**
-   * Gets the type variables as a String without brackets (i.e., <T1, T2> --> T1, T2)
+   * Gets the type variables as a list.
    *
-   * @return The type variables without brackets
+   * @return The type variables as a list
    */
-  public String getTypeVariablesAsStringWithoutBrackets();
+  public List<String> getTypeVariables();
 
   /**
    * Return a synthetic representation for type variables of the current class.

@@ -548,10 +548,21 @@ public class FullyQualifiedNameGenerator {
           resolvedType.asReferenceType().typeParametersValues().stream()
               .map(this::getFQNsForResolvedType)
               .toList());
+    } else if (resolvedType.isWildcard()) {
+      if (resolvedType.asWildcard().isBounded()) {
+        FullyQualifiedNameSet bound =
+            getFQNsForResolvedType(resolvedType.asWildcard().getBoundedType());
+        boolean isUpperBound = resolvedType.asWildcard().isUpperBounded();
+
+        return new FullyQualifiedNameSet(
+            bound.erasedFqns(), bound.typeArguments(), isUpperBound ? "? extends" : "? super");
+      } else {
+        return FullyQualifiedNameSet.UNBOUNDED_WILDCARD;
+      }
     }
 
     if (resolvedType.isNull()) {
-      return new FullyQualifiedNameSet("java.lang.Object");
+      return new FullyQualifiedNameSet("null");
     }
 
     return new FullyQualifiedNameSet(resolvedType.describe());
@@ -706,16 +717,25 @@ public class FullyQualifiedNameGenerator {
     // Field declaration and variable declaration expressions
     if (node instanceof NodeWithVariables<?> withVariables) {
       Type type = withVariables.getElementType();
+      Expression initializer = null;
 
       // See if we can find the exact variable, because ElementType gets rid of arrays
       for (VariableDeclarator varDecl : withVariables.getVariables()) {
         if (varDecl.getName().equals(((NodeWithSimpleName<?>) resolvable).getName())) {
           type = varDecl.getType();
+          initializer = varDecl.getInitializer().orElse(null);
           break;
         }
       }
 
-      if (!type.isVarType() && !type.isUnknownType()) {
+      if (type.isVarType()) {
+        if (initializer == null) {
+          throw new RuntimeException("Cannot have a var type with no initializer");
+        }
+        return getFQNsForExpressionType(initializer);
+      }
+
+      if (!type.isUnknownType()) {
         // Keep going if var/unknown type
         return getFQNsFromType(type);
       }
@@ -953,7 +973,7 @@ public class FullyQualifiedNameGenerator {
         return new FullyQualifiedNameSet(
             superFQNs.erasedFqns(), superFQNs.typeArguments(), "? super");
       } else {
-        return new FullyQualifiedNameSet(Set.of(), List.of(), "?");
+        return FullyQualifiedNameSet.UNBOUNDED_WILDCARD;
       }
     }
 
@@ -1136,6 +1156,8 @@ public class FullyQualifiedNameGenerator {
    *
    * @param expr the field access/method call expression to be used as input. Must be in the form of
    *     a qualified class name.
+   * @param isMethod true if the expression is a method call, false if it is a field access.
+   * @return The fully qualified name of the type of the statically imported member
    */
   public static String generateFQNForTheTypeOfAStaticallyImportedMember(
       String expr, boolean isMethod) {
@@ -1188,26 +1210,26 @@ public class FullyQualifiedNameGenerator {
       return new FullyQualifiedNameSet("java.lang.Runnable");
     } else if (numberOfParams == 0 && !isVoid) {
       return new FullyQualifiedNameSet(
-          Set.of("java.util.function.Supplier"), List.of(new FullyQualifiedNameSet("?")));
+          Set.of("java.util.function.Supplier"), List.of(FullyQualifiedNameSet.UNBOUNDED_WILDCARD));
     } else if (numberOfParams == 1 && isVoid) {
       return new FullyQualifiedNameSet(Set.of("java.util.function.Consumer"), parameters);
     } else if (numberOfParams == 1 && !isVoid) {
       return new FullyQualifiedNameSet(
           Set.of("java.util.function.Function"),
-          List.of(parameters.get(0), new FullyQualifiedNameSet("?")));
+          List.of(parameters.get(0), FullyQualifiedNameSet.UNBOUNDED_WILDCARD));
     } else if (numberOfParams == 2 && isVoid) {
       return new FullyQualifiedNameSet(Set.of("java.util.function.BiConsumer"), parameters);
     } else if (numberOfParams == 2 && !isVoid) {
       return new FullyQualifiedNameSet(
           Set.of("java.util.function.BiFunction"),
-          List.of(parameters.get(0), parameters.get(1), new FullyQualifiedNameSet("?")));
+          List.of(parameters.get(0), parameters.get(1), FullyQualifiedNameSet.UNBOUNDED_WILDCARD));
     } else {
       String funcInterfaceName =
           isVoid ? "SyntheticConsumer" + numberOfParams : "SyntheticFunction" + numberOfParams;
 
       if (!isVoid) {
         List<FullyQualifiedNameSet> typeArgs = new ArrayList<>(parameters);
-        typeArgs.add(new FullyQualifiedNameSet("?"));
+        typeArgs.add(FullyQualifiedNameSet.UNBOUNDED_WILDCARD);
 
         parameters = typeArgs;
       }
@@ -1230,7 +1252,7 @@ public class FullyQualifiedNameGenerator {
       int numberOfParams, boolean isVoid) {
     List<FullyQualifiedNameSet> parameters = new ArrayList<>(numberOfParams);
     for (int i = 0; i < numberOfParams; i++) {
-      parameters.add(new FullyQualifiedNameSet("?"));
+      parameters.add(FullyQualifiedNameSet.UNBOUNDED_WILDCARD);
     }
 
     return getSimpleNameOfFunctionalInterfaceWithQualifiedParameters(parameters, isVoid);

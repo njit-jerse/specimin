@@ -45,6 +45,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    * @param returnType the return type of the method
    * @param parameterList the list of parameters for this method
    * @param throwsList the list of exceptions thrown by this method
+   * @param mustPreserve the set of nodes that must be preserved with this alternate
    */
   public UnsolvedMethod(
       String name,
@@ -63,6 +64,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    * @param parameterList the list of parameters for this method
    * @param throwsList the list of exceptions thrown by this method
    * @param accessModifier the access modifier of this method
+   * @param mustPreserve the set of nodes that must be preserved with this alternate
    */
   public UnsolvedMethod(
       String name,

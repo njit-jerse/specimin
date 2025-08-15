@@ -147,6 +147,12 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
+  /**
+   * Replaces a field type with a new type in all alternates.
+   *
+   * @param oldType The type to replace
+   * @param newType The type to replace with
+   */
   public void replaceFieldType(MemberType oldType, MemberType newType) {
     for (UnsolvedField alternate : getAlternates()) {
       if (alternate.getType().equals(oldType)) {

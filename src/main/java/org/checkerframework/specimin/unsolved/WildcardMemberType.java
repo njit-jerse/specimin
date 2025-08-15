@@ -8,7 +8,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Represents a wildcard type (i.e., ?, ? extends T, or ? super T). */
 public class WildcardMemberType extends MemberType {
-
+  /** Represents the type for an unbounded wildcard: ? */
   public static final WildcardMemberType UNBOUNDED = new WildcardMemberType(null, false);
 
   private final @Nullable MemberType bound;
@@ -36,6 +36,15 @@ public class WildcardMemberType extends MemberType {
    */
   public @Nullable MemberType getBound() {
     return bound;
+  }
+
+  /**
+   * Is the bound an upper bound (? extends) or lower bound (? super)?
+   *
+   * @return True if this is an upper bound wildcard, false if it is a lower bound.
+   */
+  public boolean isUpperBounded() {
+    return isUpperBound;
   }
 
   @Override

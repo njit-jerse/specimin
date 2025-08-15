@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+/** The standard type rule dependency map */
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
   /**
@@ -59,6 +60,11 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    */
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
 
+  /**
+   * Creates a new StandardTypeRuleDependencyMap to be passed into Slicer.
+   *
+   * @param fqnToCompilationUnits The map of type FQNs to their compilation units.
+   */
   public StandardTypeRuleDependencyMap(Map<String, CompilationUnit> fqnToCompilationUnits) {
     this.fqnToCompilationUnits = fqnToCompilationUnits;
   }
@@ -434,35 +440,13 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.add(type);
       elements.add(enumConstant);
 
-      List<ResolvedType> argumentTypes = new ArrayList<>();
-      try {
-        for (Expression argument : enumConstant.getArguments()) {
-          argumentTypes.add(argument.calculateResolvedType());
-        }
-      } catch (UnsolvedSymbolException e) {
-        // Handled in UnsolvedSymbolGenerator
-        return elements;
-      }
-
-      for (ConstructorDeclaration constructor : type.getConstructors()) {
-        try {
-          ResolvedConstructorDeclaration resolvedConstructor = constructor.resolve();
-
-          if (resolvedConstructor.getNumberOfParams() != argumentTypes.size()) {
-            continue;
-          }
-
-          for (int i = 0; i < resolvedConstructor.getNumberOfParams(); i++) {
-            ResolvedParameterDeclaration param = resolvedConstructor.getParam(i);
-            if (param.getType().describe().equals(argumentTypes.get(i).describe())) {
-              elements.add(constructor);
-              break;
-            }
-          }
-        } catch (UnsolvedSymbolException e) {
-          // This will be handled in UnsolvedSymbolGenerator
-        }
-      }
+      // Most of the time, this method will return one constructor. However, there may be cases
+      // where we include multiple constructors, but this is because we simply don't know which
+      // one to use.
+      List<ConstructorDeclaration> constructors =
+          JavaParserUtil.tryResolveEnumConstantDeclarationWithUnresolvableArguments(
+              enumConstant, fqnToCompilationUnits);
+      elements.addAll(constructors);
     }
 
     return elements;

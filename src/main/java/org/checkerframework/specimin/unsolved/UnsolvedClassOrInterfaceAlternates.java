@@ -267,6 +267,12 @@ public class UnsolvedClassOrInterfaceAlternates
       return;
     }
 
+    if (superInterface.toString().equals("java.lang.annotation.Annotation")) {
+      superTypeRelationships.clear();
+      setType(UnsolvedClassOrInterfaceType.ANNOTATION);
+      return;
+    }
+
     superTypeRelationships.put(Set.of(superInterface), SuperTypeRelationship.IMPLEMENTS);
   }
 
@@ -593,13 +599,13 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
-   * Gets the type variables as a String without brackets (i.e., <T1, T2> --> T1, T2)
+   * Gets the type variables as a list
    *
-   * @return The type variables without brackets
+   * @return The type variables as a list
    */
   @Override
-  public String getTypeVariablesAsStringWithoutBrackets() {
-    return getAlternates().get(0).getTypeVariablesAsStringWithoutBrackets();
+  public List<String> getTypeVariables() {
+    return getAlternates().get(0).getTypeVariables();
   }
 
   @Override

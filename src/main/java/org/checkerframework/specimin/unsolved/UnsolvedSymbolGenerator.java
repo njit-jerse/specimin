@@ -50,9 +50,11 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.utils.Pair;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -433,7 +435,7 @@ public class UnsolvedSymbolGenerator {
       for (String fqn : rawFqns.erasedFqns()) {
         // java.lang.Class<...> --> java.lang.Class<?>
         if (fqn.equals("java.lang.Class")) {
-          typeArgs = List.of(new FullyQualifiedNameSet(Set.of("?")));
+          typeArgs = List.of(FullyQualifiedNameSet.UNBOUNDED_WILDCARD);
         }
 
         if (isArray) {
@@ -1095,7 +1097,7 @@ public class UnsolvedSymbolGenerator {
    * @param potentialScopeFQNs Potential scope FQNs
    * @param argumentToParameterPotentialFQNs A map of arguments to their type FQNs; pass in null if
    *     no side effect is desired.
-   * @param useNullInsteadOfObject True if you want to use null instead of Object as part of the
+   * @param keepNullInsteadOfObject True if you want to use null instead of Object as part of the
    *     signature
    * @return The set of strings representing the potential FQNs of this method
    */
@@ -1103,11 +1105,11 @@ public class UnsolvedSymbolGenerator {
       MethodCallExpr methodCall,
       Collection<Set<String>> potentialScopeFQNs,
       @Nullable Map<Expression, FullyQualifiedNameSet> argumentToParameterPotentialFQNs,
-      boolean useNullInsteadOfObject) {
+      boolean keepNullInsteadOfObject) {
     List<String> simpleNames = new ArrayList<>();
 
     for (Expression argument : methodCall.getArguments()) {
-      if (argument.isNullLiteralExpr() && useNullInsteadOfObject) {
+      if (argument.isNullLiteralExpr() && keepNullInsteadOfObject) {
         simpleNames.add("null");
         if (argumentToParameterPotentialFQNs != null) {
           argumentToParameterPotentialFQNs.put(argument, new FullyQualifiedNameSet("null"));
@@ -1455,15 +1457,14 @@ public class UnsolvedSymbolGenerator {
 
     result.add(functionalInterface);
 
-    String[] paramArray =
-        functionalInterface.getTypeVariablesAsStringWithoutBrackets().split(", ", -1);
+    List<String> paramList = functionalInterface.getTypeVariables();
     List<MemberType> params = new ArrayList<>();
     String paramListAsString = functionalInterface.getTypeVariablesAsString();
 
     // remove the last element of params, because that's the return type, not a parameter
-    for (int i = 0; i < paramArray.length - (isVoid ? 0 : 1); i++) {
-      params.add(new SolvedMemberType(paramArray[i]));
-      paramListAsString += paramArray[i];
+    for (int i = 0; i < paramList.size() - (isVoid ? 0 : 1); i++) {
+      params.add(new SolvedMemberType(paramList.get(i)));
+      paramListAsString += paramList.get(i);
     }
 
     if (!isVoid) {
@@ -1596,6 +1597,8 @@ public class UnsolvedSymbolGenerator {
   /**
    * Replaces all methods with null in their signature to use java.lang.Object instead, and returns
    * the updated methods.
+   *
+   * @return The updated methods.
    */
   public Set<UnsolvedMethodAlternates> clearMethodsWithNull() {
     for (UnsolvedMethodAlternates unsolvedMethodAlternates : methodsWithNullInSignature) {
@@ -1827,192 +1830,11 @@ public class UnsolvedSymbolGenerator {
     // can be updated by potential child classes.
     // See VoidReturnDoubleTest for an example of why this is necessary
     else if (node instanceof MethodCallExpr methodCall) {
-      // Try to resolve where this came from. If we can, we'll look at its declaring type(s)
-      // and see if anywhere defines its return type.
+      UnsolvedGenerationResult methodCallResult =
+          matchMethodReturnTypesToKnownChildClasses(methodCall);
 
-      // If the method is resolvable, then we do not need to do this.
-
-      try {
-        methodCall.resolve();
-        return UnsolvedGenerationResult.EMPTY;
-      } catch (UnsolvedSymbolException ex) {
-        // continue
-      } catch (UnsupportedOperationException ex) {
-        if (JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
-                methodCall)
-            != null) {
-          return UnsolvedGenerationResult.EMPTY;
-        }
-      }
-
-      Collection<Set<String>> potentialScopeFQNs =
-          getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(methodCall);
-
-      // Could be empty if the method is called on a NameExpr with a union type,
-      // but the method is located in a known class.
-      if (potentialScopeFQNs.isEmpty()) {
-        return UnsolvedGenerationResult.EMPTY;
-      }
-
-      for (Set<String> set : potentialScopeFQNs) {
-        if (doesOverlapWithKnownType(set)) {
-          return UnsolvedGenerationResult.EMPTY;
-        }
-      }
-
-      Set<String> potentialFQNs =
-          getMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, false);
-
-      UnsolvedMethodAlternates alt =
-          (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(potentialFQNs);
-
-      if (alt == null) {
-        for (Set<String> set : potentialScopeFQNs) {
-          UnsolvedClassOrInterfaceAlternates generatedType =
-              (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
-          if (generatedType != null
-              && (generatedType.doesExtend(SolvedMemberType.JAVA_LANG_EXCEPTION)
-                  || generatedType.doesExtend(SolvedMemberType.JAVA_LANG_ERROR))) {
-            if (potentialFQNs.stream()
-                .map(fqn -> fqn.substring(fqn.indexOf('#') + 1))
-                .anyMatch(fqn -> JavaLangUtils.getJavaLangThrowableMethods().containsKey(fqn))) {
-              return UnsolvedGenerationResult.EMPTY;
-            }
-          }
-        }
-
-        // If there is a null, and the Object version is not findable, then another call to the same
-        // method exists, and we'll get the signature from there instead
-        if (methodCall.getArguments().stream().anyMatch(Expression::isNullLiteralExpr)) {
-          return UnsolvedGenerationResult.EMPTY;
-        }
-        throw new RuntimeException(
-            "Unresolvable method is not generated when all unsolved symbols should be: "
-                + potentialFQNs);
-      }
-
-      if (alt.getReturnTypes().size() > 1
-          || !(alt.getReturnTypes().iterator().next() instanceof UnsolvedMemberType)) {
-        // Return type is not synthetic
-        return UnsolvedGenerationResult.EMPTY;
-      }
-
-      if (methodCall.hasScope()) {
-        Set<ResolvedType> potentialTypes = new LinkedHashSet<>();
-        Expression scope = methodCall.getScope().get();
-        try {
-
-          ResolvedValueDeclaration resolved;
-          if (scope.isFieldAccessExpr()) {
-            resolved = scope.asFieldAccessExpr().resolve();
-          } else if (scope.isNameExpr()) {
-            resolved = scope.asNameExpr().resolve();
-          } else {
-            // If not a NameExpr or FieldAccessExpr, then we can't gain any more information, since
-            // the type of the scope is unsolved.
-            return UnsolvedGenerationResult.EMPTY;
-          }
-
-          List<VariableDeclarator> variables;
-
-          Node toAst = JavaParserUtil.findAttachedNode(resolved, fqnsToCompilationUnits);
-
-          if (toAst instanceof VariableDeclarationExpr initializer) {
-            variables = initializer.getVariables();
-          } else if (toAst instanceof FieldDeclaration fieldDecl) {
-            variables = fieldDecl.getVariables();
-          } else if (toAst instanceof VariableDeclarator varDecl) {
-            variables = List.of(varDecl);
-          } else {
-            variables = List.of();
-          }
-
-          for (VariableDeclarator varDecl : variables) {
-            if (varDecl.getInitializer().isPresent()
-                && JavaParserUtil.isExprTypeResolvable(varDecl.getInitializer().get())) {
-              potentialTypes.add(varDecl.getInitializer().get().calculateResolvedType());
-            }
-          }
-        } catch (UnsolvedSymbolException ex) {
-          // Initializer could not be resolved, but the field could still be set somewhere
-        }
-
-        // Now, find all places where the NameExpr/FieldAccessExpr is set to another type
-        TypeDeclaration<?> typeDecl = JavaParserUtil.getEnclosingClassLike(methodCall);
-
-        potentialTypes.addAll(
-            typeDecl.findAll(AssignExpr.class).stream()
-                .filter(
-                    assign ->
-                        assign.getOperator() == AssignExpr.Operator.ASSIGN
-                            && assign.getTarget().toString().equals(scope.toString())
-                            && JavaParserUtil.isExprTypeResolvable(assign.getValue()))
-                .map(assign -> assign.calculateResolvedType())
-                .toList());
-
-        String methodSignature = potentialFQNs.iterator().next();
-        methodSignature =
-            methodSignature.substring(potentialFQNs.iterator().next().indexOf('#') + 1);
-        for (ResolvedType type : potentialTypes) {
-          // Check to see if any of these contain the same method signature; if so, we can
-          // update the return type of the current generated one to match it
-
-          // Must be a reference type: if it were not, the method would be solvable, which we
-          // checked already
-          ResolvedReferenceType refType = type.asReferenceType();
-
-          // The type must also be a user-defined class, not a built-in Java class. This means we
-          // cannot get the ResolvedMethodDeclarations from each type declaration since parameter
-          // types could be unsolved
-          if (refType.getTypeDeclaration().isPresent()) {
-            for (ResolvedMethodDeclaration methodDecl :
-                refType.getTypeDeclaration().get().getDeclaredMethods()) {
-              MethodDeclaration methodDeclAst =
-                  (MethodDeclaration)
-                      JavaParserUtil.findAttachedNode(methodDecl, fqnsToCompilationUnits);
-
-              String signature =
-                  methodDeclAst.getNameAsString()
-                      + "("
-                      + String.join(
-                          ", ",
-                          methodDeclAst.getParameters().stream()
-                              .map(
-                                  param ->
-                                      JavaParserUtil.getSimpleNameFromQualifiedName(
-                                          param.getTypeAsString()))
-                              .toList())
-                      + ")";
-
-              if (signature.equals(methodSignature)) {
-                UnsolvedClassOrInterfaceAlternates oldReturn =
-                    ((UnsolvedMemberType) alt.getReturnTypes().iterator().next()).getUnsolvedType();
-                try {
-                  ResolvedType resolvedType = methodDecl.getReturnType();
-
-                  alt.setReturnType(new SolvedMemberType(resolvedType.describe()));
-
-                  toRemove.add(oldReturn);
-                  removeSymbolFromGeneratedSymbolsMap(oldReturn);
-                } catch (UnsolvedSymbolException ex) {
-                  // In this case, remove the old (SomeMethodReturnType) and replace it with a
-                  // "better" return type (maybe imported, so we would know a more specific FQN)
-                  UnsolvedClassOrInterfaceAlternates generated =
-                      findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
-
-                  if (!generated.equals(oldReturn)) {
-                    toRemove.add(oldReturn);
-                    removeSymbolFromGeneratedSymbolsMap(oldReturn);
-                    toAdd.add(generated);
-                  }
-                }
-
-                break;
-              }
-            }
-          }
-        }
-      }
+      toAdd.addAll(methodCallResult.toAdd());
+      toRemove.addAll(methodCallResult.toRemove());
     } else if (node instanceof TypeParameter typeParam) {
       // All bounds after the first in a type parameter must be interfaces
       // https://docs.oracle.com/javase/tutorial/java/generics/bounded.html
@@ -2147,17 +1969,41 @@ public class UnsolvedSymbolGenerator {
       handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
     } else if (node instanceof MethodCallExpr
         || node instanceof ObjectCreationExpr
-        || node instanceof ExplicitConstructorInvocationStmt) {
+        || node instanceof ExplicitConstructorInvocationStmt
+        || (node instanceof EnumConstantDeclaration enumConstantDeclaration
+            && enumConstantDeclaration.getArguments().isNonEmpty())) {
       NodeWithArguments<?> nodeWithArgs = (NodeWithArguments<?>) node;
 
+      ResolvedMethodLikeDeclaration resolved;
       try {
-        ResolvedMethodLikeDeclaration resolved =
-            (ResolvedMethodLikeDeclaration) ((Resolvable<?>) nodeWithArgs).resolve();
+        if (!(node instanceof EnumConstantDeclaration)) {
+          resolved = (ResolvedMethodLikeDeclaration) ((Resolvable<?>) nodeWithArgs).resolve();
 
-        if (resolved == null) {
-          throw new RuntimeException("Resolved declaration is null when it shouldn't be");
+          if (resolved == null) {
+            throw new RuntimeException("Resolved declaration is null when it shouldn't be");
+          }
+        } else {
+          resolved = null;
         }
+      } catch (UnsolvedSymbolException ex) {
+        resolved = null;
+      } catch (UnsupportedOperationException ex) {
+        if (node instanceof MethodCallExpr methodCall) {
+          Object decl =
+              JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
+                  methodCall);
 
+          if (decl instanceof ResolvedMethodDeclaration methodDecl) {
+            resolved = methodDecl;
+          } else {
+            throw ex;
+          }
+        } else {
+          throw ex;
+        }
+      }
+
+      if (resolved != null) {
         CallableDeclaration<?> asAst =
             (CallableDeclaration<?>)
                 JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
@@ -2203,7 +2049,7 @@ public class UnsolvedSymbolGenerator {
 
           handleLHSAndRHSRelationship(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
         }
-      } catch (UnsolvedSymbolException ex) {
+      } else {
         List<? extends CallableDeclaration<?>> withUnresolvableArgs =
             getExistingCallsWithUnresolvableArguments(nodeWithArgs);
 
@@ -2212,9 +2058,32 @@ public class UnsolvedSymbolGenerator {
           if (node instanceof MethodCallExpr methodCall) {
             Collection<Set<String>> methodScope =
                 getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(methodCall);
+
+            // Could be empty if the method is called on a NameExpr with a union type,
+            // but the method is located in a known class.
+            if (methodScope.isEmpty()) {
+              return UnsolvedGenerationResult.EMPTY;
+            }
+
+            for (Set<String> set : methodScope) {
+              if (doesOverlapWithKnownType(set)) {
+                return UnsolvedGenerationResult.EMPTY;
+              }
+            }
+
             Set<String> methodFqns =
                 getMethodFQNsWithSideEffect(methodCall, methodScope, null, false);
             genMethod = (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(methodFqns);
+
+            // If there is a null, and the Object version is not findable, then another call to the
+            // same
+            // method exists, and we'll get the signature from there instead
+            if (genMethod == null
+                && (isMethodABuiltInThrowableMethod(methodScope, methodFqns)
+                    || methodCall.getArguments().stream()
+                        .anyMatch(Expression::isNullLiteralExpr))) {
+              return UnsolvedGenerationResult.EMPTY;
+            }
           } else {
             genMethod =
                 (UnsolvedMethodAlternates)
@@ -2311,6 +2180,236 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Given a method call expression, try to match its return types to known child classes if this
+   * method declaration behind the call matches all of these requirements:
+   *
+   * <ul>
+   *   <li>The method declaration is unsolved and has a synthetic definition for it
+   *   <li>The unsolved declaring type of this method has a solvable child class with the same
+   *       method signature
+   *   <li>This method call currently has a synthetic return type
+   * </ul>
+   *
+   * If all these requirements are matched, then we update the return type of the method declaration
+   * based on the known child class method override return type. We also remove all instances of the
+   * synthetic return type.
+   *
+   * <p>If any of these requirements are not matched, then we return UnsolvedGenerationResult.EMPTY.
+   *
+   * @param methodCall The method call expression to analyze
+   * @return The symbols to add and remove, if any
+   */
+  private UnsolvedGenerationResult matchMethodReturnTypesToKnownChildClasses(
+      MethodCallExpr methodCall) {
+    // Try to resolve where this came from. If we can, we'll look at its declaring type(s)
+    // and see if anywhere defines its return type.
+
+    // If the method is resolvable, then we do not need to do this.
+
+    try {
+      methodCall.resolve();
+      return UnsolvedGenerationResult.EMPTY;
+    } catch (UnsolvedSymbolException ex) {
+      // continue
+    } catch (UnsupportedOperationException ex) {
+      if (JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(methodCall)
+          != null) {
+        return UnsolvedGenerationResult.EMPTY;
+      }
+    }
+
+    Collection<Set<String>> potentialScopeFQNs =
+        getFQNsForExpressionLocationIfRepresentsGeneratedOrElseDefault(methodCall);
+
+    // Could be empty if the method is called on a NameExpr with a union type,
+    // but the method is located in a known class.
+    if (potentialScopeFQNs.isEmpty()) {
+      return UnsolvedGenerationResult.EMPTY;
+    }
+
+    for (Set<String> set : potentialScopeFQNs) {
+      if (doesOverlapWithKnownType(set)) {
+        return UnsolvedGenerationResult.EMPTY;
+      }
+    }
+
+    Set<String> potentialFQNs =
+        getMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, false);
+
+    UnsolvedMethodAlternates alt =
+        (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(potentialFQNs);
+
+    if (alt == null) {
+      if (isMethodABuiltInThrowableMethod(potentialScopeFQNs, potentialFQNs)) {
+        return UnsolvedGenerationResult.EMPTY;
+      }
+
+      // If there is a null, and the Object version is not findable, then another call to the same
+      // method exists, and we'll get the signature from there instead
+      if (methodCall.getArguments().stream().anyMatch(Expression::isNullLiteralExpr)) {
+        return UnsolvedGenerationResult.EMPTY;
+      }
+      throw new RuntimeException(
+          "Unresolvable method is not generated when all unsolved symbols should be: "
+              + potentialFQNs);
+    }
+
+    if (alt.getReturnTypes().size() > 1
+        || !(alt.getReturnTypes().iterator().next() instanceof UnsolvedMemberType)) {
+      // Return type is not synthetic
+      return UnsolvedGenerationResult.EMPTY;
+    }
+
+    if (methodCall.hasScope()) {
+      Set<ResolvedType> potentialTypes = new LinkedHashSet<>();
+      Expression scope = methodCall.getScope().get();
+      try {
+        ResolvedValueDeclaration resolved;
+        if (scope.isFieldAccessExpr()) {
+          resolved = scope.asFieldAccessExpr().resolve();
+        } else if (scope.isNameExpr()) {
+          resolved = scope.asNameExpr().resolve();
+        } else {
+          // If not a NameExpr or FieldAccessExpr, then we can't gain any more information, since
+          // the type of the scope is unsolved.
+          return UnsolvedGenerationResult.EMPTY;
+        }
+
+        List<VariableDeclarator> variables;
+
+        Node toAst = JavaParserUtil.findAttachedNode(resolved, fqnsToCompilationUnits);
+
+        if (toAst instanceof VariableDeclarationExpr initializer) {
+          variables = initializer.getVariables();
+        } else if (toAst instanceof FieldDeclaration fieldDecl) {
+          variables = fieldDecl.getVariables();
+        } else if (toAst instanceof VariableDeclarator varDecl) {
+          variables = List.of(varDecl);
+        } else {
+          variables = List.of();
+        }
+
+        for (VariableDeclarator varDecl : variables) {
+          if (varDecl.getInitializer().isPresent()
+              && JavaParserUtil.isExprTypeResolvable(varDecl.getInitializer().get())) {
+            potentialTypes.add(varDecl.getInitializer().get().calculateResolvedType());
+          }
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // Initializer could not be resolved, but the field could still be set somewhere
+      }
+
+      List<UnsolvedSymbolAlternates<?>> toRemove = new ArrayList<>();
+      List<UnsolvedSymbolAlternates<?>> toAdd = new ArrayList<>();
+
+      // Now, find all places where the NameExpr/FieldAccessExpr is set to another type
+      TypeDeclaration<?> typeDecl = JavaParserUtil.getEnclosingClassLike(methodCall);
+
+      potentialTypes.addAll(
+          typeDecl.findAll(AssignExpr.class).stream()
+              .filter(
+                  assign ->
+                      assign.getOperator() == AssignExpr.Operator.ASSIGN
+                          && assign.getTarget().toString().equals(scope.toString())
+                          && JavaParserUtil.isExprTypeResolvable(assign.getValue()))
+              .map(assign -> assign.calculateResolvedType())
+              .toList());
+
+      String methodSignature = potentialFQNs.iterator().next();
+      methodSignature = methodSignature.substring(potentialFQNs.iterator().next().indexOf('#') + 1);
+      for (ResolvedType type : potentialTypes) {
+        // Check to see if any of these contain the same method signature; if so, we can
+        // update the return type of the current generated one to match it
+
+        // Must be a reference type: if it were not, the method would be solvable, which we
+        // checked already
+        ResolvedReferenceType refType = type.asReferenceType();
+
+        // The type must also be a user-defined class, not a built-in Java class. This means we
+        // cannot get the ResolvedMethodDeclarations from each type declaration since parameter
+        // types could be unsolved
+        if (refType.getTypeDeclaration().isPresent()) {
+          for (ResolvedMethodDeclaration methodDecl :
+              refType.getTypeDeclaration().get().getDeclaredMethods()) {
+            MethodDeclaration methodDeclAst =
+                (MethodDeclaration)
+                    JavaParserUtil.findAttachedNode(methodDecl, fqnsToCompilationUnits);
+
+            String signature =
+                methodDeclAst.getNameAsString()
+                    + "("
+                    + String.join(
+                        ", ",
+                        methodDeclAst.getParameters().stream()
+                            .map(
+                                param ->
+                                    JavaParserUtil.getSimpleNameFromQualifiedName(
+                                        param.getTypeAsString()))
+                            .toList())
+                    + ")";
+
+            if (signature.equals(methodSignature)) {
+              UnsolvedClassOrInterfaceAlternates oldReturn =
+                  ((UnsolvedMemberType) alt.getReturnTypes().iterator().next()).getUnsolvedType();
+              try {
+                ResolvedType resolvedType = methodDecl.getReturnType();
+
+                alt.setReturnType(new SolvedMemberType(resolvedType.describe()));
+
+                toRemove.add(oldReturn);
+                removeSymbolFromGeneratedSymbolsMap(oldReturn);
+              } catch (UnsolvedSymbolException ex) {
+                // In this case, remove the old (SomeMethodReturnType) and replace it with a
+                // "better" return type (maybe imported, so we would know a more specific FQN)
+                UnsolvedClassOrInterfaceAlternates generated =
+                    findExistingAndUpdateFQNsOrCreateNewType(potentialFQNs);
+
+                if (!generated.equals(oldReturn)) {
+                  toRemove.add(oldReturn);
+                  removeSymbolFromGeneratedSymbolsMap(oldReturn);
+                  toAdd.add(generated);
+                }
+              }
+
+              break;
+            }
+          }
+        }
+      }
+
+      return new UnsolvedGenerationResult(toAdd, toRemove);
+    }
+    return UnsolvedGenerationResult.EMPTY;
+  }
+
+  /**
+   * Given the possible declaring type fully qualified names and potential method call FQNs, check
+   * to see if this is defined in java.lang.Throwable.
+   *
+   * @param potentialScopeFQNs The potential declaring type fully qualified names
+   * @param potentialFQNs The potential method call fully qualified names
+   * @return True if this method call is a java.lang.Throwable method
+   */
+  private boolean isMethodABuiltInThrowableMethod(
+      Collection<Set<String>> potentialScopeFQNs, Set<String> potentialFQNs) {
+    for (Set<String> set : potentialScopeFQNs) {
+      UnsolvedClassOrInterfaceAlternates generatedType =
+          (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(set);
+      if (generatedType != null
+          && (generatedType.doesExtend(SolvedMemberType.JAVA_LANG_EXCEPTION)
+              || generatedType.doesExtend(SolvedMemberType.JAVA_LANG_ERROR))) {
+        if (potentialFQNs.stream()
+            .map(fqn -> fqn.substring(fqn.indexOf('#') + 1))
+            .anyMatch(fqn -> JavaLangUtils.getJavaLangThrowableMethods().containsKey(fqn))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Handles the relationship between the LHS and RHS types by making the type of the LHS a
    * supertype of the type of the RHS, if the type of the RHS is unsolved.
    *
@@ -2323,15 +2422,22 @@ public class UnsolvedSymbolGenerator {
       Set<MemberType> lhsTypes,
       Set<MemberType> rhsTypes,
       Supplier<ResolvedType> getResolvedTypeOfLHS) {
+
+    @Nullable ResolvedType resolved;
+    try {
+      resolved = getResolvedTypeOfLHS.get();
+    } catch (UnsolvedSymbolException ex) {
+      resolved = null;
+    }
+
+    // Make sure all erasures of the RHS types are handled with the LHS types
     for (MemberType rhsType : rhsTypes) {
       // If RHS is solvable, do not continue
       if (!(rhsType instanceof UnsolvedMemberType unsolved)) {
-        return;
+        continue;
       }
 
-      try {
-        ResolvedType resolved = getResolvedTypeOfLHS.get();
-
+      if (resolved != null) {
         if (resolved.isReferenceType()
             && resolved.asReferenceType().getTypeDeclaration().isPresent()) {
           ResolvedReferenceTypeDeclaration decl =
@@ -2346,8 +2452,143 @@ public class UnsolvedSymbolGenerator {
             throw new RuntimeException("Invalid LHS type: " + resolved.describe());
           }
         }
-      } catch (UnsolvedSymbolException e) {
+      } else {
         unsolved.getUnsolvedType().addSuperType(lhsTypes);
+      }
+    }
+
+    // Now, make sure the type parameters also have the same relationship, if the left hand side is
+    // a bounded wildcard
+    if (resolved != null) {
+      if (!resolved.isReferenceType()) {
+        return;
+      }
+
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParameters =
+          resolved.asReferenceType().getTypeParametersMap();
+      for (int i = 0; i < typeParameters.size(); i++) {
+        ResolvedType typeParam = typeParameters.get(i).b;
+
+        if (typeParam.isWildcard() && typeParam.asWildcard().isBounded()) {
+          ResolvedType bound = typeParam.asWildcard().getBoundedType();
+          boolean isUpperBound = typeParam.asWildcard().isUpperBounded();
+
+          String erased = JavaParserUtil.erase(bound.describe());
+
+          Set<MemberType> rhsTypeParameters = new LinkedHashSet<>();
+          for (MemberType rhsType : rhsTypes) {
+            // There are many possibilities for this: for example, if rhsType is a raw type,
+            // if rhsType is a non-generic type that extends a generic type, etc.
+            if (rhsType.getTypeArguments().size() <= i) {
+              continue;
+            }
+
+            MemberType typeArg = rhsType.getTypeArguments().get(i);
+
+            if (typeArg instanceof WildcardMemberType rhsWildcard) {
+              MemberType memberTypeBound = rhsWildcard.getBound();
+
+              if (memberTypeBound != null) {
+                typeArg = memberTypeBound;
+              }
+            }
+
+            if (!typeArg.getFullyQualifiedNames().stream().anyMatch(erased::contains)) {
+              continue;
+            }
+
+            rhsTypeParameters.add(typeArg);
+          }
+
+          // ? extends with ? extends; there is no ? extends with ? super
+          if (isUpperBound) {
+            MemberType memberTypeBound = lhsTypes.iterator().next().getTypeArguments().get(i);
+
+            memberTypeBound = ((WildcardMemberType) memberTypeBound).getBound();
+
+            if (memberTypeBound == null) {
+              throw new RuntimeException(
+                  "Null member type wildcard bound when resolved wildcard bound is not null");
+            }
+
+            handleLHSAndRHSRelationship(Set.of(memberTypeBound), rhsTypeParameters, () -> bound);
+          } else {
+            // If the LHS were unsolved, we would make it extend every single class in the RHS; but
+            // since the LHS
+            // is solved, we can't do this
+
+            // If an issue arises in the future, we could find the unsolvable super classes of this
+            // resolvable type
+            // bound and then apply these bounds there
+          }
+        }
+      }
+
+      return;
+    }
+
+    for (MemberType lhsType : lhsTypes) {
+      for (int i = 0; i < lhsType.getTypeArguments().size(); i++) {
+        MemberType typeParam = lhsType.getTypeArguments().get(i);
+
+        if (!(typeParam instanceof WildcardMemberType wildcard)
+            || wildcard.equals(WildcardMemberType.UNBOUNDED)) {
+          continue;
+        }
+
+        MemberType bound = wildcard.getBound();
+
+        if (bound == null) {
+          continue;
+        }
+        boolean isUpperBound = wildcard.isUpperBounded();
+
+        Set<String> erased =
+            bound.getFullyQualifiedNames().stream()
+                .map(JavaParserUtil::erase)
+                .collect(Collectors.toSet());
+
+        Set<MemberType> rhsTypeParameters = new LinkedHashSet<>();
+        for (MemberType rhsType : rhsTypes) {
+          // There are many possibilities for this: for example, if rhsType is a raw type,
+          // if rhsType is a non-generic type that extends a generic type, etc.
+          if (rhsType.getTypeArguments().size() <= i) {
+            continue;
+          }
+
+          MemberType typeArg = rhsType.getTypeArguments().get(i);
+
+          if (typeArg instanceof WildcardMemberType rhsWildcard) {
+            MemberType memberTypeBound = rhsWildcard.getBound();
+
+            if (memberTypeBound != null) {
+              typeArg = memberTypeBound;
+            }
+          }
+
+          if (!typeArg.getFullyQualifiedNames().stream().anyMatch(erased::contains)) {
+            continue;
+          }
+
+          rhsTypeParameters.add(typeArg);
+        }
+
+        // ? extends with ? extends; there is no ? extends with ? super
+        if (isUpperBound) {
+          handleLHSAndRHSRelationship(
+              Set.of(bound),
+              rhsTypeParameters,
+              () -> {
+                throw new UnsolvedSymbolException("");
+              });
+        } else {
+          handleLHSAndRHSRelationship(
+              rhsTypeParameters,
+              rhsTypes,
+              () -> {
+                throw new UnsolvedSymbolException("");
+              });
+        }
       }
     }
   }
@@ -2394,7 +2635,8 @@ public class UnsolvedSymbolGenerator {
       }
     } else {
       throw new RuntimeException(
-          "Parameter node must be an ObjectCreationExpr or an ExplicitConstructorInvocationStmt");
+          "Parameter node must be an ObjectCreationExpr or an ExplicitConstructorInvocationStmt: "
+              + node.getClass());
     }
 
     if (scope == null) {
@@ -2685,7 +2927,8 @@ public class UnsolvedSymbolGenerator {
         || node instanceof VariableDeclarator
         || node instanceof LambdaExpr
         || node instanceof ObjectCreationExpr
-        || node instanceof ExplicitConstructorInvocationStmt;
+        || node instanceof ExplicitConstructorInvocationStmt
+        || node instanceof EnumConstantDeclaration;
   }
 
   /**
@@ -2898,7 +3141,7 @@ public class UnsolvedSymbolGenerator {
       FullyQualifiedNameSet fqns, boolean createNew) {
     String wildcard = fqns.wildcard();
     if (wildcard != null) {
-      if (wildcard.equals("?")) {
+      if (wildcard.equals(FullyQualifiedNameSet.UNBOUNDED_WILDCARD.wildcard())) {
         return WildcardMemberType.UNBOUNDED;
       }
 

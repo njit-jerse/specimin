@@ -1,0 +1,11 @@
+package com.example;
+
+public class Simple {
+    void bar() {
+        Foo<? extends Bar> foo = new Foo<Baz>();
+        Foo2<? extends Bar2> foo2 = new Foo2<Baz2>();
+
+        // Foo2 should extend Foo, and Bar2 should extend Bar
+        foo = foo2;
+    }
+}

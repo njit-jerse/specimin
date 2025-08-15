@@ -18,6 +18,10 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 public record FullyQualifiedNameSet(
     Set<String> erasedFqns, List<FullyQualifiedNameSet> typeArguments, @Nullable String wildcard) {
 
+  /** Represents an unbounded wildcard: ? */
+  public static final FullyQualifiedNameSet UNBOUNDED_WILDCARD =
+      new FullyQualifiedNameSet(Set.of(), List.of(), "?");
+
   /**
    * Creates a FullyQualifiedNameSet with erased FQNs, type arguments, but no wildcard.
    *

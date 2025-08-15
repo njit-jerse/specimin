@@ -658,6 +658,7 @@ public class JavaParserUtil {
    * returned, but a corresponding Type in the AST cannot be found.
    *
    * @param expression The expression to get the type from
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
    * @return The type of the expression, or null if it cannot be found
    */
   public static @Nullable String tryGetTypeAsStringFromExpression(
@@ -784,6 +785,7 @@ public class JavaParserUtil {
    * the declaring type could not be solved.
    *
    * @param constructorCall The constructor call expression
+   * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible constructor declarations
    */
   public static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
@@ -820,6 +822,7 @@ public class JavaParserUtil {
    * the declaring type could not be solved.
    *
    * @param constructorCall The constructor call statement (super or this constructor call)
+   * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible constructor declarations
    */
   public static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
@@ -859,6 +862,7 @@ public class JavaParserUtil {
    * type could not be solved.
    *
    * @param methodCall The method call expression
+   * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible method declarations
    */
   public static List<MethodDeclaration> tryResolveMethodCallWithUnresolvableArguments(
@@ -934,6 +938,7 @@ public class JavaParserUtil {
    * or if the declaring type could not be solved.
    *
    * @param enumConstant The enum constant declaration
+   * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible constructor declarations
    */
   public static List<ConstructorDeclaration>
@@ -1678,6 +1683,7 @@ public class JavaParserUtil {
   /**
    * Given a list, return all subsets.
    *
+   * @param <T> The type of the list elements
    * @param original The original list
    * @return A list of all subsets
    */
@@ -1704,6 +1710,7 @@ public class JavaParserUtil {
    * from each collection. For example, if you input a list [[1, 2], [3]], then output [[1, 3], [2,
    * 3]].
    *
+   * @param <T> The type of the list elements
    * @param collections The list of collections to combine
    * @return A list of all combinations of elements
    */

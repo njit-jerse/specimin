@@ -17,5 +17,12 @@ public interface TypeRuleDependencyMap {
    */
   public List<Node> getRelevantElements(Node node);
 
+  /**
+   * Given a resolved object, return all relevant nodes. For example, a resolved method declaration
+   * would return the method declaration and its declaring type, both as attached nodes.
+   *
+   * @param resolved The resolved object
+   * @return All relevant nodes to the input resolved object.
+   */
   public List<Node> getRelevantElements(Object resolved);
 }
