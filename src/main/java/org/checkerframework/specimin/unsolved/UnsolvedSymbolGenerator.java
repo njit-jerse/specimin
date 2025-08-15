@@ -303,8 +303,7 @@ public class UnsolvedSymbolGenerator {
       generated.setNumberOfTypeVariables(type.getTypeArguments().get().size());
 
       NodeList<Type> typeArgs = type.getTypeArguments().get();
-      List<String> typeArgsPreferred =
-          new ArrayList<>(List.of(generated.getTypeVariablesAsString().split(",\\s*", -1)));
+      List<String> typeArgsPreferred = new ArrayList<>(generated.getTypeVariables());
 
       boolean changed = false;
 
@@ -2473,7 +2472,7 @@ public class UnsolvedSymbolGenerator {
           ResolvedType bound = typeParam.asWildcard().getBoundedType();
           boolean isUpperBound = typeParam.asWildcard().isUpperBounded();
 
-          String erased = JavaParserUtil.erase(bound.describe());
+          String erased = JavaParserUtil.erase(resolved.describe());
 
           Set<MemberType> rhsTypeParameters = new LinkedHashSet<>();
           for (MemberType rhsType : rhsTypes) {
@@ -2493,7 +2492,7 @@ public class UnsolvedSymbolGenerator {
               }
             }
 
-            if (!typeArg.getFullyQualifiedNames().stream().anyMatch(erased::contains)) {
+            if (!rhsType.getFullyQualifiedNames().stream().anyMatch(erased::contains)) {
               continue;
             }
 
@@ -2544,7 +2543,7 @@ public class UnsolvedSymbolGenerator {
         boolean isUpperBound = wildcard.isUpperBounded();
 
         Set<String> erased =
-            bound.getFullyQualifiedNames().stream()
+            lhsType.getFullyQualifiedNames().stream()
                 .map(JavaParserUtil::erase)
                 .collect(Collectors.toSet());
 
@@ -2566,7 +2565,7 @@ public class UnsolvedSymbolGenerator {
             }
           }
 
-          if (!typeArg.getFullyQualifiedNames().stream().anyMatch(erased::contains)) {
+          if (!rhsType.getFullyQualifiedNames().stream().anyMatch(erased::contains)) {
             continue;
           }
 

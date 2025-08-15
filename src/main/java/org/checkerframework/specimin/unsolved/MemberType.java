@@ -11,7 +11,7 @@ import java.util.Set;
  * UnsolvedField} to ensure proper types when alternates are generated.
  */
 public abstract class MemberType {
-  private final List<MemberType> typeArguments;
+  private List<MemberType> typeArguments;
 
   /**
    * Creates a new MemberType with the given type arguments.
@@ -37,5 +37,14 @@ public abstract class MemberType {
    */
   public List<MemberType> getTypeArguments() {
     return typeArguments;
+  }
+
+  /**
+   * Sets the type arguments for this type.
+   *
+   * @param typeArguments The list of member types representing the type arguments of this type
+   */
+  public void setTypeArguments(List<MemberType> typeArguments) {
+    this.typeArguments = typeArguments;
   }
 }

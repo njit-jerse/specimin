@@ -1,3 +1,3 @@
 package com.example;
-public interface Set<E> extends com.example.Collection<E> {
+public interface Set<T> extends com.example.Collection<T> {
 }

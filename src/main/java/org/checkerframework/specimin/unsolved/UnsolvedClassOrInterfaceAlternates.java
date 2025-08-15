@@ -2,6 +2,7 @@ package org.checkerframework.specimin.unsolved;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -213,12 +214,17 @@ public class UnsolvedClassOrInterfaceAlternates
       }
     }
 
+    Set<MemberType> sanitizedSuperTypes = new LinkedHashSet<>();
+    for (MemberType superType : superTypes) {
+      sanitizedSuperTypes.add(sanitizeMemberTypeForSuperTyping(superType));
+    }
+
     if (commonType == UnsolvedClassOrInterfaceType.CLASS) {
-      superTypeRelationships.put(superTypes, SuperTypeRelationship.EXTENDS);
+      superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.EXTENDS);
     } else if (commonType == UnsolvedClassOrInterfaceType.INTERFACE) {
-      superTypeRelationships.put(superTypes, SuperTypeRelationship.IMPLEMENTS);
+      superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.IMPLEMENTS);
     } else if (superTypeRelationships.get(superTypes) == null) {
-      superTypeRelationships.put(superTypes, SuperTypeRelationship.UNKNOWN);
+      superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.UNKNOWN);
     }
   }
 
@@ -242,7 +248,8 @@ public class UnsolvedClassOrInterfaceAlternates
       setType(UnsolvedClassOrInterfaceType.CLASS);
     }
 
-    superTypeRelationships.put(Set.of(superClass), SuperTypeRelationship.EXTENDS);
+    superTypeRelationships.put(
+        Set.of(sanitizeMemberTypeForSuperTyping(superClass)), SuperTypeRelationship.EXTENDS);
   }
 
   /**
@@ -273,7 +280,37 @@ public class UnsolvedClassOrInterfaceAlternates
       return;
     }
 
-    superTypeRelationships.put(Set.of(superInterface), SuperTypeRelationship.IMPLEMENTS);
+    superTypeRelationships.put(
+        Set.of(sanitizeMemberTypeForSuperTyping(superInterface)), SuperTypeRelationship.IMPLEMENTS);
+  }
+
+  /**
+   * Sanitizes a member type for supertyping such that it no longer contains any wildcards.
+   *
+   * @param memberType The member type to sanitize
+   * @return The sanitized member type
+   */
+  private MemberType sanitizeMemberTypeForSuperTyping(MemberType memberType) {
+    if (memberType.getTypeArguments().isEmpty()) {
+      return memberType;
+    }
+
+    List<MemberType> sanitized = new ArrayList<>();
+
+    // I'm pretty sure this is not right, but until we find a better way to do this,
+    // this is what we'll do
+    Iterator<String> getTypeArgs = getTypeVariables().iterator();
+    for (int i = 0; i < memberType.getTypeArguments().size(); i++) {
+      MemberType typeArg = memberType.getTypeArguments().get(i);
+      if (typeArg instanceof WildcardMemberType) {
+        String typeVar = getTypeArgs.next();
+        typeArg = new SolvedMemberType(typeVar);
+      }
+      sanitized.add(sanitizeMemberTypeForSuperTyping(typeArg));
+    }
+
+    memberType.setTypeArguments(sanitized);
+    return memberType;
   }
 
   /**
