@@ -1,7 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
 import java.util.List;
-import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
@@ -56,25 +55,18 @@ public interface UnsolvedClassOrInterfaceCommon {
   public boolean doesImplement(MemberType interfaceType);
 
   /**
-   * Sets the number of type variables.
+   * Autogenerates the given amount of type variables (T, T1, T2, ...)
    *
    * @param number The number of type variables.
    */
-  public void setNumberOfTypeVariables(int number);
+  public void setTypeVariables(int number);
 
   /**
    * Sets the preferred type variables.
    *
    * @param preferredTypeVariables The preferred type variables.
    */
-  public void setPreferredTypeVariables(@Nullable List<String> preferredTypeVariables);
-
-  /**
-   * Gets the preferred type variables.
-   *
-   * @return The preferred type variables.
-   */
-  public @Nullable List<String> getPreferredTypeVariables();
+  public void setTypeVariables(List<String> preferredTypeVariables);
 
   /**
    * Gets the type variables as a list.
@@ -82,20 +74,6 @@ public interface UnsolvedClassOrInterfaceCommon {
    * @return The type variables as a list
    */
   public List<String> getTypeVariables();
-
-  /**
-   * Return a synthetic representation for type variables of the current class.
-   *
-   * @return the synthetic representation for type variables
-   */
-  public String getTypeVariablesAsString();
-
-  /**
-   * Gets the number of type variables.
-   *
-   * @return The number of type variables
-   */
-  public int getNumberOfTypeVariables();
 
   /**
    * Get the name of this class (note: without any generic type variables).

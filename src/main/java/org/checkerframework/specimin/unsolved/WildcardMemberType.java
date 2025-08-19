@@ -65,17 +65,20 @@ public class WildcardMemberType extends MemberType {
     return fqnSet;
   }
 
+  private String getBoundString() {
+    if (bound == null) {
+      return "?";
+    }
+    return isUpperBound ? "? extends " : "? super ";
+  }
+
   @Override
   public String toString() {
     if (bound == null) {
       return "?";
     }
 
-    if (isUpperBound) {
-      return "? extends " + bound.toString();
-    } else {
-      return "? super " + bound.toString();
-    }
+    return getBoundString() + bound.toString();
   }
 
   @Override
@@ -85,11 +88,20 @@ public class WildcardMemberType extends MemberType {
     }
 
     return Objects.equals(otherAsWildcard.bound, this.bound)
-        && otherAsWildcard.isUpperBound == this.isUpperBound;
+        && Objects.equals(otherAsWildcard.getBoundString(), this.getBoundString());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(bound, isUpperBound);
+    return Objects.hash(bound, getBoundString());
+  }
+
+  @Override
+  public MemberType copyWithNewTypeArgs(List<MemberType> newTypeArgs) {
+    if (newTypeArgs.isEmpty()) {
+      return new WildcardMemberType(bound, isUpperBound);
+    } else {
+      throw new RuntimeException("WildcardMemberType cannot have type arguments");
+    }
   }
 }

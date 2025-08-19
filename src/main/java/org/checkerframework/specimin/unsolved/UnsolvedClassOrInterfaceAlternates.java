@@ -1,8 +1,6 @@
 package org.checkerframework.specimin.unsolved;
 
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,6 +38,7 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   private Set<String> fullyQualifiedNames = new LinkedHashSet<>();
+  private boolean alreadyHandledAllSuperRelationships = false;
 
   /** A map of super types to their relationships to the type represented by this object. */
   private Map<Set<MemberType>, SuperTypeRelationship> superTypeRelationships =
@@ -147,7 +146,7 @@ public class UnsolvedClassOrInterfaceAlternates
   public void updateFullyQualifiedNames(Set<String> updated) {
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
-    fullyQualifiedNames.removeIf(name -> !updated.contains(name));
+    fullyQualifiedNames.retainAll(updated);
     getAlternates()
         .removeIf(alternate -> !fullyQualifiedNames.contains(alternate.getFullyQualifiedName()));
 
@@ -177,23 +176,11 @@ public class UnsolvedClassOrInterfaceAlternates
    * @param superTypes The mutually exclusive super types
    */
   public void addSuperType(Set<MemberType> superTypes) {
-    // If superTypes contains this instance, remove it
-    // Also, never extend java.lang.Object
-    if (superTypes.contains(new UnsolvedMemberType(this))
-        || superTypes.contains(new SolvedMemberType("java.lang.Object"))) {
-      superTypes = new HashSet<>(superTypes);
-      superTypes.remove(new UnsolvedMemberType(this));
-      superTypes.remove(new SolvedMemberType("java.lang.Object"));
-    }
-
-    if (superTypes.isEmpty()) {
-      return;
-    }
-
     if (getType() == UnsolvedClassOrInterfaceType.INTERFACE) {
       // If we encounter a super type but we're an interface, make it an interface as well
       for (MemberType superType : superTypes) {
-        if (superType instanceof UnsolvedMemberType unsolvedMemberType) {
+        if (superType instanceof UnsolvedMemberType unsolvedMemberType
+            && !unsolvedMemberType.getUnsolvedType().equals(this)) {
           unsolvedMemberType.getUnsolvedType().setType(UnsolvedClassOrInterfaceType.INTERFACE);
         }
       }
@@ -201,7 +188,8 @@ public class UnsolvedClassOrInterfaceAlternates
 
     UnsolvedClassOrInterfaceType commonType = null;
     for (MemberType superType : superTypes) {
-      if (superType instanceof UnsolvedMemberType unsolvedMemberType) {
+      if (superType instanceof UnsolvedMemberType unsolvedMemberType
+          && !unsolvedMemberType.getUnsolvedType().equals(this)) {
         UnsolvedClassOrInterfaceType type = unsolvedMemberType.getUnsolvedType().getType();
         if (commonType == null) {
           commonType = type;
@@ -216,7 +204,21 @@ public class UnsolvedClassOrInterfaceAlternates
 
     Set<MemberType> sanitizedSuperTypes = new LinkedHashSet<>();
     for (MemberType superType : superTypes) {
-      sanitizedSuperTypes.add(sanitizeMemberTypeForSuperTyping(superType));
+      if (superType instanceof UnsolvedMemberType unsolvedMemberType
+          && unsolvedMemberType.getUnsolvedType().equals(this)) {
+        // If the super type is this type, we don't need to add it
+        continue;
+      }
+      if (superType.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
+        // If the super type is java.lang.Object, we don't need to add it
+        continue;
+      }
+
+      sanitizedSuperTypes.addAll(removeAllWildcardsAndReturnPotentialTypes(superType));
+    }
+
+    if (sanitizedSuperTypes.isEmpty()) {
+      return;
     }
 
     if (commonType == UnsolvedClassOrInterfaceType.CLASS) {
@@ -236,7 +238,7 @@ public class UnsolvedClassOrInterfaceAlternates
   public void forceSuperClass(MemberType superClass) {
     if ((superClass instanceof UnsolvedMemberType unsolved
             && unsolved.getUnsolvedType().equals(this))
-        || superClass.equals(new SolvedMemberType("java.lang.Object"))) {
+        || superClass.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
       return;
     }
 
@@ -249,7 +251,8 @@ public class UnsolvedClassOrInterfaceAlternates
     }
 
     superTypeRelationships.put(
-        Set.of(sanitizeMemberTypeForSuperTyping(superClass)), SuperTypeRelationship.EXTENDS);
+        new LinkedHashSet<>(removeAllWildcardsAndReturnPotentialTypes(superClass)),
+        SuperTypeRelationship.EXTENDS);
   }
 
   /**
@@ -281,36 +284,76 @@ public class UnsolvedClassOrInterfaceAlternates
     }
 
     superTypeRelationships.put(
-        Set.of(sanitizeMemberTypeForSuperTyping(superInterface)), SuperTypeRelationship.IMPLEMENTS);
+        new LinkedHashSet<>(removeAllWildcardsAndReturnPotentialTypes(superInterface)),
+        SuperTypeRelationship.IMPLEMENTS);
   }
 
   /**
-   * Sanitizes a member type for supertyping such that it no longer contains any wildcards.
+   * Removes all wildcards from the given member type and generates alternates based on which type
+   * variable could take its place. The best guess for the right type variable is returned as the
+   * first element of the list. This is primarily used for generating potential super types, since
+   * the input type may have a wildcard in its type arguments, but we cannot include a wildcard in
+   * an extends/implements clause.
    *
-   * @param memberType The member type to sanitize
-   * @return The sanitized member type
+   * @param memberType The member type to remove wildcards from
+   * @return The potential super types
    */
-  private MemberType sanitizeMemberTypeForSuperTyping(MemberType memberType) {
+  private List<MemberType> removeAllWildcardsAndReturnPotentialTypes(MemberType memberType) {
     if (memberType.getTypeArguments().isEmpty()) {
-      return memberType;
+      return List.of(memberType);
     }
 
     List<MemberType> sanitized = new ArrayList<>();
+    sanitized.add(memberType);
 
-    // I'm pretty sure this is not right, but until we find a better way to do this,
-    // this is what we'll do
-    Iterator<String> getTypeArgs = getTypeVariables().iterator();
     for (int i = 0; i < memberType.getTypeArguments().size(); i++) {
       MemberType typeArg = memberType.getTypeArguments().get(i);
-      if (typeArg instanceof WildcardMemberType) {
-        String typeVar = getTypeArgs.next();
-        typeArg = new SolvedMemberType(typeVar);
+
+      // Preferred type arg for best-effort is the argument that corresponds to the same location
+      // but this isn't always possible
+
+      String preferredTypeArg = null;
+      if (i < getTypeVariables().size()) {
+        preferredTypeArg = getTypeVariables().get(i);
       }
-      sanitized.add(sanitizeMemberTypeForSuperTyping(typeArg));
+
+      List<MemberType> newSanitized = new ArrayList<>();
+      boolean isWildcard = typeArg instanceof WildcardMemberType;
+      for (MemberType halfSanitized : sanitized) {
+        // Half sanitized means that all member types up to index i are already handled
+        List<MemberType> newTypeArgs = new ArrayList<>(halfSanitized.getTypeArguments());
+        if (preferredTypeArg != null) {
+          newTypeArgs.set(i, new SolvedMemberType(preferredTypeArg));
+          newSanitized.add(halfSanitized.copyWithNewTypeArgs(newTypeArgs));
+
+          newTypeArgs = new ArrayList<>(halfSanitized.getTypeArguments());
+        }
+
+        if (isWildcard) {
+          for (String potentialTypeArg : getTypeVariables()) {
+            if (potentialTypeArg.equals(preferredTypeArg)) {
+              continue;
+            }
+
+            newTypeArgs.set(i, new SolvedMemberType(potentialTypeArg));
+            newSanitized.add(halfSanitized.copyWithNewTypeArgs(newTypeArgs));
+
+            newTypeArgs = new ArrayList<>(halfSanitized.getTypeArguments());
+          }
+        } else {
+          for (MemberType potentialTypeArg : removeAllWildcardsAndReturnPotentialTypes(typeArg)) {
+            newTypeArgs.set(i, potentialTypeArg);
+            newSanitized.add(halfSanitized.copyWithNewTypeArgs(newTypeArgs));
+
+            newTypeArgs = new ArrayList<>(halfSanitized.getTypeArguments());
+          }
+        }
+
+        sanitized = newSanitized;
+      }
     }
 
-    memberType.setTypeArguments(sanitized);
-    return memberType;
+    return sanitized;
   }
 
   /**
@@ -319,6 +362,13 @@ public class UnsolvedClassOrInterfaceAlternates
    * once on each UnsolvedClassOrInterfaceAlternates.
    */
   public void createAlternatesBasedOnSuperTypeRelationships() {
+    if (alreadyHandledAllSuperRelationships) {
+      throw new RuntimeException(
+          "createAlternatesBasedOnSuperTypeRelationships should only be called once.");
+    }
+
+    alreadyHandledAllSuperRelationships = true;
+
     if (superTypeRelationships.isEmpty()) {
       // No super types; nothing to do
       return;
@@ -625,14 +675,9 @@ public class UnsolvedClassOrInterfaceAlternates
     return null;
   }
 
-  /**
-   * Sets the number of type variables.
-   *
-   * @param number The number of type variables.
-   */
   @Override
-  public void setNumberOfTypeVariables(int number) {
-    applyToAllAlternates(UnsolvedClassOrInterface::setNumberOfTypeVariables, number);
+  public void setTypeVariables(int number) {
+    applyToAllAlternates(UnsolvedClassOrInterface::setTypeVariables, number);
   }
 
   /**
@@ -646,18 +691,8 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   @Override
-  public int getNumberOfTypeVariables() {
-    return getAlternates().get(0).getNumberOfTypeVariables();
-  }
-
-  @Override
   public @ClassGetSimpleName String getClassName() {
     return getAlternates().get(0).getClassName();
-  }
-
-  @Override
-  public String getTypeVariablesAsString() {
-    return getAlternates().get(0).getTypeVariablesAsString();
   }
 
   @Override
@@ -747,13 +782,7 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   @Override
-  public void setPreferredTypeVariables(@Nullable List<String> preferredTypeVariables) {
-    applyToAllAlternates(
-        UnsolvedClassOrInterface::setPreferredTypeVariables, preferredTypeVariables);
-  }
-
-  @Override
-  public @Nullable List<String> getPreferredTypeVariables() {
-    return getAlternates().get(0).getPreferredTypeVariables();
+  public void setTypeVariables(List<String> typeVariables) {
+    applyToAllAlternates(UnsolvedClassOrInterface::setTypeVariables, typeVariables);
   }
 }

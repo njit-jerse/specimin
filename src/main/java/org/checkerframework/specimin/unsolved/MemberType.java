@@ -40,11 +40,10 @@ public abstract class MemberType {
   }
 
   /**
-   * Sets the type arguments for this type.
+   * Utility method to return a copy of this member type with new type arguments.
    *
-   * @param typeArguments The list of member types representing the type arguments of this type
+   * @param newTypeArgs The new type arguments to use for the copy
+   * @return A copy of this member type with the specified type arguments
    */
-  public void setTypeArguments(List<MemberType> typeArguments) {
-    this.typeArguments = typeArguments;
-  }
+  public abstract MemberType copyWithNewTypeArgs(List<MemberType> newTypeArgs);
 }

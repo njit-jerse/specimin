@@ -22,6 +22,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
@@ -41,6 +42,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
@@ -51,6 +53,7 @@ import com.github.javaparser.utils.Pair;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -58,10 +61,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.unsolved.SolvedMemberType;
 
 /**
  * A class containing useful static functions using JavaParser.
@@ -1132,6 +1137,60 @@ public class JavaParserUtil {
   }
 
   /**
+   * Finds all unsolvable ancestors, given a type declaration to start.
+   *
+   * @param start The type declaration
+   * @param fqnToCompilationUnits A map of FQNs to compilation units
+   * @return A list of type declarations representing all unsolvable ancestors
+   */
+  public static List<ClassOrInterfaceType> getAllUnsolvableAncestors(
+      TypeDeclaration<?> start, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    List<ClassOrInterfaceType> result = new ArrayList<>();
+
+    getAllUnsolvableAncestorsImpl(start, fqnToCompilationUnits, result);
+
+    return result;
+  }
+
+  /**
+   * Helper method for {@link #getAllUnsolvableAncestors(TypeDeclaration, Map)}. Recursively calls
+   * itself on all unsolvable ancestors.
+   *
+   * @param start The declaration to start at
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @param result The
+   */
+  private static void getAllUnsolvableAncestorsImpl(
+      TypeDeclaration<?> start,
+      Map<String, CompilationUnit> fqnToCompilationUnits,
+      List<ClassOrInterfaceType> result) {
+    List<ClassOrInterfaceType> extendedOrImplemented = new ArrayList<>();
+
+    if (start instanceof NodeWithExtends<?> withExtends) {
+      extendedOrImplemented.addAll(withExtends.getExtendedTypes());
+    }
+    if (start instanceof NodeWithImplements<?> withImplements) {
+      extendedOrImplemented.addAll(withImplements.getImplementedTypes());
+    }
+
+    for (ClassOrInterfaceType type : extendedOrImplemented) {
+      try {
+        ResolvedType resolvedType = type.resolve();
+        TypeDeclaration<?> typeDecl =
+            getTypeFromQualifiedName(resolvedType.describe(), fqnToCompilationUnits);
+
+        if (typeDecl == null) {
+          continue;
+        }
+
+        getAllUnsolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
+      } catch (UnsolvedSymbolException ex) {
+        result.add(type);
+      }
+    }
+  }
+
+  /**
    * Finds all solvable ancestors, given a type declaration to start.
    *
    * @param start The type declaration
@@ -1818,5 +1877,106 @@ public class JavaParserUtil {
     }
 
     return null;
+  }
+
+  /**
+   * Finds the least upper bound given a set of resolved types and solved member types.
+   *
+   * @param resolvedTypes The resolved types
+   * @param solvedMemberTypes The solved member types
+   * @return The least upper bound, or null if it is a primitive. Note that this is a
+   *     ResolvedReferenceTypeDeclaration because this does not consider type variables.
+   */
+  public static @Nullable ResolvedReferenceTypeDeclaration getLeastUpperBound(
+      List<ResolvedType> resolvedTypes, List<SolvedMemberType> solvedMemberTypes) {
+    if (resolvedTypes.isEmpty() && solvedMemberTypes.isEmpty()) {
+      throw new RuntimeException("No types available to compute least upper bound");
+    }
+
+    List<ResolvedReferenceTypeDeclaration> combined = new ArrayList<>();
+
+    for (ResolvedType resolvedType : resolvedTypes) {
+      if (!resolvedType.isReferenceType()) {
+        // May be a type variable
+        continue;
+      }
+
+      combined.add(resolvedType.asReferenceType().getTypeDeclaration().get());
+    }
+
+    for (SolvedMemberType solvedMemberType : solvedMemberTypes) {
+      String fqn = solvedMemberType.getFullyQualifiedNames().iterator().next();
+      if (JavaLangUtils.isPrimitive(fqn)) {
+        break;
+      }
+
+      try {
+        combined.add(getTypeSolver().solveType(fqn));
+      } catch (UnsolvedSymbolException e) {
+        // Type param, likely
+      }
+    }
+
+    if (combined.isEmpty()) {
+      return null;
+    }
+
+    Set<ResolvedReferenceTypeDeclaration> intersectedAncestors =
+        Stream.concat(
+                combined.get(0).getAllAncestors().stream()
+                    .map(anc -> anc.getTypeDeclaration().get()),
+                Stream.of(combined.get(0)))
+            .collect(Collectors.toCollection(HashSet::new));
+
+    for (ResolvedReferenceTypeDeclaration typeDecl : combined) {
+      intersectedAncestors.retainAll(
+          Stream.concat(
+                  typeDecl.getAllAncestors().stream().map(anc -> anc.getTypeDeclaration().get()),
+                  Stream.of(typeDecl))
+              .toList());
+    }
+
+    return intersectedAncestors.stream()
+        .min(
+            (a, b) -> {
+              if (a.isAssignableBy(b)) return 1;
+              if (b.isAssignableBy(a)) return -1;
+
+              // Prefer a class lub to an interface lub
+              if (a.isClass() && !b.isClass()) return -1;
+              if (!a.isClass() && b.isClass()) return 1;
+
+              return 0;
+            })
+        .get();
+  }
+
+  /**
+   * Given a method reference expression, find all possible methods it could be referring to. If the
+   * method reference scope type is unsolvable or no methods of matching name could be found (maybe
+   * in an unsolved ancestor), then this method returns an empty list.
+   *
+   * @param methodReference The method reference to find declarations of
+   * @return The list of matching resolved method declarations or an empty list if none could be
+   *     found
+   */
+  public static List<? extends ResolvedMethodLikeDeclaration> getMethodDeclarationsFromMethodRef(
+      MethodReferenceExpr methodReference) {
+    if (!isExprTypeResolvable(methodReference.getScope())) {
+      return Collections.emptyList();
+    }
+
+    ResolvedType methodDeclaringType = methodReference.getScope().calculateResolvedType();
+
+    String methodName = methodReference.getIdentifier();
+
+    if (methodName.equals("new")) {
+      return methodDeclaringType.asReferenceType().getTypeDeclaration().get().getConstructors();
+    }
+
+    // Method references must be on reference types
+    return methodDeclaringType.asReferenceType().getAllMethods().stream()
+        .filter(method -> method.getName().equals(methodName))
+        .toList();
   }
 }

@@ -15,6 +15,7 @@ import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
+import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
@@ -708,7 +709,19 @@ public class FullyQualifiedNameGenerator {
   private @Nullable FullyQualifiedNameSet getFQNsForTypeOfSolvableExpression(
       Resolvable<?> resolvable) {
     Node node = null;
-    Object resolved = resolvable.resolve();
+    Object resolved;
+
+    try {
+      resolved = resolvable.resolve();
+    } catch (UnsupportedOperationException ex) {
+      if (resolvable instanceof Expression expr) {
+        resolved =
+            JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
+                (Expression) resolvable);
+      } else {
+        throw ex;
+      }
+    }
 
     if (resolved instanceof AssociableToAST associableToAST) {
       node = JavaParserUtil.tryFindAttachedNode(associableToAST, fqnToCompilationUnits);
@@ -845,11 +858,22 @@ public class FullyQualifiedNameGenerator {
       if (withCondition.getCondition().equals(expr)) {
         return new FullyQualifiedNameSet("boolean");
       }
+
+      if (withCondition instanceof ConditionalExpr conditionalExpr && canRecurse) {
+        Expression other;
+
+        if (conditionalExpr.getThenExpr().equals(expr)) {
+          other = conditionalExpr.getElseExpr();
+        } else {
+          other = conditionalExpr.getThenExpr();
+        }
+
+        return getFQNsForExpressionTypeImpl(other, false);
+      }
     }
     // If it's in a binary expression (i.e., + - / * == != etc.), then set it to the type of the
     // other side, if known
-    else if (parentNode instanceof BinaryExpr && canRecurse) {
-      BinaryExpr binary = (BinaryExpr) parentNode;
+    else if (parentNode instanceof BinaryExpr binary && canRecurse) {
       Operator operator = binary.getOperator();
 
       Expression other;

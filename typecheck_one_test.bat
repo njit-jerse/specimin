@@ -13,9 +13,6 @@ set testcase=%1
 if "%testcase%"=="shared" exit /b 0
 rem https://bugs.openjdk.org/browse/JDK-8319461 wasn't actually fixed (this test is based on that bug)
 if "%testcase%"=="superinterfaceextends" exit /b 0
-rem incomplete handling of method references: https://github.com/njit-jerse/specimin/issues/291
-rem this test exists to check that no crash occurs, not that Specimin produces the correct output
-if "%testcase%"=="methodref2" exit /b 0
 
 cd "%testcase%\expected\" || exit /b 2
 

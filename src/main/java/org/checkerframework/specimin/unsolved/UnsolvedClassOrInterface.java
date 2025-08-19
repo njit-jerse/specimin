@@ -26,11 +26,8 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    */
   private final String packageName;
 
-  /** The number of type variables for this class */
-  private int numberOfTypeVariables = 0;
-
-  /** The preferred type variables, if any exist. */
-  private @Nullable List<String> preferredTypeVariables;
+  /** The type variables, if any exist. */
+  private List<String> typeVariables = Collections.emptyList();
 
   /** The extends clause, if one exists. */
   private @Nullable MemberType extendsClause;
@@ -90,26 +87,6 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    */
   public String getPackageName() {
     return packageName;
-  }
-
-  /**
-   * This method sets the number of type variables for the current class
-   *
-   * @param numberOfTypeVariables number of type variable in this class.
-   */
-  @Override
-  public void setNumberOfTypeVariables(int numberOfTypeVariables) {
-    this.numberOfTypeVariables = numberOfTypeVariables;
-  }
-
-  /**
-   * This method tells the number of type variables for this class
-   *
-   * @return the number of type variables
-   */
-  @Override
-  public int getNumberOfTypeVariables() {
-    return this.numberOfTypeVariables;
   }
 
   /**
@@ -210,7 +187,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
     copy.extendsClause = this.extendsClause;
     copy.implementsClauses = new LinkedHashSet<>(this.implementsClauses);
     copy.typeOfType = this.typeOfType;
-    copy.numberOfTypeVariables = this.numberOfTypeVariables;
+    copy.typeVariables = new ArrayList<>(this.typeVariables);
     copy.annotations = new HashSet<>(this.annotations);
 
     return copy;
@@ -268,7 +245,14 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
     } else {
       sb.append("class ");
     }
-    sb.append(className).append(getTypeVariablesAsString());
+    sb.append(className);
+
+    if (!getTypeVariables().isEmpty()) {
+      sb.append("<");
+      sb.append(String.join(", ", getTypeVariables()));
+      sb.append(">");
+    }
+
     if (extendsClause != null) {
       @NonNull MemberType nonNullExtends = extendsClause;
       sb.append(" extends ").append(nonNullExtends).append(" ");
@@ -308,20 +292,6 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   }
 
   /**
-   * Return a synthetic representation for type variables of the current class.
-   *
-   * @return the synthetic representation for type variables
-   */
-  @Override
-  public String getTypeVariablesAsString() {
-    List<String> typeVariables = getTypeVariables();
-    if (typeVariables.isEmpty()) {
-      return "";
-    }
-    return "<" + String.join(", ", typeVariables) + ">";
-  }
-
-  /**
    * Return a synthetic representation for type variables of the current class, without surrounding
    * angle brackets.
    *
@@ -329,16 +299,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    */
   @Override
   public List<String> getTypeVariables() {
-    if (preferredTypeVariables != null) {
-      return preferredTypeVariables;
-    }
-    List<String> result = new ArrayList<>();
-
-    for (int i = 0; i < numberOfTypeVariables; i++) {
-      String typeExpression = "T" + ((i > 0) ? i : "");
-      result.add(typeExpression);
-    }
-    return result;
+    return typeVariables;
   }
 
   @Override
@@ -352,12 +313,19 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   }
 
   @Override
-  public void setPreferredTypeVariables(@Nullable List<String> preferredTypeVariables) {
-    this.preferredTypeVariables = preferredTypeVariables;
+  public void setTypeVariables(List<String> typeVariables) {
+    this.typeVariables = typeVariables;
   }
 
   @Override
-  public @Nullable List<String> getPreferredTypeVariables() {
-    return preferredTypeVariables;
+  public void setTypeVariables(int numberOfTypeVariables) {
+    List<String> result = new ArrayList<>();
+
+    for (int i = 0; i < numberOfTypeVariables; i++) {
+      String typeExpression = "T" + ((i > 0) ? i : "");
+      result.add(typeExpression);
+    }
+
+    setTypeVariables(result);
   }
 }

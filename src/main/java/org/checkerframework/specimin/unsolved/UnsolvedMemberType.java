@@ -97,11 +97,17 @@ public class UnsolvedMemberType extends MemberType {
       return false;
     }
 
-    return Objects.equals(otherAsUnsolvedMemberType.unsolved, this.unsolved);
+    return Objects.equals(otherAsUnsolvedMemberType.unsolved, this.unsolved)
+        && Objects.equals(otherAsUnsolvedMemberType.getTypeArguments(), this.getTypeArguments());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(unsolved);
+    return Objects.hash(unsolved, getTypeArguments());
+  }
+
+  @Override
+  public MemberType copyWithNewTypeArgs(List<MemberType> newTypeArgs) {
+    return new UnsolvedMemberType(unsolved, numArrayBrackets, newTypeArgs);
   }
 }

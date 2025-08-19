@@ -19,6 +19,9 @@ public class SolvedMemberType extends MemberType {
   /** Represents java.lang.Error */
   public static final SolvedMemberType JAVA_LANG_ERROR = new SolvedMemberType("java.lang.Error");
 
+  /** Represents java.lang.Object */
+  public static final SolvedMemberType JAVA_LANG_OBJECT = new SolvedMemberType("java.lang.Object");
+
   private String fqn;
 
   /**
@@ -85,11 +88,17 @@ public class SolvedMemberType extends MemberType {
       return false;
     }
 
-    return Objects.equals(otherAsSolvedMemberType.fqn, this.fqn);
+    return Objects.equals(otherAsSolvedMemberType.fqn, this.fqn)
+        && Objects.equals(otherAsSolvedMemberType.getTypeArguments(), this.getTypeArguments());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(fqn);
+    return Objects.hash(fqn, getTypeArguments());
+  }
+
+  @Override
+  public MemberType copyWithNewTypeArgs(List<MemberType> newTypeArgs) {
+    return new SolvedMemberType(fqn, newTypeArgs);
   }
 }
