@@ -389,7 +389,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
       // Case: new Foo() but Foo does not contain a constructor
       // Anonymous class methods do not need to be re-added
-      if (!(resolved instanceof DefaultConstructorDeclaration) && !isAnonymousClass) {
+      if (!(resolved instanceof DefaultConstructorDeclaration)
+          && !isAnonymousClass
+          && resolvedMethodLikeDeclaration.toAst().isPresent()) {
         Node unattached = resolvedMethodLikeDeclaration.toAst().get();
         CallableDeclaration<?> methodLike =
             type.findFirst(CallableDeclaration.class, n -> n.equals(unattached)).get();
@@ -424,7 +426,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.add(variableDeclarator);
     }
 
-    if (resolved instanceof ResolvedEnumConstantDeclaration resolvedEnumConstantDeclaration) {
+    if (resolved instanceof ResolvedEnumConstantDeclaration resolvedEnumConstantDeclaration
+        && resolvedEnumConstantDeclaration.toAst().isPresent()) {
       TypeDeclaration<?> type =
           JavaParserUtil.getTypeFromQualifiedName(
               resolvedEnumConstantDeclaration.getType().describe(), fqnToCompilationUnits);
@@ -568,7 +571,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       parents.addAll(withImplements.getImplementedTypes());
     }
 
-    getAllMustImplementMethodsImpl(parents, typeDecl, typeDecl, methods, null, alreadyImplemented);
+    getAllMustImplementMethodsImpl(parents, typeDecl, methods, null, alreadyImplemented);
 
     methods.removeAll(alreadyImplemented);
     return methods;
@@ -580,7 +583,6 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    *
    * @param parents The parents of the type declaration, i.e., the extended/implemented types
    * @param originalTypeDecl The original type declaration
-   * @param typeDecl The current type declaration being processed
    * @param result The result list
    * @param previousTypeParametersMap A map of type parameters of the parent type, or null if this
    *     is the first call.
@@ -590,7 +592,6 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
   private void getAllMustImplementMethodsImpl(
       List<ClassOrInterfaceType> parents,
       TypeDeclaration<?> originalTypeDecl,
-      TypeDeclaration<?> typeDecl,
       List<MethodDeclaration> result,
       @Nullable List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>>
           previousTypeParametersMap,
@@ -683,7 +684,6 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           getAllMustImplementMethodsImpl(
               withExtends.getExtendedTypes(),
               originalTypeDecl,
-              parent,
               result,
               typeParametersMap,
               alreadyImplemented);
@@ -692,7 +692,6 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           getAllMustImplementMethodsImpl(
               withImplements.getImplementedTypes(),
               originalTypeDecl,
-              parent,
               result,
               typeParametersMap,
               alreadyImplemented);

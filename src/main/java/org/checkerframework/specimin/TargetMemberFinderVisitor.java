@@ -183,9 +183,13 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
     return handleClassLikeDeclaration(decl, p);
   }
 
-  /*
+  /**
    * The purpose of this method is to help find the fully qualified name, not to do any modification
    * to the worklist/slice.
+   *
+   * @param decl The type declaration being visited
+   * @param p void param
+   * @return super.visit() return value
    */
   private Visitable handleClassLikeDeclaration(TypeDeclaration<?> decl, Void p) {
     if (decl.isNestedType()) {
@@ -268,6 +272,11 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
     return super.visit(method, p);
   }
 
+  /**
+   * Adds a callable (constructor/method) declaration and its body to the worklist.
+   *
+   * @param method The method/constructor to add
+   */
   private void addMethodAndChildrenToWorklist(CallableDeclaration<?> method) {
     // Add itself to the worklist
     worklist.add(method);

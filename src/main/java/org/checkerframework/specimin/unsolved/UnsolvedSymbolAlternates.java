@@ -13,7 +13,10 @@ import java.util.function.Predicate;
 
 /** Base type for all synthetic definitions containing alternates. */
 public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate> {
+  /** A list of potential declaring types for this symbol. */
   private final List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes;
+
+  /** A list of alternate definitions for this symbol. */
   private List<T> alternates = new ArrayList<>();
 
   /**
@@ -23,7 +26,7 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    */
   protected UnsolvedSymbolAlternates(
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes) {
-    this.alternateDeclaringTypes = alternateDeclaringTypes;
+    this.alternateDeclaringTypes = new ArrayList<>(alternateDeclaringTypes);
   }
 
   /**
@@ -65,7 +68,7 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    * @param apply A Consumer that modifies each alternate. Pass in an instance method from {@link T}
    *     with no parameters.
    */
-  public void applyToAllAlternates(Consumer<T> apply) {
+  protected void applyToAllAlternates(Consumer<T> apply) {
     for (T alternate : alternates) {
       apply.accept(alternate);
     }
@@ -80,7 +83,7 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    *     T} with one parameter.
    * @param input The input to use to set all alternates.
    */
-  public <U> void applyToAllAlternates(BiConsumer<T, U> apply, U input) {
+  protected <U> void applyToAllAlternates(BiConsumer<T, U> apply, U input) {
     for (T alternate : alternates) {
       apply.accept(alternate, input);
     }
@@ -94,7 +97,7 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    * @param predicate A predicate; pass in an instance method from {@link T} with no parameters.
    * @return True if all alternates return true for the predicate
    */
-  public boolean doAllAlternatesReturnTrueFor(Predicate<T> predicate) {
+  protected boolean doAllAlternatesReturnTrueFor(Predicate<T> predicate) {
     for (T alternate : alternates) {
       if (!predicate.test(alternate)) {
         return false;
@@ -113,7 +116,7 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
    * @param input The input to use for the predicate
    * @return True if all alternates return true for the predicate
    */
-  public <U> boolean doAllAlternatesReturnTrueFor(BiPredicate<T, U> predicate, U input) {
+  protected <U> boolean doAllAlternatesReturnTrueFor(BiPredicate<T, U> predicate, U input) {
     for (T alternate : alternates) {
       if (!predicate.test(alternate, input)) {
         return false;

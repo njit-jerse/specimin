@@ -19,12 +19,16 @@ import java.util.stream.Collectors;
  * }
  * </code></pre>
  *
- * where B and C are both unresolvable, field a could be in either one. Note that {@code
- * getAlternates()} will always return a single alternate for this class, since {@code
- * UnsolvedFieldAlternates} depends on encapsulating classes for alternate definitions.
+ * where B and C are both unresolvable, field a could be in either one.
  */
 public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedField>
     implements UnsolvedFieldCommon {
+
+  /**
+   * Creates a new instance of UnsolvedFieldAlternates. Private constructor; use the create methods.
+   *
+   * @param alternateDeclaringTypes A list of potential declaring types for this field.
+   */
   private UnsolvedFieldAlternates(
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes) {
     super(alternateDeclaringTypes);

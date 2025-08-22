@@ -16,8 +16,13 @@ import org.checkerframework.specimin.Slicer;
  * enumerate one to all possibilities.
  */
 public class UnsolvedSymbolEnumerator {
+  /** The unsolved types that must be included in the output. */
   private final Set<UnsolvedClassOrInterfaceAlternates> unsolvedTypes = new LinkedHashSet<>();
+
+  /** The unsolved fields that must be included in the output. */
   private final Set<UnsolvedFieldAlternates> unsolvedFields = new LinkedHashSet<>();
+
+  /** The unsolved methods that must be included in the output. */
   private final Set<UnsolvedMethodAlternates> unsolvedMethods = new LinkedHashSet<>();
 
   /**

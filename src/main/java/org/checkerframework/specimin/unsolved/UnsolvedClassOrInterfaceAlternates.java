@@ -32,18 +32,33 @@ public class UnsolvedClassOrInterfaceAlternates
    * SolvedMemberType since we don't know if the solved type is an interface or not.
    */
   private enum SuperTypeRelationship {
+    /** A relationship that has not been determined. */
     UNKNOWN,
+    /** Indicates that the super type is extended by this type. */
     EXTENDS,
+    /** Indicates that the super type is implemented by this type. */
     IMPLEMENTS
   }
 
+  /** A set of fully qualified names for this type. */
   private Set<String> fullyQualifiedNames = new LinkedHashSet<>();
+
+  /**
+   * A flag to ensure that {@link #createAlternatesBasedOnSuperTypeRelationships()} is only called
+   * once.
+   */
   private boolean alreadyHandledAllSuperRelationships = false;
 
   /** A map of super types to their relationships to the type represented by this object. */
   private Map<Set<MemberType>, SuperTypeRelationship> superTypeRelationships =
       new LinkedHashMap<>();
 
+  /**
+   * Creates a new instance of UnsolvedClassOrInterfaceAlternates. Private constructor; use the
+   * create methods.
+   *
+   * @param potentialDeclaringTypes A list of potential declaring types for this type.
+   */
   private UnsolvedClassOrInterfaceAlternates(
       List<UnsolvedClassOrInterfaceAlternates> potentialDeclaringTypes) {
     super(potentialDeclaringTypes);

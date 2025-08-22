@@ -39,7 +39,6 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
-import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 import org.checkerframework.specimin.Slicer.SliceResult;
 import org.checkerframework.specimin.modularity.ModularityModel;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolEnumerator;
@@ -212,6 +211,7 @@ public class SpeciminRunner {
    * @param modularityModel The modularity model.
    * @throws IOException if there is an exception
    */
+  @SuppressWarnings("UnusedVariable") // Remove once ambiguityResolutionPolicy is used
   private static void performMinimizationImpl(
       String root,
       List<String> targetFiles,
@@ -345,7 +345,7 @@ public class SpeciminRunner {
    * @param formatter A formatter for the output
    */
   private static void handleUnsolvedSymbolEnumeratorResult(
-      Slicer.SliceResult sliceResult,
+      SliceResult sliceResult,
       UnsolvedSymbolEnumeratorResult enumeratorResult,
       Map<String, Path> existingClassesToFilePath,
       String root,
@@ -354,6 +354,24 @@ public class SpeciminRunner {
       Set<Path> createdDirectories,
       Formatter formatter)
       throws IOException {
+    Set<String> usedPackages = new HashSet<>();
+    for (CompilationUnit cu : sliceResult.solvedSlice()) {
+      if (!cu.getPackageDeclaration().isPresent()) {
+        usedPackages.add("");
+        continue;
+      }
+      usedPackages.add(cu.getPackageDeclaration().get().getNameAsString());
+    }
+
+    for (String className : enumeratorResult.classNamesToFileContent().keySet()) {
+      int lastDot = className.lastIndexOf('.');
+      if (lastDot < 0) {
+        usedPackages.add("");
+      } else {
+        usedPackages.add(className.substring(0, lastDot));
+      }
+    }
+
     for (CompilationUnit original : sliceResult.solvedSlice()) {
       if (isEmptyCompilationUnit(original)) {
         continue;
@@ -415,7 +433,9 @@ public class SpeciminRunner {
           new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8)) {
         writer.print(
             formatter.formatSourceAndFixImports(
-                getCompilationUnitWithCommentsTrimmed(cu).toString()));
+                getCompilationUnitWithUnusedWildcardImportsRemoved(
+                        getCompilationUnitWithCommentsTrimmed(cu), usedPackages)
+                    .toString()));
       } catch (IOException | FormatterException e) {
         System.out.println("failed to write output file " + targetOutputPath);
         System.out.println("with error: " + e);
@@ -466,6 +486,39 @@ public class SpeciminRunner {
     }
   }
 
+  /**
+   * Removes all wildcard imports that are not used in the given set of package names.
+   *
+   * @param cu The CompilationUnit to process.
+   * @param usedPackages A set of package names that are used in the code.
+   * @return The modified CompilationUnit with unused wildcard imports removed.
+   */
+  private static CompilationUnit getCompilationUnitWithUnusedWildcardImportsRemoved(
+      CompilationUnit cu, Set<String> usedPackages) {
+    for (ImportDeclaration decl : List.copyOf(cu.getImports())) {
+      if (!decl.isAsterisk()) {
+        continue;
+      }
+      String packageName = decl.getNameAsString();
+
+      if (JavaLangUtils.inJdkPackage(packageName)) {
+        continue;
+      }
+
+      if (!usedPackages.contains(packageName)) {
+        decl.remove();
+      }
+    }
+    return cu;
+  }
+
+  /**
+   * Decompiles the given jar files into the specified root directory.
+   *
+   * @param root The root directory where the jar files will be decompiled.
+   * @param jarPaths The list of paths to the jar files to be decompiled.
+   * @param createdClass A set to keep track of all created class files during decompilation.
+   */
   private static void decompileJarFiles(
       String root, List<String> jarPaths, Set<Path> createdClass) {
     if (!jarPaths.isEmpty()) {
@@ -542,24 +595,6 @@ public class SpeciminRunner {
     StaticJavaParser.setConfiguration(config);
 
     return config;
-  }
-
-  /**
-   * Converts a path to a Java file into the fully-qualified name of the public class in that file,
-   * relying on the file's relative path being the same as the package name.
-   *
-   * @param javaFilePath the path to a .java file, in this form: "path/of/package/ClassName.java".
-   *     Note that this path must be rooted at the same directory in which javac could be invoked to
-   *     compile the file
-   * @return the fully-qualified name of the given class
-   */
-  @SuppressWarnings("signature") // string manipulation
-  private static @FullyQualifiedName String getFullyQualifiedClassName(final String javaFilePath) {
-    String result = javaFilePath.replace("/", ".");
-    if (!result.endsWith(".java")) {
-      throw new RuntimeException("A Java file path does not end with .java: " + result);
-    }
-    return result.substring(0, result.length() - 5);
   }
 
   /**

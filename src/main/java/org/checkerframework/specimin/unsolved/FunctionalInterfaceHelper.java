@@ -6,11 +6,12 @@ import java.util.Set;
 import java.util.stream.Stream;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+/** Provides helper methods for handling functional interfaces. */
 public class FunctionalInterfaceHelper {
   /**
    * Converts any java.util.function functional interface to a "normal" functional interface, i.e.,
    * Runnable, Supplier, Consumer, Function, BiConsumer, BiFunction. BooleanSupplier is changed to
-   * Supplier<Boolean>, DoubleToIntFunction to Function<Double, Integer>, etc.
+   * {@code Supplier<Boolean>}, DoubleToIntFunction to {@code Function<Double, Integer>}, etc.
    *
    * @param fqnSet The set of fully qualified names to convert
    * @return A new set with all functional interfaces converted to their "normal" forms

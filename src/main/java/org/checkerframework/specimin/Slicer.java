@@ -73,9 +73,13 @@ public class Slicer {
   /** The result of the slice, not including generated symbols. */
   private final Set<CompilationUnit> resultCompilationUnits = new HashSet<>();
 
+  /** The unsolved symbol generator. */
   private final UnsolvedSymbolGenerator unsolvedSymbolGenerator;
+
+  /** The type rule dependency map. */
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
+  /** The map of fully-qualified names to their compilation units. */
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
 
   /**

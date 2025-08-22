@@ -45,6 +45,7 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration.Bound;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -586,7 +587,8 @@ public class JavaParserUtil {
    * Returns true if this expression is resolvable to a definition.
    *
    * @param expr The expression to resolve
-   * @return True if this expression is of type Resolvable<?> and also has a resolvable definition
+   * @return True if this expression is of type {@code Resolvable<?>} and also has a resolvable
+   *     definition
    */
   public static boolean isExprDefinitionResolvable(Expression expr) {
     if (!(expr instanceof Resolvable<?> resolvable)) {
@@ -763,17 +765,15 @@ public class JavaParserUtil {
 
   /**
    * Returns true if the given string is probably a package name. This is a heuristic based on
-   * common Java package naming conventions; i.e., all lowercase letters, underscores, and dots.
+   * common Java package naming conventions. If the first character and each character after a dot
+   * are all lowercase, then this is probably a package.
    *
    * @param type The type/package name
    * @return True if the type is probably a package
    */
   public static boolean isProbablyAPackage(String type) {
-    // If all characters are lowercase, a period, or an underscore, it is probably a package
-    // https://docs.oracle.com/javase/tutorial/java/package/namingpkgs.html
-    for (int i = 0; i < type.length(); i++) {
-      char c = type.charAt(i);
-      if (c != '.' && c != '_' && !Character.isLowerCase(c)) {
+    for (String segment : type.split("\\.", -1)) {
+      if (Character.isUpperCase(segment.charAt(0))) {
         return false;
       }
     }
@@ -1018,7 +1018,7 @@ public class JavaParserUtil {
       MethodCallExpr methodCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
     boolean isSuperOnly = false;
 
-    TypeDeclaration<?> enclosingClass;
+    List<TypeDeclaration<?>> enclosingClass = new ArrayList<>();
     if (methodCall.hasScope()) {
       Expression scope = methodCall.getScope().get();
 
@@ -1029,10 +1029,28 @@ public class JavaParserUtil {
       try {
         ResolvedType scopeType = scope.calculateResolvedType();
 
-        enclosingClass = getTypeFromQualifiedName(scopeType.describe(), fqnToCompilationUnits);
+        if (scopeType.isTypeVariable()) {
+          for (Bound bound : scopeType.asTypeParameter().getBounds()) {
+            TypeDeclaration<?> decl =
+                getTypeFromQualifiedName(bound.getType().describe(), fqnToCompilationUnits);
 
-        if (enclosingClass == null) {
-          return List.of();
+            if (decl != null) {
+              enclosingClass.add(decl);
+            }
+          }
+
+          if (enclosingClass.isEmpty()) {
+            return List.of();
+          }
+        } else {
+          TypeDeclaration<?> decl =
+              getTypeFromQualifiedName(scopeType.describe(), fqnToCompilationUnits);
+
+          if (decl == null) {
+            return List.of();
+          }
+
+          enclosingClass.add(decl);
         }
       } catch (UnsolvedSymbolException ex) {
         // Maybe the scope has type arguments; try to resolve without those.
@@ -1044,14 +1062,16 @@ public class JavaParserUtil {
           return List.of();
         }
 
-        enclosingClass = getTypeFromQualifiedName(scopeType, fqnToCompilationUnits);
+        TypeDeclaration<?> decl = getTypeFromQualifiedName(scopeType, fqnToCompilationUnits);
 
-        if (enclosingClass == null) {
+        if (decl == null) {
           return List.of();
         }
+
+        enclosingClass.add(decl);
       }
     } else {
-      enclosingClass = JavaParserUtil.getEnclosingClassLike(methodCall);
+      enclosingClass.add(JavaParserUtil.getEnclosingClassLike(methodCall));
     }
 
     List<@Nullable ResolvedType> parameterTypes =
@@ -1059,23 +1079,24 @@ public class JavaParserUtil {
 
     List<MethodDeclaration> candidates = new ArrayList<>();
 
-    if (!isSuperOnly) {
-      addAllMatchingCallablesToList(
-          enclosingClass,
-          parameterTypes,
-          candidates,
-          methodCall.getNameAsString(),
-          MethodDeclaration.class);
-    }
+    for (TypeDeclaration<?> typeDecl : enclosingClass) {
+      if (!isSuperOnly) {
+        addAllMatchingCallablesToList(
+            typeDecl,
+            parameterTypes,
+            candidates,
+            methodCall.getNameAsString(),
+            MethodDeclaration.class);
+      }
 
-    for (TypeDeclaration<?> ancestor :
-        getAllSolvableAncestors(enclosingClass, fqnToCompilationUnits)) {
-      addAllMatchingCallablesToList(
-          ancestor,
-          parameterTypes,
-          candidates,
-          methodCall.getNameAsString(),
-          MethodDeclaration.class);
+      for (TypeDeclaration<?> ancestor : getAllSolvableAncestors(typeDecl, fqnToCompilationUnits)) {
+        addAllMatchingCallablesToList(
+            ancestor,
+            parameterTypes,
+            candidates,
+            methodCall.getNameAsString(),
+            MethodDeclaration.class);
+      }
     }
 
     return candidates;
@@ -2034,13 +2055,14 @@ public class JavaParserUtil {
     clone.removeScope();
     clone.setParentNode(methodCall.getParentNode().get());
 
-    List<MethodDeclaration> methods =
-        tryResolveMethodCallWithUnresolvableArguments(clone, fqnToCompilationUnit);
+    MethodDeclaration method =
+        (MethodDeclaration)
+            tryFindSingleCallableForNodeWithUnresolvableArguments(clone, fqnToCompilationUnit);
 
     clone.remove();
 
-    if (methods.size() == 1) {
-      return methods.get(0);
+    if (method != null) {
+      return method;
     }
 
     return null;

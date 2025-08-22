@@ -24,12 +24,16 @@ import org.checkerframework.specimin.JavaParserUtil;
  * }
  * </code></pre>
  *
- * where B and C are both unresolvable, method a() could be in either one. Note that {@code
- * getAlternates()} will always return a single alternate for this class, since {@code
- * UnsolvedMethodAlternates} depends on encapsulating classes for alternate definitions.
+ * where B and C are both unresolvable, method a() could be in either one.
  */
 public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedMethod>
     implements UnsolvedMethodCommon {
+  /**
+   * Creates a new instance of UnsolvedMethodAlternates. Private constructor; use the create
+   * methods.
+   *
+   * @param alternateDeclaringTypes A list of potential declaring types for this method.
+   */
   private UnsolvedMethodAlternates(
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes) {
     super(alternateDeclaringTypes);

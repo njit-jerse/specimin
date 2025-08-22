@@ -11,7 +11,13 @@ public class WildcardMemberType extends MemberType {
   /** Represents the type for an unbounded wildcard: ? */
   public static final WildcardMemberType UNBOUNDED = new WildcardMemberType(null, false);
 
+  /** The bound of the wildcard, or null if unbounded. */
   private final @Nullable MemberType bound;
+
+  /**
+   * If bound is not null, this indicates whether the wildcard is an upper bound (? extends) or a
+   * lower bound (? super).
+   */
   private final boolean isUpperBound;
 
   /**
@@ -55,16 +61,19 @@ public class WildcardMemberType extends MemberType {
       return Set.of("?");
     }
 
+    String boundString = getBoundString();
     for (String fqn : bound.getFullyQualifiedNames()) {
-      if (isUpperBound) {
-        fqnSet.add("? extends " + fqn);
-      } else {
-        fqnSet.add("? super " + fqn);
-      }
+      fqnSet.add(boundString + fqn);
     }
     return fqnSet;
   }
 
+  /**
+   * Gets the string representation of the wildcard's bound, including the wildcard symbol and the
+   * appropriate keyword ("extends" or "super") if the bound is not null.
+   *
+   * @return The string representation of the wildcard's bound.
+   */
   private String getBoundString() {
     if (bound == null) {
       return "?";

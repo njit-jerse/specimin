@@ -10,6 +10,6 @@ public class Simple {
         // Bar2 should extend Bar
         foo = foo2;
         // Foo should extend BadFoo, but Bar3 should have no super/subtypes
-        badFoo = foo2;
+        badFoo = new Foo<>();
     }
 }

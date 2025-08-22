@@ -12,8 +12,10 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * <p>See {@link MemberType} for more details.
  */
 public class UnsolvedMemberType extends MemberType {
-
+  /** The unsolved class or interface alternates that this member type wraps. */
   private final UnsolvedClassOrInterfaceAlternates unsolved;
+
+  /** The number of array brackets (e.g., 2 for int[][]). */
   private int numArrayBrackets;
 
   /**

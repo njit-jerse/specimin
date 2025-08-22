@@ -7,6 +7,6 @@ public class Simple {
     Foo<? extends Bar2> foo2 = new Foo<Baz2>();
     BadFoo<? extends Bar3> badFoo = new BadFoo<Baz3>();
     foo = foo2;
-    badFoo = foo2;
+    badFoo = new Foo<>();
   }
 }

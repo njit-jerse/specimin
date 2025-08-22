@@ -48,7 +48,6 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclar
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
-import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration;
 import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
@@ -73,9 +72,16 @@ import org.checkerframework.specimin.JavaParserUtil;
  * type.
  */
 public class FullyQualifiedNameGenerator {
+  /** Constant prefix for generated synthetic types. */
   private static final String SYNTHETIC_TYPE_FOR = "SyntheticTypeFor";
+
+  /** Constant suffix for generated return type symbols. */
   private static final String RETURN_TYPE = "ReturnType";
+
+  /** Map of fully qualified names to their corresponding compilation units. */
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
+
+  /** Map of fully qualified names to their generated symbol alternates. */
   private final Map<String, UnsolvedSymbolAlternates<?>> generatedSymbols;
 
   /**
@@ -487,12 +493,10 @@ public class FullyQualifiedNameGenerator {
     // local variable / field / method call / object creation expression / any other case
     // where the expression is resolvable BUT the type of the expression may not be.
     try {
-      if (expr instanceof Resolvable<?> resolvable) {
-        @Nullable Set<FullyQualifiedNameSet> solvableDeclarationTypeFQNs =
-            getFQNsForTypeOfSolvableExpression(resolvable);
-        if (solvableDeclarationTypeFQNs != null) {
-          return solvableDeclarationTypeFQNs;
-        }
+      @Nullable Set<FullyQualifiedNameSet> solvableDeclarationTypeFQNs =
+          getFQNsForTypeOfSolvableExpression(expr);
+      if (solvableDeclarationTypeFQNs != null) {
+        return solvableDeclarationTypeFQNs;
       }
     } catch (UnsolvedSymbolException ex) {
       @Nullable FullyQualifiedNameSet findableDeclarationTypeFQNs =
@@ -1221,27 +1225,38 @@ public class FullyQualifiedNameGenerator {
    * declaration. May return null if a type cannot be found from the resolved declaration. This
    * method will also throw an UnsolvedSymbolException if .resolve() fails.
    *
-   * @param resolvable A resolvable expression
+   * @param expr A resolvable expression
    * @return A set of FQNs, or null if unfound
    */
-  private @Nullable Set<FullyQualifiedNameSet> getFQNsForTypeOfSolvableExpression(
-      Resolvable<?> resolvable) {
+  private @Nullable Set<FullyQualifiedNameSet> getFQNsForTypeOfSolvableExpression(Expression expr) {
+    if (!(expr instanceof Resolvable<?>)) {
+      return null;
+    }
+
     Node node = null;
-    Object resolved;
+    Object resolved = null;
 
     try {
-      resolved = resolvable.resolve();
+      resolved = ((Resolvable<?>) expr).resolve();
     } catch (UnsupportedOperationException ex) {
-      if (resolvable instanceof Expression expr) {
+      resolved =
+          JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
+    } catch (UnsolvedSymbolException ex) {
+      if (expr instanceof NodeWithArguments<?> withArguments) {
         resolved =
-            JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
-      } else {
+            JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                withArguments, fqnToCompilationUnits);
+      }
+
+      if (resolved == null) {
         throw ex;
       }
     }
 
     if (resolved instanceof AssociableToAST associableToAST) {
       node = JavaParserUtil.tryFindAttachedNode(associableToAST, fqnToCompilationUnits);
+    } else if (resolved instanceof Node directlyFoundAst) {
+      node = directlyFoundAst;
     }
 
     // Field declaration and variable declaration expressions
@@ -1251,7 +1266,7 @@ public class FullyQualifiedNameGenerator {
 
       // See if we can find the exact variable, because ElementType gets rid of arrays
       for (VariableDeclarator varDecl : withVariables.getVariables()) {
-        if (varDecl.getName().equals(((NodeWithSimpleName<?>) resolvable).getName())) {
+        if (varDecl.getName().equals(((NodeWithSimpleName<?>) expr).getName())) {
           type = varDecl.getType();
           initializer = varDecl.getInitializer().orElse(null);
           break;
@@ -1375,7 +1390,9 @@ public class FullyQualifiedNameGenerator {
 
       // When the parent is a VariableDeclarator, the child (expr) is on the right hand side
       // The type is on the left hand side
-      return Set.of(getFQNsFromType(declarator.getType()));
+      if (!declarator.getType().isVarType()) {
+        return Set.of(getFQNsFromType(declarator.getType()));
+      }
     } else if (parentNode instanceof AssignExpr && canRecurse) {
       AssignExpr assignment = (AssignExpr) parentNode;
 
@@ -1539,12 +1556,29 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
-   * Returns the possible FQNs of the type.
+   * Returns the possible FQNs of the type. Only use this method with unsolvable types; otherwise,
+   * use {@link #getFQNsFromType(Type)}.
    *
    * @param type The type
    * @return A set of possible FQNs
    */
-  public FullyQualifiedNameSet getFQNsFromClassOrInterfaceType(ClassOrInterfaceType type) {
+  private FullyQualifiedNameSet getFQNsFromClassOrInterfaceType(ClassOrInterfaceType type) {
+    return getFQNsFromClassOrInterfaceTypeImpl(type, Set.of());
+  }
+
+  /**
+   * Returns the possible FQNs of the type. Only use this method with unsolvable types; otherwise,
+   * use {@link #getFQNsFromType(Type)}. Call this instead of {@link
+   * #getFQNsFromClassOrInterfaceType(ClassOrInterfaceType)} in {@link
+   * #getAllUnresolvableParentsImpl(TypeDeclaration, Node, Map, Set)}.
+   *
+   * @param type The type
+   * @param alreadyTraversed A set of type declarations that have already been traversed to prevent
+   *     infinite recursion
+   * @return A set of possible FQNs
+   */
+  private FullyQualifiedNameSet getFQNsFromClassOrInterfaceTypeImpl(
+      ClassOrInterfaceType type, Set<TypeDeclaration<?>> alreadyTraversed) {
     // If a ClassOrInterfaceType is Map.Entry, we need to find the import with java.util.Map, not
     // java.util.Map.Entry.
     // Hence, look for the import with the "earliest" scope (with Map.Entry, this would be Map).
@@ -1558,11 +1592,12 @@ public class FullyQualifiedNameGenerator {
     }
 
     Set<String> erasedFQNs =
-        getFQNsFromErasedClassName(
+        getFQNsFromErasedClassNameImpl(
             JavaParserUtil.erase(getImportedName),
             JavaParserUtil.erase(type.getNameWithScope()),
             type.findCompilationUnit().get(),
-            type);
+            type,
+            alreadyTraversed);
 
     if (type.getTypeArguments().isPresent()) {
       List<FullyQualifiedNameSet> typeArguments = new ArrayList<>();
@@ -1633,6 +1668,30 @@ public class FullyQualifiedNameGenerator {
       String fullName,
       CompilationUnit compilationUnit,
       @Nullable Node node) {
+    return getFQNsFromErasedClassNameImpl(
+        firstIdentifier, fullName, compilationUnit, node, Set.of());
+  }
+
+  /**
+   * Implementation for {@link #getFQNsFromErasedClassName(String, String, CompilationUnit, Node)}.
+   * Prevents infinite recursion by not looking at parent types if the parent type declaration has
+   * already been visited.
+   *
+   * @param firstIdentifier The leftmost identifier of the class name/class path
+   * @param fullName The full, known name of the class
+   * @param compilationUnit The compilation unit (we need this to be passed in because {@code node}
+   *     could be null)
+   * @param node The node representing the class (if this is null, we won't look at parent types)
+   * @param alreadyTraversed A set of type declarations that have already been traversed to prevent
+   *     infinite recursion
+   * @return A set of potential FQNs
+   */
+  private Set<String> getFQNsFromErasedClassNameImpl(
+      String firstIdentifier,
+      String fullName,
+      CompilationUnit compilationUnit,
+      @Nullable Node node,
+      Set<TypeDeclaration<?>> alreadyTraversed) {
     Set<String> fqns = new LinkedHashSet<>();
 
     // If a class or interface type is unresolvable, it must be imported or be in the same package.
@@ -1677,7 +1736,7 @@ public class FullyQualifiedNameGenerator {
       // 4) inner class of a parent class of the enclosing class
       TypeDeclaration<?> enclosingType = JavaParserUtil.getEnclosingClassLikeOptional(node);
 
-      if (enclosingType != null) {
+      if (enclosingType != null && !alreadyTraversed.contains(enclosingType)) {
         // If the node is a ClassOrInterfaceType, find the outermost node, since it could be a
         // generic, which would cause a StackOverflowError
         Node outerNode = node;
@@ -1876,8 +1935,9 @@ public class FullyQualifiedNameGenerator {
   public Map<String, Set<String>> getFQNsOfAllUnresolvableParents(
       TypeDeclaration<?> typeDecl, Node currentNode) {
     Map<String, Set<String>> map = new LinkedHashMap<>();
+    Set<TypeDeclaration<?>> traversedTypeDeclarations = new HashSet<>();
 
-    getAllUnresolvableParentsImpl(typeDecl, currentNode, map);
+    getAllUnresolvableParentsImpl(typeDecl, currentNode, map, traversedTypeDeclarations);
 
     return map;
   }
@@ -1891,9 +1951,19 @@ public class FullyQualifiedNameGenerator {
    * @param currentNode The current node, to determine whether or not we should continue down that
    *     path (if node.equals(currentNode), do not do recurse)
    * @param map The map to add to
+   * @param traversedTypeDeclarations A set of type declarations that have already been traversed to
+   *     avoid infinite recursion
    */
   private void getAllUnresolvableParentsImpl(
-      TypeDeclaration<?> typeDecl, Node currentNode, Map<String, Set<String>> map) {
+      TypeDeclaration<?> typeDecl,
+      Node currentNode,
+      Map<String, Set<String>> map,
+      Set<TypeDeclaration<?>> traversedTypeDeclarations) {
+    if (traversedTypeDeclarations.contains(typeDecl)) {
+      return;
+    }
+    traversedTypeDeclarations.add(typeDecl);
+
     if (typeDecl instanceof NodeWithImplements<?>) {
       for (ClassOrInterfaceType type : ((NodeWithImplements<?>) typeDecl).getImplementedTypes()) {
         if (type.equals(currentNode)) {
@@ -1902,16 +1972,19 @@ public class FullyQualifiedNameGenerator {
 
         try {
           ResolvedReferenceType resolved = type.resolve().asReferenceType();
-          ResolvedReferenceTypeDeclaration resolvedDecl = resolved.getTypeDeclaration().get();
+          TypeDeclaration<?> parentTypeDecl =
+              JavaParserUtil.getTypeFromQualifiedName(
+                  resolved.getQualifiedName(), fqnToCompilationUnits);
 
-          if (resolvedDecl instanceof JavaParserClassDeclaration) {
-            TypeDeclaration<?> parentTypeDecl =
-                ((JavaParserClassDeclaration) resolvedDecl).getWrappedNode();
-            getAllUnresolvableParentsImpl(parentTypeDecl, currentNode, map);
+          if (parentTypeDecl != null) {
+            getAllUnresolvableParentsImpl(
+                parentTypeDecl, currentNode, map, traversedTypeDeclarations);
           }
 
         } catch (UnsolvedSymbolException ex) {
-          map.put(type.getNameWithScope(), getFQNsFromClassOrInterfaceType(type).erasedFqns());
+          map.put(
+              type.getNameWithScope(),
+              getFQNsFromClassOrInterfaceTypeImpl(type, traversedTypeDeclarations).erasedFqns());
         }
       }
     }
@@ -1924,16 +1997,19 @@ public class FullyQualifiedNameGenerator {
 
         try {
           ResolvedReferenceType resolved = type.resolve().asReferenceType();
-          ResolvedReferenceTypeDeclaration resolvedDecl = resolved.getTypeDeclaration().get();
+          TypeDeclaration<?> parentTypeDecl =
+              JavaParserUtil.getTypeFromQualifiedName(
+                  resolved.getQualifiedName(), fqnToCompilationUnits);
 
-          if (resolvedDecl instanceof JavaParserClassDeclaration) {
-            TypeDeclaration<?> parentTypeDecl =
-                ((JavaParserClassDeclaration) resolvedDecl).getWrappedNode();
-            getAllUnresolvableParentsImpl(parentTypeDecl, currentNode, map);
+          if (parentTypeDecl != null) {
+            getAllUnresolvableParentsImpl(
+                parentTypeDecl, currentNode, map, traversedTypeDeclarations);
           }
 
         } catch (UnsolvedSymbolException ex) {
-          map.put(type.getNameWithScope(), getFQNsFromClassOrInterfaceType(type).erasedFqns());
+          map.put(
+              type.getNameWithScope(),
+              getFQNsFromClassOrInterfaceTypeImpl(type, traversedTypeDeclarations).erasedFqns());
         }
       }
     }

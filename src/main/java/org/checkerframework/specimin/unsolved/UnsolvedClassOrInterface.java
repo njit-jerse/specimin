@@ -35,6 +35,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   /** The implements clauses, if they exist. */
   private Set<MemberType> implementsClauses = new LinkedHashSet<>(0);
 
+  /** The annotations on this type. */
   private Set<String> annotations = new HashSet<>();
 
   /** The type of this type; i.e., is it a class, interface, annotation, enum? */

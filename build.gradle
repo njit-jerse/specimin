@@ -105,10 +105,7 @@ tasks.compileJava {
             // JavaParser's visitor design requires us to regularly violate this rule
             "VoidUsed",
             // Specimin should compile with Java 11, but this suggestion assumes Java 17
-            "PatternMatchingInstanceof",
-            // Remove after refactor
-            "UnusedMethod",
-            "UnusedVariable")
+            "PatternMatchingInstanceof")
 }
 
 tasks.compileTestJava {

@@ -77,7 +77,10 @@ import org.checkerframework.specimin.JavaParserUtil;
  * alternates are selected.
  */
 public class UnsolvedSymbolGenerator {
+  /** A map of fully qualified names to their corresponding compilation units. */
   private final Map<String, CompilationUnit> fqnsToCompilationUnits;
+
+  /** Generates fully qualified names for symbols. */
   private final FullyQualifiedNameGenerator fullyQualifiedNameGenerator;
 
   /**
@@ -193,8 +196,7 @@ public class UnsolvedSymbolGenerator {
         scope =
             (UnsolvedClassOrInterfaceAlternates)
                 findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
-                        constructor.getType()));
+                    fullyQualifiedNameGenerator.getFQNsFromType(constructor.getType()));
 
         constructorName = constructor.getTypeAsString();
         arguments = constructor.getArguments();
@@ -226,7 +228,7 @@ public class UnsolvedSymbolGenerator {
           scope =
               (UnsolvedClassOrInterfaceAlternates)
                   findExistingAndUpdateFQNs(
-                      fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(superClass));
+                      fullyQualifiedNameGenerator.getFQNsFromType(superClass));
 
           constructorName = superClass.getNameAsString();
           arguments = constructor.getArguments();
@@ -299,8 +301,7 @@ public class UnsolvedSymbolGenerator {
     } catch (UnsolvedSymbolException ex) {
       // Ok to continue
     }
-    FullyQualifiedNameSet potentialFQNs =
-        fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(type);
+    FullyQualifiedNameSet potentialFQNs = fullyQualifiedNameGenerator.getFQNsFromType(type);
 
     // ClassOrInterfaceType may be Set<UnknownType>, which would be unresolvable because of
     // UnknownType, but we should not create Set in this case.
@@ -933,7 +934,8 @@ public class UnsolvedSymbolGenerator {
         UnsolvedSymbolAlternates<?> gen = findExistingAndUpdateFQNs(set);
 
         if (gen == null) {
-          throw new RuntimeException("Method scope types are not yet created");
+          throw new RuntimeException(
+              "Method scope types are not yet created: " + methodCall + " with scope " + set);
         }
         potentialParents.add((UnsolvedClassOrInterfaceAlternates) gen);
       }
@@ -1709,8 +1711,7 @@ public class UnsolvedSymbolGenerator {
       for (ClassOrInterfaceType implemented : decl.getImplementedTypes()) {
         UnsolvedClassOrInterfaceAlternates syntheticType =
             (UnsolvedClassOrInterfaceAlternates)
-                findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(implemented));
+                findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(implemented));
 
         if (syntheticType != null) {
           syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
@@ -1719,8 +1720,7 @@ public class UnsolvedSymbolGenerator {
       for (ClassOrInterfaceType extended : decl.getExtendedTypes()) {
         UnsolvedClassOrInterfaceAlternates syntheticType =
             (UnsolvedClassOrInterfaceAlternates)
-                findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(extended));
+                findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(extended));
 
         if (syntheticType != null) {
           syntheticType.setType(
@@ -1733,8 +1733,7 @@ public class UnsolvedSymbolGenerator {
       for (ClassOrInterfaceType implemented : decl.getImplementedTypes()) {
         UnsolvedClassOrInterfaceAlternates syntheticType =
             (UnsolvedClassOrInterfaceAlternates)
-                findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(implemented));
+                findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(implemented));
 
         if (syntheticType != null) {
           syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
@@ -1749,7 +1748,7 @@ public class UnsolvedSymbolGenerator {
         UnsolvedClassOrInterfaceAlternates syntheticType =
             (UnsolvedClassOrInterfaceAlternates)
                 findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
+                    fullyQualifiedNameGenerator.getFQNsFromType(
                         thrownException.asClassOrInterfaceType()));
 
         // Method declaration throws clauses could be either checked or unchecked, but are typically
@@ -1792,8 +1791,7 @@ public class UnsolvedSymbolGenerator {
           UnsolvedClassOrInterfaceAlternates lhs =
               (UnsolvedClassOrInterfaceAlternates)
                   findExistingAndUpdateFQNs(
-                      fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
-                          varDeclExpr.getElementType().asClassOrInterfaceType()));
+                      fullyQualifiedNameGenerator.getFQNsFromType(varDeclExpr.getElementType()));
           types.add(lhs);
 
           for (FullyQualifiedNameSet type :
@@ -1831,15 +1829,14 @@ public class UnsolvedSymbolGenerator {
           UnsolvedClassOrInterfaceAlternates type =
               (UnsolvedClassOrInterfaceAlternates)
                   findExistingAndUpdateFQNs(
-                      fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
-                          exception.getType().asClassOrInterfaceType()));
+                      fullyQualifiedNameGenerator.getFQNsFromType(exception.getType()));
           exceptions.add(type);
         } else if (exception.getType().isUnionType()) {
           for (ReferenceType refType : exception.getType().asUnionType().getElements()) {
             UnsolvedClassOrInterfaceAlternates type =
                 (UnsolvedClassOrInterfaceAlternates)
                     findExistingAndUpdateFQNs(
-                        fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
+                        fullyQualifiedNameGenerator.getFQNsFromType(
                             (ClassOrInterfaceType) refType));
             exceptions.add(type);
           }
@@ -1892,6 +1889,14 @@ public class UnsolvedSymbolGenerator {
       } else {
         type = instanceOf.getType();
       }
+
+      try {
+        type.resolve();
+        return UnsolvedGenerationResult.EMPTY;
+      } catch (UnsolvedSymbolException e) {
+        // continue
+      }
+
       Expression relationalExpr = instanceOf.getExpression();
 
       Set<MemberType> relational =
@@ -1905,13 +1910,11 @@ public class UnsolvedSymbolGenerator {
 
       UnsolvedClassOrInterfaceAlternates referenceType =
           (UnsolvedClassOrInterfaceAlternates)
-              findExistingAndUpdateFQNs(
-                  fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
-                      type.asClassOrInterfaceType()));
+              findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(type));
 
       if (referenceType == null) {
         throw new RuntimeException(
-            "Unsolved instanceof type when all unsolved symbols should be generated.");
+            "Unsolved instanceof type when all unsolved symbols should be generated: " + type);
       }
 
       referenceType.addSuperType(relational);
@@ -1930,7 +1933,7 @@ public class UnsolvedSymbolGenerator {
         UnsolvedClassOrInterfaceAlternates syntheticType =
             (UnsolvedClassOrInterfaceAlternates)
                 findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(elements.get(i)));
+                    fullyQualifiedNameGenerator.getFQNsFromType(elements.get(i)));
 
         if (syntheticType != null) {
           syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
@@ -2116,7 +2119,14 @@ public class UnsolvedSymbolGenerator {
           Supplier<ResolvedType> getResolvedTypeOfLHS;
 
           try {
-            ResolvedParameterDeclaration param = resolved.getParam(i);
+            ResolvedParameterDeclaration param;
+
+            if (i >= resolved.getNumberOfParams()) {
+              // Varargs; get last param
+              param = resolved.getLastParam();
+            } else {
+              param = resolved.getParam(i);
+            }
 
             lhsType =
                 getMemberTypeFromFQNs(
@@ -2288,9 +2298,8 @@ public class UnsolvedSymbolGenerator {
    * method declaration behind the call matches all of these requirements:
    *
    * <ul>
-   *   <li>The method declaration is unsolved and has a synthetic definition for it
-   *   <li>The unsolved declaring type of this method has a solvable child class with the same
-   *       method signature
+   *   <li>The method has an unsolved super method declaration with a generated synthetic definition
+   *   <li>There are known child classes of the unsolved declaring type of this method
    * </ul>
    *
    * If all these requirements are matched, then we update the return type of the method declaration
@@ -2305,10 +2314,18 @@ public class UnsolvedSymbolGenerator {
   private void matchMethodReturnTypesToKnownChildClasses(MethodCallExpr methodCall) {
     Collection<Set<String>> potentialScopeFQNs = null;
     ResolvedMethodDeclaration resolvedMethod = null;
+    MethodDeclaration ast = null;
     try {
       resolvedMethod = methodCall.resolve();
     } catch (UnsolvedSymbolException ex) {
-      potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
+      ast =
+          (MethodDeclaration)
+              JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                  methodCall, fqnsToCompilationUnits);
+
+      if (ast == null) {
+        potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
+      }
     } catch (UnsupportedOperationException ex) {
       resolvedMethod =
           (ResolvedMethodDeclaration)
@@ -2318,13 +2335,15 @@ public class UnsolvedSymbolGenerator {
 
     if (resolvedMethod != null) {
       // Potential scope is all unsolvable ancestors
-      MethodDeclaration ast =
+      ast =
           (MethodDeclaration)
               JavaParserUtil.tryFindAttachedNode(resolvedMethod, fqnsToCompilationUnits);
       if (ast == null) {
         return;
       }
+    }
 
+    if (ast != null) {
       List<ClassOrInterfaceType> unsolvableAncestors =
           JavaParserUtil.getAllUnsolvableAncestors(
               JavaParserUtil.getEnclosingClassLike(ast), fqnsToCompilationUnits);
@@ -2360,7 +2379,8 @@ public class UnsolvedSymbolGenerator {
 
     if (alt == null) {
       if (isMethodABuiltInThrowableMethod(potentialScopeFQNs, potentialFQNs)
-          || resolvedMethod != null) {
+          || resolvedMethod != null
+          || ast != null) {
         return;
       }
 
@@ -2780,8 +2800,7 @@ public class UnsolvedSymbolGenerator {
       scope =
           (UnsolvedClassOrInterfaceAlternates)
               findExistingAndUpdateFQNs(
-                  fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(
-                      constructor.getType()));
+                  fullyQualifiedNameGenerator.getFQNsFromType(constructor.getType()));
 
       constructorName = constructor.getTypeAsString();
       arguments = constructor.getArguments();
@@ -2793,8 +2812,7 @@ public class UnsolvedSymbolGenerator {
 
         scope =
             (UnsolvedClassOrInterfaceAlternates)
-                findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromClassOrInterfaceType(superClass));
+                findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(superClass));
 
         constructorName = superClass.getNameAsString();
         arguments = constructor.getArguments();
@@ -3260,7 +3278,7 @@ public class UnsolvedSymbolGenerator {
     }
 
     for (String fqn : fqns.erasedFqns()) {
-      if (fqnsToCompilationUnits.containsKey(fqn)) {
+      if (fqnsToCompilationUnits.containsKey(JavaParserUtil.removeArrayBrackets(fqn))) {
         return new SolvedMemberType(fqn, typeArguments);
       }
 

@@ -1,6 +1,5 @@
 package com.example;
 
-import org.anotherexample.*;
 import org.example.*;
 
 class Simple {

@@ -39,6 +39,7 @@ public abstract class UnsolvedSymbolAlternate {
     this.mustPreserve.addAll(mustPreserve);
   }
 
+  /** A set of nodes that must be preserved for this alternate. */
   private final Set<Node> mustPreserve;
 
   /**

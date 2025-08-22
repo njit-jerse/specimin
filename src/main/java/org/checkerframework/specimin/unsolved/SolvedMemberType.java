@@ -22,6 +22,7 @@ public class SolvedMemberType extends MemberType {
   /** Represents java.lang.Object */
   public static final SolvedMemberType JAVA_LANG_OBJECT = new SolvedMemberType("java.lang.Object");
 
+  /** The fully-qualified name represented by this type. */
   private String fqn;
 
   /**
