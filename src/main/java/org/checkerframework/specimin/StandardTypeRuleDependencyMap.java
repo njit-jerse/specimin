@@ -443,8 +443,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       // Most of the time, this method will return one constructor. However, there may be cases
       // where we include multiple constructors, but this is because we simply don't know which
       // one to use.
-      List<ConstructorDeclaration> constructors =
-          JavaParserUtil.tryResolveEnumConstantDeclarationWithUnresolvableArguments(
+      List<? extends CallableDeclaration<?>> constructors =
+          JavaParserUtil.tryResolveNodeWithUnresolvableArguments(
               enumConstant, fqnToCompilationUnits);
       elements.addAll(constructors);
     }

@@ -81,14 +81,40 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       boolean isStatic,
       boolean isFinal) {
+    return create(name, Set.of(type), alternateDeclaringTypes, isStatic, isFinal);
+  }
+
+  /**
+   * Creates a new instance of a field. Note that there is only one alternate generated here, but
+   * there could potentially be many different declaring types.
+   *
+   * @param name The name of the field
+   * @param types The potential types of the field
+   * @param alternateDeclaringTypes Potential declaring types
+   * @param isStatic Whether the field is static or not
+   * @param isFinal Whether the field is final or not
+   * @return The generated field
+   */
+  public static UnsolvedFieldAlternates create(
+      String name,
+      Set<MemberType> types,
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
+      boolean isStatic,
+      boolean isFinal) {
     if (alternateDeclaringTypes.isEmpty()) {
       throw new RuntimeException("Unsolved field must have at least one potential declaring type.");
     }
 
+    if (types.isEmpty()) {
+      throw new RuntimeException("Unsolved field must have at least one potential type.");
+    }
+
     UnsolvedFieldAlternates result = new UnsolvedFieldAlternates(alternateDeclaringTypes);
 
-    UnsolvedField field = new UnsolvedField(name, type, isStatic, isFinal, Set.of());
-    result.addAlternate(field);
+    for (MemberType type : types) {
+      UnsolvedField field = new UnsolvedField(name, type, isStatic, isFinal, Set.of());
+      result.addAlternate(field);
+    }
 
     return result;
   }

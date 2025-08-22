@@ -1,11 +1,14 @@
 package org.checkerframework.specimin.unsolved;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
 
 /**
@@ -36,70 +39,127 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    * Creates a new unsolved method declaration
    *
    * @param name The name of the method
-   * @param type The return type of the method
+   * @param types The return types of the method
    * @param alternateDeclaringTypes Potential declaring types of the method
-   * @param parameters The parameters of the method
+   * @param parameters Potential parameters of the method. Each set represents a possibility of
+   *     parameter types at that position
    * @return The method definition
    */
   public static UnsolvedMethodAlternates create(
       String name,
-      MemberType type,
+      Set<MemberType> types,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
-      List<MemberType> parameters) {
-    // TODO: enable alternate methods in case a method reference is an argument
-    // For example, Foo::bar may refer to a bar(int) -> void or a bar(String) -> boolean
-    // If Foo::bar were an argument, we wouldn't know which is which
-
-    // TODO: alternates for default/abstract methods in interfaces
-    return create(name, type, alternateDeclaringTypes, parameters, List.of());
+      List<Set<MemberType>> parameters) {
+    return create(name, types, alternateDeclaringTypes, parameters, List.of());
   }
 
   /**
    * Creates a new unsolved method declaration
    *
    * @param name The name of the method
-   * @param type The return type of the method
+   * @param types The return types of the method
    * @param alternateDeclaringTypes Potential declaring types of the method
-   * @param parameters The parameters of the method
+   * @param parameters Potential parameters of the method. Each set represents a possibility of
+   *     parameter types at that position
    * @param exceptions Thrown exceptions of this method
    * @return The method definition
    */
   public static UnsolvedMethodAlternates create(
       String name,
-      MemberType type,
+      Set<MemberType> types,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
-      List<MemberType> parameters,
+      List<Set<MemberType>> parameters,
       List<MemberType> exceptions) {
-    return create(name, type, alternateDeclaringTypes, parameters, exceptions, "public");
+    return create(name, types, alternateDeclaringTypes, parameters, exceptions, "public");
   }
 
   /**
    * Creates a new unsolved method declaration
    *
    * @param name The name of the method
-   * @param type The return type of the method
+   * @param types The return types of the method
    * @param alternateDeclaringTypes Potential declaring types of the method
-   * @param parameters The parameters of the method
+   * @param parameters Potential parameters of the method. Each set represents a possibility of
+   *     parameter types at that position
    * @param exceptions Thrown exceptions of this method
    * @param accessModifier The access modifier of this method
    * @return The method definition
    */
   public static UnsolvedMethodAlternates create(
       String name,
-      MemberType type,
+      Set<MemberType> types,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
-      List<MemberType> parameters,
+      List<Set<MemberType>> parameters,
       List<MemberType> exceptions,
       String accessModifier) {
     if (alternateDeclaringTypes.isEmpty()) {
       throw new RuntimeException(
           "Unsolved method must have at least one potential declaring type.");
     }
+
+    if (types.isEmpty()) {
+      throw new RuntimeException("Unsolved method must have at least one potential return type.");
+    }
+
     UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
 
-    UnsolvedMethod method =
-        new UnsolvedMethod(name, type, parameters, exceptions, Set.of(), accessModifier);
-    result.addAlternate(method);
+    for (List<MemberType> parameterList : JavaParserUtil.generateAllCombinations(parameters)) {
+      for (MemberType type : types) {
+        UnsolvedMethod method =
+            new UnsolvedMethod(name, type, parameterList, exceptions, Set.of(), accessModifier);
+        result.addAlternate(method);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Creates a new unsolved method declaration
+   *
+   * @param name The name of the method
+   * @param types The return types of the method
+   * @param alternateDeclaringTypes Potential declaring types of the method
+   * @param parameters Potential parameters of the method. Each map represents a possibility of
+   *     parameter types at that position, along with nodes that must be preserved if that type is
+   *     chosen
+   * @param exceptions Thrown exceptions of this method
+   * @return The method definition
+   */
+  public static UnsolvedMethodAlternates createWithPreservation(
+      String name,
+      Set<MemberType> types,
+      List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
+      List<Map<MemberType, @Nullable Node>> parameters,
+      List<MemberType> exceptions) {
+    if (alternateDeclaringTypes.isEmpty()) {
+      throw new RuntimeException(
+          "Unsolved method must have at least one potential declaring type.");
+    }
+
+    if (types.isEmpty()) {
+      throw new RuntimeException("Unsolved method must have at least one potential return type.");
+    }
+
+    UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
+
+    for (List<Map.Entry<MemberType, @Nullable Node>> parameterList :
+        JavaParserUtil.generateAllCombinationsForListOfMaps(parameters)) {
+      for (MemberType type : types) {
+        List<MemberType> params = parameterList.stream().map(Map.Entry::getKey).toList();
+        Set<Node> toPreserve = new HashSet<>();
+
+        for (Map.Entry<MemberType, @Nullable Node> entry : parameterList) {
+          Node node = entry.getValue();
+          if (node != null) {
+            toPreserve.add(node);
+          }
+        }
+
+        UnsolvedMethod method = new UnsolvedMethod(name, type, params, exceptions, toPreserve);
+        result.addAlternate(method);
+      }
+    }
 
     return result;
   }
@@ -111,15 +171,17 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    * @param returnTypesToMustPreserveNodes A map of return types to must-preserve nodes. Different
    *     return types may lead to different sets of nodes that need to be conditionally preserved.
    * @param alternateDeclaringTypes Potential declaring types of the method
-   * @param parameters The parameters of the method
+   * @param parameters Potential parameters of the method. Each map represents a possibility of
+   *     parameter types at that position, along with nodes that must be preserved if that type is
+   *     chosen
    * @param exceptions Thrown exceptions of this method
    * @return The method definition
    */
-  public static UnsolvedMethodAlternates create(
+  public static UnsolvedMethodAlternates createWithPreservation(
       String name,
       Map<MemberType, CallableDeclaration<?>> returnTypesToMustPreserveNodes,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
-      List<MemberType> parameters,
+      List<Map<MemberType, @Nullable Node>> parameters,
       List<MemberType> exceptions) {
     if (alternateDeclaringTypes.isEmpty()) {
       throw new RuntimeException(
@@ -127,12 +189,29 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     }
     UnsolvedMethodAlternates result = new UnsolvedMethodAlternates(alternateDeclaringTypes);
 
-    for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
-        returnTypesToMustPreserveNodes.entrySet()) {
-      UnsolvedMethod method =
-          new UnsolvedMethod(
-              name, entry.getKey(), parameters, exceptions, Set.of(entry.getValue()));
-      result.addAlternate(method);
+    for (List<Map.Entry<MemberType, @Nullable Node>> parameterList :
+        JavaParserUtil.generateAllCombinationsForListOfMaps(parameters)) {
+      for (Map.Entry<MemberType, CallableDeclaration<?>> returnType :
+          returnTypesToMustPreserveNodes.entrySet()) {
+        List<MemberType> params = parameterList.stream().map(Map.Entry::getKey).toList();
+        Set<Node> toPreserve = new HashSet<>();
+        for (Map.Entry<MemberType, @Nullable Node> entry : parameterList) {
+          Node node = entry.getValue();
+          if (node != null) {
+            toPreserve.add(node);
+          }
+        }
+
+        Node returnTypePreserve = returnType.getValue();
+
+        if (returnTypePreserve != null) {
+          toPreserve.add(returnTypePreserve);
+        }
+
+        UnsolvedMethod method =
+            new UnsolvedMethod(name, returnType.getKey(), params, exceptions, toPreserve);
+        result.addAlternate(method);
+      }
     }
 
     return result;
@@ -284,5 +363,10 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   @Override
   public void setAccessModifier(String accessModifier) {
     applyToAllAlternates(UnsolvedMethod::setAccessModifier, accessModifier);
+  }
+
+  @Override
+  public boolean isStatic() {
+    return getAlternates().get(0).isStatic();
   }
 }

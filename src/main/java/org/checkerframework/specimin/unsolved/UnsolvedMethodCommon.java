@@ -33,6 +33,13 @@ public interface UnsolvedMethodCommon {
   public void setStatic();
 
   /**
+   * Returns true if this method is static
+   *
+   * @return True if the method is static
+   */
+  public boolean isStatic();
+
+  /**
    * Gets the number of type variables.
    *
    * @return The number of type variables

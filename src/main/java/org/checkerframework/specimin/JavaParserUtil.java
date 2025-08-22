@@ -25,6 +25,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
@@ -51,6 +52,7 @@ import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Splitter;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -573,7 +575,33 @@ public class JavaParserUtil {
     try {
       expr.calculateResolvedType();
       return true;
+    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+      // We can get an UnsupportedOperationException when trying to resolve an unsolvable method
+      // reference
+      return false;
+    }
+  }
+
+  /**
+   * Returns true if this expression is resolvable to a definition.
+   *
+   * @param expr The expression to resolve
+   * @return True if this expression is of type Resolvable<?> and also has a resolvable definition
+   */
+  public static boolean isExprDefinitionResolvable(Expression expr) {
+    if (!(expr instanceof Resolvable<?> resolvable)) {
+      return false;
+    }
+
+    try {
+      resolvable.resolve();
+      return true;
     } catch (UnsolvedSymbolException ex) {
+      return false;
+    } catch (UnsupportedOperationException ex) {
+      if (tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr) != null) {
+        return true;
+      }
       return false;
     }
   }
@@ -785,6 +813,122 @@ public class JavaParserUtil {
   }
 
   /**
+   * Returns a list of existing callable declarations (methods, constructors, or enum constants)
+   * that match the given node with arguments, even if some arguments are unresolvable.
+   *
+   * @param withArgs The node representing a method call, constructor call, or enum constant
+   *     declaration with arguments
+   * @param fqnsToCompilationUnits The map of fully qualified names to their compilation units
+   * @return A list of matching {@link CallableDeclaration} instances, or an empty list if none are
+   *     found
+   */
+  public static List<? extends CallableDeclaration<?>> tryResolveNodeWithUnresolvableArguments(
+      NodeWithArguments<?> withArgs, Map<String, CompilationUnit> fqnsToCompilationUnits) {
+    if (withArgs instanceof MethodCallExpr parentMethodCall) {
+      return tryResolveMethodCallWithUnresolvableArguments(
+          parentMethodCall, fqnsToCompilationUnits);
+    } else if (withArgs instanceof ExplicitConstructorInvocationStmt parentConstructorCall) {
+      return tryResolveConstructorCallWithUnresolvableArguments(
+          parentConstructorCall, fqnsToCompilationUnits);
+    } else if (withArgs instanceof ObjectCreationExpr parentConstructorCall) {
+      return tryResolveConstructorCallWithUnresolvableArguments(
+          parentConstructorCall, fqnsToCompilationUnits);
+    } else if (withArgs instanceof EnumConstantDeclaration parentEnumConstantDeclaration) {
+      return tryResolveEnumConstantDeclarationWithUnresolvableArguments(
+          parentEnumConstantDeclaration, fqnsToCompilationUnits);
+    } else {
+      // Not possible:
+      // https://javadoc.io/doc/com.github.javaparser/javaparser-core/latest/com/github/javaparser/ast/nodeTypes/NodeWithArguments.html
+      throw new RuntimeException("Unexpected NodeWithArguments type: " + withArgs.getClass());
+    }
+  }
+
+  /**
+   * Tries to resolve a node with unresolvable arguments. If no single callable can be found, it
+   * returns null.
+   *
+   * @param node The node with arguments to resolve
+   * @param fqnsToCompilationUnits The map of fully qualified names to their compilation units
+   * @return A resolvable callable if it can be found, null otherwise
+   */
+  public static @Nullable CallableDeclaration<?>
+      tryFindSingleCallableForNodeWithUnresolvableArguments(
+          NodeWithArguments<?> node, Map<String, CompilationUnit> fqnsToCompilationUnits) {
+    List<? extends CallableDeclaration<?>> callables =
+        JavaParserUtil.tryResolveNodeWithUnresolvableArguments(node, fqnsToCompilationUnits);
+    if (callables.isEmpty()) {
+      return null;
+    }
+
+    if (callables.size() == 1) {
+      return callables.get(0);
+    }
+
+    List<@Nullable Object> argumentTypes =
+        new ArrayList<>(JavaParserUtil.getArgumentTypesAsResolved(node.getArguments()));
+
+    for (int i = 0; i < argumentTypes.size(); i++) {
+      if (argumentTypes.get(i) == null) {
+        argumentTypes.set(
+            i,
+            JavaParserUtil.tryGetTypeAsStringFromExpression(
+                node.getArgument(i), fqnsToCompilationUnits));
+      }
+    }
+
+    // If there is only one callable where the rest of the parameters match and a few others that
+    // are null, return this maybe best match
+    CallableDeclaration<?> maybeBestMatch = null;
+    // If there are multiple callables, find the best match, i.e., FQNs = FQNs and simple names =
+    // simple names
+    // If there is one that matches exactly, return it; others that match it directly are simply
+    // overrides
+    for (CallableDeclaration<?> callable : callables) {
+      boolean isAMatch = true;
+      int nulls = 0;
+      for (int i = 0; i < callable.getParameters().size(); i++) {
+        Object typeInCall = argumentTypes.get(i);
+
+        if (typeInCall == null) {
+          nulls++;
+          continue;
+        }
+
+        // The call to tryResolve... already guarantees that ResolvedType is handled correctly
+        if (typeInCall instanceof ResolvedType) {
+          continue;
+        }
+
+        Type paramType = callable.getParameter(i).getType();
+        if (typeInCall instanceof String typeAsString) {
+          // If the type in the call is a string, it must match the parameter type exactly
+          if (!JavaParserUtil.erase(paramType.asString())
+              .equals(JavaParserUtil.erase(typeAsString))) {
+            isAMatch = false;
+            break;
+          }
+        }
+      }
+
+      if (isAMatch) {
+        if (nulls == 0) {
+          // If there are no nulls, this is a perfect match
+          return callable;
+        } else if (maybeBestMatch == null) {
+          // If there are nulls, this is the best match so far
+          maybeBestMatch = callable;
+        } else {
+          // If nulls > 0 and maybeBestMatch is already existing, return null since we have
+          // ambiguities: handle in UnsolvedSymbolGenerator
+          return null;
+        }
+      }
+    }
+
+    return maybeBestMatch;
+  }
+
+  /**
    * Given a constructor call, returns all possible constructors that match the arity and known
    * types of the arguments. This returns an empty list if no matching constructors were found or if
    * the declaring type could not be solved.
@@ -793,7 +937,7 @@ public class JavaParserUtil {
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible constructor declarations
    */
-  public static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
+  private static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
       ObjectCreationExpr constructorCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
     List<@Nullable ResolvedType> parameterTypes =
         getArgumentTypesAsResolved(constructorCall.getArguments());
@@ -830,7 +974,7 @@ public class JavaParserUtil {
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible constructor declarations
    */
-  public static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
+  private static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
       ExplicitConstructorInvocationStmt constructorCall,
       Map<String, CompilationUnit> fqnToCompilationUnits) {
     List<@Nullable ResolvedType> parameterTypes =
@@ -870,7 +1014,7 @@ public class JavaParserUtil {
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible method declarations
    */
-  public static List<MethodDeclaration> tryResolveMethodCallWithUnresolvableArguments(
+  private static List<MethodDeclaration> tryResolveMethodCallWithUnresolvableArguments(
       MethodCallExpr methodCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
     boolean isSuperOnly = false;
 
@@ -946,7 +1090,7 @@ public class JavaParserUtil {
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible constructor declarations
    */
-  public static List<ConstructorDeclaration>
+  private static List<ConstructorDeclaration>
       tryResolveEnumConstantDeclarationWithUnresolvableArguments(
           EnumConstantDeclaration enumConstant,
           Map<String, CompilationUnit> fqnToCompilationUnits) {
@@ -1779,21 +1923,44 @@ public class JavaParserUtil {
     combos.add(new ArrayList<>());
 
     for (Collection<T> set : collections) {
-      int stop = combos.size();
-      for (int i = 0; i < stop; i++) {
-        List<T> combination = combos.get(i);
+      List<List<T>> newCombos = new ArrayList<>();
+      for (List<T> combination : combos) {
         for (T element : set) {
           List<T> newCombination = new ArrayList<>(combination);
           newCombination.add(element);
-          combos.add(newCombination);
+          newCombos.add(newCombination);
         }
       }
+      combos = newCombos;
     }
 
-    // The first element will always be an empty list, so we'll remove it
-    combos.remove(0);
-
     return combos;
+  }
+
+  /**
+   * Same as {@link #generateAllCombinations(List)} but for Lists of Maps instead of Lists of
+   * Collections. Each map's entry set is used as the collection of elements to combine.
+   *
+   * @param <T> The type of the keys in the maps
+   * @param <U> The type of the values in the maps
+   * @param collections The list of maps to combine
+   * @return A list of all combinations of map entries
+   */
+  public static <T, U> List<List<Map.Entry<T, U>>> generateAllCombinationsForListOfMaps(
+      List<? extends Map<T, U>> collections) {
+    // AbstractMap.Entry allows null values, unlike Map.Entry
+    List<List<Map.Entry<T, U>>> combinable =
+        collections.stream()
+            .map(
+                map ->
+                    map.entrySet().stream()
+                        .<Map.Entry<T, U>>map(
+                            entry ->
+                                (Map.Entry<T, U>)
+                                    new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue()))
+                        .toList())
+            .toList();
+    return generateAllCombinations(combinable);
   }
 
   /**
@@ -1884,8 +2051,9 @@ public class JavaParserUtil {
    *
    * @param resolvedTypes The resolved types
    * @param solvedMemberTypes The solved member types
-   * @return The least upper bound, or null if it is a primitive. Note that this is a
-   *     ResolvedReferenceTypeDeclaration because this does not consider type variables.
+   * @return The least upper bound, or null if it is a primitive (this will only be the case if a
+   *     primitive is inputted). Note that this is a ResolvedReferenceTypeDeclaration because this
+   *     does not consider type variables.
    */
   public static @Nullable ResolvedReferenceTypeDeclaration getLeastUpperBound(
       List<ResolvedType> resolvedTypes, List<SolvedMemberType> solvedMemberTypes) {
@@ -1907,7 +2075,7 @@ public class JavaParserUtil {
     for (SolvedMemberType solvedMemberType : solvedMemberTypes) {
       String fqn = solvedMemberType.getFullyQualifiedNames().iterator().next();
       if (JavaLangUtils.isPrimitive(fqn)) {
-        break;
+        return null;
       }
 
       try {
@@ -1978,5 +2146,28 @@ public class JavaParserUtil {
     return methodDeclaringType.asReferenceType().getAllMethods().stream()
         .filter(method -> method.getName().equals(methodName))
         .toList();
+  }
+
+  /**
+   * Gets an import declaration based on a simple name, if one exists. Returns null if not found.
+   *
+   * @param name The simple name; does not contain a period
+   * @param cu The compilation unit
+   * @param mustBeStatic True if looking only for static imports
+   * @return The import declaration, if found; if not, then null
+   */
+  public static @Nullable ImportDeclaration getImportDeclaration(
+      String name, CompilationUnit cu, boolean mustBeStatic) {
+    for (ImportDeclaration importDecl : cu.getImports()) {
+      if (mustBeStatic && !importDecl.isStatic()) {
+        continue;
+      }
+
+      if (importDecl.getNameAsString().endsWith("." + name)) {
+        return importDecl;
+      }
+    }
+
+    return null;
   }
 }

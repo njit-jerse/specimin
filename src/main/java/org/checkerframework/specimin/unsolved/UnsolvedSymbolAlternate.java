@@ -1,6 +1,8 @@
 package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Set;
 
 /**
@@ -33,7 +35,8 @@ public abstract class UnsolvedSymbolAlternate {
    * @param mustPreserve The set of nodes that must be preserved for this alternate.
    */
   public UnsolvedSymbolAlternate(Set<Node> mustPreserve) {
-    this.mustPreserve = mustPreserve;
+    this.mustPreserve = Collections.newSetFromMap(new IdentityHashMap<>());
+    this.mustPreserve.addAll(mustPreserve);
   }
 
   private final Set<Node> mustPreserve;
@@ -45,5 +48,14 @@ public abstract class UnsolvedSymbolAlternate {
    */
   public Set<Node> getMustPreserveNodes() {
     return mustPreserve;
+  }
+
+  /**
+   * Adds a node that must be preserved with this alternate.
+   *
+   * @param node The node to be preserved
+   */
+  public void addMustPreserveNode(Node node) {
+    mustPreserve.add(node);
   }
 }

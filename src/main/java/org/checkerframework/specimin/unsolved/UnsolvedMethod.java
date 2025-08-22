@@ -1,6 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -76,7 +77,8 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     super(mustPreserve);
     this.name = name;
     this.returnType = returnType;
-    this.parameterList = parameterList;
+    // Parameter list should be mutable, so convert it to be safe
+    this.parameterList = new ArrayList<>(parameterList);
     this.throwsList = throwsList;
     this.accessModifier = accessModifier;
   }
@@ -288,5 +290,10 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   @Override
   public void setAccessModifier(String accessModifier) {
     this.accessModifier = accessModifier;
+  }
+
+  @Override
+  public boolean isStatic() {
+    return isStatic;
   }
 }

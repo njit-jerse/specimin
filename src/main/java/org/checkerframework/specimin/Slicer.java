@@ -5,7 +5,6 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -13,21 +12,17 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
-import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -123,19 +118,26 @@ public class Slicer {
 
     slicer.buildSlice();
 
+    unsolvedSymbolGenerator.generateAllAlternatesBasedOnSuperTypeRelationships();
+
     Set<Node> dependentSlice = new HashSet<>();
-    for (UnsolvedSymbolAlternates<?> gen : slicer.generatedSymbolSlice) {
+    // Use getGeneratedSymbols() instead of Slicer.generatedSymbolSlice here because we want to
+    // include
+    // nodes which are included by generated symbols that are conditionally included as well, not
+    // just
+    // those in the slice
+    for (UnsolvedSymbolAlternates<?> gen :
+        slicer.unsolvedSymbolGenerator.getGeneratedSymbols().values()) {
       for (Node node : gen.getDependentNodes()) {
+        if (!slicer.slice.contains(node)) {
+          dependentSlice.add(node);
+        }
         // These nodes may be something like a method declaration; we need to call the
         // type rule dependency map once to get its keywords to make sure it's not removed
         slicer.slice.add(node);
         slicer.slice.addAll(typeRuleDependencyMap.getRelevantElements(node));
-
-        if (!slicer.slice.contains(node)) dependentSlice.add(node);
       }
     }
-
-    unsolvedSymbolGenerator.generateAllAlternatesBasedOnSuperTypeRelationships();
 
     slicer.prune();
 
@@ -243,14 +245,15 @@ public class Slicer {
 
         // Handle cases where a method/constructor call cannot be resolved because of unresolvable
         // arguments, but its definition exists
-        Resolvable<?> potentiallyResolvableCallable =
+        CallableDeclaration<?> potentiallyResolvableCallable =
             node instanceof NodeWithArguments<?> withArgs
-                ? tryResolveNodeWithUnsolvableArguments(withArgs)
+                ? JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                    withArgs, fqnToCompilationUnits)
                 : null;
 
         if (potentiallyResolvableCallable != null) {
           try {
-            resolved = potentiallyResolvableCallable.resolve();
+            resolved = ((Resolvable<?>) potentiallyResolvableCallable).resolve();
             shouldTryToResolve = false;
           } catch (UnsolvedSymbolException e) {
             // This should never happen
@@ -299,108 +302,6 @@ public class Slicer {
     if (unsolvedSymbolGenerator.needToPostProcess(node)) {
       postProcessingWorklist.add(node);
     }
-  }
-
-  /**
-   * Tries to resolve a node with unresolvable arguments. If no single callable can be found, it
-   * returns null.
-   *
-   * @param node The node with arguments to resolve
-   * @return A resolvable callable if it can be found, null otherwise
-   */
-  private @Nullable Resolvable<?> tryResolveNodeWithUnsolvableArguments(NodeWithArguments<?> node) {
-    List<? extends CallableDeclaration<?>> callables;
-
-    if (node instanceof MethodCallExpr methodCall) {
-      callables =
-          JavaParserUtil.tryResolveMethodCallWithUnresolvableArguments(
-              methodCall, fqnToCompilationUnits);
-    } else if (node instanceof ObjectCreationExpr objectCreationExpr) {
-      callables =
-          JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
-              objectCreationExpr, fqnToCompilationUnits);
-    } else if (node instanceof ExplicitConstructorInvocationStmt constructorCall) {
-      callables =
-          JavaParserUtil.tryResolveConstructorCallWithUnresolvableArguments(
-              constructorCall, fqnToCompilationUnits);
-    } else if (node instanceof EnumConstantDeclaration enumConstant) {
-      callables =
-          JavaParserUtil.tryResolveEnumConstantDeclarationWithUnresolvableArguments(
-              enumConstant, fqnToCompilationUnits);
-    } else {
-      return null;
-    }
-
-    if (callables.isEmpty()) {
-      return null;
-    }
-
-    if (callables.size() == 1) {
-      return (Resolvable<?>) callables.get(0);
-    }
-
-    List<@Nullable Object> argumentTypes =
-        new ArrayList<>(JavaParserUtil.getArgumentTypesAsResolved(node.getArguments()));
-
-    for (int i = 0; i < argumentTypes.size(); i++) {
-      if (argumentTypes.get(i) == null) {
-        argumentTypes.set(
-            i,
-            JavaParserUtil.tryGetTypeAsStringFromExpression(
-                node.getArgument(i), fqnToCompilationUnits));
-      }
-    }
-
-    // If there is only one callable where the rest of the parameters match and a few others that
-    // are null, return this maybe best match
-    CallableDeclaration<?> maybeBestMatch = null;
-    // If there are multiple callables, find the best match, i.e., FQNs = FQNs and simple names =
-    // simple names
-    // If there is one that matches exactly, return it; others that match it directly are simply
-    // overrides
-    for (CallableDeclaration<?> callable : callables) {
-      boolean isAMatch = true;
-      int nulls = 0;
-      for (int i = 0; i < callable.getParameters().size(); i++) {
-        Object typeInCall = argumentTypes.get(i);
-
-        if (typeInCall == null) {
-          nulls++;
-          continue;
-        }
-
-        // The call to tryResolve... already guarantees that ResolvedType is handled correctly
-        if (typeInCall instanceof ResolvedType) {
-          continue;
-        }
-
-        Type paramType = callable.getParameter(i).getType();
-        if (typeInCall instanceof String typeAsString) {
-          // If the type in the call is a string, it must match the parameter type exactly
-          if (!JavaParserUtil.erase(paramType.asString())
-              .equals(JavaParserUtil.erase(typeAsString))) {
-            isAMatch = false;
-            break;
-          }
-        }
-      }
-
-      if (isAMatch) {
-        if (nulls == 0) {
-          // If there are no nulls, this is a perfect match
-          return (Resolvable<?>) callable;
-        } else if (maybeBestMatch == null) {
-          // If there are nulls, this is the best match so far
-          maybeBestMatch = callable;
-        } else {
-          // If nulls > 0 and maybeBestMatch is already existing, return null since we have
-          // ambiguities: handle in UnsolvedSymbolGenerator
-          return null;
-        }
-      }
-    }
-
-    return (Resolvable<?>) maybeBestMatch;
   }
 
   /**

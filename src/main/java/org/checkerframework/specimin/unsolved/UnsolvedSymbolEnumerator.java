@@ -49,13 +49,21 @@ public class UnsolvedSymbolEnumerator {
     Set<UnsolvedClassOrInterface> outerTypes = new LinkedHashSet<>();
 
     // Note that the keyset is not equal to outerTypes. For Foo.Bar.Baz, Bar will be a key here, Baz
-    // will be an inner type;
-    // Foo will also be a key, Bar will be an inner type. However, outerTypes will only contain Foo.
+    // will be an inner type; Foo will also be a key, Bar will be an inner type. However, outerTypes
+    // will only contain Foo.
     Map<UnsolvedClassOrInterface, Set<UnsolvedClassOrInterface>> outerTypesToInnerTypes =
         new LinkedHashMap<>();
 
     for (UnsolvedClassOrInterfaceAlternates unsolved : unsolvedTypes) {
       addTypeToCorrectDataStructure(unsolved, outerTypes, outerTypesToInnerTypes);
+      for (MemberType implemented : unsolved.getAlternates().get(0).getImplementedTypes()) {
+        addAllUsedTypesToSet(implemented, outerTypes, outerTypesToInnerTypes);
+      }
+
+      MemberType extended = unsolved.getAlternates().get(0).getExtendedType();
+      if (extended != null) {
+        addAllUsedTypesToSet(extended, outerTypes, outerTypesToInnerTypes);
+      }
     }
 
     Map<UnsolvedClassOrInterface, Set<UnsolvedField>> typesToFields = new LinkedHashMap<>();

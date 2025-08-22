@@ -307,6 +307,24 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
     return typeOfType;
   }
 
+  /**
+   * Gets the set of types that are implemented by this type.
+   *
+   * @return The implemented types
+   */
+  public Set<MemberType> getImplementedTypes() {
+    return implementsClauses;
+  }
+
+  /**
+   * Gets the extended type of this type.
+   *
+   * @return The extended type, or null if none
+   */
+  public @Nullable MemberType getExtendedType() {
+    return extendsClause;
+  }
+
   @Override
   public void setType(UnsolvedClassOrInterfaceType type) {
     typeOfType = type;

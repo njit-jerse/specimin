@@ -2,6 +2,7 @@ package org.checkerframework.specimin.unsolved;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -48,5 +49,20 @@ public record FullyQualifiedNameSet(
    */
   public FullyQualifiedNameSet(String... erasedFqns) {
     this(Set.of(erasedFqns));
+  }
+
+  @Override
+  public boolean equals(@Nullable Object other) {
+    if (other instanceof FullyQualifiedNameSet otherSet) {
+      return Objects.equals(erasedFqns, otherSet.erasedFqns)
+          && Objects.equals(typeArguments, otherSet.typeArguments)
+          && Objects.equals(wildcard, otherSet.wildcard);
+    }
+    return false;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(erasedFqns, typeArguments, wildcard);
   }
 }

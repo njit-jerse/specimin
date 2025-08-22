@@ -56,10 +56,10 @@ public final class JavaLangUtils {
   private static final Map<String, String> primitivesToObjects = new HashMap<>();
 
   /**
-   * A set of methods signatures in java.lang.Object. Parameter types are fully qualified (if not
-   * primitive) and there are spaces after each comma.
+   * A map of methods signatures to return types in java.lang.Object. Parameter types are fully
+   * qualified (if not primitive) and there are spaces after each comma.
    */
-  private static Set<String> javaLangObjectMethods = new HashSet<>();
+  private static Map<String, String> javaLangObjectMethods;
 
   /**
    * A map of method signatures in java.lang.Throwable to their return types. The method signatures
@@ -251,15 +251,18 @@ public final class JavaLangUtils {
     }
     knownFinalJdkTypes.addAll(withJavaLang);
 
-    javaLangObjectMethods.add("getClass()");
-    javaLangObjectMethods.add("toString()");
-    javaLangObjectMethods.add("hashCode()");
-    javaLangObjectMethods.add("equals(java.lang.Object)");
-    javaLangObjectMethods.add("notifyAll()");
-    javaLangObjectMethods.add("notify()");
-    javaLangObjectMethods.add("wait()");
-    javaLangObjectMethods.add("wait(long)");
-    javaLangObjectMethods.add("wait(long, int)");
+    Map<String, String> javaLangObjectMethods = new HashMap<>();
+    javaLangObjectMethods.put("getClass()", "java.lang.Class<?>");
+    javaLangObjectMethods.put("toString()", "java.lang.String");
+    javaLangObjectMethods.put("hashCode()", "int");
+    javaLangObjectMethods.put("equals(java.lang.Object)", "boolean");
+    javaLangObjectMethods.put("notifyAll()", "void");
+    javaLangObjectMethods.put("notify()", "void");
+    javaLangObjectMethods.put("wait()", "void");
+    javaLangObjectMethods.put("wait(long)", "void");
+    javaLangObjectMethods.put("wait(long, int)", "void");
+
+    JavaLangUtils.javaLangObjectMethods = Collections.unmodifiableMap(javaLangObjectMethods);
 
     Map<String, String> javaLangThrowableMethods = new HashMap<>();
     // https://docs.oracle.com/javase/8/docs/api/java/lang/Throwable.html
@@ -430,7 +433,18 @@ public final class JavaLangUtils {
    * @return true if the method is defined in java.lang.Object
    */
   public static boolean isJavaLangObjectMethod(String methodSignature) {
-    return javaLangObjectMethods.contains(methodSignature);
+    return javaLangObjectMethods.containsKey(methodSignature);
+  }
+
+  /**
+   * Gets the map of methods in java.lang.Object, where the keys are method signatures (parameter
+   * types are fully qualified, with spaces after each comma, no declaring type) and the values are
+   * the return types of each method.
+   *
+   * @return A map of method signatures to their return types
+   */
+  public static Map<String, String> getJavaLangObjectMethods() {
+    return javaLangObjectMethods;
   }
 
   /**

@@ -293,7 +293,8 @@ public class UnsolvedClassOrInterfaceAlternates
    * variable could take its place. The best guess for the right type variable is returned as the
    * first element of the list. This is primarily used for generating potential super types, since
    * the input type may have a wildcard in its type arguments, but we cannot include a wildcard in
-   * an extends/implements clause.
+   * an extends/implements clause. For example, if we encounter Bar<?> = Foo<?>, we need to make
+   * sure Foo<T> extends Bar<T>, not Bar<?>, since this is not compilable.
    *
    * @param memberType The member type to remove wildcards from
    * @return The potential super types
