@@ -1302,6 +1302,25 @@ public class JavaParserUtil {
   }
 
   /**
+   * Utility method to get the extended/implemented types from a type declaration.
+   *
+   * @param typeDecl The type declaration
+   * @return A list of direct super types (extended/implemented)
+   */
+  public static List<ClassOrInterfaceType> getDirectSuperTypes(TypeDeclaration<?> typeDecl) {
+    List<ClassOrInterfaceType> extendedOrImplemented = new ArrayList<>();
+
+    if (typeDecl instanceof NodeWithExtends<?> withExtends) {
+      extendedOrImplemented.addAll(withExtends.getExtendedTypes());
+    }
+    if (typeDecl instanceof NodeWithImplements<?> withImplements) {
+      extendedOrImplemented.addAll(withImplements.getImplementedTypes());
+    }
+
+    return extendedOrImplemented;
+  }
+
+  /**
    * Finds all unsolvable ancestors, given a type declaration to start.
    *
    * @param start The type declaration
@@ -1329,14 +1348,7 @@ public class JavaParserUtil {
       TypeDeclaration<?> start,
       Map<String, CompilationUnit> fqnToCompilationUnits,
       List<ClassOrInterfaceType> result) {
-    List<ClassOrInterfaceType> extendedOrImplemented = new ArrayList<>();
-
-    if (start instanceof NodeWithExtends<?> withExtends) {
-      extendedOrImplemented.addAll(withExtends.getExtendedTypes());
-    }
-    if (start instanceof NodeWithImplements<?> withImplements) {
-      extendedOrImplemented.addAll(withImplements.getImplementedTypes());
-    }
+    List<ClassOrInterfaceType> extendedOrImplemented = getDirectSuperTypes(start);
 
     for (ClassOrInterfaceType type : extendedOrImplemented) {
       try {
@@ -1356,7 +1368,32 @@ public class JavaParserUtil {
   }
 
   /**
-   * Finds all solvable ancestors, given a type declaration to start.
+   * Finds all solvable ancestors (in JDK and user-defined types), given a type declaration to
+   * start.
+   *
+   * @param start The type declaration
+   * @return A list of resolved type declarations representing all solvable ancestors
+   */
+  public static List<ResolvedReferenceTypeDeclaration> getAllJDKAncestors(
+      TypeDeclaration<?> start) {
+    List<ResolvedReferenceTypeDeclaration> result = new ArrayList<>();
+
+    try {
+      ResolvedReferenceTypeDeclaration resolved = start.resolve();
+      for (ResolvedReferenceType ancestor : resolved.getAllAncestors()) {
+        if (JavaLangUtils.inJdkPackage(ancestor.getQualifiedName())) {
+          result.add(ancestor.getTypeDeclaration().get());
+        }
+      }
+    } catch (UnsolvedSymbolException ex) {
+      // continue
+    }
+
+    return result;
+  }
+
+  /**
+   * Finds all solvable non-JDK ancestors, given a type declaration to start.
    *
    * @param start The type declaration
    * @param fqnToCompilationUnits A map of FQNs to compilation units
@@ -1383,14 +1420,7 @@ public class JavaParserUtil {
       TypeDeclaration<?> start,
       Map<String, CompilationUnit> fqnToCompilationUnits,
       List<TypeDeclaration<?>> result) {
-    List<ClassOrInterfaceType> extendedOrImplemented = new ArrayList<>();
-
-    if (start instanceof NodeWithExtends<?> withExtends) {
-      extendedOrImplemented.addAll(withExtends.getExtendedTypes());
-    }
-    if (start instanceof NodeWithImplements<?> withImplements) {
-      extendedOrImplemented.addAll(withImplements.getImplementedTypes());
-    }
+    List<ClassOrInterfaceType> extendedOrImplemented = getDirectSuperTypes(start);
 
     for (ClassOrInterfaceType type : extendedOrImplemented) {
       try {
