@@ -29,7 +29,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
       - name: Run build with Gradle Wrapper
-        run: ./gradlew build expectedTestOutputsMustCompile
+        continue-on-error: true
+        run: |
+          ./gradlew build expectedTestOutputsMustCompile
+          echo "exit_code_expectedTestOutputsMustCompile=$?" >> $GITHUB_OUTPUT
       - name: export Specimin PATH
         run: echo "SPECIMIN=$(pwd)" >> $GITHUB_ENV
       - name: Setup Python
@@ -60,6 +63,12 @@ jobs:
           diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
       - name: Check preservation status
         run: diff -uw src/main/resources/preservation_status.json specimin-evaluation/ISSUES/preservation_status.json
+      - name: Fail if expectedTestOutputsMustCompile failed
+        run: |
+          if [[ "${{ steps.build.outputs.exit_code_expectedTestOutputsMustCompile }}" != "0" ]]; then
+            echo "expectedTestOutputsMustCompile failed."
+            exit 1
+          fi
   windows-tester:
     runs-on: windows-latest
     steps:

@@ -43,6 +43,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration.Bound;
@@ -50,6 +51,7 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.resolution.types.ResolvedWildcard;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Splitter;
@@ -110,11 +112,11 @@ public class JavaParserUtil {
    * @return The type solver
    */
   public static TypeSolver getTypeSolver() {
-    if (JavaParserUtil.typeSolver == null) {
+    if (typeSolver == null) {
       throw new RuntimeException(
           "TypeSolver is not set. Make sure to call setTypeSolver() in SpeciminRunner.");
     }
-    return JavaParserUtil.typeSolver;
+    return typeSolver;
   }
 
   /**
@@ -343,7 +345,7 @@ public class JavaParserUtil {
    * @return The super class
    */
   public static ClassOrInterfaceType getSuperClass(Node node) {
-    TypeDeclaration<?> decl = JavaParserUtil.getEnclosingClassLike(node);
+    TypeDeclaration<?> decl = getEnclosingClassLike(node);
 
     return decl.asClassOrInterfaceDeclaration().getExtendedTypes().get(0);
   }
@@ -855,7 +857,7 @@ public class JavaParserUtil {
       tryFindSingleCallableForNodeWithUnresolvableArguments(
           NodeWithArguments<?> node, Map<String, CompilationUnit> fqnsToCompilationUnits) {
     List<? extends CallableDeclaration<?>> callables =
-        JavaParserUtil.tryResolveNodeWithUnresolvableArguments(node, fqnsToCompilationUnits);
+        tryResolveNodeWithUnresolvableArguments(node, fqnsToCompilationUnits);
     if (callables.isEmpty()) {
       return null;
     }
@@ -865,14 +867,12 @@ public class JavaParserUtil {
     }
 
     List<@Nullable Object> argumentTypes =
-        new ArrayList<>(JavaParserUtil.getArgumentTypesAsResolved(node.getArguments()));
+        new ArrayList<>(getArgumentTypesAsResolved(node.getArguments()));
 
     for (int i = 0; i < argumentTypes.size(); i++) {
       if (argumentTypes.get(i) == null) {
         argumentTypes.set(
-            i,
-            JavaParserUtil.tryGetTypeAsStringFromExpression(
-                node.getArgument(i), fqnsToCompilationUnits));
+            i, tryGetTypeAsStringFromExpression(node.getArgument(i), fqnsToCompilationUnits));
       }
     }
 
@@ -902,8 +902,7 @@ public class JavaParserUtil {
         Type paramType = callable.getParameter(i).getType();
         if (typeInCall instanceof String typeAsString) {
           // If the type in the call is a string, it must match the parameter type exactly
-          if (!JavaParserUtil.erase(paramType.asString())
-              .equals(JavaParserUtil.erase(typeAsString))) {
+          if (!erase(paramType.asString()).equals(erase(typeAsString))) {
             isAMatch = false;
             break;
           }
@@ -1071,7 +1070,7 @@ public class JavaParserUtil {
         enclosingClass.add(decl);
       }
     } else {
-      enclosingClass.add(JavaParserUtil.getEnclosingClassLike(methodCall));
+      enclosingClass.add(getEnclosingClassLike(methodCall));
     }
 
     List<@Nullable ResolvedType> parameterTypes =
@@ -1166,9 +1165,7 @@ public class JavaParserUtil {
 
     ClassOrInterfaceType classOrInterfaceType = null;
     if (resolved instanceof ResolvedValueDeclaration resolvedValueDecl) {
-      Type type =
-          JavaParserUtil.getTypeFromResolvedValueDeclaration(
-              resolvedValueDecl, fqnToCompilationUnits);
+      Type type = getTypeFromResolvedValueDeclaration(resolvedValueDecl, fqnToCompilationUnits);
 
       if (type != null && type.isClassOrInterfaceType()) {
         classOrInterfaceType = type.asClassOrInterfaceType();
@@ -1372,24 +1369,36 @@ public class JavaParserUtil {
    * start.
    *
    * @param start The type declaration
-   * @return A list of resolved type declarations representing all solvable ancestors
+   * @return A set of resolved type declarations representing all solvable ancestors
    */
-  public static List<ResolvedReferenceTypeDeclaration> getAllJDKAncestors(
-      TypeDeclaration<?> start) {
-    List<ResolvedReferenceTypeDeclaration> result = new ArrayList<>();
+  public static Set<ResolvedReferenceTypeDeclaration> getAllJDKAncestors(TypeDeclaration<?> start) {
+    Set<ResolvedReferenceTypeDeclaration> result = new HashSet<>();
 
     try {
       ResolvedReferenceTypeDeclaration resolved = start.resolve();
-      for (ResolvedReferenceType ancestor : resolved.getAllAncestors()) {
-        if (JavaLangUtils.inJdkPackage(ancestor.getQualifiedName())) {
-          result.add(ancestor.getTypeDeclaration().get());
-        }
-      }
+      getAllJDKAncestorsImpl(resolved, result);
     } catch (UnsolvedSymbolException ex) {
       // continue
     }
 
     return result;
+  }
+
+  /**
+   * Finds all JDK ancestors of a given type recursively.
+   *
+   * @param type The type declaration
+   * @param result The set to append to
+   */
+  private static void getAllJDKAncestorsImpl(
+      ResolvedReferenceTypeDeclaration type, Set<ResolvedReferenceTypeDeclaration> result) {
+    for (ResolvedReferenceType ancestor : type.getAncestors(true)) {
+      if (JavaLangUtils.inJdkPackage(ancestor.getQualifiedName())) {
+        result.add(ancestor.getTypeDeclaration().get());
+      }
+
+      getAllJDKAncestorsImpl(ancestor.getTypeDeclaration().get(), result);
+    }
   }
 
   /**
@@ -2221,5 +2230,466 @@ public class JavaParserUtil {
     }
 
     return null;
+  }
+
+  /**
+   * Given a type declaration, return the resolved method declarations of all must implement
+   * methods. Must implement methods are methods that are abstract in JDK superclasses or
+   * non-default methods in JDK interfaces.
+   *
+   * @param typeDecl The type declaration
+   * @return The set of resolved JDK method declarations that must be implemented
+   */
+  public static Set<ResolvedMethodDeclaration> getAllMustImplementMethods(
+      TypeDeclaration<?> typeDecl) {
+    Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented = new HashSet<>();
+
+    for (ResolvedReferenceTypeDeclaration jdkAncestor : getAllJDKAncestors(typeDecl)) {
+      for (ResolvedMethodDeclaration resolvedMethod : jdkAncestor.getDeclaredMethods()) {
+        // Skip methods that are already defined in java.lang.Object
+        if (JavaLangUtils.isJavaLangObjectMethod(resolvedMethod.getSignature())) {
+          continue;
+        }
+
+        if (resolvedMethod.isAbstract()) {
+          methodsThatMustBeImplemented.add(resolvedMethod);
+        }
+      }
+    }
+
+    return methodsThatMustBeImplemented;
+  }
+
+  /**
+   * Given a type declaration, return the resolved method declarations of all must implement methods
+   * that do not have an existing declaration in the type or its solvable ancestors. Must implement
+   * methods are methods that are abstract in JDK superclasses or non-default methods.
+   *
+   * @param typeDecl The type declaration
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return The set of resolved JDK method declarations that must be implemented and do not have an
+   *     existing declaration
+   */
+  public static Set<ResolvedMethodDeclaration> getMustImplementMethodsWithNoExistingDeclaration(
+      TypeDeclaration<?> typeDecl, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented =
+        getAllMustImplementMethods(typeDecl);
+
+    getAllMustImplementMethodsImpl(typeDecl, methodsThatMustBeImplemented, fqnToCompilationUnits);
+
+    return methodsThatMustBeImplemented;
+  }
+
+  /**
+   * Given a type declaration, return existing definitions of all must implement methods. Must
+   * implement methods are methods that are abstract in JDK superclasses or non-default methods in
+   * JDK interfaces.
+   *
+   * @param typeDecl The type declaration to which the parents belong
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return The list of existing method declarations that must be preserved
+   */
+  public static List<MethodDeclaration> getDeclarationsForAllMustImplementMethods(
+      TypeDeclaration<?> typeDecl, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented =
+        getAllMustImplementMethods(typeDecl);
+
+    return getAllMustImplementMethodsImpl(
+        typeDecl, methodsThatMustBeImplemented, fqnToCompilationUnits);
+  }
+
+  /**
+   * Helper method for getAllMustImplementMethods. Given a set of JDK methods that must be
+   * implemented, find the closest method declaration to preserve (i.e., first check this class,
+   * then check its parent, then its grandparent, and so on.)
+   *
+   * @param typeDecl The type declaration
+   * @param methodsThatMustBeImplemented A set of methods that must be implemented
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return The result list
+   */
+  private static List<MethodDeclaration> getAllMustImplementMethodsImpl(
+      TypeDeclaration<?> typeDecl,
+      Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented,
+      Map<String, CompilationUnit> fqnToCompilationUnits) {
+    List<MethodDeclaration> result = new ArrayList<>();
+    for (ResolvedMethodDeclaration resolvedMethodDecl : Set.copyOf(methodsThatMustBeImplemented)) {
+      List<List<ResolvedReferenceType>> typesInBetween =
+          getTypesInBetween(typeDecl, resolvedMethodDecl.declaringType());
+
+      Set<ResolvedReferenceTypeDeclaration> exploredTypes = new HashSet<>();
+      List<List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>>> typeParametersMaps =
+          new ArrayList<>();
+
+      MethodDeclaration earliestMethod = null;
+      int locationInPath = -1;
+      boolean hasJdkDefinition = false;
+      for (List<ResolvedReferenceType> path : typesInBetween) {
+        if (hasJdkDefinition) {
+          break;
+        }
+
+        @MonotonicNonNull List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap = null;
+        for (int i = path.size(); i >= 0; i--) {
+          ResolvedReferenceTypeDeclaration declaration;
+
+          if (i > 0) {
+            ResolvedReferenceType type = path.get(i - 1);
+            if (typeParametersMap == null) {
+              typeParametersMap = type.getTypeParametersMap();
+            } else {
+              typeParametersMap =
+                  composeTypeParameterMap(type.getTypeParametersMap(), typeParametersMap);
+            }
+            declaration = type.getTypeDeclaration().get();
+          } else {
+            if (typeParametersMap == null) {
+              typeParametersMap = List.of();
+            }
+            declaration = typeDecl.resolve();
+          }
+
+          exploredTypes.add(declaration);
+
+          // Last in the path will be the type that contains resolvedMethodDecl
+          if (i == path.size()) {
+            continue;
+          }
+
+          for (ResolvedMethodDeclaration resolvedMethod : declaration.getDeclaredMethods()) {
+            if (resolvedMethod
+                .getSignature()
+                .equals(
+                    getSignatureFromResolvedMethodWithTypeVariablesMap(
+                        resolvedMethodDecl, typeParametersMap))) {
+
+              if (!resolvedMethod.isAbstract()) {
+                MethodDeclaration methodDecl =
+                    (MethodDeclaration) tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
+
+                if (methodDecl != null) {
+                  if (i > locationInPath) {
+                    earliestMethod = methodDecl;
+                    locationInPath = i;
+                  }
+                } else {
+                  hasJdkDefinition = true;
+                }
+              }
+
+              if (!resolvedMethod
+                  .getQualifiedSignature()
+                  .equals(resolvedMethodDecl.getQualifiedSignature())) {
+                methodsThatMustBeImplemented.remove(resolvedMethodDecl);
+              }
+
+              break;
+            }
+          }
+        }
+
+        if (typeParametersMap == null) {
+          // This error is not possible (satisfy the null checker); the loop above always runs at
+          // least once.
+          throw new RuntimeException("Impossible");
+        }
+
+        typeParametersMaps.add(typeParametersMap);
+      }
+
+      if (!hasJdkDefinition) {
+        // Maybe there is a method declaration for this, but it's not on the path from the
+        // current type declaration to the JDK type declaration.
+        // Look at types we haven't explored yet
+
+        List<ResolvedReferenceTypeDeclaration> allSolvableAncestors = new ArrayList<>();
+        allSolvableAncestors.addAll(getAllJDKAncestors(typeDecl));
+        allSolvableAncestors.addAll(
+            getAllSolvableAncestors(typeDecl, fqnToCompilationUnits).stream()
+                .map(anc -> anc.resolve())
+                .toList());
+        allSolvableAncestors.removeAll(exploredTypes);
+        allSolvableAncestors.remove(resolvedMethodDecl.declaringType());
+
+        for (ResolvedReferenceTypeDeclaration ancestor : allSolvableAncestors) {
+          if (hasJdkDefinition) {
+            break;
+          }
+
+          List<List<ResolvedReferenceType>> pathsToAncestor = getTypesInBetween(typeDecl, ancestor);
+          // Get the type parameter maps from the declaring type of the method to the current type,
+          // then compose this to the path to the ancestor
+          for (List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> potentialTypeParamMap :
+              typeParametersMaps) {
+            if (hasJdkDefinition) {
+              break;
+            }
+            List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap =
+                potentialTypeParamMap;
+            for (List<ResolvedReferenceType> path : pathsToAncestor) {
+              if (hasJdkDefinition) {
+                break;
+              }
+
+              for (int i = path.size() - 1; i >= 0; i--) {
+                ResolvedReferenceType type = path.get(i);
+                typeParametersMap =
+                    composeTypeParameterMap(type.getTypeParametersMap(), typeParametersMap);
+
+                for (ResolvedMethodDeclaration resolvedMethod :
+                    path.get(i).getTypeDeclaration().get().getDeclaredMethods()) {
+                  if (resolvedMethod
+                      .getSignature()
+                      .equals(
+                          getSignatureFromResolvedMethodWithTypeVariablesMap(
+                              resolvedMethodDecl, typeParametersMap))) {
+
+                    if (!resolvedMethod.isAbstract()) {
+                      MethodDeclaration methodDecl =
+                          (MethodDeclaration)
+                              tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
+
+                      if (methodDecl != null) {
+                        if (i > locationInPath) {
+                          earliestMethod = methodDecl;
+                          locationInPath = i;
+                        }
+                      } else {
+                        hasJdkDefinition = true;
+                      }
+
+                      methodsThatMustBeImplemented.remove(resolvedMethodDecl);
+                    } else if (!resolvedMethod
+                            .getQualifiedSignature()
+                            .equals(resolvedMethodDecl.getQualifiedSignature())
+                        && resolvedMethodDecl.declaringType().isAssignableBy(ancestor)) {
+                      methodsThatMustBeImplemented.remove(resolvedMethodDecl);
+                    }
+
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (!hasJdkDefinition) {
+        if (earliestMethod != null) {
+          result.add(earliestMethod);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * If from is A, and to is C, and A <: B and B <: C, then this should return a list of a list
+   * which contains B and C. Could contain multiple lists if there are multiple paths to the same
+   * type.
+   *
+   * @param from The first type
+   * @param to The last type
+   * @return The types in between the from and to types
+   */
+  private static List<List<ResolvedReferenceType>> getTypesInBetween(
+      TypeDeclaration<?> from, ResolvedReferenceTypeDeclaration to) {
+    List<List<ResolvedReferenceType>> result = new ArrayList<>();
+
+    List<ClassOrInterfaceType> superTypes = getDirectSuperTypes(from);
+
+    for (ClassOrInterfaceType superType : superTypes) {
+      try {
+        ResolvedReferenceType type = superType.resolve().asReferenceType();
+        getTypesInBetweenImpl(type, to, new ArrayList<>(List.of(type)), result);
+      } catch (UnsolvedSymbolException e) {
+        // continue
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Helper method for {@link #getTypesInBetween(TypeDeclaration,
+   * ResolvedReferenceTypeDeclaration)}.
+   *
+   * @param from The first type
+   * @param to The last type
+   * @param accumulator The accumulator for the current path
+   * @param result The result list
+   */
+  private static void getTypesInBetweenImpl(
+      ResolvedReferenceType from,
+      ResolvedReferenceTypeDeclaration to,
+      List<ResolvedReferenceType> accumulator,
+      List<List<ResolvedReferenceType>> result) {
+    if (to.equals(from.getTypeDeclaration().orElse(null))) {
+      result.add(accumulator);
+      return;
+    }
+
+    for (ResolvedReferenceType superType : from.getDirectAncestors()) {
+      List<ResolvedReferenceType> newAccumulator = new ArrayList<>(accumulator);
+      newAccumulator.add(superType);
+      getTypesInBetweenImpl(superType, to, newAccumulator, result);
+    }
+  }
+
+  /**
+   * Composes a type parameter map from the previous and new type parameter maps. For example, if
+   * previousTypeParametersMap is T --> String and newTypeParametersMap is E --> T, then the
+   * composed map should be E --> String.
+   *
+   * @param previousTypeParametersMap The previous type parameter map
+   * @param newTypeParametersMap The new type parameter map
+   * @return The composed type parameter map
+   */
+  private static List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> composeTypeParameterMap(
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> previousTypeParametersMap,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> newTypeParametersMap) {
+    List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> result = new ArrayList<>();
+    for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> entry : newTypeParametersMap) {
+      // In the above example, this would be T in E --> T
+      ResolvedType typeToReplace = entry.b;
+
+      if (typeToReplace.isTypeVariable()) {
+        ResolvedTypeParameterDeclaration typeVar = typeToReplace.asTypeVariable().asTypeParameter();
+        for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> pair :
+            previousTypeParametersMap) {
+          if (pair.a.equals(typeVar)) {
+            typeToReplace = pair.b;
+            break;
+          }
+        }
+      }
+      result.add(new Pair<>(entry.a, typeToReplace));
+    }
+
+    return result;
+  }
+
+  /**
+   * Given a resolved method declaration and its declaring type's type variables map, return the
+   * method's signature with the type variables replaced by their resolved types.
+   *
+   * <p>For example, if the method is part of Foo<T> and the type variables map is T --> String,
+   * then any parameters that match T will be replaced with String in the signature.
+   *
+   * @param method The resolved method declaration in the generic class
+   * @param typeVariablesMap The type variables map, which maps type variable declarations to their
+   *     resolved types
+   * @return The method's signature with the type variables replaced by their resolved types
+   */
+  public static String getSignatureFromResolvedMethodWithTypeVariablesMap(
+      ResolvedMethodDeclaration method,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeVariablesMap) {
+    StringBuilder signature = new StringBuilder(method.getName() + "(");
+
+    for (int i = 0; i < method.getNumberOfParams(); i++) {
+      ResolvedParameterDeclaration param = method.getParam(i);
+
+      signature.append(getResolvedNameWithSubstitution(param.getType(), typeVariablesMap));
+
+      if (i < method.getNumberOfParams() - 1) {
+        signature.append(", ");
+      }
+    }
+
+    signature.append(")");
+
+    return signature.toString();
+  }
+
+  /**
+   * Gets the resolved name of a type, substituting any type variables with their resolved types
+   *
+   * @param type The type to get the name of
+   * @param typeVariablesMap The type variables map
+   * @return The resolved name of the type, with type variables substituted
+   */
+  private static String getResolvedNameWithSubstitution(
+      ResolvedType type,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeVariablesMap) {
+    if (type.isTypeVariable()) {
+      for (Pair<ResolvedTypeParameterDeclaration, ResolvedType> pair : typeVariablesMap) {
+        if (pair.a.equals(type.asTypeVariable().asTypeParameter())) {
+          return pair.b.describe();
+        }
+      }
+      return type.asTypeVariable().describe();
+    }
+
+    if (type.isWildcard()) {
+      ResolvedWildcard wildcard = type.asWildcard();
+      if (!wildcard.isBounded()) {
+        return "?";
+      }
+      String bound = getResolvedNameWithSubstitution(wildcard.getBoundedType(), typeVariablesMap);
+      return wildcard.isExtends() ? "? extends " + bound : "? super " + bound;
+    }
+
+    if (type.isReferenceType()) {
+      ResolvedReferenceType ref = type.asReferenceType();
+      StringBuilder sb = new StringBuilder(ref.getQualifiedName());
+
+      List<ResolvedType> typeArgs = ref.typeParametersValues();
+      if (!typeArgs.isEmpty()) {
+        sb.append("<");
+        for (int i = 0; i < typeArgs.size(); i++) {
+          sb.append(getResolvedNameWithSubstitution(typeArgs.get(i), typeVariablesMap));
+          if (i < typeArgs.size() - 1) sb.append(", ");
+        }
+        sb.append(">");
+      }
+
+      return sb.toString();
+    }
+
+    if (type.isArray()) {
+      return getResolvedNameWithSubstitution(
+              type.asArrayType().getComponentType(), typeVariablesMap)
+          + "[]";
+    }
+
+    return type.describe();
+  }
+
+  /**
+   * Returns true if the given type or any of its outer types are private.
+   *
+   * @param fqn The FQN of the type to check
+   * @return True if the type or any of its outer types are private, false otherwise
+   */
+  public static boolean areTypeOrOuterTypesPrivate(
+      String fqn, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    TypeDeclaration<?> typeDecl = getTypeFromQualifiedName(fqn, fqnToCompilationUnits);
+    if (typeDecl != null) {
+      if (typeDecl.isPrivate()) {
+        return true;
+      }
+
+      int lastIndexOfDot = fqn.lastIndexOf('.');
+      if (lastIndexOfDot == -1) {
+        return false;
+      }
+
+      TypeDeclaration<?> outerType = getEnclosingClassLikeOptional(typeDecl);
+
+      while (outerType != null) {
+        // A non-public inner class is private.
+        if (!typeDecl.isPublic()) {
+          return true;
+        }
+
+        typeDecl = outerType;
+        outerType = getEnclosingClassLikeOptional(outerType);
+
+        return true;
+      }
+    }
+    return false;
   }
 }

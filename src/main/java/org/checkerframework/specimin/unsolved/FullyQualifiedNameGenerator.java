@@ -410,7 +410,11 @@ public class FullyQualifiedNameGenerator {
       Expression expr, boolean canRecurse) {
     // If the type of the expression can already be calculated, return it
     // Throws UnsupportedOperationException for annotation expressions
-    if (!expr.isAnnotationExpr() && JavaParserUtil.isExprTypeResolvable(expr)) {
+    // Handle class expressions separately; their type argument may be a private type, which
+    // is handled below.
+    if (!expr.isAnnotationExpr()
+        && !expr.isClassExpr()
+        && JavaParserUtil.isExprTypeResolvable(expr)) {
       ResolvedType type = expr.calculateResolvedType();
 
       return Set.of(getFQNsForResolvedType(type));
@@ -464,7 +468,12 @@ public class FullyQualifiedNameGenerator {
     } else if (expr.isClassExpr()) {
       return Set.of(
           new FullyQualifiedNameSet(
-              Set.of("java.lang.Class"), List.of(getFQNsFromType(expr.asClassExpr().getType()))));
+              Set.of("java.lang.Class"),
+              List.of(
+                  new FullyQualifiedNameSet(
+                      getFQNsFromType(expr.asClassExpr().getType()).erasedFqns(),
+                      List.of(),
+                      "? extends"))));
     } else if (expr.isAnnotationExpr()) {
       return Set.of(getFQNsFromAnnotation(expr.asAnnotationExpr()));
     } else if (expr.isArrayAccessExpr()) {
@@ -964,17 +973,10 @@ public class FullyQualifiedNameGenerator {
     if (resolvedType.isReferenceType()) {
       String qualifiedName = resolvedType.asReferenceType().getQualifiedName();
 
-      ResolvedReferenceTypeDeclaration typeDecl =
-          resolvedType.asReferenceType().getTypeDeclaration().orElse(null);
-
-      if (typeDecl != null && typeDecl.toAst().isPresent()) {
-        TypeDeclaration<?> typeDeclaration = (TypeDeclaration<?>) typeDecl.toAst().get();
-
-        if (typeDeclaration.isPrivate()) {
-          // If private, then we use java.lang.Object since this method is likely for use by
-          // symbols not in the current class.
-          qualifiedName = "java.lang.Object";
-        }
+      if (JavaParserUtil.areTypeOrOuterTypesPrivate(qualifiedName, fqnToCompilationUnits)) {
+        // If private, then we use java.lang.Object since this method is likely for use by
+        // symbols not in the current class.
+        qualifiedName = "java.lang.Object";
       }
       return new FullyQualifiedNameSet(
           Set.of(qualifiedName),

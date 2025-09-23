@@ -342,6 +342,57 @@ public class UnsolvedSymbolGenerator {
     }
 
     result.add(generated);
+
+    // If this type is A, and A is in an extends clause of a non-abstract class, and that class
+    // also implements JDK interfaces, and the current declaration has no implementations of must
+    // implement methods, we need to generate these methods here.
+    if (type.getParentNode().isPresent()
+        && type.getParentNode().get() instanceof ClassOrInterfaceDeclaration parent
+        && !parent.isInterface()
+        && !parent.isAbstract()
+        && parent.getExtendedTypes().contains(type)) {
+      Set<ResolvedMethodDeclaration> withNoDeclaration =
+          JavaParserUtil.getMustImplementMethodsWithNoExistingDeclaration(
+              parent, fqnsToCompilationUnits);
+
+      for (ResolvedMethodDeclaration method : withNoDeclaration) {
+        Set<String> methodFQNs = new LinkedHashSet<>();
+
+        String signature = method.getName() + "(";
+        List<Set<MemberType>> paramTypes = new ArrayList<>();
+
+        for (int i = 0; i < method.getNumberOfParams(); i++) {
+          signature +=
+              JavaParserUtil.getSimpleNameFromQualifiedName(
+                  JavaParserUtil.erase(method.getParam(i).toString()));
+          if (i < method.getNumberOfParams() - 1) {
+            signature += ", ";
+          }
+
+          paramTypes.add(Set.of(new SolvedMemberType(method.getParam(i).describeType())));
+        }
+
+        signature += ")";
+
+        for (String parentFQN : generated.getFullyQualifiedNames()) {
+          methodFQNs.add(parentFQN + "#" + signature);
+        }
+
+        UnsolvedMethodAlternates gen =
+            (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(methodFQNs);
+
+        if (gen == null) {
+          gen =
+              UnsolvedMethodAlternates.create(
+                  method.getName(),
+                  Set.of(new SolvedMemberType(method.getReturnType().describe())),
+                  List.of(generated),
+                  paramTypes);
+          addNewSymbolToGeneratedSymbolsMap(gen);
+          result.add(gen);
+        }
+      }
+    }
   }
 
   /**
