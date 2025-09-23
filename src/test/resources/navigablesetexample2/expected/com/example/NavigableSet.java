@@ -1,4 +1,4 @@
 package com.example;
 
-public interface NavigableSet<T> {
+public interface NavigableSet<E> {
 }

@@ -1,0 +1,84 @@
+package org.checkerframework.specimin.unsolved;
+
+import java.util.List;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+
+/**
+ * Common interface for {@link UnsolvedClassOrInterface} and {@link
+ * UnsolvedClassOrInterfaceAlternates}. Each getter should return the same value for each alternate;
+ * each setter should do the same operation to each alternate. If these requirements are not met, do
+ * not include the method in this interface.
+ */
+public interface UnsolvedClassOrInterfaceCommon {
+  /**
+   * Returns the type of this type. i.e., is it a class, interface, annotation, or enum?
+   *
+   * @return The type of this type
+   */
+  public UnsolvedClassOrInterfaceType getType();
+
+  /**
+   * Sets the type of this type.
+   *
+   * @param type The type to set this type to
+   */
+  public void setType(UnsolvedClassOrInterfaceType type);
+
+  /**
+   * Returns true if this class has an extends clause.
+   *
+   * @return True if this class has an extends clause.
+   */
+  public boolean hasExtends();
+
+  /**
+   * Returns true if any alternate extends the given extendsType.
+   *
+   * @param extendsType The superclass
+   * @return True if any alternate extends the given extendsType.
+   */
+  public boolean doesExtend(MemberType extendsType);
+
+  /**
+   * Adds an annotation to this class.
+   *
+   * @param annotation a fully-qualified annotation to apply
+   */
+  public void addAnnotation(String annotation);
+
+  /**
+   * Returns true if any alternate implements the given interface.
+   *
+   * @param interfaceType The type of the interface
+   * @return True if this type implements the given interface.
+   */
+  public boolean doesImplement(MemberType interfaceType);
+
+  /**
+   * Autogenerates the given amount of type variables (T, T1, T2, ...)
+   *
+   * @param number The number of type variables.
+   */
+  public void setTypeVariables(int number);
+
+  /**
+   * Sets the preferred type variables.
+   *
+   * @param preferredTypeVariables The preferred type variables.
+   */
+  public void setTypeVariables(List<String> preferredTypeVariables);
+
+  /**
+   * Gets the type variables as a list.
+   *
+   * @return The type variables as a list
+   */
+  public List<String> getTypeVariables();
+
+  /**
+   * Get the name of this class (note: without any generic type variables).
+   *
+   * @return the name of the class
+   */
+  public @ClassGetSimpleName String getClassName();
+}

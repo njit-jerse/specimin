@@ -1,7 +1,7 @@
 package com.example;
 
 public class SyntheticTypeForPaws {
-    public SetNumberReturnType setNumber(int parameter0) {
+    public com.example.SetNumberReturnType setNumber(int parameter0) {
         throw new java.lang.Error();
     }
 }

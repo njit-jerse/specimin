@@ -11,8 +11,11 @@ public class Simple {
             private Foo foo = new Foo("starting");
 
             public void remove() {
+                other();
                 foo.remove();
             }
+
+            private void other() {}
         };
     }
 }

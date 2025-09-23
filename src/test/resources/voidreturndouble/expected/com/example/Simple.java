@@ -1,7 +1,7 @@
 package com.example;
 
-import org.example.MethodGen;
 import org.example.Foo;
+import org.example.MethodGen;
 
 public class Simple {
 

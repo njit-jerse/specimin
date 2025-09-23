@@ -2,7 +2,7 @@ package org.plumelib.util;
 
 public class CollectionsPlume {
 
-    public static OrgPlumelibUtilCollectionsPlumeMapListReturnType mapList(java.util.function.Supplier<?> parameter0, java.util.Set<?> parameter1) {
+    public static java.util.List<java.lang.String> mapList(java.util.function.Function<? extends com.example.MethodSignature, ?> parameter0, java.util.Set<com.example.MethodSignature> parameter1) {
         throw new java.lang.Error();
     }
 }
