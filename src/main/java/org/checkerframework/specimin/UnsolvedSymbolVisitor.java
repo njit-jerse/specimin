@@ -435,7 +435,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     super.maintainDataStructuresPreSuper(decl);
     if (decl.isEnumDeclaration()) {
       // Enums cannot extend other classes (they always extend Enum) and cannot have type
-      // parameters, o it's not necessary to do any maintenance on the data structures that
+      // parameters, so it's not necessary to do any maintenance on the data structures that
       // track superclasses or type parameters in the enum case (only implemented interfaces).
       NodeList<ClassOrInterfaceType> implementedTypes =
           decl.asEnumDeclaration().getImplementedTypes();
@@ -460,6 +460,21 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       NodeList<ClassOrInterfaceType> extendedAndImplementedTypes =
           asClassOrInterface.getExtendedTypes();
       extendedAndImplementedTypes.addAll(implementedTypes);
+
+      // Also include the bounds of the class' type parameters.
+      for (TypeParameter t : asClassOrInterface.getTypeParameters()) {
+        NodeList<ClassOrInterfaceType> bounds = t.getTypeBound();
+        for (int i = 0; i < bounds.size(); i++) {
+          // In Java, only the first bound may be a class; subsequent bounds _must_ be
+          // interfaces. Therefore, we have to add bounds later than the first to both
+          // the extended and the implemented types.
+          extendedAndImplementedTypes.add(bounds.get(i));
+          if (i > 0) {
+            implementedTypes.add(bounds.get(i));
+          }
+        }
+      }
+
       updateForExtendedAndImplementedTypes(
           extendedAndImplementedTypes, implementedTypes, asClassOrInterface.isInterface());
     } else {
