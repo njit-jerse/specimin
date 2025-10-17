@@ -3,7 +3,7 @@
 **Specimin** (SPECIfication MINimizer) is a program reduction tool:  it
 takes as input a program, and it outputs a subset of the program.
 Given a Java Program *P*
-and a set of methods or fields in that program *M*, Specimin
+and a set of methods or fields in that program *M*, Specimin outputs
 a subset of *P* that contains (1) *M* (including field initializers, if any)
 and (2) as little else as possible while ensuring that the program compiles.
 
@@ -16,7 +16,7 @@ Specimin supports two *modes*: exact and approximate specification slicing. Exac
 is automatically used if all relevant source or class files are provided to Specimin. If
 a relevant source or class file is missing (for example, if the Specimin user
 didn't supply the classpath of the target program), Specimin enters approximate mode
-and create synthetic Java code based on the context in which that missing source or class
+and creates synthetic Java code based on the context in which that missing source or class
 file is used. In approximate mode, ambiguity in the context may cause Specimin to fail
 to preserve the behavior of an analysis tool. However, approximate mode is very useful
 for analysis debugging (when it works), because it
