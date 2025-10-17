@@ -233,8 +233,7 @@ public abstract class SpeciminStateVisitor extends ModifierVisitor<Void> {
     } else if (!JavaParserUtil.isLocalClassDecl(decl)) {
       // the purpose of keeping track of class name is to recognize the signatures of target
       // methods. Since we don't support methods inside local classes as target methods, we don't
-      // need
-      // to keep track of class name in this case.
+      // need to keep track of class name in this case.
       this.currentClassQualifiedName = decl.getFullyQualifiedName().orElseThrow();
     }
   }
