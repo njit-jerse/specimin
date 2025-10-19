@@ -43,7 +43,7 @@ configurations {
 dependencies {
     requireJavadoc("org.plumelib:require-javadoc:1.0.9")
 }
-tasks.register(JavaExec, "requireJavadoc") {
+tasks.register("requireJavadoc", JavaExec) {
     group = "Documentation"
     description = "Ensures that Javadoc documentation exists."
     mainClass = "org.plumelib.javadoc.RequireJavadoc"
@@ -51,7 +51,7 @@ tasks.register(JavaExec, "requireJavadoc") {
     args("src/main/java")
 }
 
-tasks.register(Exec, "expectedTestOutputsMustCompile") {
+tasks.register("expectedTestOutputsMustCompile", Exec) {
     if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
         commandLine("cmd", "/c", "typecheck_test_outputs.bat")
     } else {
@@ -60,7 +60,7 @@ tasks.register(Exec, "expectedTestOutputsMustCompile") {
 }
 
 // run via e.g.: ./gradlew checkExpectedOutputCompilesFor -PtestName="onefilesimple"
-tasks.register(Exec, "checkExpectedOutputCompilesFor") {
+tasks.register("checkExpectedOutputCompilesFor", Exec) {
     if (project.hasProperty("testName")) {
         workingDir("src/test/resources")
         if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
