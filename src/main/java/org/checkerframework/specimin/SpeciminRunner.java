@@ -708,8 +708,12 @@ public class SpeciminRunner {
           .append("\n  Considered these ")
           .append(isMethod ? "methods" : "fields")
           .append(" from the same class:\n");
-      for (String consideredMember : unfoundMembers.get(unfoundMember)) {
-        sb.append("    * ").append(consideredMember).append("\n");
+      if (unfoundMembers.get(unfoundMember).size() == 0) {
+        sb.append("No suitable methods found");
+      } else {
+        for (String consideredMember : unfoundMembers.get(unfoundMember)) {
+          sb.append("    * ").append(consideredMember).append("\n");
+        }
       }
     }
     return sb.toString();
