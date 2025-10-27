@@ -3,16 +3,14 @@ plugins {
     id("java-library")
     id("maven-publish")
     id("signing")
-    id("com.diffplug.spotless").version("7.1.0")
+    id("com.diffplug.spotless").version("8.0.0")
     id("org.checkerframework").version("0.6.56")
     id("net.ltgt.errorprone").version("4.3.0")
     id("com.adarshr.test-logger").version("4.0.0")
 }
 
 repositories {
-    // Use Maven Central for resolving dependencies.
     mavenCentral()
-    mavenLocal()
 }
 
 application {
@@ -34,6 +32,7 @@ dependencies {
 
     errorprone("com.google.errorprone:error_prone_core:2.40.0")
 
+    // TODO: Does this version need to be the same as the version used by Spotless?
     implementation("com.google.googlejavaformat:google-java-format:1.28.0")
 }
 
