@@ -512,7 +512,7 @@ public class UnsolvedClassOrInterface {
     if (extendsClause != null) {
       sb.append(" ").append(extendsClause);
     }
-    if (implementsClauses.size() > 0) {
+    if (!implementsClauses.isEmpty()) {
       if (extendsClause != null) {
         sb.append(", ");
       }
@@ -580,7 +580,7 @@ public class UnsolvedClassOrInterface {
    * @param result a string builder. Will be side-effected.
    */
   private void getTypeVariablesImpl(StringBuilder result) {
-    if (preferredTypeVariables.size() == 0) {
+    if (preferredTypeVariables.isEmpty()) {
       for (int i = 0; i < numberOfTypeVariables; i++) {
         String typeExpression = "T" + ((i > 0) ? i : "");
         result.append(typeExpression).append(", ");

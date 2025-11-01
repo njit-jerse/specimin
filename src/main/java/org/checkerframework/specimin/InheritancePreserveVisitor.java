@@ -63,7 +63,7 @@ public class InheritancePreserveVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     if (usedClass.contains(decl.resolve().getQualifiedName())) {
-      if (decl.getTypeParameters().size() > 0) {
+      if (!decl.getTypeParameters().isEmpty()) {
         // preserve the bounds of the type parameters, too
         for (TypeParameter tp : decl.getTypeParameters()) {
           for (Type bound : tp.getTypeBound()) {

@@ -243,7 +243,7 @@ public class UnsolvedMethod {
     signature.append(arguments);
     signature.append(")");
 
-    if (throwsList.size() > 0) {
+    if (!throwsList.isEmpty()) {
       signature.append(" throws ");
     }
 
