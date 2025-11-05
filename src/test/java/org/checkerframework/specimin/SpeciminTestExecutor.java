@@ -2,12 +2,12 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.visitor.EqualsVisitor;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.Assert;
 
@@ -107,13 +107,15 @@ public class SpeciminTestExecutor {
           expectedStream
               .filter(p -> p.toString().endsWith(".java"))
               .map(expectedDir::relativize)
-              .collect(Collectors.toList());
+              .sorted()
+              .toList();
 
       List<Path> actualJavaFiles =
           actualStream
               .filter(p -> p.toString().endsWith(".java"))
               .map(actualDir::relativize)
-              .collect(Collectors.toList());
+              .sorted()
+              .toList();
 
       if (!expectedJavaFiles.equals(actualJavaFiles)) {
         Assert.fail(
@@ -129,11 +131,14 @@ public class SpeciminTestExecutor {
         try {
           CompilationUnit expectedCu = StaticJavaParser.parse(expectedFile);
           CompilationUnit actualCu = StaticJavaParser.parse(actualFile);
-          if (!expectedCu.equals(actualCu)) {
-            Assert.assertEquals(
-                "ASTs do not match for file: " + relativePath,
-                expectedCu.toString(),
-                actualCu.toString());
+          if (!EqualsVisitor.equals(actualCu, expectedCu)) {
+            Assert.fail(
+                "ASTs do not match for file: "
+                    + relativePath
+                    + "\nExpected:\n"
+                    + expectedCu
+                    + "\nActual:\n"
+                    + actualCu);
           }
         } catch (Exception e) {
           Assert.fail("Error parsing and comparing files: " + relativePath + "\n" + e);
