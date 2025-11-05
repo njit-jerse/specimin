@@ -1,8 +1,8 @@
 package org.checkerframework.specimin;
 
-import com.google.common.base.Ascii;
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -11,10 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.Assert;
 
 /** Utility class containing routines to run Specimin's tests. */
@@ -104,61 +103,57 @@ public class SpeciminTestExecutor {
       throw ex;
     }
 
-    boolean isWindows = Ascii.toLowerCase(System.getProperty("os.name")).startsWith("windows");
-    // Diff the files to ensure that specimin's output is what we expect
-    ProcessBuilder builder = new ProcessBuilder();
-    if (isWindows) {
-      builder.command(
-          "check_differences/check_differences.bat",
-          "\"" + outputDir.toAbsolutePath().toString().replace('\\', '/') + "\"",
-          "\""
-              + Path.of("src/test/resources/" + testName + "/expected")
-                  .toAbsolutePath()
-                  .toString()
-                  .replace('\\', '/')
-              + "\"");
-      builder.directory(new File(Path.of(".").toAbsolutePath().toString()));
-    } else {
-      builder.command(
-          "diff",
-          "-q",
-          "-r",
-          "-w",
-          "-B",
-          outputDir.toAbsolutePath().toString(),
-          Path.of("src/test/resources/" + testName + "/expected").toAbsolutePath().toString());
-      builder.directory(new File(System.getProperty("user.home")));
+    Path expectedDir = Path.of("src/test/resources/" + testName + "/expected/");
+    assertDirectoriesEqual(expectedDir, outputDir);
+  }
+
+  /**
+   * Compares two directories recursively, parsing all Java files and comparing their ASTs.
+   *
+   * @param expectedDir the directory with the expected output
+   * @param actualDir the directory with the actual output
+   * @throws IOException if there is an issue reading the files
+   */
+  private static void assertDirectoriesEqual(Path expectedDir, Path actualDir) throws IOException {
+    try (Stream<Path> expectedStream = Files.walk(expectedDir);
+        Stream<Path> actualStream = Files.walk(actualDir)) {
+      List<Path> expectedJavaFiles =
+          expectedStream
+              .filter(p -> p.toString().endsWith(".java"))
+              .map(expectedDir::relativize)
+              .collect(Collectors.toList());
+
+      List<Path> actualJavaFiles =
+          actualStream
+              .filter(p -> p.toString().endsWith(".java"))
+              .map(actualDir::relativize)
+              .collect(Collectors.toList());
+
+      if (!expectedJavaFiles.equals(actualJavaFiles)) {
+        Assert.fail(
+            "The set of Java files in the expected and actual directories do not match.\nExpected: "
+                + expectedJavaFiles
+                + "\nActual: "
+                + actualJavaFiles);
+      }
+
+      for (Path relativePath : expectedJavaFiles) {
+        Path expectedFile = expectedDir.resolve(relativePath);
+        Path actualFile = actualDir.resolve(relativePath);
+        try {
+          CompilationUnit expectedCu = StaticJavaParser.parse(expectedFile);
+          CompilationUnit actualCu = StaticJavaParser.parse(actualFile);
+          if (!expectedCu.equals(actualCu)) {
+            Assert.assertEquals(
+                "ASTs do not match for file: " + relativePath,
+                expectedCu.toString(),
+                actualCu.toString());
+          }
+        } catch (Exception e) {
+          Assert.fail("Error parsing and comparing files: " + relativePath + "\n" + e);
+        }
+      }
     }
-    Process process;
-    try {
-      process = builder.start();
-    } catch (IOException e) {
-      Assert.fail("cannot start diff process: " + e);
-      return;
-    }
-    StringBuilder processOutput = new StringBuilder();
-    StreamGobbler streamGobbler =
-        new StreamGobbler(process.getInputStream(), processOutput::append);
-    Future<?> unused_result = Executors.newSingleThreadExecutor().submit(streamGobbler);
-    int exitCode;
-    try {
-      exitCode = process.waitFor();
-    } catch (InterruptedException e) {
-      Assert.fail("diff process interrupted: " + e);
-      return;
-    }
-    Assert.assertEquals(
-        "Diff failed with the following output: "
-            + (isWindows ? processOutput.toString().replace('\\', '/') : processOutput)
-            + "\n Output directory: "
-            + (isWindows ? outputDir.toString().replace('\\', '/') : outputDir)
-            + "\n diff command: "
-            + builder.command().stream()
-                .filter(s -> !"-q".equals(s))
-                .collect(Collectors.joining(" "))
-            + "\n Error codes: ",
-        0,
-        exitCode);
   }
 
   /**
