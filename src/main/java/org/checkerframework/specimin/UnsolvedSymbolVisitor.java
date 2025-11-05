@@ -302,7 +302,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   private void setclassAndPackageMap() {
     for (String importStatement : this.importStatement) {
       List<String> importParts = Splitter.on('.').splitToList(importStatement);
-      if (importParts.size() > 0) {
+      if (!importParts.isEmpty()) {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
         if (!"*".equals(className)) {
@@ -434,7 +434,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     super.maintainDataStructuresPreSuper(decl);
     if (decl.isEnumDeclaration()) {
       // Enums cannot extend other classes (they always extend Enum) and cannot have type
-      // parameters, o it's not necessary to do any maintenance on the data structures that
+      // parameters, so it's not necessary to do any maintenance on the data structures that
       // track superclasses or type parameters in the enum case (only implemented interfaces).
       NodeList<ClassOrInterfaceType> implementedTypes =
           decl.asEnumDeclaration().getImplementedTypes();
@@ -459,6 +459,21 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       NodeList<ClassOrInterfaceType> extendedAndImplementedTypes =
           asClassOrInterface.getExtendedTypes();
       extendedAndImplementedTypes.addAll(implementedTypes);
+
+      // Also include the bounds of the class' type parameters.
+      for (TypeParameter t : asClassOrInterface.getTypeParameters()) {
+        NodeList<ClassOrInterfaceType> bounds = t.getTypeBound();
+        for (int i = 0; i < bounds.size(); i++) {
+          // In Java, only the first bound may be a class; subsequent bounds _must_ be
+          // interfaces. Therefore, we have to add bounds later than the first to both
+          // the extended and the implemented types.
+          extendedAndImplementedTypes.add(bounds.get(i));
+          if (i > 0) {
+            implementedTypes.add(bounds.get(i));
+          }
+        }
+      }
+
       updateForExtendedAndImplementedTypes(
           extendedAndImplementedTypes, implementedTypes, asClassOrInterface.isInterface());
     } else {
@@ -658,7 +673,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
     List<Expression> resources = node.getResources();
-    if (resources.size() != 0) {
+    if (!resources.isEmpty()) {
       handleSyntheticResources(resources);
     }
     Visitable result = super.visit(node, p);
@@ -2888,7 +2903,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     } else {
       // Check if there is a wildcard import. If there isn't always use
       // currentPackage.
-      if (wildcardImports.size() == 0) {
+      if (wildcardImports.isEmpty()) {
         return currentPackage;
       }
       // If there is a wildcard import, check if there is a matching class
@@ -3845,7 +3860,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       typeVarDecl = "";
       rest = javacType;
     }
-    
+
     // need to also remove annotations before parsing, because they aren't in the right
     // format. E.g., the string might look like this:
     // WeakReference<@org.checkerframework.checker.nullness.qual.Nullable,@org.checkerframework.checker.interning.qual.Interned String []>

@@ -335,7 +335,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
       }
 
       NodeList<Statement> bodyStatement = constructorDecl.getBody().getStatements();
-      if (bodyStatement.size() == 0) {
+      if (bodyStatement.isEmpty()) {
         return constructorDecl;
       }
       Statement firstStatement = bodyStatement.get(0);
@@ -393,7 +393,7 @@ public class PrunerVisitor extends SpeciminStateVisitor {
     }
 
     // if all the declarators were removed, remove this field, too
-    if (fieldDecl.getVariables().size() == 0) {
+    if (fieldDecl.getVariables().isEmpty()) {
       fieldDecl.remove();
     }
 
