@@ -303,7 +303,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   private void setclassAndPackageMap() {
     for (String importStatement : this.importStatement) {
       List<String> importParts = Splitter.on('.').splitToList(importStatement);
-      if (importParts.size() > 0) {
+      if (!importParts.isEmpty()) {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
         if (!"*".equals(className)) {
@@ -741,7 +741,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
     List<Expression> resources = node.getResources();
-    if (resources.size() != 0) {
+    if (!resources.isEmpty()) {
       handleSyntheticResources(resources);
     }
     Visitable result = super.visit(node, p);
@@ -2992,7 +2992,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     } else {
       // Check if there is a wildcard import. If there isn't always use
       // currentPackage.
-      if (wildcardImports.size() == 0) {
+      if (wildcardImports.isEmpty()) {
         return currentPackage;
       }
       // If there is a wildcard import, check if there is a matching class
