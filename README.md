@@ -1,37 +1,41 @@
 # Specimin: a specification slicer
 
-This document describes **Specimin** (SPECIfication MINimizer).
-Specimin's goal is, given a Java Program *P*
-and a set of methods or fields in that program *M*, produce an independently-compilable
-version of *P* that contains (1) the body of each method or initializer of each field in *M*
-and (2) as little else as possible while preserving the specifications
-(i.e., the signatures of methods, the structure of classes, etc.) used
-by anything in *M*.
+**Specimin** (SPECIfication MINimizer) is a program reduction tool:  it
+takes as input a program, and it outputs a subset of the program.
+Given a Java Program *P*
+and a set of methods or fields in that program *M*, Specimin
+a subset of *P* that contains (1) *M* (including field initializers, if any)
+and (2) as little else as possible while ensuring that the program compiles.
 
-Specimin is useful as a static program reduction tool when debugging a compiler or type
-system that does *modular* program analysis, such as a [Checker Framework](checkerframework.org)
-checker or the type system of Java itself. Specimin's output should preserve the output
-of a type-system-like analysis (such as a crash, false positive, or false negative).
+Suppose you are debugging a *modular* program analysis, such as a Java compiler
+or a [Checker Framework](checkerframework.org) checker.  Specimin will reduce
+the size of your test case while preserving the program analysis output (such as
+a crash, false positive, or false negative).
 
 Specimin supports two *modes*: exact and approximate specification slicing. Exact mode
 is automatically used if all relevant source or class files are provided to Specimin. If
-a relevant source or class file is used but missing, Specimin will enter approximate mode
+a relevant source or class file is missing (for example, if the Specimin user
+didn't supply the classpath of the target program), Specimin enters approximate mode
 and create synthetic Java code based on the context in which that missing source or class
 file is used. In approximate mode, ambiguity in the context may cause Specimin to fail
 to preserve the behavior of an analysis tool. However, approximate mode is very useful
-for analysis debugging (when it works), because the user need not supply the classpath
-of the target program. When debugging crashes or false positives reported by users, this
+for analysis debugging (when it works), because it
 avoids the need to interact with the user's build system at all.
+
+# Installation
+
+```sh
+git clone https://github.com/njit-jerse/specimin
+cd specimin
+```
 
 # Usage instructions
 
-Clone the project and `cd` the project directory in your shell.
-
-To run the tool, use `./gradlew run --args='[OPTIONS]'`.
+To run Specimin, issue this command from the `specimin/` directory: `./gradlew run --args='[OPTIONS]'`.
 
 The available options are (required options in **bold**, repeatable options in *italics*):
 * **--root**: specifies the root directory of the target project.
-* ***--targetFile***: a source file in which to search for target methods
+* ***--targetFile***: a source file in which to search for target methods.  The file name is **relative** to the root.
 * *--targetMethod*: a target method that must be preserved, and whose dependencies should be stubbed out. Use the format `class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)`. Note: If a target method has a receiver parameter, i.e., (.. this), exclude that parameter from the signature. Check this [documentation](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-ReceiverParameter) for more info.
 * *--targetField*: a target field that must be preserved (including its initializer). Uses the same format as `--targetMethod`, but without the parameter list. The `--targetMethod` and `--targetField` options can be freely combined, but if at least one of the two is not provided then Specimin will always produce empty output.
 

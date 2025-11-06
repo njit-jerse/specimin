@@ -1,13 +1,13 @@
 
 plugins {
-    id 'application'
-    id 'java-library'
-    id 'maven-publish'
-    id 'signing'
-    id 'com.diffplug.spotless' version '7.1.0'
-    id 'org.checkerframework' version '0.6.56'
-    id 'net.ltgt.errorprone' version '4.3.0'
-    id 'com.adarshr.test-logger' version '4.0.0'
+    id("application")
+    id("java-library")
+    id("maven-publish")
+    id("signing")
+    id("com.diffplug.spotless").version("7.1.0")
+    id("org.checkerframework").version("0.6.56")
+    id("net.ltgt.errorprone").version("4.3.0")
+    id("com.adarshr.test-logger").version("4.0.0")
 }
 
 repositories {
@@ -17,21 +17,21 @@ repositories {
 }
 
 application {
-    mainClass = 'org.checkerframework.specimin.SpeciminRunner'
+    mainClass = "org.checkerframework.specimin.SpeciminRunner"
 }
 
 dependencies {
 
-    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.27.0'
+    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.27.0")
 
-    implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
+    implementation("net.sf.jopt-simple:jopt-simple:5.0.4")
 
-    implementation "org.vineflower:vineflower:1.11.1"
+    implementation("org.vineflower:vineflower:1.11.1")
 
-    implementation 'commons-io:commons-io:2.19.0'
+    implementation("commons-io:commons-io:2.19.0")
 
     // Use JUnit test framework.
-    testImplementation 'junit:junit:4.13.2'
+    testImplementation("junit:junit:4.13.2")
 
     errorprone("com.google.errorprone:error_prone_core:2.40.0")
 
@@ -43,34 +43,34 @@ configurations {
     requireJavadoc
 }
 dependencies {
-    requireJavadoc "org.plumelib:require-javadoc:2.0.0"
+    requireJavadoc("org.plumelib:require-javadoc:2.0.0")
 }
-task requireJavadoc(type: JavaExec) {
-    group = 'Documentation'
-    description = 'Ensures that Javadoc documentation exists.'
+tasks.register("requireJavadoc", JavaExec) {
+    group = "Documentation"
+    description = "Ensures that Javadoc documentation exists."
     mainClass = "org.plumelib.javadoc.RequireJavadoc"
     classpath = configurations.requireJavadoc
-    args "src/main/java"
+    args("src/main/java")
 }
 
-task expectedTestOutputsMustCompile(type: Exec) {
-    if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
-        commandLine "cmd", "/c", "typecheck_test_outputs.bat"
+tasks.register("expectedTestOutputsMustCompile", Exec) {
+    if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
+        commandLine("cmd", "/c", "typecheck_test_outputs.bat")
     } else {
-        commandLine "sh", "typecheck_test_outputs.sh"
+        commandLine("sh", "typecheck_test_outputs.sh")
     }
 }
 
 // run via e.g.: ./gradlew checkExpectedOutputCompilesFor -PtestName="onefilesimple"
-task checkExpectedOutputCompilesFor(type: Exec) {
+tasks.register("checkExpectedOutputCompilesFor", Exec) {
     if (project.hasProperty("testName")) {
         workingDir("src/test/resources")
-        if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
-            // Avoid '..' is not a command error
+        if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
+            // Avoid("..") is not a command error
             def scriptPath = file("typecheck_one_test.bat").absolutePath
-            commandLine "cmd", "/c", scriptPath, project.property("testName")
+            commandLine("cmd", "/c", scriptPath, project.property("testName"))
         } else {
-            commandLine "sh", "../../../typecheck_one_test.sh", project.property("testName")
+            commandLine("sh", "../../../typecheck_one_test.sh", project.property("testName"))
         }
     }
 }
@@ -116,10 +116,10 @@ checkerFramework {
     // uncomment for testing
     // skipCheckerFramework = true
     checkers = [
-            'org.checkerframework.checker.nullness.NullnessChecker',
-            'org.checkerframework.checker.resourceleak.ResourceLeakChecker',
-            'org.checkerframework.checker.interning.InterningChecker',
-            'org.checkerframework.checker.signature.SignatureChecker'
+            "org.checkerframework.checker.nullness.NullnessChecker",
+            "org.checkerframework.checker.resourceleak.ResourceLeakChecker",
+            "org.checkerframework.checker.interning.InterningChecker",
+            "org.checkerframework.checker.signature.SignatureChecker"
     ]
     excludeTests = true
 
@@ -130,11 +130,11 @@ checkerFramework {
 
 spotless {
     // optional: limit format enforcement to just the files changed by this feature branch
-    ratchetFrom 'origin/main'
+    ratchetFrom("origin/main")
 
-    format 'misc', {
+    format "misc", {
         // define the files to apply `misc` to
-        target '*.gradle', '*.md', '.gitignore'
+        target("*.gradle", "*.md", ".gitignore")
 
         // define the steps to apply to those files
         trimTrailingWhitespace()
@@ -148,21 +148,21 @@ spotless {
 }
 
 compileJava {
-    options.compilerArgs += ['-Werror']
+    options.compilerArgs += ["-Werror"]
 }
 
 jar {
     manifest {
-        attributes 'Main-Class': 'org.checkerframework.specimin.SpeciminRunner'
+        attributes "Main-Class": "org.checkerframework.specimin.SpeciminRunner"
     }
-    duplicatesStrategy = 'exclude'
+    duplicatesStrategy = "exclude"
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 }
 
-compileJava.dependsOn 'spotlessApply'
-check.dependsOn requireJavadoc
+compileJava.dependsOn("spotlessApply")
+check.dependsOn(requireJavadoc)
 
 java {
     withJavadocJar()
@@ -173,18 +173,18 @@ java {
 publishing {
     publications {
         maven(MavenPublication) {
-            groupId = 'edu.njit.jerse'
-            artifactId = 'specimin'
-            version = '0.1'
+            groupId = "edu.njit.jerse"
+            artifactId = "specimin"
+            version = "0.1"
 
-            from components.java
+            from(components.java)
         }
     }
 }
 
 javadoc {
     if(JavaVersion.current().isJava9Compatible()) {
-        options.addBooleanOption('html5', true)
+        options.addBooleanOption("html5", true)
     }
 }
 
@@ -204,6 +204,6 @@ test {
 // code by Gradle?
 sourceSets {
     test {
-        java.srcDirs = ['src/main/java/', 'src/test/java/']
+        java.srcDirs = ["src/main/java/", "src/test/java/"]
     }
 }
