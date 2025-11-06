@@ -120,9 +120,9 @@ public class SpeciminTestExecutor {
       if (!expectedJavaFiles.equals(actualJavaFiles)) {
         Assert.fail(
             "The set of Java files in the expected and actual directories do not match.\nExpected: "
-                + expectedJavaFiles
+                + expectedJavaFiles.toString().replace('\\', '/')
                 + "\nActual: "
-                + actualJavaFiles);
+                + actualJavaFiles.toString().replace('\\', '/'));
       }
 
       for (Path relativePath : expectedJavaFiles) {
@@ -134,7 +134,7 @@ public class SpeciminTestExecutor {
           if (!EqualsVisitor.equals(actualCu, expectedCu)) {
             Assert.fail(
                 "ASTs do not match for file: "
-                    + relativePath
+                    + relativePath.toString().replace('\\', '/')
                     + "\nExpected:\n"
                     + expectedCu
                     + "\nActual:\n"
