@@ -1629,7 +1629,7 @@ public class JavaParserUtil {
         Object result = resolvable.resolve();
         copy.remove();
         return result;
-      } catch (UnsolvedSymbolException e) {
+      } catch (RuntimeException e) {
         // Go below and try to see if calculateResolvedType works
       }
     }
@@ -1667,21 +1667,20 @@ public class JavaParserUtil {
     // Check if the expression is within the anonymous class. This method is necessary because
     // if the parent class of the anonymous class is not solvable, fields/methods defined within
     // are also unsolvable
-    if (anonymousClass.getAnonymousClassBody().isPresent()) {
-      if (expr.isNameExpr()
-          || (expr.isFieldAccessExpr() && expr.asFieldAccessExpr().getScope().isThisExpr())) {
-        // Try to find the field
-        for (BodyDeclaration<?> bodyDecl : anonymousClass.getAnonymousClassBody().get()) {
-          if (bodyDecl.isFieldDeclaration()) {
-            FieldDeclaration fieldDecl = bodyDecl.asFieldDeclaration();
-            return fieldDecl;
-          }
+    if (expr.isNameExpr()
+        || (expr.isFieldAccessExpr() && expr.asFieldAccessExpr().getScope().isThisExpr())) {
+      // Try to find the field
+      for (BodyDeclaration<?> bodyDecl : anonymousClass.getAnonymousClassBody().get()) {
+        if (bodyDecl.isFieldDeclaration()
+            && bodyDecl.asFieldDeclaration().getVariables().stream()
+                .anyMatch(v -> v.getNameAsString().equals(expr.toString()))) {
+          return bodyDecl.asFieldDeclaration();
         }
       }
-      // The current handling of methods in anonymous classes seems to work for now. If an issue
-      // arises in the future, add it here.
-      // TODO: add method finding based on name and parameter types
     }
+    // The current handling of methods in anonymous classes seems to work for now. If an issue
+    // arises in the future, add it here.
+    // TODO: add method finding based on name and parameter types
     return null;
   }
 
@@ -2286,13 +2285,18 @@ public class JavaParserUtil {
    * JDK interfaces.
    *
    * @param typeDecl The type declaration to which the parents belong
+   * @param nonJDKMustImplements The set of non-JDK must implement methods
    * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
    * @return The list of existing method declarations that must be preserved
    */
   public static List<MethodDeclaration> getDeclarationsForAllMustImplementMethods(
-      TypeDeclaration<?> typeDecl, Map<String, CompilationUnit> fqnToCompilationUnits) {
+      TypeDeclaration<?> typeDecl,
+      Set<ResolvedMethodDeclaration> nonJDKMustImplements,
+      Map<String, CompilationUnit> fqnToCompilationUnits) {
     Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented =
         getAllMustImplementMethods(typeDecl);
+
+    methodsThatMustBeImplemented.addAll(nonJDKMustImplements);
 
     return getAllMustImplementMethodsImpl(
         typeDecl, methodsThatMustBeImplemented, fqnToCompilationUnits);
@@ -2357,33 +2361,41 @@ public class JavaParserUtil {
           }
 
           for (ResolvedMethodDeclaration resolvedMethod : declaration.getDeclaredMethods()) {
-            if (resolvedMethod
-                .getSignature()
-                .equals(
-                    getSignatureFromResolvedMethodWithTypeVariablesMap(
-                        resolvedMethodDecl, typeParametersMap))) {
+            try {
+              if (resolvedMethod
+                  .getSignature()
+                  .equals(
+                      getSignatureFromResolvedMethodWithTypeVariablesMap(
+                          resolvedMethodDecl, typeParametersMap))) {
 
-              if (!resolvedMethod.isAbstract()) {
                 MethodDeclaration methodDecl =
                     (MethodDeclaration) tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
 
                 if (methodDecl != null) {
-                  if (i > locationInPath) {
-                    earliestMethod = methodDecl;
-                    locationInPath = i;
+                  if (!resolvedMethod.isAbstract()) {
+                    if (i > locationInPath) {
+                      earliestMethod = methodDecl;
+                      locationInPath = i;
+                    }
                   }
                 } else {
-                  hasJdkDefinition = true;
+                  // We travel the path from the furthest ancestor to the closest ancestor, so if we
+                  // find an abstract definition, set hasJdkDefinition to false since the abstract
+                  // will override the concrete definition we may have found earlier in the path.
+                  hasJdkDefinition = !resolvedMethod.isAbstract();
                 }
-              }
 
-              if (!resolvedMethod
-                  .getQualifiedSignature()
-                  .equals(resolvedMethodDecl.getQualifiedSignature())) {
-                methodsThatMustBeImplemented.remove(resolvedMethodDecl);
-              }
+                if (!resolvedMethod
+                    .getQualifiedSignature()
+                    .equals(resolvedMethodDecl.getQualifiedSignature())) {
+                  methodsThatMustBeImplemented.remove(resolvedMethodDecl);
+                }
 
-              break;
+                break;
+              }
+            } catch (UnsolvedSymbolException ex) {
+              // It's possible that a method could reference an unsolved symbol; in this case, just
+              // skip it
             }
           }
         }
@@ -2444,22 +2456,25 @@ public class JavaParserUtil {
                           getSignatureFromResolvedMethodWithTypeVariablesMap(
                               resolvedMethodDecl, typeParametersMap))) {
 
-                    if (!resolvedMethod.isAbstract()) {
-                      MethodDeclaration methodDecl =
-                          (MethodDeclaration)
-                              tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
+                    MethodDeclaration methodDecl =
+                        (MethodDeclaration)
+                            tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
 
-                      if (methodDecl != null) {
-                        if (i > locationInPath) {
-                          earliestMethod = methodDecl;
-                          locationInPath = i;
-                        }
-                      } else {
-                        hasJdkDefinition = true;
+                    if (methodDecl != null) {
+                      if (i > locationInPath) {
+                        earliestMethod = methodDecl;
+                        locationInPath = i;
                       }
+                    } else {
+                      // We travel the path from the furthest ancestor to the closest ancestor, so
+                      // if we find an abstract definition, set hasJdkDefinition to false since
+                      // the abstract will override the concrete definition we may have found
+                      // earlier in the path.
+                      hasJdkDefinition = !resolvedMethod.isAbstract();
+                    }
 
-                      methodsThatMustBeImplemented.remove(resolvedMethodDecl);
-                    } else if (!resolvedMethod
+                    if (resolvedMethod.isAbstract()
+                        && !resolvedMethod
                             .getQualifiedSignature()
                             .equals(resolvedMethodDecl.getQualifiedSignature())
                         && resolvedMethodDecl.declaringType().isAssignableBy(ancestor)) {
@@ -2575,8 +2590,8 @@ public class JavaParserUtil {
    * Given a resolved method declaration and its declaring type's type variables map, return the
    * method's signature with the type variables replaced by their resolved types.
    *
-   * <p>For example, if the method is part of Foo<T> and the type variables map is T --> String,
-   * then any parameters that match T will be replaced with String in the signature.
+   * <p>For example, if the method is part of {@code Foo<T>} and the type variables map is {@code T
+   * --> String}, then any parameters that match T will be replaced with String in the signature.
    *
    * @param method The resolved method declaration in the generic class
    * @param typeVariablesMap The type variables map, which maps type variable declarations to their
@@ -2661,6 +2676,7 @@ public class JavaParserUtil {
    * Returns true if the given type or any of its outer types are private.
    *
    * @param fqn The FQN of the type to check
+   * @param fqnToCompilationUnits A map of FQNs to compilation units
    * @return True if the type or any of its outer types are private, false otherwise
    */
   public static boolean areTypeOrOuterTypesPrivate(

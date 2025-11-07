@@ -722,6 +722,10 @@ public class UnsolvedSymbolGenerator {
         return;
       }
 
+      if (JavaParserUtil.tryResolveExpressionIfInAnonymousClass(nameExpr) != null) {
+        return;
+      }
+
       FieldDeclaration field =
           (FieldDeclaration)
               JavaParserUtil.tryFindCorrespondingDeclarationInAnonymousClass(nameExpr);
@@ -828,7 +832,11 @@ public class UnsolvedSymbolGenerator {
       }
 
       return;
-    } catch (UnsolvedSymbolException | UnsupportedOperationException ex) {
+    } catch (UnsolvedSymbolException ex) {
+      if (JavaParserUtil.tryResolveExpressionIfInAnonymousClass(methodCall) != null) {
+        return;
+      }
+    } catch (UnsupportedOperationException ex) {
       // continue
     }
 

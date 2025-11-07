@@ -150,7 +150,11 @@ public class SpeciminTestExecutor {
                     + actualCu);
           }
         } catch (Exception e) {
-          Assert.fail("Error parsing and comparing files: " + relativePath.toString().replace('\\', '/') + "\n" + e);
+          Assert.fail(
+              "Error parsing and comparing files: "
+                  + relativePath.toString().replace('\\', '/')
+                  + "\n"
+                  + e);
         }
       }
     }
