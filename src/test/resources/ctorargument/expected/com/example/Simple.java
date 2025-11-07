@@ -1,8 +1,8 @@
 package com.example;
 
 import org.example.MethodGen;
-import org.example.VerifierConstraintViolatedException;
 import org.example.VerificationResult;
+import org.example.VerifierConstraintViolatedException;
 
 public class Simple {
 

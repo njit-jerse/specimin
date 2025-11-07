@@ -36,6 +36,7 @@ public class SpeciminTestExecutor {
    *     class.fully.qualified.Name#fieldName for field.
    * @param modularityModel the model to use
    * @param jarPaths the path of jar files for Specimin to solve symbols
+   * @param ambiguityResolutionPolicy the ambiguity resolution policy to use
    * @throws IOException if some operation fails
    */
   public static void runTest(
@@ -43,7 +44,8 @@ public class SpeciminTestExecutor {
       String[] targetFiles,
       String[] targetMembers,
       String modularityModel,
-      String[] jarPaths)
+      String[] jarPaths,
+      String ambiguityResolutionPolicy)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -85,9 +87,16 @@ public class SpeciminTestExecutor {
       speciminArgs.add("--jarPath");
       speciminArgs.add(jarPath);
     }
+    speciminArgs.add("--ambiguityResolutionPolicy");
+    speciminArgs.add(ambiguityResolutionPolicy);
 
     // Run specimin on target
-    SpeciminRunner.main(speciminArgs.toArray(new String[0]));
+    try {
+      SpeciminRunner.main(speciminArgs.toArray(new String[0]));
+    } catch (Exception ex) {
+      ex.printStackTrace();
+      throw ex;
+    }
 
     Path expectedDir = Path.of("src/test/resources/" + testName + "/expected/");
     assertDirectoriesEqual(expectedDir, outputDir);
@@ -141,7 +150,11 @@ public class SpeciminTestExecutor {
                     + actualCu);
           }
         } catch (Exception e) {
-          Assert.fail("Error parsing and comparing files: " + relativePath.toString().replace('\\', '/') + "\n" + e);
+          Assert.fail(
+              "Error parsing and comparing files: "
+                  + relativePath.toString().replace('\\', '/')
+                  + "\n"
+                  + e);
         }
       }
     }
@@ -160,7 +173,7 @@ public class SpeciminTestExecutor {
    */
   public static void runTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "cf", new String[] {});
+    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, "best-effort");
   }
 
   /**
@@ -176,6 +189,6 @@ public class SpeciminTestExecutor {
    */
   public static void runNullAwayTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {});
+    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, "best-effort");
   }
 }

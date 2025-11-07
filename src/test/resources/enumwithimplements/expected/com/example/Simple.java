@@ -1,13 +1,14 @@
 package com.example;
 
 public class Simple {
-    private enum MyEnum {
 
-        A, B
-    }
+  private enum MyEnum implements Function<MyEnum, MyEnum> {
+    A,
+    B
+  }
 
-    void bar() {
-        MyEnum a = MyEnum.A;
-        MyEnum b = MyEnum.B;
-    }
+  void bar() {
+    MyEnum a = MyEnum.A;
+    MyEnum b = MyEnum.B;
+  }
 }

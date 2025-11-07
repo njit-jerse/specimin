@@ -2,7 +2,7 @@ package org.example;
 
 public class LocalVariables {
 
-    public SetReturnType set(int parameter0) {
+    public org.example.SetReturnType set(int parameter0) {
         throw new java.lang.Error();
     }
 }

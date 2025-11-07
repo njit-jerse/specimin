@@ -29,5 +29,5 @@ if !returnval!==0 (
   )
 )
 
-endlocal
 exit /b !returnval!
+endlocal

@@ -1,6 +1,5 @@
 package org.checkerframework.specimin;
 
-import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
@@ -8,14 +7,15 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.utils.SourceRoot;
+import com.google.googlejavaformat.java.Formatter;
+import com.google.googlejavaformat.java.FormatterException;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -23,9 +23,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -36,9 +39,11 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.apache.commons.io.FileUtils;
-import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
-import org.checkerframework.checker.signature.qual.FullyQualifiedName;
+import org.checkerframework.specimin.Slicer.SliceResult;
 import org.checkerframework.specimin.modularity.ModularityModel;
+import org.checkerframework.specimin.unsolved.UnsolvedSymbolEnumerator;
+import org.checkerframework.specimin.unsolved.UnsolvedSymbolEnumeratorResult;
+import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 import org.jetbrains.java.decompiler.main.decompiler.ConsoleDecompiler;
 
 /** This class is the main runner for Specimin. Use its main() method to start Specimin. */
@@ -70,15 +75,22 @@ public class SpeciminRunner {
     // class.fully.qualified.Name#fieldName
     OptionSpec<String> targetFieldsOptions = optionParser.accepts("targetField").withRequiredArg();
 
-    // This option is to specify the modularity model. By default, the modularity model is
+    // The directory in which to output the results.
+    OptionSpec<String> outputDirectoryOption =
+        optionParser.accepts("outputDirectory").withRequiredArg();
+
+    // This option determines how ambiguities are to be resolved.
+    // Accepts the arguments: "best-effort", "all", "input-condition"
+    OptionSpec<String> ambiguityResolutionPolicy =
+        optionParser
+            .accepts("ambiguityResolutionPolicy")
+            .withOptionalArg()
+            .defaultsTo("best-effort");
+
     // the model for the javac type system, which is shared by the Checker Framework.
     // Accepts the arguments: "javac", "cf", "nullaway"
     OptionSpec<String> modularityModelOption =
         optionParser.accepts("modularityModel").withOptionalArg().defaultsTo("cf");
-
-    // The directory in which to output the results.
-    OptionSpec<String> outputDirectoryOption =
-        optionParser.accepts("outputDirectory").withRequiredArg();
 
     OptionSet options = optionParser.parse(args);
 
@@ -95,6 +107,7 @@ public class SpeciminRunner {
         options.valuesOf(targetMethodsOption),
         options.valuesOf(targetFieldsOptions),
         options.valueOf(outputDirectoryOption),
+        options.valueOf(ambiguityResolutionPolicy),
         options.valueOf(modularityModelOption));
   }
 
@@ -120,7 +133,14 @@ public class SpeciminRunner {
       String outputDirectory)
       throws IOException {
     performMinimization(
-        root, targetFiles, jarPaths, targetMethodNames, targetFieldNames, outputDirectory, "cf");
+        root,
+        targetFiles,
+        jarPaths,
+        targetMethodNames,
+        targetFieldNames,
+        outputDirectory,
+        "best-effort",
+        "cf");
   }
 
   /**
@@ -134,7 +154,8 @@ public class SpeciminRunner {
    * @param targetMethodNames A set of target method names to be preserved.
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
-   * @param modularityModelCode the modularity model to use
+   * @param ambiguityResolutionPolicy The ambiguity resolution policy to use.
+   * @param modularityModelCode The modularity model to use.
    * @throws IOException if there is an exception
    */
   public static void performMinimization(
@@ -144,6 +165,7 @@ public class SpeciminRunner {
       List<String> targetMethodNames,
       List<String> targetFieldNames,
       String outputDirectory,
+      String ambiguityResolutionPolicy,
       String modularityModelCode)
       throws IOException {
     // The set of path of files that have been created by Specimin. We must be careful to delete all
@@ -159,6 +181,7 @@ public class SpeciminRunner {
               }
             });
 
+    AmbiguityResolutionPolicy policy = AmbiguityResolutionPolicy.parse(ambiguityResolutionPolicy);
     ModularityModel model = ModularityModel.createModularityModel(modularityModelCode);
 
     performMinimizationImpl(
@@ -168,6 +191,7 @@ public class SpeciminRunner {
         targetMethodNames,
         targetFieldNames,
         outputDirectory,
+        policy,
         model,
         createdClass);
   }
@@ -183,9 +207,11 @@ public class SpeciminRunner {
    * @param targetMethodNames A set of target method names to be preserved.
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
-   * @param modularityModel the modularity model
+   * @param ambiguityResolutionPolicy The ambiguity resolution policy.
+   * @param modularityModel The modularity model.
    * @throws IOException if there is an exception
    */
+  @SuppressWarnings("UnusedVariable") // Remove once ambiguityResolutionPolicy is used
   private static void performMinimizationImpl(
       String root,
       List<String> targetFiles,
@@ -193,6 +219,7 @@ public class SpeciminRunner {
       List<String> targetMethodNames,
       List<String> targetFieldNames,
       String outputDirectory,
+      AmbiguityResolutionPolicy ambiguityResolutionPolicy,
       ModularityModel modularityModel,
       Set<Path> createdClass)
       throws IOException {
@@ -202,217 +229,53 @@ public class SpeciminRunner {
       root = root + "/";
     }
 
-    updateStaticSolver(root, jarPaths);
-
-    // Keys are paths to files, values are parsed ASTs
-    Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
-    for (String targetFile : targetFiles) {
-      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+    if (!Path.of(root).isAbsolute()) {
+      root = Paths.get(root).toAbsolutePath().normalize().toString();
     }
 
-    if (!jarPaths.isEmpty()) {
-      List<String> argsToDecompile = new ArrayList<>();
-      argsToDecompile.add("--silent");
-      argsToDecompile.addAll(jarPaths);
-      argsToDecompile.add(root);
-      ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
-      // delete unneccessary legal files
-      try {
-        FileUtils.deleteDirectory(new File(root + "META-INF"));
-      } catch (IOException ex) {
-        // Following decompilation, Windows raises an IOException because the files are still
-        // being used (by what?), so we should defer deletion until the end
-        for (File legalFile :
-            FileUtils.listFiles(new File(root + "META-INF"), new String[] {}, true)) {
-          createdClass.add(legalFile.toPath());
-        }
-      }
-    }
+    ParserConfiguration config = updateStaticSolver(root, jarPaths);
+    decompileJarFiles(root, jarPaths, createdClass);
+
+    SourceRoot sourceRoot = new SourceRoot(Path.of(root));
+    sourceRoot.setParserConfiguration(config);
+    sourceRoot.tryToParse();
 
     // the set of Java classes in the original codebase mapped with their corresponding Java files.
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
-    // This map connects the fully-qualified names of non-primary classes with the fully-qualified
-    // names of their corresponding primary classes. A primary
-    // class is a class that has the same name as the Java file where the class is declared.
-    Map<String, String> nonPrimaryClassesToPrimaryClass = new HashMap<>();
-    SourceRoot sourceRoot = new SourceRoot(Path.of(root));
-    sourceRoot.tryToParse();
+    Map<String, CompilationUnit> fqnToCompilationUnits = new HashMap<>();
+
+    // Keys are paths to files, values are parsed ASTs
+    Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
+
     // getCompilationUnits does not seem to include all files, causing some to be deleted
     for (ParseResult<CompilationUnit> res : sourceRoot.getCache()) {
       CompilationUnit compilationUnit =
           res.getResult().orElseThrow(() -> new RuntimeException(res.getProblems().toString()));
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
-      String primaryTypeQualifiedName = "";
-      if (compilationUnit.getPrimaryType().isPresent()) {
-        // the get() is safe because primary type here is definitely not a local declaration,
-        // which does not have a fully-qualified name.
-        primaryTypeQualifiedName =
-            compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
-      }
-      for (ClassOrInterfaceDeclaration declaredClass :
-          compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
-        if (declaredClass.getFullyQualifiedName().isPresent()) {
-          String declaredClassQualifiedName =
-              declaredClass.getFullyQualifiedName().get().toString();
-          existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
-          // which means this class is not a primary class, and there is a primary class.
-          if (!"".equals(primaryTypeQualifiedName)
-              && !declaredClassQualifiedName.equals(primaryTypeQualifiedName)) {
-            nonPrimaryClassesToPrimaryClass.put(
-                declaredClassQualifiedName, primaryTypeQualifiedName);
-          }
-        }
-      }
-      for (EnumDeclaration enumDeclaration : compilationUnit.findAll(EnumDeclaration.class)) {
-        existingClassesToFilePath.put(
-            enumDeclaration.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
-      }
-    }
-    UnsolvedSymbolVisitor addMissingClass =
-        new UnsolvedSymbolVisitor(
-            root,
-            existingClassesToFilePath,
-            new HashSet<>(targetMethodNames),
-            new HashSet<>(targetFieldNames),
-            modularityModel);
-    addMissingClass.setClassesFromJar(jarPaths);
 
-    Map<String, String> typesToChange = new HashMap<>();
-    Map<String, String> classAndUnresolvedInterface = new HashMap<>();
-    Map<String, String> methodRefToCorrectParameters = new HashMap<>();
-    Map<String, Boolean> methodRefToVoidness = new HashMap<>();
-
-    // This is a defense against infinite loop bugs. The idea is this:
-    // if we encounter the same set of outputs three times, that's a good indication
-    // that we're in an infinite loop. But, we sometimes encounter the same set
-    // of outputs *twice* during normal operation (because some symbol needs to be
-    // solved). So, we track all previous iterations, and if we ever see the same
-    // outputs we set "problematicIteration" to that one. If we see that output again,
-    // we break the loop below early.
-    Set<UnsolvedSymbolVisitorProgress> previousIterations = new HashSet<>();
-    UnsolvedSymbolVisitorProgress problematicIteration = null;
-
-    while (addMissingClass.gettingException()) {
-      addMissingClass.setExceptionToFalse();
-      for (CompilationUnit cu : parsedTargetFiles.values()) {
-        addMissingClass.setImportStatement(cu.getImports());
-        // it's important to make sure that getDeclarations and addMissingClass will visit the same
-        // file for each execution of the loop
-        FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
-        cu.accept(getDeclarations, null);
-        addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
-        cu.accept(addMissingClass, null);
-      }
-      addMissingClass.updateSyntheticSourceCode();
-      createdClass.addAll(addMissingClass.getCreatedClass());
-      // since the root directory is updated, we need to update the SymbolSolver
-      updateStaticSolver(root, jarPaths);
-      parsedTargetFiles = new HashMap<>();
       for (String targetFile : targetFiles) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-      }
-      for (String targetFile : addMissingClass.getAddedTargetFiles()) {
-        try {
-          parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-        } catch (ParseProblemException e) {
-          // These parsing codes cause crashes in the CI. Those crashes can't be reproduced locally.
-          // Not sure if something is wrong with VineFlower or Specimin CI. Hence we keep these
-          // lines as tech debt.
-          // TODO: Figure out why the CI is crashing.
-          continue;
+        if (Path.of(root, targetFile).equals(pathOfCurrentJavaFile)) {
+          parsedTargetFiles.put(targetFile.replace('\\', '/'), compilationUnit);
         }
       }
-      UnsolvedSymbolVisitorProgress workDoneAfterIteration =
-          new UnsolvedSymbolVisitorProgress(
-              addMissingClass.getPotentialUsedMembers(),
-              addMissingClass.getAddedTargetFiles(),
-              addMissingClass.getSyntheticClassesAsAStringSet());
 
-      // Infinite loop protection.
-      boolean gettingStuck = previousIterations.contains(workDoneAfterIteration);
-      if (gettingStuck) {
-        if (problematicIteration == null) {
-          problematicIteration = workDoneAfterIteration;
-        } else if (workDoneAfterIteration.equals(problematicIteration)) {
-          // This is the third time that we've made no changes, so we're probably
-          // in an infinite loop.
-          break;
+      for (TypeDeclaration<?> declaredClass : compilationUnit.findAll(TypeDeclaration.class)) {
+        if (declaredClass.getFullyQualifiedName().isPresent()) {
+          String declaredClassQualifiedName = declaredClass.getFullyQualifiedName().get();
+          existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
+          fqnToCompilationUnits.put(declaredClassQualifiedName, compilationUnit);
         }
-      } else { // not getting stuck
-        if (problematicIteration != null && !problematicIteration.equals(workDoneAfterIteration)) {
-          // unset problematicIteration
-          problematicIteration = null;
-        }
-      }
-      previousIterations.add(workDoneAfterIteration);
-
-      if (gettingStuck || !addMissingClass.gettingException()) {
-        // Three possible cases here:
-        // 1: addMissingClass has finished its iteration.
-        // 2: addMissingClass is stuck for some unknown reasons.
-        // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
-        // below should solve it. In this case (only), we should trigger another round
-        // of iteration of the unsolved symbol visitor, since JavaTypeCorrect may have caused
-        // some new symbols to be unsolved.
-
-        // update the synthetic types by using error messages from javac.
-        GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
-        for (CompilationUnit cu : parsedTargetFiles.values()) {
-          cu.accept(getTypesFullNameVisitor, null);
-        }
-        Map<String, Set<String>> filesAndAssociatedTypes =
-            getTypesFullNameVisitor.getFileAndAssociatedTypes();
-        // correct the types of all related files before adding them to parsedTargetFiles
-        JavaTypeCorrect typeCorrecter =
-            new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
-        typeCorrecter.correctTypesForAllFiles();
-        typesToChange = typeCorrecter.getTypeToChange();
-        classAndUnresolvedInterface = typeCorrecter.getClassAndUnresolvedInterface();
-        methodRefToCorrectParameters = typeCorrecter.getMethodRefToCorrectParameters();
-        methodRefToVoidness = typeCorrecter.getMethodRefVoidness();
-        boolean changeAtLeastOneType = addMissingClass.updateTypes(typesToChange);
-        boolean extendAtLeastOneType =
-            addMissingClass.updateTypesWithExtends(typeCorrecter.getExtendedTypes());
-        boolean changeAtLeastOneMethodRef =
-            addMissingClass.updateMethodReferenceParameters(methodRefToCorrectParameters);
-        boolean changeAtLeastOneMethodReturn =
-            addMissingClass.updateMethodReferenceVoidness(methodRefToVoidness);
-        boolean atLeastOneTypeIsUpdated =
-            changeAtLeastOneType
-                || extendAtLeastOneType
-                || changeAtLeastOneMethodRef
-                || changeAtLeastOneMethodReturn;
-
-        // this is case 2. We will stop addMissingClass. In the next phase,
-        // TargetMethodFinderVisitor will give us a meaningful exception message regarding which
-        // element in the input is not solvable.
-        if (!atLeastOneTypeIsUpdated && gettingStuck) {
-          break;
-        } else if (atLeastOneTypeIsUpdated) {
-          // this is case 3: ensure that unsolved symbol solver is called at least once, to force us
-          // to reach a correct fixpoint
-          addMissingClass.gotException();
-          continue;
-        }
-
-        // in order for the newly updated files to be considered when solving symbols, we need to
-        // update the type solver and the map of parsed target files.
-        updateStaticSolver(root, jarPaths);
       }
     }
 
-    EnumVisitor enumVisitor = new EnumVisitor(addMissingClass);
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(enumVisitor, null);
-    }
+    createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
 
-    // Use a two-phase approach: the first phase finds the target(s) and records
-    // what specifications they use, and the second phase takes that information
-    // and removes all non-used code.
+    Deque<Node> worklist = new ArrayDeque<>();
 
     TargetMemberFinderVisitor finder =
-        new TargetMemberFinderVisitor(enumVisitor, nonPrimaryClassesToPrimaryClass);
+        new TargetMemberFinderVisitor(
+            targetMethodNames, targetFieldNames, worklist, modularityModel);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
@@ -432,92 +295,14 @@ public class SpeciminRunner {
               + unfoundMembersTable(unfoundFields, false));
     }
 
-    SolveMethodOverridingVisitor solveMethodOverridingVisitor =
-        new SolveMethodOverridingVisitor(finder);
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(solveMethodOverridingVisitor, null);
-    }
-
-    Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
-    // add all files related to the targeted methods
-    for (String classFullName : solveMethodOverridingVisitor.getUsedTypeElements()) {
-      String directoryOfFile = classFullName.replace(".", "/") + ".java";
-      File thisFile = new File(root + directoryOfFile);
-      // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
-      // create synthetic files for them
-      if (thisFile.exists()) {
-        relatedClass.add(directoryOfFile);
-      }
-    }
-
-    for (String directory : relatedClass) {
-      // directories already in parsedTargetFiles are original files in the root directory, we are
-      // not supposed to update them.
-      if (!parsedTargetFiles.containsKey(directory)) {
-        try {
-          parsedTargetFiles.put(directory, parseJavaFile(root, directory));
-        } catch (ParseProblemException e) {
-          // TODO: Figure out why the CI is crashing.
-          continue;
-        }
-      }
-    }
-    Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedTypeElements();
-    Set<String> totalSetOfAddedInheritedClasses = classToFindInheritance;
-    InheritancePreserveVisitor inheritancePreserve;
-    while (!classToFindInheritance.isEmpty()) {
-      inheritancePreserve = new InheritancePreserveVisitor(classToFindInheritance);
-      for (CompilationUnit cu : parsedTargetFiles.values()) {
-        cu.accept(inheritancePreserve, null);
-      }
-      for (String targetFile : inheritancePreserve.getAddedClasses()) {
-        String directoryOfFile = targetFile.replace(".", "/") + ".java";
-        File thisFile = new File(root + directoryOfFile);
-        if (thisFile.exists()) {
-          try {
-            parsedTargetFiles.put(directoryOfFile, parseJavaFile(root, directoryOfFile));
-          } catch (ParseProblemException e) {
-            // TODO: Figure out why the CI is crashing.
-            continue;
-          }
-        }
-      }
-      classToFindInheritance = inheritancePreserve.getAddedClasses();
-      totalSetOfAddedInheritedClasses.addAll(classToFindInheritance);
-      inheritancePreserve.emptyAddedClasses();
-    }
-
-    solveMethodOverridingVisitor.getUsedTypeElements().addAll(totalSetOfAddedInheritedClasses);
-
-    MustImplementMethodsVisitor mustImplementMethodsVisitor =
-        new MustImplementMethodsVisitor(solveMethodOverridingVisitor);
-
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(mustImplementMethodsVisitor, null);
-    }
-
-    // This is safe to run after MustImplementMethodsVisitor because
-    // annotations do not inherit
-    processAnnotationTypes(mustImplementMethodsVisitor, root, parsedTargetFiles);
-
-    // Remove the unsolved annotations (and @Override) in all files.
-    UnsolvedAnnotationRemoverVisitor annoRemover = new UnsolvedAnnotationRemoverVisitor(jarPaths);
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(annoRemover, null);
-    }
-
-    PrunerVisitor methodPruner =
-        new PrunerVisitor(
-            mustImplementMethodsVisitor,
-            finder.getResolvedYetStuckMethodCall(),
-            classAndUnresolvedInterface);
-
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(methodPruner, null);
-    }
-
-    pruneAnnotationDeclarationTargets(parsedTargetFiles);
-    removeUnusedImports(parsedTargetFiles);
+    UnsolvedSymbolGenerator unsolvedSymbolGenerator =
+        new UnsolvedSymbolGenerator(fqnToCompilationUnits);
+    SliceResult sliceResult =
+        Slicer.slice(
+            new StandardTypeRuleDependencyMap(fqnToCompilationUnits),
+            worklist,
+            unsolvedSymbolGenerator,
+            fqnToCompilationUnits);
 
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();
@@ -529,33 +314,138 @@ public class SpeciminRunner {
       targetFilesAbsolutePaths.add(targetFile.getAbsolutePath());
     }
 
-    for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
-      // ignore classes from the Java package, unless we are targeting a JDK file.
-      // However, all related java/ files should not be included (as in used, but not targeted)
-      String absolutePath = new File(target.getKey()).getAbsolutePath();
-      if (!targetFilesAbsolutePaths.contains(absolutePath)
-          && (target.getKey().startsWith("java/") || target.getKey().startsWith("java\\"))) {
+    UnsolvedSymbolEnumerator alternateOutput =
+        new UnsolvedSymbolEnumerator(sliceResult.generatedSymbolSlice());
+    UnsolvedSymbolEnumeratorResult enumeratorResult =
+        alternateOutput.getBestEffort(sliceResult.generatedSymbolDependentSlice());
+    Formatter formatter = new Formatter();
+
+    handleUnsolvedSymbolEnumeratorResult(
+        sliceResult,
+        enumeratorResult,
+        existingClassesToFilePath,
+        root,
+        targetFilesAbsolutePaths,
+        outputDirectory,
+        createdDirectories,
+        formatter);
+  }
+
+  /**
+   * Handles a result from an iteration of {@link UnsolvedSymbolEnumerator}. This outputs the files
+   * for both solved and unsolved symbols.
+   *
+   * @param sliceResult The result of the slice
+   * @param enumeratorResult The iteration of the UnsolvedSymbolEnumerator
+   * @param existingClassesToFilePath A map of existing classes to their files paths
+   * @param root The root directory
+   * @param targetFilesAbsolutePaths The target files as absolute paths
+   * @param outputDirectory The output directory
+   * @param createdDirectories A cache of created directories
+   * @param formatter A formatter for the output
+   */
+  private static void handleUnsolvedSymbolEnumeratorResult(
+      SliceResult sliceResult,
+      UnsolvedSymbolEnumeratorResult enumeratorResult,
+      Map<String, Path> existingClassesToFilePath,
+      String root,
+      Set<String> targetFilesAbsolutePaths,
+      String outputDirectory,
+      Set<Path> createdDirectories,
+      Formatter formatter)
+      throws IOException {
+    Set<String> usedPackages = new HashSet<>();
+    for (CompilationUnit cu : sliceResult.solvedSlice()) {
+      if (!cu.getPackageDeclaration().isPresent()) {
+        usedPackages.add("");
         continue;
       }
-      // If a compilation output's entire body has been removed and the related class is not used by
-      // the target methods, do not output it.
-      if (isEmptyCompilationUnit(target.getValue())) {
-        // target key will have this form: "path/of/package/ClassName.java"
-        String classFullyQualifiedName = getFullyQualifiedClassName(target.getKey());
-        @SuppressWarnings("signature") // since it's the last element of a fully qualified path
-        @ClassGetSimpleName String simpleName =
-            classFullyQualifiedName.substring(classFullyQualifiedName.lastIndexOf(".") + 1);
-        // If this condition is true, this class is a synthetic class initially created to be a
-        // return type of some synthetic methods, but later javac has found the correct return type
-        // for that method.
-        if (typesToChange.containsKey(simpleName)) {
-          continue;
-        }
-        if (!finder.getUsedTypeElements().contains(classFullyQualifiedName)) {
-          continue;
+      usedPackages.add(cu.getPackageDeclaration().get().getNameAsString());
+    }
+
+    for (String className : enumeratorResult.classNamesToFileContent().keySet()) {
+      int lastDot = className.lastIndexOf('.');
+      if (lastDot < 0) {
+        usedPackages.add("");
+      } else {
+        usedPackages.add(className.substring(0, lastDot));
+      }
+    }
+
+    for (CompilationUnit original : sliceResult.solvedSlice()) {
+      if (isEmptyCompilationUnit(original)) {
+        continue;
+      }
+
+      // Generally, this set will be small, so we'll check if we need to clone at all
+      // to prevent the cloning process from happening when it's not necessary
+      boolean shouldClone = false;
+      for (Node node : enumeratorResult.unusedDependentNodes()) {
+        if (node.findCompilationUnit().get().equals(original)) {
+          shouldClone = true;
+          break;
         }
       }
-      Path targetOutputPath = Path.of(outputDirectory, target.getKey());
+
+      CompilationUnit cu = original;
+      if (shouldClone) {
+        cu = original.clone();
+
+        IdentityHashMap<Node, Node> map = new IdentityHashMap<>();
+        mapNodes(original, cu, map);
+
+        for (Node toRemove : enumeratorResult.unusedDependentNodes()) {
+          Node clone = map.get(toRemove);
+
+          if (clone == null) {
+            continue;
+          }
+          clone.remove();
+        }
+      }
+
+      String path =
+          qualifiedNameToFilePath(
+              cu.getPrimaryType().get().getFullyQualifiedName().get(),
+              existingClassesToFilePath,
+              root);
+
+      // ignore classes from the Java package, unless we are targeting a JDK file.
+      // However, all related java/ files should not be included (as in used, but not targeted)
+      String absolutePath = new File(path).getAbsolutePath();
+      if (!targetFilesAbsolutePaths.contains(absolutePath)
+          && (path.startsWith("java/") || path.startsWith("java\\"))) {
+        continue;
+      }
+      Path targetOutputPath = Path.of(outputDirectory, path);
+      // Create any parts of the directory structure that don't already exist.
+      Path dirContainingOutputFile = targetOutputPath.getParent();
+      // This null test is very defensive and might not be required? I think getParent can
+      // only return null if its input was a single element path, which targetOutputPath
+      // should not be unless the user made an error.
+      if (dirContainingOutputFile != null
+          && !createdDirectories.contains(dirContainingOutputFile)) {
+        Files.createDirectories(dirContainingOutputFile);
+        createdDirectories.add(dirContainingOutputFile);
+      }
+      // Write the string representation of CompilationUnit to the file
+      try (PrintWriter writer =
+          new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8)) {
+        writer.print(
+            formatter.formatSourceAndFixImports(
+                getCompilationUnitWithUnusedWildcardImportsRemoved(
+                        getCompilationUnitWithCommentsTrimmed(cu), usedPackages)
+                    .toString()));
+      } catch (IOException | FormatterException e) {
+        System.out.println("failed to write output file " + targetOutputPath);
+        System.out.println("with error: " + e);
+      }
+    }
+
+    // Generated files do not have imports, so we don't need to call the formatter.
+    for (Entry<String, String> alternate : enumeratorResult.classNamesToFileContent().entrySet()) {
+      Path targetOutputPath =
+          Path.of(outputDirectory, alternate.getKey().replace('.', '/') + ".java");
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
       // This null test is very defensive and might not be required? I think getParent can
@@ -569,125 +459,86 @@ public class SpeciminRunner {
       // Write the string representation of CompilationUnit to the file
       try {
         PrintWriter writer = new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8);
-        writer.print(getCompilationUnitWithCommentsTrimmed(target.getValue()));
+        writer.print(alternate.getValue());
         writer.close();
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
         System.out.println("with error: " + e);
       }
     }
-    createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
   }
 
   /**
-   * Fully solve all annotations by processing all annotations, annotation parameters, and their
-   * types. This method also removes any annotations which are not fully solvable and includes all
-   * necessary files in Specimin's output.
+   * Creates a map of original nodes to cloned nodes.
    *
-   * @param last The last SpeciminStateVisitor to run
-   * @param root The root directory
-   * @param parsedTargetFiles A map of file names to parsed CompilationUnits
+   * @param original The original node
+   * @param clone The cloned node
+   * @param map The final mapping
    */
-  private static SpeciminStateVisitor processAnnotationTypes(
-      SpeciminStateVisitor last, String root, Map<String, CompilationUnit> parsedTargetFiles)
-      throws IOException {
-    AnnotationParameterTypesVisitor annotationParameterTypesVisitor =
-        new AnnotationParameterTypesVisitor(last);
+  private static void mapNodes(Node original, Node clone, IdentityHashMap<Node, Node> map) {
+    map.put(original, clone);
 
-    Set<String> classesToParse = new HashSet<>();
-    Set<CompilationUnit> compilationUnitsToSolveAnnotations =
-        new HashSet<>(parsedTargetFiles.values());
+    List<Node> originalChildNodes = original.getChildNodes();
+    List<Node> cloneChildNodes = clone.getChildNodes();
 
-    while (!compilationUnitsToSolveAnnotations.isEmpty()) {
-      for (CompilationUnit cu : compilationUnitsToSolveAnnotations) {
-        cu.accept(annotationParameterTypesVisitor, null);
-      }
-
-      // add all files related to the target annotations
-      for (String annoFullName : annotationParameterTypesVisitor.getClassesToAdd()) {
-        if (annotationParameterTypesVisitor.getUsedTypeElements().contains(annoFullName)) {
-          continue;
-        }
-        String directoryOfFile = annoFullName.replace(".", "/") + ".java";
-        File thisFile = new File(root + directoryOfFile);
-        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
-        // create synthetic files for them
-        if (thisFile.exists()) {
-          classesToParse.add(directoryOfFile);
-        } else {
-          // The given class may be an inner class, so we should find its encapsulating class
-          // Assuming following Java conventions, we will find the first instance of .{capital}
-          // and trim off subsequent .*s.
-          int dot = annoFullName.indexOf('.');
-          while (dot != -1) {
-            if (Character.isUpperCase(annoFullName.charAt(dot + 1))) {
-              dot = annoFullName.indexOf('.', dot + 1);
-              break;
-            }
-            dot = annoFullName.indexOf('.', dot + 1);
-          }
-
-          if (dot != -1) {
-            directoryOfFile = annoFullName.substring(0, dot).replace(".", "/") + ".java";
-            thisFile = new File(root + directoryOfFile);
-            // This inner class was just added, so we should re-parse the file
-            if (thisFile.exists()) {
-              classesToParse.add(directoryOfFile);
-            }
-          }
-        }
-      }
-
-      compilationUnitsToSolveAnnotations.clear();
-
-      for (String directory : classesToParse) {
-        // We need to continue solving annotations and parameters in newly added annotation files
-        try {
-          // directories already in parsedTargetFiles are original files in the root directory, we
-          // are not supposed to update them.
-          if (!parsedTargetFiles.containsKey(directory)) {
-            CompilationUnit parsed = parseJavaFile(root, directory);
-            parsedTargetFiles.put(directory, parsed);
-          }
-          compilationUnitsToSolveAnnotations.add(parsedTargetFiles.get(directory));
-        } catch (ParseProblemException e) {
-          // TODO: Figure out why the CI is crashing.
-          continue;
-        }
-      }
-
-      classesToParse.clear();
-
-      annotationParameterTypesVisitor
-          .getUsedTypeElements()
-          .addAll(annotationParameterTypesVisitor.getClassesToAdd());
-      annotationParameterTypesVisitor.getClassesToAdd().clear();
+    for (int i = 0; i < originalChildNodes.size(); i++) {
+      mapNodes(originalChildNodes.get(i), cloneChildNodes.get(i), map);
     }
-    return annotationParameterTypesVisitor;
-  }
-
-  /** Runs AnnotationTargetRemoverVisitor on the target files. Call after PrunerVisitor. */
-  private static void pruneAnnotationDeclarationTargets(
-      Map<String, CompilationUnit> parsedTargetFiles) {
-    AnnotationTargetRemoverVisitor targetPruner = new AnnotationTargetRemoverVisitor();
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(targetPruner, null);
-    }
-
-    targetPruner.removeExtraAnnotationTargets();
   }
 
   /**
-   * Removes all unused imports in each output file through {@code UnusedImportRemoverVisitor}.
+   * Removes all wildcard imports that are not used in the given set of package names.
    *
-   * @param parsedTargetFiles the files to remove unused imports
+   * @param cu The CompilationUnit to process.
+   * @param usedPackages A set of package names that are used in the code.
+   * @return The modified CompilationUnit with unused wildcard imports removed.
    */
-  private static void removeUnusedImports(Map<String, CompilationUnit> parsedTargetFiles) {
-    UnusedImportRemoverVisitor unusedImportRemover = new UnusedImportRemoverVisitor();
+  private static CompilationUnit getCompilationUnitWithUnusedWildcardImportsRemoved(
+      CompilationUnit cu, Set<String> usedPackages) {
+    for (ImportDeclaration decl : List.copyOf(cu.getImports())) {
+      if (!decl.isAsterisk()) {
+        continue;
+      }
+      String packageName = decl.getNameAsString();
 
-    for (CompilationUnit cu : parsedTargetFiles.values()) {
-      cu.accept(unusedImportRemover, null);
-      unusedImportRemover.removeUnusedImports();
+      if (JavaLangUtils.inJdkPackage(packageName)) {
+        continue;
+      }
+
+      if (!usedPackages.contains(packageName)) {
+        decl.remove();
+      }
+    }
+    return cu;
+  }
+
+  /**
+   * Decompiles the given jar files into the specified root directory.
+   *
+   * @param root The root directory where the jar files will be decompiled.
+   * @param jarPaths The list of paths to the jar files to be decompiled.
+   * @param createdClass A set to keep track of all created class files during decompilation.
+   */
+  private static void decompileJarFiles(
+      String root, List<String> jarPaths, Set<Path> createdClass) {
+    if (!jarPaths.isEmpty()) {
+      List<String> argsToDecompile = new ArrayList<>();
+      argsToDecompile.add("--silent");
+      argsToDecompile.addAll(jarPaths);
+      argsToDecompile.add(root);
+      ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
+      // delete unneccessary legal files
+      try {
+        FileUtils.deleteDirectory(new File(root + "META-INF"));
+      } catch (IOException ex) {
+        // Following decompilation, Windows raises an IOException because the files are still
+        // being used (by what?), so we should defer deletion until the end
+
+        for (File legalFile :
+            FileUtils.listFiles(new File(root + "META-INF"), new String[] {}, true)) {
+          createdClass.add(legalFile.toPath());
+        }
+      }
     }
   }
 
@@ -726,35 +577,28 @@ public class SpeciminRunner {
    * @param jarPaths the list of jar files to be used as input.
    * @throws IOException if something went wrong.
    */
-  private static void updateStaticSolver(String root, List<String> jarPaths) throws IOException {
+  private static ParserConfiguration updateStaticSolver(String root, List<String> jarPaths)
+      throws IOException {
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
         new CombinedTypeSolver(new JdkTypeSolver(), new JavaParserTypeSolver(new File(root)));
+
     for (String path : jarPaths) {
       typeSolver.add(new JarTypeSolver(path));
     }
-    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
-    StaticJavaParser.getParserConfiguration().setSymbolResolver(symbolSolver);
-    StaticJavaParser.getParserConfiguration()
-        .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
-  }
 
-  /**
-   * Converts a path to a Java file into the fully-qualified name of the public class in that file,
-   * relying on the file's relative path being the same as the package name.
-   *
-   * @param javaFilePath the path to a .java file, in this form: "path/of/package/ClassName.java".
-   *     Note that this path must be rooted at the same directory in which javac could be invoked to
-   *     compile the file
-   * @return the fully-qualified name of the given class
-   */
-  @SuppressWarnings("signature") // string manipulation
-  private static @FullyQualifiedName String getFullyQualifiedClassName(final String javaFilePath) {
-    String result = javaFilePath.replace("/", ".");
-    if (!result.endsWith(".java")) {
-      throw new RuntimeException("A Java file path does not end with .java: " + result);
-    }
-    return result.substring(0, result.length() - 5);
+    JavaParserUtil.setTypeSolver(typeSolver);
+
+    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
+
+    ParserConfiguration config =
+        new ParserConfiguration()
+            .setSymbolResolver(symbolSolver)
+            .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
+
+    StaticJavaParser.setConfiguration(config);
+
+    return config;
   }
 
   /**
@@ -772,12 +616,6 @@ public class SpeciminRunner {
           || child instanceof Comment) {
         // Package declarations, imports, and comments don't count for the purposes of
         // deciding whether to entirely remove a compilation unit.
-      } else if (child instanceof ClassOrInterfaceDeclaration) {
-        ClassOrInterfaceDeclaration cdecl =
-            ((ClassOrInterfaceDeclaration) child).asClassOrInterfaceDeclaration();
-        if (!cdecl.getMembers().isEmpty()) {
-          return false;
-        }
       } else {
         return false;
       }
@@ -786,33 +624,21 @@ public class SpeciminRunner {
   }
 
   /**
-   * Use JavaParser to parse a single Java files.
-   *
-   * @param root the absolute path to the root of the source tree
-   * @param path the path of the file to be parsed, relative to the root
-   * @return the compilation unit representing the code in the file at the path, or exit with an
-   *     error
-   */
-  private static CompilationUnit parseJavaFile(String root, String path) throws IOException {
-    return StaticJavaParser.parse(Path.of(root, path));
-  }
-
-  /**
    * Retrieves the paths of Java files that should be created from the list of JAR files.
    *
-   * @param outPutDirectory The directory where the Java files will be created.
+   * @param outputDirectory The directory where the Java files will be created.
    * @param jarPaths The set of paths to JAR files.
    * @return A set containing the paths of the Java files to be created.
    * @throws IOException If an I/O error occurs.
    */
-  private static Set<Path> getPathsFromJarPaths(String outPutDirectory, List<String> jarPaths)
+  private static Set<Path> getPathsFromJarPaths(String outputDirectory, List<String> jarPaths)
       throws IOException {
     Set<Path> pathsOfFile = new HashSet<>();
     for (String path : jarPaths) {
       JarTypeSolver jarSolver = new JarTypeSolver(path);
       for (String qualifedClassName : jarSolver.getKnownClasses()) {
         String relativePath = qualifedClassName.replace(".", "/") + ".java";
-        String absolutePath = outPutDirectory + relativePath;
+        String absolutePath = outputDirectory + relativePath;
         Path filePath = Paths.get(absolutePath);
         if (Files.exists(filePath)) {
           pathsOfFile.add(filePath);
@@ -847,7 +673,7 @@ public class SpeciminRunner {
           }
         }
       } catch (Exception e) {
-        throw new RuntimeException("Unresolved file path: " + filePath);
+        throw new RuntimeException("Unresolved file path: " + filePath, e);
       }
     }
   }
@@ -903,5 +729,26 @@ public class SpeciminRunner {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  /**
+   * Gets the path of the file containing the definition for the class represented by a qualified
+   * name. Throws an exception if this class is not in the original directory.
+   *
+   * @param qualifiedName The qualified name of the type
+   * @param existingClassesToFilePath The map of existing classes to file paths
+   * @param rootDirectory The root directory
+   * @return The relative path of the file containing the definition of the class
+   */
+  private static String qualifiedNameToFilePath(
+      String qualifiedName, Map<String, Path> existingClassesToFilePath, String rootDirectory) {
+    if (!existingClassesToFilePath.containsKey(qualifiedName)) {
+      throw new RuntimeException(
+          "qualifiedNameToFilePath only works for classes in the original directory");
+    }
+    Path absoluteFilePath = existingClassesToFilePath.get(qualifiedName);
+    // theoretically rootDirectory should already be absolute as stated in README.
+    Path absoluteRootDirectory = Paths.get(rootDirectory).toAbsolutePath();
+    return absoluteRootDirectory.relativize(absoluteFilePath).toString().replace('\\', '/');
   }
 }

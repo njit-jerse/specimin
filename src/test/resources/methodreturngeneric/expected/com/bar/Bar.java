@@ -1,8 +1,8 @@
 package com.bar;
 
 public class Bar<T> {
-
-    public static com.bar.Bar<com.foo.InOtherPackage> getOtherPackage() {
+    
+    public static com.bar.Bar<java.lang.Integer> getJavaLang() {
         throw new java.lang.Error();
     }
 
@@ -10,7 +10,7 @@ public class Bar<T> {
         throw new java.lang.Error();
     }
 
-    public static com.bar.Bar<Integer> getJavaLang() {
+    public static com.bar.Bar<com.foo.InOtherPackage> getOtherPackage() {
         throw new java.lang.Error();
     }
 }

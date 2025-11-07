@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -53,6 +54,22 @@ public final class JavaLangUtils {
 
   /** A map of primitive names (int, short, etc.) to their object representations */
   private static final Map<String, String> primitivesToObjects = new HashMap<>();
+
+  /**
+   * A map of methods signatures to return types in java.lang.Object. Parameter types are fully
+   * qualified (if not primitive) and there are spaces after each comma.
+   */
+  private static Map<String, String> javaLangObjectMethods;
+
+  /**
+   * A map of method signatures in java.lang.Throwable to their return types. The method signatures
+   * are not fully qualified (do not contain the declaring type), but its parameter types are fully
+   * qualified and contain spaces after each comma.
+   *
+   * <p>Note that Exception and Error do not have a separate map because they do not add any
+   * additional methods beyond those in Throwable.
+   */
+  private static Map<String, String> javaLangThrowableMethods;
 
   static {
     primitives.add("int");
@@ -198,6 +215,11 @@ public final class JavaLangUtils {
     javaLangClassesAndInterfaces.add("VirtualMachineError");
     javaLangClassesAndInterfaces.add("Void");
     javaLangClassesAndInterfaces.add("WrongThreadException");
+    Set<String> withJavaLang = new HashSet<>(javaLangClassesAndInterfaces.size());
+    for (String s : javaLangClassesAndInterfaces) {
+      withJavaLang.add("java.lang." + s);
+    }
+    javaLangClassesAndInterfaces.addAll(withJavaLang);
 
     // I made this list by going through the members of
     // java.lang and checking which were final classes. We
@@ -223,11 +245,42 @@ public final class JavaLangUtils {
     knownFinalJdkTypes.add("StringBuilder");
     knownFinalJdkTypes.add("System");
     knownFinalJdkTypes.add("Void");
-    Set<String> withJavaLang = new HashSet<>(knownFinalJdkTypes.size());
+    withJavaLang = new HashSet<>(knownFinalJdkTypes.size());
     for (String s : knownFinalJdkTypes) {
       withJavaLang.add("java.lang." + s);
     }
     knownFinalJdkTypes.addAll(withJavaLang);
+
+    Map<String, String> javaLangObjectMethods = new HashMap<>();
+    javaLangObjectMethods.put("getClass()", "java.lang.Class<?>");
+    javaLangObjectMethods.put("toString()", "java.lang.String");
+    javaLangObjectMethods.put("hashCode()", "int");
+    javaLangObjectMethods.put("equals(java.lang.Object)", "boolean");
+    javaLangObjectMethods.put("notifyAll()", "void");
+    javaLangObjectMethods.put("notify()", "void");
+    javaLangObjectMethods.put("wait()", "void");
+    javaLangObjectMethods.put("wait(long)", "void");
+    javaLangObjectMethods.put("wait(long, int)", "void");
+
+    JavaLangUtils.javaLangObjectMethods = Collections.unmodifiableMap(javaLangObjectMethods);
+
+    Map<String, String> javaLangThrowableMethods = new HashMap<>();
+    // https://docs.oracle.com/javase/8/docs/api/java/lang/Throwable.html
+    javaLangThrowableMethods.put("addSuppressed()", "void");
+    javaLangThrowableMethods.put("fillInStackTrace()", "java.lang.Throwable");
+    javaLangThrowableMethods.put("getCause()", "java.lang.Throwable");
+    javaLangThrowableMethods.put("getLocalizedMessage()", "java.lang.String");
+    javaLangThrowableMethods.put("getMessage()", "java.lang.String");
+    javaLangThrowableMethods.put("getStackTrace()", "java.lang.StackTraceElement[]");
+    javaLangThrowableMethods.put("getSuppressed()", "java.lang.Throwable[]");
+    javaLangThrowableMethods.put("initCause()", "java.lang.Throwable");
+    javaLangThrowableMethods.put("printStackTrace()", "void");
+    javaLangThrowableMethods.put("printStackTrace(java.io.PrintStream)", "void");
+    javaLangThrowableMethods.put("printStackTrace(java.io.PrintWriter)", "void");
+    javaLangThrowableMethods.put("setStackTrace(java.lang.StackTraceElement[])", "void");
+    javaLangThrowableMethods.put("toString()", "java.lang.String");
+
+    JavaLangUtils.javaLangThrowableMethods = Collections.unmodifiableMap(javaLangThrowableMethods);
   }
 
   /** The integral primitives. */
@@ -273,46 +326,34 @@ public final class JavaLangUtils {
    * @return the set of compatible types, such as ["boolean", "Boolean"]
    */
   public static String[] getTypesForOp(String binOp) {
-    switch (binOp) {
-      case "*":
-      case "/":
-      case "%":
-        // JLS 15.17
-        return NUMERIC_PRIMITIVES;
-      case "-":
-        // JLS 15.18
-        return NUMERIC_PRIMITIVES;
-      case "+":
-        // JLS 15.18 (see note about "+", which can also mean string concatenation!)
-        return NUMERIC_PRIMITIVES_AND_STRING;
-      case ">>":
-      case ">>>":
-      case "<<":
-        // JSL 15.19
-        return INTEGRAL_PRIMITIVES;
-      case "<":
-      case "<=":
-      case ">":
-      case ">=":
-        // JLS 15.20.1
-        return NUMERIC_PRIMITIVES;
-      case "==":
-      case "!=":
-        // JLS 15.21 says that it's an error if one of the sides of an == or != is a boolean or
-        // numeric type, but the other is not. This return value is based on that error condition.
-        return NUMERIC_PRIMITIVES_AND_BOOLEANS;
-      case "^":
-      case "&":
-      case "|":
-        // JLS 15.22
-        return NUMERIC_PRIMITIVES_AND_BOOLEANS;
-      case "||":
-      case "&&":
-        // JLS 15.23 and 15.24
-        return BOOLEANS;
-      default:
-        throw new IllegalArgumentException("unexpected binary operator: " + binOp);
-    }
+    return switch (binOp) {
+      // JLS 15.17
+      case "*", "/", "%" -> NUMERIC_PRIMITIVES;
+
+      // JLS 15.18
+      case "-" -> NUMERIC_PRIMITIVES;
+
+      // JLS 15.18 (see note about "+", which can also mean string concatenation!)
+      case "+" -> NUMERIC_PRIMITIVES_AND_STRING;
+
+      // JSL 15.19
+      case ">>", ">>>", "<<" -> INTEGRAL_PRIMITIVES;
+
+      // JLS 15.20.1
+      case "<", "<=", ">", ">=" -> NUMERIC_PRIMITIVES;
+
+      // JLS 15.21 says that it's an error if one of the sides of an == or != is a boolean or
+      // numeric type, but the other is not. This return value is based on that error condition.
+      case "==", "!=" -> NUMERIC_PRIMITIVES_AND_BOOLEANS;
+
+      // JLS 15.22
+      case "^", "&", "|" -> NUMERIC_PRIMITIVES_AND_BOOLEANS;
+
+      // JLS 15.23 and 15.24
+      case "||", "&&" -> BOOLEANS;
+
+      default -> throw new IllegalArgumentException("unexpected binary operator: " + binOp);
+    };
   }
 
   /**
@@ -382,5 +423,38 @@ public final class JavaLangUtils {
    */
   public static boolean isFinalJdkClass(String name) {
     return knownFinalJdkTypes.contains(name);
+  }
+
+  /**
+   * Checks if the given method signature is a method in java.lang.Object. For example,
+   * equals(java.lang.Object).
+   *
+   * @param methodSignature A method signature, not including the declaring type
+   * @return true if the method is defined in java.lang.Object
+   */
+  public static boolean isJavaLangObjectMethod(String methodSignature) {
+    return javaLangObjectMethods.containsKey(methodSignature);
+  }
+
+  /**
+   * Gets the map of methods in java.lang.Object, where the keys are method signatures (parameter
+   * types are fully qualified, with spaces after each comma, no declaring type) and the values are
+   * the return types of each method.
+   *
+   * @return A map of method signatures to their return types
+   */
+  public static Map<String, String> getJavaLangObjectMethods() {
+    return javaLangObjectMethods;
+  }
+
+  /**
+   * Gets the map of methods in java.lang.Throwable, where the keys are method signatures (parameter
+   * types are fully qualified, with spaces after each comma, no declaring type) and the values are
+   * the return types of each method.
+   *
+   * @return A map of method signatures to their return types
+   */
+  public static Map<String, String> getJavaLangThrowableMethods() {
+    return javaLangThrowableMethods;
   }
 }

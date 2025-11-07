@@ -23,12 +23,9 @@ public class Foo<E> {
         }
     }
 
-    public interface Iterator3<E> extends Iterator2<E> {
-    }
+    public interface Iterator3<E> extends Iterator2<E> {}
 
-    public interface Iterator2<E> extends Iterator1<E> {
-    }
+    public interface Iterator2<E> extends Iterator1<E> {}
     
-    public interface Iterator1<E> extends Iterator<E> {
-    }
+    public interface Iterator1<E> extends Iterator<E> {}
 }
