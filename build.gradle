@@ -41,7 +41,7 @@ configurations {
     requireJavadoc
 }
 dependencies {
-    requireJavadoc("org.plumelib:require-javadoc:1.0.9")
+    requireJavadoc("org.plumelib:require-javadoc:2.0.0")
 }
 tasks.register("requireJavadoc", JavaExec) {
     group = "Documentation"
@@ -49,6 +49,16 @@ tasks.register("requireJavadoc", JavaExec) {
     mainClass = "org.plumelib.javadoc.RequireJavadoc"
     classpath = configurations.requireJavadoc
     args("src/main/java")
+    jvmArgs += [
+            '--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+    ]
 }
 
 tasks.register("expectedTestOutputsMustCompile", Exec) {
