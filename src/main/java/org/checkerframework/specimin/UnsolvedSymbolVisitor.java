@@ -805,7 +805,10 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     ReferenceType referenceType;
     if (node.getPattern().isPresent()) {
       PatternExpr patternExpr = node.getPattern().get();
-      referenceType = patternExpr.getType();
+      // This type cast is safe because this pattern is a top-level pattern in an instanceof,
+      // where the pattern type must be a reference type. Nested patterns can have primitive
+      // types, but top-level patterns cannot.
+      referenceType = (ReferenceType) patternExpr.getType();
     } else {
       referenceType = node.getType();
     }
