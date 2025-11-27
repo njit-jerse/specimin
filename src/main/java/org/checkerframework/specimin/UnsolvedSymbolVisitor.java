@@ -305,7 +305,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (!importParts.isEmpty()) {
         String className = importParts.get(importParts.size() - 1);
         String packageName = importStatement.replace("." + className, "");
-        if (!"*".equals(className)) {
+        // Avoids accidentally adding the last package name in a wildcard import.
+        if (JavaParserUtil.isCapital(className)) {
           this.classAndPackageMap.put(className, packageName);
         }
       }
@@ -899,9 +900,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       String typeAsString = declType.asString();
       List<String> elements = Splitter.onPattern("\\.").splitToList(typeAsString);
-      // There could be three cases here: a type variable, a fully-qualified class name, or a simple
-      // class name.
-      // This is the fully-qualified case.
+      // There could be four cases here: a type variable, a fully-qualified class name, or a simple
+      // class name (this last case has two sub-cases: one for inner classes and one for true simple
+      // names).
+      // This is the fully-qualified case; it's necessary to carefully distinguish it from the inner
+      // class case, which looks similar.
       if (elements.size() > 1) {
         int typeParamIndex = typeAsString.indexOf('<');
         int typeParamCount = -1;
@@ -915,7 +918,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
             "signature") // since this type is in a fully-qualified form, or we make it
         // fully-qualified
         @FullyQualifiedName String qualifiedTypeName =
-            typeAsString.contains(".")
+            typeAsString.contains(".") && !JavaParserUtil.isCapital(typeAsString)
                 ? typeAsString
                 : getPackageFromClassName(typeAsString) + "." + typeAsString;
         UnsolvedClassOrInterface unsolved =
@@ -1452,7 +1455,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       @SuppressWarnings("signature") // Already guaranteed to be a FQN here
       @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
       unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
-      updateMissingClass(unsolvedAnnotation);
+      unsolvedAnnotation = updateMissingClass(unsolvedAnnotation);
     } else {
       unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
     }
@@ -1499,7 +1502,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       @SuppressWarnings("signature") // Already guaranteed to be a FQN here
       @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
       unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
-      updateMissingClass(unsolvedAnnotation);
+      unsolvedAnnotation = updateMissingClass(unsolvedAnnotation);
     } else {
       unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
     }
@@ -1556,7 +1559,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       @SuppressWarnings("signature") // Already guaranteed to be a FQN here
       @FullyQualifiedName String qualifiedTypeName = anno.getNameAsString();
       unsolvedAnnotation = getSimpleSyntheticClassFromFullyQualifiedName(qualifiedTypeName);
-      updateMissingClass(unsolvedAnnotation);
+      unsolvedAnnotation = updateMissingClass(unsolvedAnnotation);
     } else {
       unsolvedAnnotation = updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
     }
@@ -1747,6 +1750,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       typeRawName = typeRawName.substring(0, typeRawName.indexOf("<"));
     }
 
+    // TODO: why doesn't this work: Pair<String, String> pkgAndClass = splitName(typeRawName);
     String packageName, className;
     if (JavaParserUtil.isAClassPath(typeRawName)) {
       // Two cases: this could be either an Outer.Inner pair or it could
@@ -1955,15 +1959,13 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @param className the class name to be converted
    * @return the simple form of that class name
    */
-  // We can have certainty that this method is true as the last element of a class name is the
-  // simple form of that name
   @SuppressWarnings("signature")
-  public static @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
-    List<String> elements = Splitter.onPattern("[.]").splitToList(className);
-    if (elements.size() < 2) {
-      return className;
+  public @ClassGetSimpleName String toSimpleName(@DotSeparatedIdentifiers String className) {
+    if ("void".equals(className)) {
+      return "void";
     }
-    return elements.get(elements.size() - 1);
+    Pair<String, String> pkgAndClass = splitName(className);
+    return (@ClassGetSimpleName String) pkgAndClass.b;
   }
 
   /**
@@ -2056,7 +2058,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     if (desiredReturnType.equals("")) {
       UnsolvedClassOrInterface returnTypeForThisMethod =
           new UnsolvedClassOrInterface(returnType, missingClass.getPackageName());
-      this.updateMissingClass(returnTypeForThisMethod);
+      returnTypeForThisMethod = this.updateMissingClass(returnTypeForThisMethod);
       classAndPackageMap.put(
           returnTypeForThisMethod.getClassName(), returnTypeForThisMethod.getPackageName());
     }
@@ -2248,8 +2250,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     for (UnsolvedMethod unsolvedMethod : unsolvedMethods) {
       result.addMethod(unsolvedMethod);
     }
-    updateMissingClass(result);
-    return result;
+    return updateMissingClass(result);
   }
 
   /**
@@ -3061,17 +3062,16 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * This method converts a @FullyQualifiedName classname to a @ClassGetSimpleName classname. Note
-   * that there is warning suppression here. It is safe to claim that if we split
-   * a @FullyQualifiedName name by dot ([.]), then the last part is the @ClassGetSimpleName part.
+   * This method converts a @FullyQualifiedName name to a @ClassGetSimpleName name.
    *
-   * @param fullyQualifiedName a @FullyQualifiedName classname
+   * @param fullyQualifiedName a @FullyQualifiedName class name
    * @return the @ClassGetSimpleName version of that class
    */
-  public static @ClassGetSimpleName String fullyQualifiedToSimple(
+  public @ClassGetSimpleName String fullyQualifiedToSimple(
       @FullyQualifiedName String fullyQualifiedName) {
+    Pair<String, String> pkgAndClass = splitName(fullyQualifiedName);
     @SuppressWarnings("signature")
-    @ClassGetSimpleName String simpleName = fullyQualifiedName.substring(fullyQualifiedName.lastIndexOf(".") + 1);
+    @ClassGetSimpleName String simpleName = pkgAndClass.b;
     return simpleName;
   }
 
@@ -3094,16 +3094,20 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * method to an existing class.
    *
    * @param missedClass the class to be updated
+   * @return the class or interface declaration after the update. This may differ from the input,
+   *     since it might need to be combined with a synthetic class that already exist (or it might
+   *     be an inner class of some other synthetic class, or...). If any further operations are
+   *     going to be done with the input, use the result instead.
    */
-  public void updateMissingClass(UnsolvedClassOrInterface missedClass) {
+  public UnsolvedClassOrInterface updateMissingClass(UnsolvedClassOrInterface missedClass) {
     String qualifiedName = missedClass.getQualifiedClassName();
     // If an original class from the input codebase is used with unsolved type parameters, it may be
     // misunderstood as an unresolved class.
     if (classfileIsInOriginalCodebase(qualifiedName)) {
-      return;
+      return missedClass;
     }
     if (JavaLangUtils.inJdkPackage(qualifiedName)) {
-      return;
+      return missedClass;
     }
 
     // If the input contains something simple like Map.Entry,
@@ -3136,7 +3140,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
               new UnsolvedClassOrInterface.UnsolvedInnerClass(innerClassName, e.getPackageName());
           updateMissingClassHelper(missedClass, innerClass);
           e.addInnerClass(innerClass);
-          return;
+          return e;
         }
       }
       // The outer class doesn't exist yet. Create it.
@@ -3149,16 +3153,17 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       updateMissingClassHelper(missedClass, innerClass);
       outerClass.addInnerClass(innerClass);
       missingClass.add(outerClass);
-      return;
+      return outerClass;
     }
 
     for (UnsolvedClassOrInterface e : missingClass) {
       if (e.equals(missedClass)) {
         updateMissingClassHelper(missedClass, e);
-        return;
+        return e;
       }
     }
     missingClass.add(missedClass);
+    return missedClass;
   }
 
   /**
@@ -3284,7 +3289,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * @param fullyName the fully-qualified name of the class
    * @return the corresponding instance of UnsolvedClass
    */
-  public static UnsolvedClassOrInterface getSimpleSyntheticClassFromFullyQualifiedName(
+  public UnsolvedClassOrInterface getSimpleSyntheticClassFromFullyQualifiedName(
       @FullyQualifiedName String fullyName) {
     if (!JavaParserUtil.isAClassPath(fullyName)) {
       throw new RuntimeException(
@@ -3591,11 +3596,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     fieldDeclaration =
         setInitialValueForVariableDeclaration(fieldTypeClassName.toString(), fieldDeclaration);
     classThatContainField.addFields(fieldDeclaration);
+    this.updateMissingClass(typeClass);
+    classThatContainField = this.updateMissingClass(classThatContainField);
     classAndPackageMap.put(thisFieldType, packageName.toString());
     classAndPackageMap.put(className, packageName.toString());
     syntheticTypeAndClass.put(thisFieldType, classThatContainField);
-    this.updateMissingClass(typeClass);
-    this.updateMissingClass(classThatContainField);
   }
 
   /**
@@ -3717,11 +3722,13 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       boolean updateAField,
       String incorrectTypeName,
       String correctTypeName) {
+
     // Make sure that correctTypeName is fully qualified, so that we don't need to
     // add an import to the synthetic class.
     if (!correctTypeName.contains(JavaTypeCorrect.SYNTHETIC_UNCONSTRAINED_TYPE)) {
       correctTypeName = lookupFQNs(correctTypeName);
     }
+
     boolean updatedSuccessfully = false;
     UnsolvedClassOrInterface classToSearch = new UnsolvedClassOrInterface(className, packageName);
     Iterator<UnsolvedClassOrInterface> iterator = missingClass.iterator();
@@ -3746,7 +3753,11 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         return updatedSuccessfully;
       }
     }
-    throw new RuntimeException("Could not find the corresponding missing class!");
+    throw new RuntimeException(
+        "Could not find the corresponding missing class! Looking for: "
+            + packageName
+            + "."
+            + className);
   }
 
   /**
@@ -3966,6 +3977,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       } else if (asWildcardType.getExtendedType().isPresent()) {
         fullyQualifiedName.append("? extends ");
         lookupTypeArgumentFQN(fullyQualifiedName, asWildcardType.getExtendedType().get());
+      } else {
+        fullyQualifiedName.append("?");
       }
     } else if (JavaParserUtil.isAClassPath(erased)) {
       // If it's already a fully qualified name, don't do anything
