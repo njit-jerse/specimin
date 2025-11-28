@@ -12,8 +12,9 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
- * An UnsolvedClassOrInterface instance is a representation of a class or an interface that can not
- * be solved by SymbolSolver. The reason is that the class file is not in the root directory.
+ * An UnsolvedClassOrInterface instance is a representation of a class, enum, or an interface that
+ * can not be solved by SymbolSolver. The reason is that the class file is not in the root
+ * directory.
  */
 public class UnsolvedClassOrInterface {
   /**
@@ -57,6 +58,15 @@ public class UnsolvedClassOrInterface {
 
   /** Is this class an annotation? */
   private boolean isAnAnnotation = false;
+
+  /** Is this an enum? */
+  private boolean isAnEnum = false;
+
+  /**
+   * The enum constants of this enum. Must be a linked set to ensure deterministic iteration order
+   * when writing out the constants for synthetic classes.
+   */
+  private final LinkedHashSet<String> enumConstants;
 
   /**
    * This class' constructor should be used for creating inner classes. Frankly, this design is a
@@ -123,6 +133,7 @@ public class UnsolvedClassOrInterface {
       this.extendsClause = " extends Exception";
     }
     this.isAnInterface = isAnInterface;
+    this.enumConstants = new LinkedHashSet<>();
   }
 
   /**
@@ -140,6 +151,41 @@ public class UnsolvedClassOrInterface {
    */
   public void setIsAnInterfaceToTrue() {
     this.isAnInterface = true;
+  }
+
+  /**
+   * Returns the value of isAnEnum.
+   *
+   * @return return true if the current UnsolvedClassOrInterface instance represents an enum.
+   */
+  public boolean isAnEnum() {
+    return isAnEnum;
+  }
+
+  /**
+   * Adds the given name to this enum's list of enum constants.
+   *
+   * @param enumConstantName the name of the constant
+   */
+  public void addEnumConstant(String enumConstantName) {
+    if (!isAnEnum) {
+      throw new RuntimeException(
+          "cannot add an enum constant to a synthetic class that is not an enum");
+    }
+    this.enumConstants.add(enumConstantName);
+  }
+
+  /**
+   * Sets isAnEnum to true. isAnEnum is monotonic: it can start as false and become true (because we
+   * encounter something that forces the class to be a enum, such as being used in a switch
+   * selector), but it can never go from true to false.
+   */
+  public void setIsAnEnumToTrue() {
+    this.isAnEnum = true;
+    if (extendsClause != null) {
+      throw new RuntimeException(
+          "trying to make a synthetic class that already has an extends clause into" + "an enum");
+    }
   }
 
   /**
@@ -302,6 +348,9 @@ public class UnsolvedClassOrInterface {
    */
   public void extend(String className) {
     this.extendsClause = "extends " + className;
+    if (isAnEnum) {
+      throw new RuntimeException("enums cannot extend another class");
+    }
   }
 
   /**
@@ -505,6 +554,8 @@ public class UnsolvedClassOrInterface {
       sb.append("interface ");
     } else if (isAnAnnotation) {
       sb.append("@interface ");
+    } else if (isAnEnum) {
+      sb.append("enum ");
     } else {
       sb.append("class ");
     }
@@ -526,6 +577,17 @@ public class UnsolvedClassOrInterface {
       }
     }
     sb.append(" {\n");
+    if (isAnEnum) {
+      Iterator<String> constants = enumConstants.iterator();
+      while (constants.hasNext()) {
+        sb.append(constants.next());
+        if (constants.hasNext()) {
+          sb.append(",\n");
+        }
+      }
+      sb.append(";\n");
+    }
+
     if (innerClasses != null) {
       for (UnsolvedClassOrInterface innerClass : innerClasses) {
         sb.append(innerClass.toString());

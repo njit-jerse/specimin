@@ -43,6 +43,7 @@ import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.type.ArrayType;
@@ -650,11 +651,53 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     return result;
   }
 
+  /** The name of the enum type used as a switch selector, if one is currently in scope. */
+  private @Nullable String enumSwitchSelectorFQN = null;
+
+  /** True iff we are visiting a switch control structure (a label, guard, or selector). */
+  private boolean inSwitch = false;
+
   @Override
   public Visitable visit(SwitchExpr node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
+    // workaround JavaParser visit order bug: we should visit the
+    // selector expression first, but JavaParser for some reason
+    // visits the _entries_ (i.e., the expression in the cases) first!
+    node.getSelector().accept(this, p);
+    inSwitch = true;
+    try {
+      ResolvedType resolved = node.getSelector().calculateResolvedType();
+      enumSwitchSelectorFQN = resolved.describe();
+    } catch (UnsolvedSymbolException e) {
+      // We'll deal with this next time.
+      gotException();
+    }
     Visitable result = super.visit(node, p);
+    inSwitch = false;
+    localVariables.removeFirst();
+    return result;
+  }
+
+  @Override
+  public Visitable visit(SwitchStmt node, Void p) {
+    HashSet<String> currentLocalVariables = new HashSet<>();
+    localVariables.addFirst(currentLocalVariables);
+    // workaround JavaParser visit order bug: we should visit the
+    // selector expression first, but JavaParser for some reason
+    // visits the _entries_ (i.e., the expression in the cases) first!
+    node.getSelector().accept(this, p);
+    inSwitch = true;
+    try {
+      ResolvedType resolved = node.getSelector().calculateResolvedType();
+      enumSwitchSelectorFQN = resolved.describe();
+    } catch (UnsolvedSymbolException e) {
+      // We'll deal with this next time.
+      gotException();
+    }
+    Visitable result = super.visit(node, p);
+    inSwitch = false;
+    enumSwitchSelectorFQN = null;
     localVariables.removeFirst();
     return result;
   }
@@ -663,7 +706,32 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   public Visitable visit(SwitchEntry node, Void p) {
     HashSet<String> currentLocalVariables = new HashSet<>();
     localVariables.addFirst(currentLocalVariables);
-    Visitable result = super.visit(node, p);
+
+    // The following code is copied from super.visit(SwitchEntry, ...),
+    // because we need to differentiate between the expressions in the "labels"
+    // (which may be unqualified enum constants) and the "statements", which may not be.
+    SwitchEntry n = node;
+    Void arg = p;
+    Expression guard = n.getGuard().map(s -> (Expression) s.accept(this, arg)).orElse(null);
+    NodeList<Expression> labels = (NodeList<Expression>) n.getLabels().accept(this, arg);
+
+    // Here, we need to remove the special enum switch handling temporarily.
+    String oldEnumSwitchSelectorFQN = enumSwitchSelectorFQN;
+    enumSwitchSelectorFQN = null;
+    inSwitch = false;
+
+    NodeList<Statement> statements = (NodeList<Statement>) n.getStatements().accept(this, arg);
+    Comment comment = n.getComment().map(s -> (Comment) s.accept(this, arg)).orElse(null);
+    n.setGuard(guard);
+    n.setLabels(labels);
+    n.setStatements(statements);
+    n.setComment(comment);
+    Visitable result = n;
+
+    // and then restore it
+    enumSwitchSelectorFQN = oldEnumSwitchSelectorFQN;
+    inSwitch = true;
+
     localVariables.removeFirst();
     return result;
   }
@@ -993,7 +1061,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       if (parentNode.isEmpty()
           || !(parentNode.get() instanceof MethodCallExpr
               || parentNode.get() instanceof FieldAccessExpr)) {
-        if (!isALocalVar(name)) {
+        if (inSwitch && enumSwitchSelectorFQN != null) {
+          updateSyntheticEnumWithNewConstant(enumSwitchSelectorFQN, name);
+        } else if (!isALocalVar(name) && !inSwitch) {
           updateSyntheticClassForSuperCall(node);
         }
       }
@@ -2380,6 +2450,25 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
     }
     String fieldQualifedSignature = fullyQualifiedClassName + "." + field.getNameAsString();
     updateClassSetWithQualifiedFieldSignature(fieldQualifedSignature, false, false);
+  }
+
+  /**
+   * Updates the synthetic enum with the given FQN by adding a new enum constant with the given
+   * name. This method is idempotent, and the enum may not yet exist (but if not, this will trigger
+   * another round of unsolved symbol visiting).
+   *
+   * @param enumFQN the fully-qualified name of a synthetic enum
+   * @param constantName the name of one of the enum constants of that enum
+   */
+  public void updateSyntheticEnumWithNewConstant(String enumFQN, String constantName) {
+    for (UnsolvedClassOrInterface synthEnum : missingClass) {
+      if (!synthEnum.getQualifiedClassName().equals(enumFQN)) {
+        continue;
+      }
+      synthEnum.setIsAnEnumToTrue();
+      synthEnum.addEnumConstant(constantName);
+      return;
+    }
   }
 
   /**
@@ -4035,8 +4124,8 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
   }
 
   /**
-   * Given the name of a class, this method will based on the map classAndItsParent to find the name
-   * of the super class of the input class
+   * Given the name of a class, this method look up the name in the map classAndItsParent to find
+   * the name of the super class of the input class. Otherwise, a RunTime exception is thrown.
    *
    * @param className the name of the class to be taken as the input
    * @return the name of the super class of the input class
