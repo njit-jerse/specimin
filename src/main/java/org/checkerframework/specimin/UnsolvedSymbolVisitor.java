@@ -1138,7 +1138,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
         if (classfileIsInOriginalCodebase(scopeAsTypeFQN)) {
           addedTargetFiles.add(qualifiedNameToFilePath(scopeAsTypeFQN));
         } else {
-          // TODO: create a synthetic class?
+          // TODO: this creates a synthetic class, but I think it should be more sophisticated.
+          // What about type arguments?
+          updateUnsolvedClassOrInterfaceWithMethod(node, scopeAsTypeFQN, "", false);
         }
       }
       String identifier = node.getIdentifier();
@@ -1972,7 +1974,7 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
    * the added method. The desired return type can be an empty string, and in that case, Specimin
    * will create another synthetic class to be the return type of that method.
    *
-   * @param method the method call or method declaration in the original input
+   * @param method the method call, method reference, or method declaration in the original input
    * @param className the name of the synthetic class, which may be either simple or fully-qualified
    * @param desiredReturnType the desired return type for this method
    * @param updatingInterface true if this method is being used to update an interface, false for
@@ -1988,6 +1990,9 @@ public class UnsolvedSymbolVisitor extends SpeciminStateVisitor {
       methodName = ((MethodCallExpr) method).getNameAsString();
       String packageName = splitName(className).a;
       listOfParameters = getArgumentTypesFromMethodCall(((MethodCallExpr) method), packageName);
+    } else if (method instanceof MethodReferenceExpr) {
+      methodName = ((MethodReferenceExpr) method).getIdentifier();
+      listOfParameters = Collections.emptyList();
     }
     // method is a MethodDeclaration
     else {
