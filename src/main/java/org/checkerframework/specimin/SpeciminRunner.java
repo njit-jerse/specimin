@@ -80,6 +80,8 @@ public class SpeciminRunner {
     OptionSpec<String> outputDirectoryOption =
         optionParser.accepts("outputDirectory").withRequiredArg();
 
+    OptionSpec<Void> disableRootValidationOption = optionParser.accepts("disable-root-validation");
+
     OptionSet options = optionParser.parse(args);
 
     String jarDirectory = options.valueOf(jar);
@@ -95,7 +97,8 @@ public class SpeciminRunner {
         options.valuesOf(targetMethodsOption),
         options.valuesOf(targetFieldsOptions),
         options.valueOf(outputDirectoryOption),
-        options.valueOf(modularityModelOption));
+        options.valueOf(modularityModelOption),
+        options.has(disableRootValidationOption));
   }
 
   /**
@@ -120,7 +123,14 @@ public class SpeciminRunner {
       String outputDirectory)
       throws IOException {
     performMinimization(
-        root, targetFiles, jarPaths, targetMethodNames, targetFieldNames, outputDirectory, "cf");
+        root,
+        targetFiles,
+        jarPaths,
+        targetMethodNames,
+        targetFieldNames,
+        outputDirectory,
+        "cf",
+        false);
   }
 
   /**
@@ -146,6 +156,42 @@ public class SpeciminRunner {
       String outputDirectory,
       String modularityModelCode)
       throws IOException {
+    performMinimization(
+        root,
+        targetFiles,
+        jarPaths,
+        targetMethodNames,
+        targetFieldNames,
+        outputDirectory,
+        modularityModelCode,
+        false);
+  }
+
+  /**
+   * This method acts as an API for users who want to incorporate Specimin as a library into their
+   * projects. It offers an easy way to do the minimization job without needing to directly call
+   * Specimin's main method.
+   *
+   * @param root The root directory of the input files.
+   * @param targetFiles A list of files that contain the target methods.
+   * @param jarPaths Paths to relevant JAR files.
+   * @param targetMethodNames A set of target method names to be preserved.
+   * @param targetFieldNames A set of target field names to be preserved.
+   * @param outputDirectory The directory for the output.
+   * @param modularityModelCode the modularity model to use
+   * @param disableRootValidation whether to disable root validation
+   * @throws IOException if there is an exception
+   */
+  public static void performMinimization(
+      String root,
+      List<String> targetFiles,
+      List<String> jarPaths,
+      List<String> targetMethodNames,
+      List<String> targetFieldNames,
+      String outputDirectory,
+      String modularityModelCode,
+      boolean disableRootValidation)
+      throws IOException {
     // The set of path of files that have been created by Specimin. We must be careful to delete all
     // those files in the end, because otherwise they can pollute the input directory. To do that,
     // we need to register a shutdown hook with the JVM.
@@ -169,7 +215,8 @@ public class SpeciminRunner {
         targetFieldNames,
         outputDirectory,
         model,
-        createdClass);
+        createdClass,
+        disableRootValidation);
   }
 
   /**
@@ -184,6 +231,7 @@ public class SpeciminRunner {
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
    * @param modularityModel the modularity model
+   * @param disableRootValidation whether to disable root validation
    * @throws IOException if there is an exception
    */
   private static void performMinimizationImpl(
@@ -194,12 +242,17 @@ public class SpeciminRunner {
       List<String> targetFieldNames,
       String outputDirectory,
       ModularityModel modularityModel,
-      Set<Path> createdClass)
+      Set<Path> createdClass,
+      boolean disableRootValidation)
       throws IOException {
     // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
     // trailing slash.
     if (!root.endsWith("/")) {
       root = root + "/";
+    }
+
+    if (!disableRootValidation) {
+      validateRoot(root, targetMethodNames, targetFieldNames);
     }
 
     updateStaticSolver(root, jarPaths);
@@ -577,6 +630,83 @@ public class SpeciminRunner {
       }
     }
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
+  }
+
+  /**
+   * Checks that the root directory is specified correctly, by checking that the files for the
+   * target methods/fields can be found.
+   *
+   * @param root the root directory
+   * @param targetMethodNames the list of target methods
+   * @param targetFieldNames the list of target fields
+   * @throws IOException if the root is incorrect
+   */
+  private static void validateRoot(
+      String root, List<String> targetMethodNames, List<String> targetFieldNames)
+      throws IOException {
+    Set<String> targetClassFqns = new HashSet<>();
+    for (String targetMethod : targetMethodNames) {
+      if (!targetMethod.contains("#")) {
+        throw new IOException("Invalid target method format: " + targetMethod);
+      }
+      String fqn = targetMethod.substring(0, targetMethod.indexOf('#'));
+      if (fqn.isEmpty() || fqn.endsWith(".") || fqn.startsWith(".") || fqn.contains("..")) {
+        throw new IOException(
+            "Invalid target method format (malformed class name): " + targetMethod);
+      }
+      targetClassFqns.add(fqn);
+    }
+    for (String targetField : targetFieldNames) {
+      if (!targetField.contains("#")) {
+        throw new IOException("Invalid target field format: " + targetField);
+      }
+      String fqn = targetField.substring(0, targetField.indexOf('#'));
+      if (fqn.isEmpty() || fqn.endsWith(".") || fqn.startsWith(".") || fqn.contains("..")) {
+        throw new IOException("Invalid target field format (malformed class name): " + targetField);
+      }
+      targetClassFqns.add(fqn);
+    }
+
+    for (String fqn : targetClassFqns) {
+      String classFqn = fqn;
+      boolean found = false;
+      while (true) {
+        Path expectedPath = Path.of(root, classFqn.replace('.', '/') + ".java");
+        if (Files.exists(expectedPath)) {
+          found = true;
+          break;
+        }
+
+        // The remainder of this code exists to handle the possibility that a target method or field
+        // is in an inner class.
+        int lastDot = classFqn.lastIndexOf('.');
+        if (lastDot == -1) {
+          break;
+        }
+
+        // Heuristic to avoid stripping package names.
+        if (Character.isLowerCase(classFqn.charAt(lastDot + 1))) {
+          break;
+        }
+        classFqn = classFqn.substring(0, lastDot);
+      }
+
+      if (!found) {
+        Path originalExpectedPath = Path.of(root, fqn.replace('.', '/') + ".java");
+        String errorMessage =
+            "Specimin could not find the file for the target class '"
+                + fqn
+                + "'.\n"
+                + "It looked for '"
+                + originalExpectedPath.toString()
+                + "' and variations for inner classes.\n"
+                + "Please make sure that the --root argument ('"
+                + root
+                + "') is the root of the source code, "
+                + "and that the package name of the target class matches its directory structure.";
+        throw new IOException(errorMessage);
+      }
+    }
   }
 
   /**
