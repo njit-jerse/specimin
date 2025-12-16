@@ -649,13 +649,22 @@ public class SpeciminRunner {
       if (!targetMethod.contains("#")) {
         throw new IOException("Invalid target method format: " + targetMethod);
       }
-      targetClassFqns.add(targetMethod.substring(0, targetMethod.indexOf('#')));
+      String fqn = targetMethod.substring(0, targetMethod.indexOf('#'));
+      if (fqn.isEmpty() || fqn.endsWith(".") || fqn.startsWith(".") || fqn.contains("..")) {
+        throw new IOException(
+            "Invalid target method format (malformed class name): " + targetMethod);
+      }
+      targetClassFqns.add(fqn);
     }
     for (String targetField : targetFieldNames) {
       if (!targetField.contains("#")) {
         throw new IOException("Invalid target field format: " + targetField);
       }
-      targetClassFqns.add(targetField.substring(0, targetField.indexOf('#')));
+      String fqn = targetField.substring(0, targetField.indexOf('#'));
+      if (fqn.isEmpty() || fqn.endsWith(".") || fqn.startsWith(".") || fqn.contains("..")) {
+        throw new IOException("Invalid target field format (malformed class name): " + targetField);
+      }
+      targetClassFqns.add(fqn);
     }
 
     for (String fqn : targetClassFqns) {
