@@ -36,6 +36,7 @@ public class SpeciminTestExecutor {
    *     class.fully.qualified.Name#fieldName for field.
    * @param modularityModel the model to use
    * @param jarPaths the path of jar files for Specimin to solve symbols
+   * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
   public static void runTest(
@@ -43,7 +44,8 @@ public class SpeciminTestExecutor {
       String[] targetFiles,
       String[] targetMembers,
       String modularityModel,
-      String[] jarPaths)
+      String[] jarPaths,
+      String... extraArgs)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -85,6 +87,7 @@ public class SpeciminTestExecutor {
       speciminArgs.add("--jarPath");
       speciminArgs.add(jarPath);
     }
+    speciminArgs.addAll(List.of(extraArgs));
 
     // Run specimin on target
     SpeciminRunner.main(speciminArgs.toArray(new String[0]));
@@ -141,7 +144,11 @@ public class SpeciminTestExecutor {
                     + actualCu);
           }
         } catch (Exception e) {
-          Assert.fail("Error parsing and comparing files: " + relativePath.toString().replace('\\', '/') + "\n" + e);
+          Assert.fail(
+              "Error parsing and comparing files: "
+                  + relativePath.toString().replace('\\', '/')
+                  + "\n"
+                  + e);
         }
       }
     }
@@ -156,11 +163,13 @@ public class SpeciminTestExecutor {
    * @param targetMembers the targeted methods or fields, each in the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
    *     class.fully.qualified.Name#fieldName for field.
+   * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
   public static void runTestWithoutJarPaths(
-      String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "cf", new String[] {});
+      String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
+      throws IOException {
+    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, extraArgs);
   }
 
   /**
@@ -172,10 +181,12 @@ public class SpeciminTestExecutor {
    * @param targetMembers the targeted methods or fields, each in the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
    *     class.fully.qualified.Name#fieldName for field.
+   * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
   public static void runNullAwayTestWithoutJarPaths(
-      String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {});
+      String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
+      throws IOException {
+    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, extraArgs);
   }
 }

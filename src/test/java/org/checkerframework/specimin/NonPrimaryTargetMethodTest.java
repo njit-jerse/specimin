@@ -10,6 +10,7 @@ public class NonPrimaryTargetMethodTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "nonprimarytargetmethod",
         new String[] {"com/example/Baz.java"},
-        new String[] {"com.example.NonPrimary#printMessage()"});
+        new String[] {"com.example.NonPrimary#printMessage()"},
+        "--disable-root-validation");
   }
 }
