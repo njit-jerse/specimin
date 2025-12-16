@@ -202,6 +202,8 @@ public class SpeciminRunner {
       root = root + "/";
     }
 
+    validateRoot(root, targetMethodNames, targetFieldNames);
+
     updateStaticSolver(root, jarPaths);
 
     // Keys are paths to files, values are parsed ASTs
@@ -577,6 +579,74 @@ public class SpeciminRunner {
       }
     }
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
+  }
+
+  /**
+   * Checks that the root directory is specified correctly, by checking that the files for the
+   * target methods/fields can be found.
+   *
+   * @param root the root directory
+   * @param targetMethodNames the list of target methods
+   * @param targetFieldNames the list of target fields
+   * @throws IOException if the root is incorrect
+   */
+  private static void validateRoot(
+      String root, List<String> targetMethodNames, List<String> targetFieldNames)
+      throws IOException {
+    Set<String> targetClassFqns = new HashSet<>();
+    for (String targetMethod : targetMethodNames) {
+      if (!targetMethod.contains("#")) {
+        throw new IOException("Invalid target method format: " + targetMethod);
+      }
+      targetClassFqns.add(targetMethod.substring(0, targetMethod.indexOf('#')));
+    }
+    for (String targetField : targetFieldNames) {
+      if (!targetField.contains("#")) {
+        throw new IOException("Invalid target field format: " + targetField);
+      }
+      targetClassFqns.add(targetField.substring(0, targetField.indexOf('#')));
+    }
+
+    for (String fqn : targetClassFqns) {
+      String classFqn = fqn;
+      boolean found = false;
+      while (true) {
+        Path expectedPath = Path.of(root, classFqn.replace('.', '/') + ".java");
+        if (Files.exists(expectedPath)) {
+          found = true;
+          break;
+        }
+
+        // The remainder of this code exists to handle the possibility that a target method or field
+        // is in an inner class.
+        int lastDot = classFqn.lastIndexOf('.');
+        if (lastDot == -1) {
+          break;
+        }
+
+        // Heuristic to avoid stripping package names.
+        if (Character.isLowerCase(classFqn.charAt(lastDot + 1))) {
+          break;
+        }
+        classFqn = classFqn.substring(0, lastDot);
+      }
+
+      if (!found) {
+        Path originalExpectedPath = Path.of(root, fqn.replace('.', '/') + ".java");
+        String errorMessage =
+            "Specimin could not find the file for the target class '"
+                + fqn
+                + "'.\n"
+                + "It looked for '"
+                + originalExpectedPath.toString()
+                + "' and variations for inner classes.\n"
+                + "Please make sure that the --root argument ('"
+                + root
+                + "') is the root of the source code, "
+                + "and that the package name of the target class matches its directory structure.";
+        throw new IOException(errorMessage);
+      }
+    }
   }
 
   /**
