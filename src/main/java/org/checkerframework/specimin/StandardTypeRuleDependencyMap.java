@@ -36,12 +36,16 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
 import com.github.javaparser.utils.Pair;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** The standard type rule dependency map */
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
@@ -51,6 +55,22 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    * properly attached to a compilation unit.
    */
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
+
+  /**
+   * A map of abstract super method qualified signatures to their concrete implementations. This
+   * addresses cases where an abstract method is preserved because it is directly called but its
+   * concrete implementations are not, but the types containing those concrete implementations are
+   * also included in the slice. If we encounter the abstract super method after encountering the
+   * concrete implementation, then we use this map.
+   */
+  private final Map<String, Set<MethodDeclaration>> methodsWithAbstractSuperDefinitions =
+      new HashMap<>();
+
+  /**
+   * Similar to {@link #methodsWithAbstractSuperDefinitions}, but for cases where the type of the
+   * concrete implementation is seen after the abstract super method.
+   */
+  private final Set<ResolvedMethodDeclaration> nonJDKMustImplementMethods = new HashSet<>();
 
   /**
    * Creates a new StandardTypeRuleDependencyMap to be passed into Slicer.
@@ -97,6 +117,16 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     // i.e., method declarations, parameters, annotation type declarations, instanceof, etc.
     if (node instanceof NodeWithType<?, ?> withType) {
       elements.add(withType.getType());
+
+      if (withType instanceof MethodDeclaration methodDecl && methodDecl.isAbstract()) {
+        ResolvedMethodDeclaration resolvedMethod = methodDecl.resolve();
+        nonJDKMustImplementMethods.add(resolvedMethod);
+        if (methodsWithAbstractSuperDefinitions.containsKey(
+            resolvedMethod.getQualifiedSignature())) {
+          elements.addAll(
+              methodsWithAbstractSuperDefinitions.get(resolvedMethod.getQualifiedSignature()));
+        }
+      }
     }
     if (node instanceof NodeWithSimpleName<?> nodeWithSimpleName) {
       elements.add(nodeWithSimpleName.getName());
@@ -110,9 +140,38 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.addAll(withExtends.getExtendedTypes());
     }
     if (node instanceof TypeDeclaration<?> typeDeclaration) {
-      elements.addAll(
+      List<MethodDeclaration> mustImplement =
           JavaParserUtil.getDeclarationsForAllMustImplementMethods(
-              typeDeclaration, fqnToCompilationUnits));
+              typeDeclaration, nonJDKMustImplementMethods, fqnToCompilationUnits);
+      elements.addAll(mustImplement);
+
+      for (MethodDeclaration method : typeDeclaration.getMethods()) {
+        if (mustImplement.contains(method)) {
+          continue;
+        }
+        try {
+          ResolvedMethodDeclaration resolvedMethod = method.resolve();
+          if (resolvedMethod.isAbstract()) {
+            continue;
+          }
+
+          for (ResolvedReferenceType ancestor : resolvedMethod.declaringType().getAllAncestors()) {
+            // Approximate: check to see if name and arity matches.
+            for (ResolvedMethodDeclaration ancestorMethod :
+                ancestor.getTypeDeclaration().get().getDeclaredMethods()) {
+              if (ancestorMethod.getName().equals(resolvedMethod.getName())
+                  && ancestorMethod.getNumberOfParams() == resolvedMethod.getNumberOfParams()
+                  && ancestorMethod.isAbstract()) {
+                methodsWithAbstractSuperDefinitions
+                    .computeIfAbsent(ancestorMethod.getQualifiedSignature(), k -> new HashSet<>())
+                    .add(method);
+              }
+            }
+          }
+        } catch (UnsolvedSymbolException ex) {
+          // Ignore
+        }
+      }
     }
 
     // If the node is a type declaration, exit now, so we don't unintentionally

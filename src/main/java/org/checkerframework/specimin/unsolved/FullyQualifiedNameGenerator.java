@@ -1308,10 +1308,26 @@ public class FullyQualifiedNameGenerator {
    * @return A set of FQNs, or null if unfound
    */
   private @Nullable FullyQualifiedNameSet getFQNsForExpressionInAnonymousClass(Expression expr) {
-    // Check if the expression is within the anonymous class. This method is necessary because
-    // if the parent class of the anonymous class is not solvable, fields/methods defined within
-    // are also unsolvable
-    BodyDeclaration<?> decl = JavaParserUtil.tryFindCorrespondingDeclarationInAnonymousClass(expr);
+    Object resolved = JavaParserUtil.tryResolveExpressionIfInAnonymousClass(expr);
+
+    BodyDeclaration<?> decl = null;
+    if (resolved instanceof AssociableToAST associableToAST) {
+      // Expressions are linked to NodeWithType
+      Node node = JavaParserUtil.tryFindAttachedNode(associableToAST, fqnToCompilationUnits);
+
+      if (node instanceof NodeWithType<?, ?> withType) {
+        return getFQNsFromType(withType.getType());
+      } else if (node instanceof BodyDeclaration<?> bodyDecl) {
+        decl = bodyDecl;
+      }
+    }
+
+    if (decl == null) {
+      // Check if the expression is within the anonymous class. This method is necessary because
+      // if the parent class of the anonymous class is not solvable, fields/methods defined within
+      // are also unsolvable
+      decl = JavaParserUtil.tryFindCorrespondingDeclarationInAnonymousClass(expr);
+    }
 
     if (decl == null) {
       return null;

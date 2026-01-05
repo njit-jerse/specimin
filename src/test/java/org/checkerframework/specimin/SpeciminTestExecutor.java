@@ -2,17 +2,12 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
-import java.io.BufferedReader;
+import com.github.javaparser.ast.visitor.EqualsVisitor;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.Assert;
 
@@ -121,20 +116,22 @@ public class SpeciminTestExecutor {
           expectedStream
               .filter(p -> p.toString().endsWith(".java"))
               .map(expectedDir::relativize)
-              .collect(Collectors.toList());
+              .sorted()
+              .toList();
 
       List<Path> actualJavaFiles =
           actualStream
               .filter(p -> p.toString().endsWith(".java"))
               .map(actualDir::relativize)
-              .collect(Collectors.toList());
+              .sorted()
+              .toList();
 
       if (!expectedJavaFiles.equals(actualJavaFiles)) {
         Assert.fail(
             "The set of Java files in the expected and actual directories do not match.\nExpected: "
-                + expectedJavaFiles
+                + expectedJavaFiles.toString().replace('\\', '/')
                 + "\nActual: "
-                + actualJavaFiles);
+                + actualJavaFiles.toString().replace('\\', '/'));
       }
 
       for (Path relativePath : expectedJavaFiles) {
@@ -143,14 +140,21 @@ public class SpeciminTestExecutor {
         try {
           CompilationUnit expectedCu = StaticJavaParser.parse(expectedFile);
           CompilationUnit actualCu = StaticJavaParser.parse(actualFile);
-          if (!expectedCu.equals(actualCu)) {
-            Assert.assertEquals(
-                "ASTs do not match for file: " + relativePath,
-                expectedCu.toString(),
-                actualCu.toString());
+          if (!EqualsVisitor.equals(actualCu, expectedCu)) {
+            Assert.fail(
+                "ASTs do not match for file: "
+                    + relativePath.toString().replace('\\', '/')
+                    + "\nExpected:\n"
+                    + expectedCu
+                    + "\nActual:\n"
+                    + actualCu);
           }
         } catch (Exception e) {
-          Assert.fail("Error parsing and comparing files: " + relativePath + "\n" + e);
+          Assert.fail(
+              "Error parsing and comparing files: "
+                  + relativePath.toString().replace('\\', '/')
+                  + "\n"
+                  + e);
         }
       }
     }
@@ -186,23 +190,5 @@ public class SpeciminTestExecutor {
   public static void runNullAwayTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers) throws IOException {
     runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, "best-effort");
-  }
-
-  /** Code borrowed from https://www.baeldung.com/run-shell-command-in-java. */
-  private static class StreamGobbler implements Runnable {
-    private InputStream inputStream;
-    private Consumer<String> consumer;
-
-    public StreamGobbler(InputStream inputStream, Consumer<String> consumer) {
-      this.inputStream = inputStream;
-      this.consumer = consumer;
-    }
-
-    @Override
-    public void run() {
-      new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
-          .lines()
-          .forEach(consumer);
-    }
   }
 }
