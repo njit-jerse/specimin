@@ -34,7 +34,7 @@ cd specimin
 To run Specimin, issue this command from the `specimin/` directory: `./gradlew run --args='[OPTIONS]'`.
 
 The available options are (required options in **bold**, repeatable options in *italics*):
-* **--root**: specifies the root directory of the target project.
+* **--root**: specifies the root directory of the target project. Note that this must be the _Java source root_: that is, the same location that you would use when invoking `javac` to compile the target file(s). For example, in most Gradle and Maven projects it probably ends in `src/main/java`.
 * ***--targetFile***: a source file in which to search for target methods.  The file name is **relative** to the root.
 * *--targetMethod*: a target method that must be preserved, and whose dependencies should be stubbed out. Use the format `class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...)`. Note: If a target method has a receiver parameter, i.e., (.. this), exclude that parameter from the signature. Check this [documentation](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-ReceiverParameter) for more info.
 * *--targetField*: a target field that must be preserved (including its initializer). Uses the same format as `--targetMethod`, but without the parameter list. The `--targetMethod` and `--targetField` options can be freely combined, but if at least one of the two is not provided then Specimin will always produce empty output.
@@ -42,6 +42,7 @@ The available options are (required options in **bold**, repeatable options in *
 * **--outputDirectory**: the directory in which to place the output. The directory must be writeable and will be created if it does not exist.
 * *--jarPath*: a directory path that contains all the jar files for Specimin to take as input.
 * --modularityModel: the name of the modularity model to use. Modularity models are named after the analysis that they represent. Available options: "javac" for the [Javac typechecker](https://en.wikipedia.org/wiki/Javac), "cf" for the [Checker Framework](checkerframework.org), or "nullaway" for [NullAway](https://github.com/uber/NullAway). Default: "cf".
+* --disable-root-validation: disables the validation of the root directory. This is useful in the rare case that a target member is in a non-primary class (i.e., in a class whose name doesn't match its source file), which can trigger a false positive from the root validation.
 
 Options may be specified in any order. When supplying repeatable options more than once, the option must be repeated for each value.
 

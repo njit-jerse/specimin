@@ -37,6 +37,7 @@ public class SpeciminTestExecutor {
    * @param modularityModel the model to use
    * @param jarPaths the path of jar files for Specimin to solve symbols
    * @param ambiguityResolutionPolicy the ambiguity resolution policy to use
+   * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
   public static void runTest(
@@ -45,7 +46,8 @@ public class SpeciminTestExecutor {
       String[] targetMembers,
       String modularityModel,
       String[] jarPaths,
-      String ambiguityResolutionPolicy)
+      String ambiguityResolutionPolicy,
+      String... extraArgs)
       throws IOException {
     // Create output directory
     Path outputDir = null;
@@ -89,6 +91,8 @@ public class SpeciminTestExecutor {
     }
     speciminArgs.add("--ambiguityResolutionPolicy");
     speciminArgs.add(ambiguityResolutionPolicy);
+
+    speciminArgs.addAll(List.of(extraArgs));
 
     // Run specimin on target
     try {
@@ -169,11 +173,13 @@ public class SpeciminTestExecutor {
    * @param targetMembers the targeted methods or fields, each in the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
    *     class.fully.qualified.Name#fieldName for field.
+   * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
   public static void runTestWithoutJarPaths(
-      String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, "best-effort");
+      String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
+      throws IOException {
+    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, "best-effort", extraArgs);
   }
 
   /**
@@ -185,10 +191,12 @@ public class SpeciminTestExecutor {
    * @param targetMembers the targeted methods or fields, each in the format
    *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
    *     class.fully.qualified.Name#fieldName for field.
+   * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
   public static void runNullAwayTestWithoutJarPaths(
-      String testName, String[] targetFiles, String[] targetMembers) throws IOException {
-    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, "best-effort");
+      String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
+      throws IOException {
+    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, "best-effort", extraArgs);
   }
 }
