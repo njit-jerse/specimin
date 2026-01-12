@@ -22,7 +22,7 @@ application {
 
 dependencies {
 
-    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.27.1")
+    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.0")
 
     implementation("net.sf.jopt-simple:jopt-simple:5.0.4")
 
