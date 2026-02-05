@@ -276,7 +276,7 @@ public class SpeciminRunner {
     }
 
     if (!Path.of(root).isAbsolute()) {
-        root = Paths.get(root).toAbsolutePath().normalize().toString();
+      root = Paths.get(root).toAbsolutePath().normalize().toString();
     }
 
     if (!disableRootValidation) {
@@ -519,9 +519,6 @@ public class SpeciminRunner {
   }
 
   /**
-<<<<<<< HEAD
-   * Creates a map of original nodes to cloned nodes.
-=======
    * Checks that the root directory is specified correctly, by checking that the files for the
    * target methods/fields can be found.
    *
@@ -599,10 +596,7 @@ public class SpeciminRunner {
   }
 
   /**
-   * Fully solve all annotations by processing all annotations, annotation parameters, and their
-   * types. This method also removes any annotations which are not fully solvable and includes all
-   * necessary files in Specimin's output.
->>>>>>> 02fc79c803ea3836752869ddf54109f3cb2ef531
+   * Helper to construct map between clones of an AST. Side-effects its third argument (`map`).
    *
    * @param original The original node
    * @param clone The cloned node

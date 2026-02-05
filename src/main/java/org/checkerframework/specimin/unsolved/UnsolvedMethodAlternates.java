@@ -373,4 +373,9 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   public boolean isStatic() {
     return getAlternates().get(0).isStatic();
   }
+
+  @Override
+  public String toString() {
+    return getAlternates().toString();
+  }
 }

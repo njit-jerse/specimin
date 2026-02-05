@@ -242,6 +242,12 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     }
   }
 
+  // mostly for debugging purposes
+  @Override
+  public String toString() {
+    return toString(UnsolvedClassOrInterfaceType.INTERFACE);
+  }
+
   /**
    * Gets the number of type variables.
    *

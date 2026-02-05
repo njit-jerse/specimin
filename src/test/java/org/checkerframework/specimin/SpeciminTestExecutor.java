@@ -135,7 +135,9 @@ public class SpeciminTestExecutor {
             "The set of Java files in the expected and actual directories do not match.\nExpected: "
                 + expectedJavaFiles.toString().replace('\\', '/')
                 + "\nActual: "
-                + actualJavaFiles.toString().replace('\\', '/'));
+                + actualJavaFiles.toString().replace('\\', '/')
+                + "\nActual outputs in:\n"
+                + actualDir);
       }
 
       for (Path relativePath : expectedJavaFiles) {
@@ -197,6 +199,13 @@ public class SpeciminTestExecutor {
   public static void runNullAwayTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
       throws IOException {
-    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, "best-effort", extraArgs);
+    runTest(
+        testName,
+        targetFiles,
+        targetMembers,
+        "nullaway",
+        new String[] {},
+        "best-effort",
+        extraArgs);
   }
 }
