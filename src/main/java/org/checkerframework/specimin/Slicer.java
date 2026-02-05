@@ -35,7 +35,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.specimin.unsolved.MemberType;
+import org.checkerframework.specimin.unsolved.SolvedMemberType;
+import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterfaceAlternates;
+import org.checkerframework.specimin.unsolved.UnsolvedClassOrInterfaceType;
+import org.checkerframework.specimin.unsolved.UnsolvedField;
+import org.checkerframework.specimin.unsolved.UnsolvedFieldAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedGenerationResult;
+import org.checkerframework.specimin.unsolved.UnsolvedMemberType;
+import org.checkerframework.specimin.unsolved.UnsolvedMethod;
+import org.checkerframework.specimin.unsolved.UnsolvedMethodAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 
@@ -123,6 +132,84 @@ public class Slicer {
     slicer.buildSlice();
 
     unsolvedSymbolGenerator.generateAllAlternatesBasedOnSuperTypeRelationships();
+
+    Iterator<UnsolvedSymbolAlternates<?>> it = slicer.generatedSymbolSlice.iterator();
+    while (it.hasNext()) {
+      UnsolvedSymbolAlternates<?> gen = it.next();
+      boolean inMap = unsolvedSymbolGenerator.getGeneratedSymbols().containsValue(gen);
+
+      if (!inMap) {
+        // If it's an annotation member, we might want to keep it even if it's not in the map
+        // because it's implicit.
+        boolean isAnnotationMember = false;
+        if (gen instanceof UnsolvedMethodAlternates methodAlt) {
+          for (UnsolvedClassOrInterfaceAlternates declaringType :
+              methodAlt.getAlternateDeclaringTypes()) {
+            if (declaringType.getType() == UnsolvedClassOrInterfaceType.ANNOTATION) {
+              isAnnotationMember = true;
+              break;
+            }
+          }
+        }
+
+        if (!isAnnotationMember) {
+          it.remove();
+          continue;
+        }
+      }
+
+      // Reconciliation logic for kept symbols
+      if (gen instanceof UnsolvedMethodAlternates methodAlt) {
+        for (UnsolvedMethod method : methodAlt.getAlternates()) {
+          // Return type
+          MemberType ret = method.getReturnType();
+          if (ret instanceof UnsolvedMemberType unsolved) {
+            boolean typeStillExists = false;
+            for (String fqn : unsolved.getUnsolvedType().getFullyQualifiedNames()) {
+              if (unsolvedSymbolGenerator.getGeneratedSymbols().containsKey(fqn)) {
+                typeStillExists = true;
+                break;
+              }
+            }
+            if (!typeStillExists) {
+              method.setReturnType(SolvedMemberType.JAVA_LANG_OBJECT);
+            }
+          }
+          // Parameters
+          for (MemberType param : method.getParameterList()) {
+            if (param instanceof UnsolvedMemberType unsolved) {
+              boolean typeStillExists = false;
+              for (String fqn : unsolved.getUnsolvedType().getFullyQualifiedNames()) {
+                if (unsolvedSymbolGenerator.getGeneratedSymbols().containsKey(fqn)) {
+                  typeStillExists = true;
+                  break;
+                }
+              }
+              if (!typeStillExists) {
+                method.replaceParameterType(param, SolvedMemberType.JAVA_LANG_OBJECT);
+              }
+            }
+          }
+        }
+      } else if (gen instanceof UnsolvedFieldAlternates fieldAlt) {
+        // Fields
+        for (UnsolvedField field : fieldAlt.getAlternates()) {
+          MemberType type = field.getType();
+          if (type instanceof UnsolvedMemberType unsolved) {
+            boolean typeStillExists = false;
+            for (String fqn : unsolved.getUnsolvedType().getFullyQualifiedNames()) {
+              if (unsolvedSymbolGenerator.getGeneratedSymbols().containsKey(fqn)) {
+                typeStillExists = true;
+                break;
+              }
+            }
+            if (!typeStillExists) {
+              field.setType(SolvedMemberType.JAVA_LANG_OBJECT);
+            }
+          }
+        }
+      }
+    }
 
     Set<Node> dependentSlice = new HashSet<>();
     // Use getGeneratedSymbols() instead of Slicer.generatedSymbolSlice here because we want to

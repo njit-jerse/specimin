@@ -36,6 +36,9 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   /** The number of type variables for this method. */
   private int numberOfTypeVariables = 0;
 
+  /** The names of the type variables for this method. */
+  private @Nullable List<String> typeVariableNames = null;
+
   /** The access modifier of the method. */
   private String accessModifier;
 
@@ -149,6 +152,24 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   @Override
   public void setNumberOfTypeVariables(int numberOfTypeVariables) {
     this.numberOfTypeVariables = numberOfTypeVariables;
+  }
+
+  @Override
+  public void setTypeVariableNames(List<String> typeVariableNames) {
+    this.typeVariableNames = typeVariableNames;
+    this.numberOfTypeVariables = typeVariableNames.size();
+  }
+
+  @Override
+  public List<String> getTypeVariableNames() {
+    if (typeVariableNames != null) {
+      return typeVariableNames;
+    }
+    List<String> generatedNames = new ArrayList<>();
+    for (int i = 0; i < numberOfTypeVariables; i++) {
+      generatedNames.add("T" + ((i > 0) ? i : ""));
+    }
+    return generatedNames;
   }
 
   @Override
@@ -281,6 +302,14 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    * @param result a string builder. Will be side-effected.
    */
   private void getTypeVariablesImpl(StringBuilder result) {
+    List<String> names = typeVariableNames;
+    if (names != null) {
+      for (int i = 0; i < names.size(); i++) {
+        result.append(names.get(i)).append(", ");
+      }
+      result.delete(result.length() - 2, result.length());
+      return;
+    }
     for (int i = 0; i < numberOfTypeVariables; i++) {
       String typeExpression = "T" + ((i > 0) ? i : "");
       result.append(typeExpression).append(", ");

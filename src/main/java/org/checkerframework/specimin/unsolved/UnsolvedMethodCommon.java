@@ -54,6 +54,20 @@ public interface UnsolvedMethodCommon {
   public void setNumberOfTypeVariables(int number);
 
   /**
+   * Sets the names of the type variables.
+   *
+   * @param names The names of the type variables
+   */
+  public void setTypeVariableNames(List<String> names);
+
+  /**
+   * Gets the names of the type variables.
+   *
+   * @return The names of the type variables
+   */
+  public List<String> getTypeVariableNames();
+
+  /**
    * Sets the return type.
    *
    * @param memberType The return type

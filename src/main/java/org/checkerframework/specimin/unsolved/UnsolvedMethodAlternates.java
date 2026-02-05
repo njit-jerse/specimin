@@ -314,6 +314,16 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     applyToAllAlternates(UnsolvedMethod::setNumberOfTypeVariables, number);
   }
 
+  @Override
+  public void setTypeVariableNames(List<String> names) {
+    applyToAllAlternates(UnsolvedMethod::setTypeVariableNames, names);
+  }
+
+  @Override
+  public List<String> getTypeVariableNames() {
+    return getAlternates().get(0).getTypeVariableNames();
+  }
+
   /**
    * Gets the return types
    *

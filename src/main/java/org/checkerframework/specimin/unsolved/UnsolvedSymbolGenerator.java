@@ -77,6 +77,7 @@ import org.checkerframework.specimin.JavaParserUtil;
  * alternates are selected.
  */
 public class UnsolvedSymbolGenerator {
+
   /** A map of fully qualified names to their corresponding compilation units. */
   private final Map<String, CompilationUnit> fqnsToCompilationUnits;
 
@@ -982,6 +983,97 @@ public class UnsolvedSymbolGenerator {
 
       if (!returnTypeToMustPreserveNode.isEmpty()) {
         generatedMethod.updateReturnTypesAndMustPreserveNodes(returnTypeToMustPreserveNode);
+      } else {
+        Set<MemberType> currentReturnTypes = new LinkedHashSet<>();
+
+        // Prioritize inference from context
+        if (methodCall.hasParentNode()) {
+          Set<FullyQualifiedNameSet> contextTypes =
+              fullyQualifiedNameGenerator.getFQNsFromSurroundingContextType(methodCall, true);
+          if (contextTypes != null) {
+            for (FullyQualifiedNameSet fqns : contextTypes) {
+              currentReturnTypes.add(getOrCreateMemberTypeFromFQNs(fqns));
+            }
+          }
+        }
+
+        if (currentReturnTypes.isEmpty()) {
+          MethodDeclaration declarationInThisTypeWithSameSignature =
+              JavaParserUtil.tryFindMethodDeclarationWithSameSignatureFromThisType(
+                  methodCall, fqnsToCompilationUnits);
+
+          if (declarationInThisTypeWithSameSignature != null) {
+            currentReturnTypes.add(
+                getOrCreateMemberTypeFromFQNs(
+                    fullyQualifiedNameGenerator.getFQNsFromType(
+                        declarationInThisTypeWithSameSignature.getType())));
+          } else {
+            for (FullyQualifiedNameSet fqns :
+                fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall)) {
+              currentReturnTypes.add(getOrCreateMemberTypeFromFQNs(fqns));
+            }
+          }
+        }
+
+        if (!currentReturnTypes.isEmpty()) {
+          Set<MemberType> existingReturnTypes = generatedMethod.getReturnTypes();
+          boolean isGeneric = generatedMethod.getNumberOfTypeVariables() > 0;
+          boolean alreadyCoveredByGeneric = false;
+
+          if (isGeneric) {
+            List<String> typeVars = generatedMethod.getTypeVariableNames();
+            for (MemberType existing : existingReturnTypes) {
+              if (typeVars.contains(existing.toString())) {
+                alreadyCoveredByGeneric = true;
+                break;
+              }
+            }
+          }
+
+          boolean isCovered =
+              alreadyCoveredByGeneric || existingReturnTypes.containsAll(currentReturnTypes);
+
+          if (!isCovered) {
+            int currentCount = generatedMethod.getNumberOfTypeVariables();
+            // If it's already generic but the return type isn't the type variable (e.g. returns
+            // String),
+            // we need to make it return a type variable. We can reuse an existing one or add new.
+            // For simplicity and safety (to avoid breaking param types), let's add a new one.
+            generatedMethod.setNumberOfTypeVariables(currentCount + 1);
+            String newReturnTypeVar;
+            if (currentCount == 0) {
+              newReturnTypeVar = "SyntheticUnconstrainedType";
+              generatedMethod.setTypeVariableNames(List.of(newReturnTypeVar));
+            } else {
+              // Existing ones are likely T, T1... so we append.
+              // We need to get existing names and add one.
+              List<String> names = new ArrayList<>(generatedMethod.getTypeVariableNames());
+              newReturnTypeVar = "T" + (currentCount > 0 ? currentCount : "");
+              names.add(newReturnTypeVar);
+              generatedMethod.setTypeVariableNames(names);
+            }
+            generatedMethod.setReturnType(new SolvedMemberType(newReturnTypeVar));
+
+            // Clean up old return types
+
+            for (MemberType oldType : existingReturnTypes) {
+
+              if (oldType instanceof UnsolvedMemberType) {
+
+                removeSymbolFromGeneratedSymbolsMap(
+                    ((UnsolvedMemberType) oldType).getUnsolvedType());
+
+              } else if (oldType instanceof SolvedMemberType) {
+
+                // Try to remove assuming it's a generated type with this name
+
+                String typeName = oldType.toString();
+
+                generatedSymbols.remove(typeName);
+              }
+            }
+          }
+        }
       }
     } else {
       List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
@@ -2245,6 +2337,12 @@ public class UnsolvedSymbolGenerator {
                     methodCall, methodScope, null, false);
             genMethod = (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(methodFqns);
 
+            if (genMethod == null) {
+              genMethod =
+                  fuzzyLookupMethod(
+                      methodCall.getNameAsString(), methodCall.getArguments().size(), methodScope);
+            }
+
             // If there is a null, and the Object version is not findable, then another call to the
             // same method exists, and we'll get the signature from there instead
             if (genMethod == null
@@ -2436,6 +2534,11 @@ public class UnsolvedSymbolGenerator {
     UnsolvedMethodAlternates alt =
         (UnsolvedMethodAlternates) findExistingAndUpdateFQNs(potentialFQNs);
 
+    if (alt == null) {
+      alt =
+          fuzzyLookupMethod(
+              methodCall.getNameAsString(), methodCall.getArguments().size(), potentialScopeFQNs);
+    }
     if (alt == null) {
       if (isMethodABuiltInThrowableMethod(potentialScopeFQNs, potentialFQNs)
           || resolvedMethod != null
@@ -3248,9 +3351,13 @@ public class UnsolvedSymbolGenerator {
    *
    * @param symbol The symbol to remove
    */
-  private void removeSymbolFromGeneratedSymbolsMap(UnsolvedSymbolAlternates<?> symbol) {
+  public void removeSymbolFromGeneratedSymbolsMap(UnsolvedSymbolAlternates<?> symbol) {
     for (String potentialFQN : symbol.getFullyQualifiedNames()) {
+      // System.out.println("DEBUG: Removing FQN: " + potentialFQN);
       generatedSymbols.remove(potentialFQN);
+      if (generatedSymbols.containsKey(potentialFQN)) {
+        System.out.println("DEBUG: FAILED TO REMOVE " + potentialFQN);
+      }
     }
   }
 
@@ -3390,6 +3497,59 @@ public class UnsolvedSymbolGenerator {
             JavaParserUtil.getSimpleNameFromQualifiedName(JavaParserUtil.removeArrayBrackets(name)))
         || name.equals("void")) {
       return new SolvedMemberType(name, typeArguments);
+    }
+    return null;
+  }
+
+  /**
+   * Helper method to perform a fuzzy lookup for a generated method.
+   *
+   * @param methodName The simple name of the method
+   * @param arity The number of arguments
+   * @param scopes The set of potential scope FQNs
+   * @return The found UnsolvedMethodAlternates, or null if not found
+   */
+  private @Nullable UnsolvedMethodAlternates fuzzyLookupMethod(
+      String methodName, int arity, Collection<Set<String>> scopes) {
+    for (Map.Entry<String, UnsolvedSymbolAlternates<?>> entry : generatedSymbols.entrySet()) {
+      if (entry.getValue() instanceof UnsolvedMethodAlternates) {
+        String fqn = entry.getKey();
+        // FQN format: package.Class#method(param1, param2)
+        int hashIndex = fqn.indexOf('#');
+        if (hashIndex == -1) {
+          continue;
+        }
+
+        String classPart = fqn.substring(0, hashIndex);
+        String methodPart = fqn.substring(hashIndex + 1);
+
+        int parenIndex = methodPart.indexOf('(');
+        if (parenIndex == -1) {
+          continue;
+        }
+
+        String name = methodPart.substring(0, parenIndex);
+        if (!name.equals(methodName)) {
+          continue;
+        }
+
+        String params = methodPart.substring(parenIndex + 1, methodPart.lastIndexOf(')'));
+        int currentArity = params.isEmpty() ? 0 : params.split(",").length;
+
+        if (currentArity == arity) {
+          boolean scopeMatch = false;
+          for (Set<String> scopeSet : scopes) {
+            if (scopeSet.contains(classPart)) {
+              scopeMatch = true;
+              break;
+            }
+          }
+
+          if (scopeMatch) {
+            return (UnsolvedMethodAlternates) entry.getValue();
+          }
+        }
+      }
     }
     return null;
   }

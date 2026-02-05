@@ -1353,7 +1353,7 @@ public class FullyQualifiedNameGenerator {
    * @param canRecurse Whether to allow recursion
    * @return A set of FQNs, or null if unfound
    */
-  private @Nullable Set<FullyQualifiedNameSet> getFQNsFromSurroundingContextType(
+  public @Nullable Set<FullyQualifiedNameSet> getFQNsFromSurroundingContextType(
       Expression expr, boolean canRecurse) {
     Node parentNode = expr.getParentNode().get();
 
