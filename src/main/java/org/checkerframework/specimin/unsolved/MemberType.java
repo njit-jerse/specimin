@@ -47,4 +47,13 @@ public abstract class MemberType {
    * @return A copy of this member type with the specified type arguments
    */
   public abstract MemberType copyWithNewTypeArgs(List<MemberType> newTypeArgs);
+
+  /**
+   * Returns a string representation of this type, erased of any top-level wildcards.
+   *
+   * @return The erased string representation of this type
+   */
+  public String toErasedString() {
+    return toString();
+  }
 }

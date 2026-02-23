@@ -212,7 +212,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     for (int i = 0; i < parameterList.size(); i++) {
       MemberType parameterType = parameterList.get(i);
 
-      arguments.append(parameterType).append(" ").append("parameter").append(i);
+      arguments.append(parameterType.toErasedString()).append(" ").append("parameter").append(i);
       if (i < parameterList.size() - 1) {
         arguments.append(", ");
       }
@@ -233,7 +233,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       signature.append(getTypeVariablesAsString()).append(" ");
     }
 
-    String returnTypeAsString = returnType.toString();
+    String returnTypeAsString = returnType.toErasedString();
     if (!"".equals(returnTypeAsString)) {
       signature.append(returnTypeAsString).append(" ");
     }
@@ -248,7 +248,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     StringBuilder exceptions = new StringBuilder();
     for (int i = 0; i < throwsList.size(); i++) {
       MemberType exception = throwsList.get(i);
-      exceptions.append(exception);
+      exceptions.append(exception.toErasedString());
       if (i < throwsList.size() - 1) {
         exceptions.append(", ");
       }

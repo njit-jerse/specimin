@@ -52,6 +52,8 @@ import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -451,7 +453,7 @@ public class FullyQualifiedNameGenerator {
     }
     // method ref
     else if (expr.isMethodReferenceExpr()) {
-      return getFQNsForMethodReferenceType(expr.asMethodReferenceExpr());
+      return getFQNsForMethodReferenceType(expr.asMethodReferenceExpr(), canRecurse);
     }
     // lambda
     else if (expr.isLambdaExpr()) {
@@ -1007,9 +1009,11 @@ public class FullyQualifiedNameGenerator {
    * Given a method reference expression, return the FQNs of its functional interface.
    *
    * @param methodRef The method reference expression
+   * @param canRecurse Whether to allow recursion
    * @return The FQNs of its functional interface
    */
-  private Set<FullyQualifiedNameSet> getFQNsForMethodReferenceType(MethodReferenceExpr methodRef) {
+  private Set<FullyQualifiedNameSet> getFQNsForMethodReferenceType(
+      MethodReferenceExpr methodRef, boolean canRecurse) {
     // Applicable java.lang.Object methods. Key is method signature, value is return type.
     Set<Entry<String, String>> applicableObjectMethods =
         JavaLangUtils.getJavaLangObjectMethods().entrySet().stream()
@@ -1048,7 +1052,7 @@ public class FullyQualifiedNameGenerator {
     }
 
     Set<FullyQualifiedNameSet> surroundingContextFQNs =
-        getFQNsFromSurroundingContextType(methodRef, true);
+        getFQNsFromSurroundingContextType(methodRef, canRecurse);
 
     if (surroundingContextFQNs != null) {
       return surroundingContextFQNs;
@@ -1386,7 +1390,19 @@ public class FullyQualifiedNameGenerator {
             JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
                 withArguments, fqnToCompilationUnits);
         if (singleCallable != null) {
-          return Set.of(getFQNsFromType(singleCallable.getParameter(param).getType()));
+          Set<FullyQualifiedNameSet> expectedReturnType = null;
+          if (canRecurse && withArguments instanceof Expression) {
+            expectedReturnType =
+                getFQNsFromSurroundingContextType((Expression) withArguments, false);
+          }
+
+          Map<String, FullyQualifiedNameSet> substitutionMap =
+              canRecurse
+                  ? inferTypeVariables(withArguments, singleCallable, expectedReturnType)
+                  : Collections.emptyMap();
+          return Set.of(
+              substitute(
+                  getFQNsFromType(singleCallable.getParameter(param).getType()), substitutionMap));
         }
 
         List<? extends CallableDeclaration<?>> allPotentialCallables =
@@ -1395,7 +1411,18 @@ public class FullyQualifiedNameGenerator {
         Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
 
         for (CallableDeclaration<?> callable : allPotentialCallables) {
-          result.add(getFQNsFromType(callable.getParameter(param).getType()));
+          Set<FullyQualifiedNameSet> expectedReturnType = null;
+          if (canRecurse && withArguments instanceof Expression) {
+            expectedReturnType =
+                getFQNsFromSurroundingContextType((Expression) withArguments, false);
+          }
+
+          Map<String, FullyQualifiedNameSet> substitutionMap =
+              canRecurse
+                  ? inferTypeVariables(withArguments, callable, expectedReturnType)
+                  : Collections.emptyMap();
+          result.add(
+              substitute(getFQNsFromType(callable.getParameter(param).getType()), substitutionMap));
         }
 
         if (!result.isEmpty()) {
@@ -2041,5 +2068,150 @@ public class FullyQualifiedNameGenerator {
    */
   private static String toCapital(String string) {
     return Ascii.toUpperCase(string.substring(0, 1)) + string.substring(1);
+  }
+
+  /**
+   * Infers type variables for a generic callable based on its arguments and expected return type.
+   *
+   * @param withArguments The call site
+   * @param callable The generic callable declaration
+   * @param expectedReturnType The expected return type of the call
+   * @return A map from type variable name to its inferred type
+   */
+  private Map<String, FullyQualifiedNameSet> inferTypeVariables(
+      NodeWithArguments<?> withArguments,
+      CallableDeclaration<?> callable,
+      @Nullable Set<FullyQualifiedNameSet> expectedReturnType) {
+    Map<String, FullyQualifiedNameSet> substitutionMap = new HashMap<>();
+    Set<String> typeParameters = new HashSet<>();
+    if (callable instanceof MethodDeclaration method) {
+      for (com.github.javaparser.ast.type.TypeParameter tp : method.getTypeParameters()) {
+        typeParameters.add(tp.getNameAsString());
+      }
+    }
+
+    // Match arguments
+    for (int i = 0;
+        i < Math.min(withArguments.getArguments().size(), callable.getParameters().size());
+        i++) {
+      Expression arg = withArguments.getArgument(i);
+      Type paramType = callable.getParameter(i).getType();
+
+      // Avoid infinite recursion by not using SurroundingContext for arguments here
+      Set<FullyQualifiedNameSet> argTypes = getFQNsForExpressionTypeImpl(arg, false);
+      if (argTypes.size() == 1) {
+        inferTypeVariablesImpl(
+            substitutionMap, paramType, argTypes.iterator().next(), typeParameters);
+      }
+    }
+
+    // Match return type
+    if (expectedReturnType != null
+        && expectedReturnType.size() == 1
+        && callable instanceof MethodDeclaration method) {
+      inferTypeVariablesImpl(
+          substitutionMap, method.getType(), expectedReturnType.iterator().next(), typeParameters);
+    }
+
+    return substitutionMap;
+  }
+
+  /**
+   * Helper implementation for type inference.
+   *
+   * @param map The map to update
+   * @param paramType The type from the declaration
+   * @param argType The type from the call site
+   * @param typeParameters The set of type parameters of the generic callable
+   */
+  private void inferTypeVariablesImpl(
+      Map<String, FullyQualifiedNameSet> map,
+      Type paramType,
+      FullyQualifiedNameSet argType,
+      Set<String> typeParameters) {
+    if (paramType.isClassOrInterfaceType()) {
+      ClassOrInterfaceType ciType = paramType.asClassOrInterfaceType();
+      String name = ciType.getNameAsString();
+      if (typeParameters.contains(name)) {
+        // If argType is a wildcard, use its bound if available
+        if (argType.wildcard() != null && !argType.erasedFqns().isEmpty()) {
+          map.put(name, new FullyQualifiedNameSet(argType.erasedFqns(), argType.typeArguments()));
+        } else {
+          map.put(name, argType);
+        }
+      } else if (ciType.getTypeArguments().isPresent()) {
+        List<Type> paramTypeArgs = ciType.getTypeArguments().get();
+        List<FullyQualifiedNameSet> argTypeArgs = argType.typeArguments();
+        for (int i = 0; i < Math.min(paramTypeArgs.size(), argTypeArgs.size()); i++) {
+          inferTypeVariablesImpl(map, paramTypeArgs.get(i), argTypeArgs.get(i), typeParameters);
+        }
+      }
+    } else if (paramType.isWildcardType()) {
+      if (paramType.asWildcardType().getExtendedType().isPresent()) {
+        inferTypeVariablesImpl(
+            map, paramType.asWildcardType().getExtendedType().get(), argType, typeParameters);
+      } else if (paramType.asWildcardType().getSuperType().isPresent()) {
+        inferTypeVariablesImpl(
+            map, paramType.asWildcardType().getSuperType().get(), argType, typeParameters);
+      }
+    } else if (paramType.isArrayType()) {
+      int arrayLevel = paramType.asArrayType().getArrayLevel();
+      Set<String> componentErased = new LinkedHashSet<>();
+      for (String fqn : argType.erasedFqns()) {
+        if (fqn.endsWith("[]".repeat(arrayLevel))) {
+          componentErased.add(fqn.substring(0, fqn.length() - 2 * arrayLevel));
+        }
+      }
+      if (!componentErased.isEmpty()) {
+        inferTypeVariablesImpl(
+            map,
+            paramType.asArrayType().getElementType(),
+            new FullyQualifiedNameSet(componentErased, argType.typeArguments()),
+            typeParameters);
+      }
+    }
+  }
+
+  /**
+   * Substitutes type variables in a FullyQualifiedNameSet using the provided map.
+   *
+   * @param fqns The FullyQualifiedNameSet to substitute in
+   * @param map The substitution map
+   * @return A new FullyQualifiedNameSet with substitutions applied
+   */
+  private FullyQualifiedNameSet substitute(
+      FullyQualifiedNameSet fqns, Map<String, FullyQualifiedNameSet> map) {
+    Set<String> newErased = new LinkedHashSet<>();
+    List<FullyQualifiedNameSet> newTypeArgs = new ArrayList<>();
+    String wildcard = fqns.wildcard();
+
+    if (fqns.erasedFqns().size() == 1) {
+      String fqn = fqns.erasedFqns().iterator().next();
+      String baseFqn = fqn.replace("[]", "");
+      int arrayLevel = (fqn.length() - baseFqn.length()) / 2;
+      if (map.containsKey(baseFqn)) {
+        FullyQualifiedNameSet sub = map.get(baseFqn);
+        for (String subFqn : sub.erasedFqns()) {
+          newErased.add(subFqn + "[]".repeat(arrayLevel));
+        }
+        // If we substituted a type variable, it might have its own type arguments
+        if (sub.typeArguments().size() > 0) {
+          newTypeArgs.addAll(sub.typeArguments());
+        }
+        if (wildcard == null) {
+          wildcard = sub.wildcard();
+        }
+      } else {
+        newErased.add(fqn);
+      }
+    } else {
+      newErased.addAll(fqns.erasedFqns());
+    }
+
+    for (FullyQualifiedNameSet arg : fqns.typeArguments()) {
+      newTypeArgs.add(substitute(arg, map));
+    }
+
+    return new FullyQualifiedNameSet(newErased, newTypeArgs, wildcard);
   }
 }

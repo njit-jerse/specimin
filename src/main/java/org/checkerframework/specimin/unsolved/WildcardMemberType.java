@@ -91,6 +91,15 @@ public class WildcardMemberType extends MemberType {
   }
 
   @Override
+  public String toErasedString() {
+    if (bound == null) {
+      return "java.lang.Object";
+    }
+
+    return bound.toErasedString();
+  }
+
+  @Override
   public boolean equals(@Nullable Object other) {
     if (!(other instanceof WildcardMemberType otherAsWildcard)) {
       return false;

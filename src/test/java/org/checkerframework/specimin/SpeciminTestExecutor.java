@@ -94,6 +94,8 @@ public class SpeciminTestExecutor {
 
     speciminArgs.addAll(List.of(extraArgs));
 
+    System.out.println("Output directory: " + outputDir.toAbsolutePath());
+
     // Run specimin on target
     try {
       SpeciminRunner.main(speciminArgs.toArray(new String[0]));
