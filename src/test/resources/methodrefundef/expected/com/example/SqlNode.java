@@ -2,7 +2,7 @@ package com.example;
 
 public class SqlNode {
 
-    public Integer getParserPosition() {
+    public java.lang.Integer getParserPosition() {
         throw new java.lang.Error();
     }
 }

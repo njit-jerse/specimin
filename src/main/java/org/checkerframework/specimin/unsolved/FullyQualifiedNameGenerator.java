@@ -2133,11 +2133,25 @@ public class FullyQualifiedNameGenerator {
       ClassOrInterfaceType ciType = paramType.asClassOrInterfaceType();
       String name = ciType.getNameAsString();
       if (typeParameters.contains(name)) {
-        // If argType is a wildcard, use its bound if available
-        if (argType.wildcard() != null && !argType.erasedFqns().isEmpty()) {
-          map.put(name, new FullyQualifiedNameSet(argType.erasedFqns(), argType.typeArguments()));
+        // If we already have a non-type-variable match, don't overwrite it with a type variable
+        if (map.containsKey(name)) {
+          FullyQualifiedNameSet existing = map.get(name);
+          if (existing.erasedFqns().size() == 1
+              && typeParameters.contains(existing.erasedFqns().iterator().next())
+              && !(argType.erasedFqns().size() == 1
+                  && typeParameters.contains(argType.erasedFqns().iterator().next()))) {
+            // Overwrite existing type variable with a real type
+            map.put(name, argType);
+          } else {
+            // Keep existing if it's already a real type
+          }
         } else {
-          map.put(name, argType);
+          // If argType is a wildcard, use its bound if available
+          if (argType.wildcard() != null && !argType.erasedFqns().isEmpty()) {
+            map.put(name, new FullyQualifiedNameSet(argType.erasedFqns(), argType.typeArguments()));
+          } else {
+            map.put(name, argType);
+          }
         }
       } else if (ciType.getTypeArguments().isPresent()) {
         List<Type> paramTypeArgs = ciType.getTypeArguments().get();
