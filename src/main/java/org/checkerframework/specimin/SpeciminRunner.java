@@ -51,6 +51,14 @@ public class SpeciminRunner {
    * @throws IOException if there is an exception
    */
   public static void main(String... args) throws IOException {
+    if (args.length == 0) {
+      throw new IOException(
+          "No arguments specified\n"
+              + "usage: ./gradlew run --args'--outputDirectory \"outputDirectory\" --root"
+              + " \"rootDirectory\" --targetFile \"targetFile.java\""
+              + " --targetMethod \"targetMethod()\""
+              + " --jarpath \"jarpath\"'");
+    }
     OptionParser optionParser = new OptionParser();
     // This option is the root of the source directory of the target files. It is used
     // for symbol resolution from source code and to organize the output directory.
