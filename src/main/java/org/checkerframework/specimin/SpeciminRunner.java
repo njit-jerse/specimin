@@ -52,21 +52,24 @@ public class SpeciminRunner {
    */
   public static void main(String... args) throws IOException {
     if (args.length == 0) {
-      throw new IOException(
-          "No arguments specified\n"
-              + "usage: ./gradlew run --args'--outputDirectory \"outputDirectory\" --root"
+      System.err.println(
+          "Error: No arguments specified\n"
+              + "usage: ./gradlew run --args='--outputDirectory \"outputDirectory\" --root"
               + " \"rootDirectory\" --targetFile \"targetFile.java\""
               + " --targetMethod \"targetMethod()\""
-              + " --jarpath \"jarpath\"'");
+              + " --jarPath \"jarPath\"'");
+      System.exit(1);
     }
     OptionParser optionParser = new OptionParser();
-    // This option is the root of the source directory of the target files. It is used
+    // This option is the root of the source directory of the target files. It is
+    // used
     // for symbol resolution from source code and to organize the output directory.
     OptionSpec<String> rootOption = optionParser.accepts("root").withRequiredArg();
 
     var jar = optionParser.accepts("jarPath").withOptionalArg().ofType(String.class);
 
-    // This option is the relative paths to the target file(s) - the .java file(s) containing
+    // This option is the relative paths to the target file(s) - the .java file(s)
+    // containing
     // target method(s) - from the root.
     OptionSpec<String> targetFilesOption = optionParser.accepts("targetFile").withRequiredArg();
 
@@ -78,8 +81,10 @@ public class SpeciminRunner {
     // class.fully.qualified.Name#fieldName
     OptionSpec<String> targetFieldsOptions = optionParser.accepts("targetField").withRequiredArg();
 
-    // This option is to specify the modularity model. By default, the modularity model is
-    // the model for the javac type system, which is shared by the Checker Framework.
+    // This option is to specify the modularity model. By default, the modularity
+    // model is
+    // the model for the javac type system, which is shared by the Checker
+    // Framework.
     // Accepts the arguments: "javac", "cf", "nullaway"
     OptionSpec<String> modularityModelOption =
         optionParser.accepts("modularityModel").withOptionalArg().defaultsTo("cf");
@@ -200,8 +205,10 @@ public class SpeciminRunner {
       String modularityModelCode,
       boolean disableRootValidation)
       throws IOException {
-    // The set of path of files that have been created by Specimin. We must be careful to delete all
-    // those files in the end, because otherwise they can pollute the input directory. To do that,
+    // The set of path of files that have been created by Specimin. We must be
+    // careful to delete all
+    // those files in the end, because otherwise they can pollute the input
+    // directory. To do that,
     // we need to register a shutdown hook with the JVM.
     Set<Path> createdClass = new HashSet<>();
     Runtime.getRuntime()
@@ -253,7 +260,8 @@ public class SpeciminRunner {
       Set<Path> createdClass,
       boolean disableRootValidation)
       throws IOException {
-    // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
+    // To facilitate string manipulation in subsequent methods, ensure that 'root'
+    // ends with a
     // trailing slash.
     if (!root.endsWith("/")) {
       root = root + "/";
@@ -281,7 +289,8 @@ public class SpeciminRunner {
       try {
         FileUtils.deleteDirectory(new File(root + "META-INF"));
       } catch (IOException ex) {
-        // Following decompilation, Windows raises an IOException because the files are still
+        // Following decompilation, Windows raises an IOException because the files are
+        // still
         // being used (by what?), so we should defer deletion until the end
         for (File legalFile :
             FileUtils.listFiles(new File(root + "META-INF"), new String[] {}, true)) {
@@ -290,15 +299,19 @@ public class SpeciminRunner {
       }
     }
 
-    // the set of Java classes in the original codebase mapped with their corresponding Java files.
+    // the set of Java classes in the original codebase mapped with their
+    // corresponding Java files.
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
-    // This map connects the fully-qualified names of non-primary classes with the fully-qualified
+    // This map connects the fully-qualified names of non-primary classes with the
+    // fully-qualified
     // names of their corresponding primary classes. A primary
-    // class is a class that has the same name as the Java file where the class is declared.
+    // class is a class that has the same name as the Java file where the class is
+    // declared.
     Map<String, String> nonPrimaryClassesToPrimaryClass = new HashMap<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
-    // getCompilationUnits does not seem to include all files, causing some to be deleted
+    // getCompilationUnits does not seem to include all files, causing some to be
+    // deleted
     for (ParseResult<CompilationUnit> res : sourceRoot.getCache()) {
       CompilationUnit compilationUnit =
           res.getResult().orElseThrow(() -> new RuntimeException(res.getProblems().toString()));
@@ -306,7 +319,8 @@ public class SpeciminRunner {
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
       String primaryTypeQualifiedName = "";
       if (compilationUnit.getPrimaryType().isPresent()) {
-        // the get() is safe because primary type here is definitely not a local declaration,
+        // the get() is safe because primary type here is definitely not a local
+        // declaration,
         // which does not have a fully-qualified name.
         primaryTypeQualifiedName =
             compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
@@ -349,7 +363,8 @@ public class SpeciminRunner {
     // that we're in an infinite loop. But, we sometimes encounter the same set
     // of outputs *twice* during normal operation (because some symbol needs to be
     // solved). So, we track all previous iterations, and if we ever see the same
-    // outputs we set "problematicIteration" to that one. If we see that output again,
+    // outputs we set "problematicIteration" to that one. If we see that output
+    // again,
     // we break the loop below early.
     Set<UnsolvedSymbolVisitorProgress> previousIterations = new HashSet<>();
     UnsolvedSymbolVisitorProgress problematicIteration = null;
@@ -358,7 +373,8 @@ public class SpeciminRunner {
       addMissingClass.setExceptionToFalse();
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());
-        // it's important to make sure that getDeclarations and addMissingClass will visit the same
+        // it's important to make sure that getDeclarations and addMissingClass will
+        // visit the same
         // file for each execution of the loop
         FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
         cu.accept(getDeclarations, null);
@@ -377,8 +393,10 @@ public class SpeciminRunner {
         try {
           parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
         } catch (ParseProblemException e) {
-          // These parsing codes cause crashes in the CI. Those crashes can't be reproduced locally.
-          // Not sure if something is wrong with VineFlower or Specimin CI. Hence we keep these
+          // These parsing codes cause crashes in the CI. Those crashes can't be
+          // reproduced locally.
+          // Not sure if something is wrong with VineFlower or Specimin CI. Hence we keep
+          // these
           // lines as tech debt.
           // TODO: Figure out why the CI is crashing.
           continue;
@@ -412,9 +430,11 @@ public class SpeciminRunner {
         // Three possible cases here:
         // 1: addMissingClass has finished its iteration.
         // 2: addMissingClass is stuck for some unknown reasons.
-        // 3: addMissingClass is stuck due to type mismatches, in which the JavaTypeCorrect call
+        // 3: addMissingClass is stuck due to type mismatches, in which the
+        // JavaTypeCorrect call
         // below should solve it. In this case (only), we should trigger another round
-        // of iteration of the unsolved symbol visitor, since JavaTypeCorrect may have caused
+        // of iteration of the unsolved symbol visitor, since JavaTypeCorrect may have
+        // caused
         // some new symbols to be unsolved.
 
         // update the synthetic types by using error messages from javac.
@@ -424,7 +444,8 @@ public class SpeciminRunner {
         }
         Map<String, Set<String>> filesAndAssociatedTypes =
             getTypesFullNameVisitor.getFileAndAssociatedTypes();
-        // correct the types of all related files before adding them to parsedTargetFiles
+        // correct the types of all related files before adding them to
+        // parsedTargetFiles
         JavaTypeCorrect typeCorrecter =
             new JavaTypeCorrect(root, new HashSet<>(targetFiles), filesAndAssociatedTypes);
         typeCorrecter.correctTypesForAllFiles();
@@ -446,18 +467,21 @@ public class SpeciminRunner {
                 || changeAtLeastOneMethodReturn;
 
         // this is case 2. We will stop addMissingClass. In the next phase,
-        // TargetMethodFinderVisitor will give us a meaningful exception message regarding which
+        // TargetMethodFinderVisitor will give us a meaningful exception message
+        // regarding which
         // element in the input is not solvable.
         if (!atLeastOneTypeIsUpdated && gettingStuck) {
           break;
         } else if (atLeastOneTypeIsUpdated) {
-          // this is case 3: ensure that unsolved symbol solver is called at least once, to force us
+          // this is case 3: ensure that unsolved symbol solver is called at least once,
+          // to force us
           // to reach a correct fixpoint
           addMissingClass.gotException();
           continue;
         }
 
-        // in order for the newly updated files to be considered when solving symbols, we need to
+        // in order for the newly updated files to be considered when solving symbols,
+        // we need to
         // update the type solver and the map of parsed target files.
         updateStaticSolver(root, jarPaths);
       }
@@ -504,7 +528,8 @@ public class SpeciminRunner {
     for (String classFullName : solveMethodOverridingVisitor.getUsedTypeElements()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
       File thisFile = new File(root + directoryOfFile);
-      // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
+      // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor
+      // will not
       // create synthetic files for them
       if (thisFile.exists()) {
         relatedClass.add(directoryOfFile);
@@ -512,7 +537,8 @@ public class SpeciminRunner {
     }
 
     for (String directory : relatedClass) {
-      // directories already in parsedTargetFiles are original files in the root directory, we are
+      // directories already in parsedTargetFiles are original files in the root
+      // directory, we are
       // not supposed to update them.
       if (!parsedTargetFiles.containsKey(directory)) {
         try {
@@ -580,7 +606,8 @@ public class SpeciminRunner {
     pruneAnnotationDeclarationTargets(parsedTargetFiles);
     removeUnusedImports(parsedTargetFiles);
 
-    // cache to avoid called Files.createDirectories repeatedly with the same arguments
+    // cache to avoid called Files.createDirectories repeatedly with the same
+    // arguments
     Set<Path> createdDirectories = new HashSet<>();
     Set<String> targetFilesAbsolutePaths = new HashSet<>();
 
@@ -592,13 +619,15 @@ public class SpeciminRunner {
 
     for (Entry<String, CompilationUnit> target : parsedTargetFiles.entrySet()) {
       // ignore classes from the Java package, unless we are targeting a JDK file.
-      // However, all related java/ files should not be included (as in used, but not targeted)
+      // However, all related java/ files should not be included (as in used, but not
+      // targeted)
       String absolutePath = new File(target.getKey()).getAbsolutePath();
       if (!targetFilesAbsolutePaths.contains(absolutePath)
           && (target.getKey().startsWith("java/") || target.getKey().startsWith("java\\"))) {
         continue;
       }
-      // If a compilation output's entire body has been removed and the related class is not used by
+      // If a compilation output's entire body has been removed and the related class
+      // is not used by
       // the target methods, do not output it.
       if (isEmptyCompilationUnit(target.getValue())) {
         // target key will have this form: "path/of/package/ClassName.java"
@@ -606,8 +635,10 @@ public class SpeciminRunner {
         @SuppressWarnings("signature") // since it's the last element of a fully qualified path
         @ClassGetSimpleName String simpleName =
             classFullyQualifiedName.substring(classFullyQualifiedName.lastIndexOf(".") + 1);
-        // If this condition is true, this class is a synthetic class initially created to be a
-        // return type of some synthetic methods, but later javac has found the correct return type
+        // If this condition is true, this class is a synthetic class initially created
+        // to be a
+        // return type of some synthetic methods, but later javac has found the correct
+        // return type
         // for that method.
         if (typesToChange.containsKey(simpleName)) {
           continue;
@@ -619,8 +650,10 @@ public class SpeciminRunner {
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
-      // This null test is very defensive and might not be required? I think getParent can
-      // only return null if its input was a single element path, which targetOutputPath
+      // This null test is very defensive and might not be required? I think getParent
+      // can
+      // only return null if its input was a single element path, which
+      // targetOutputPath
       // should not be unless the user made an error.
       if (dirContainingOutputFile != null
           && !createdDirectories.contains(dirContainingOutputFile)) {
@@ -685,7 +718,8 @@ public class SpeciminRunner {
           break;
         }
 
-        // The remainder of this code exists to handle the possibility that a target method or field
+        // The remainder of this code exists to handle the possibility that a target
+        // method or field
         // is in an inner class.
         int lastDot = classFqn.lastIndexOf('.');
         if (lastDot == -1) {
@@ -748,13 +782,16 @@ public class SpeciminRunner {
         }
         String directoryOfFile = annoFullName.replace(".", "/") + ".java";
         File thisFile = new File(root + directoryOfFile);
-        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
+        // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor
+        // will not
         // create synthetic files for them
         if (thisFile.exists()) {
           classesToParse.add(directoryOfFile);
         } else {
-          // The given class may be an inner class, so we should find its encapsulating class
-          // Assuming following Java conventions, we will find the first instance of .{capital}
+          // The given class may be an inner class, so we should find its encapsulating
+          // class
+          // Assuming following Java conventions, we will find the first instance of
+          // .{capital}
           // and trim off subsequent .*s.
           int dot = annoFullName.indexOf('.');
           while (dot != -1) {
@@ -779,9 +816,11 @@ public class SpeciminRunner {
       compilationUnitsToSolveAnnotations.clear();
 
       for (String directory : classesToParse) {
-        // We need to continue solving annotations and parameters in newly added annotation files
+        // We need to continue solving annotations and parameters in newly added
+        // annotation files
         try {
-          // directories already in parsedTargetFiles are original files in the root directory, we
+          // directories already in parsedTargetFiles are original files in the root
+          // directory, we
           // are not supposed to update them.
           if (!parsedTargetFiles.containsKey(directory)) {
             CompilationUnit parsed = parseJavaFile(root, directory);
@@ -1018,7 +1057,8 @@ public class SpeciminRunner {
     File parentDir = fileDir.getParentFile();
     if (parentDir != null && parentDir.exists() && parentDir.isDirectory()) {
       String[] fileContained = parentDir.list();
-      // Be cautious when making any changes to this line, you might actually delete important
+      // Be cautious when making any changes to this line, you might actually delete
+      // important
       // directories in the project.
       if (fileContained != null && fileContained.length == 0) {
         deleteFileFamily(parentDir);
