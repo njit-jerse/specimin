@@ -15,7 +15,7 @@ import org.junit.Assert;
 public class SpeciminTestExecutor {
 
   private SpeciminTestExecutor() {
-    throw new UnsupportedOperationException("cannot instatiate this class");
+    throw new UnsupportedOperationException("cannot instantiate this class");
   }
 
   /**
@@ -131,7 +131,9 @@ public class SpeciminTestExecutor {
             "The set of Java files in the expected and actual directories do not match.\nExpected: "
                 + expectedJavaFiles.toString().replace('\\', '/')
                 + "\nActual: "
-                + actualJavaFiles.toString().replace('\\', '/'));
+                + actualJavaFiles.toString().replace('\\', '/')
+                + "\nIn: "
+                + actualDir.toString().replace('\\', '/'));
       }
 
       for (Path relativePath : expectedJavaFiles) {
@@ -147,7 +149,9 @@ public class SpeciminTestExecutor {
                     + "\nExpected:\n"
                     + expectedCu
                     + "\nActual:\n"
-                    + actualCu);
+                    + actualCu
+                    + "\nIn: "
+                    + actualDir.toString().replace('\\', '/'));
           }
         } catch (Exception e) {
           Assert.fail(

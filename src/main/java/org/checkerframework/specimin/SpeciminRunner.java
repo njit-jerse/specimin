@@ -579,15 +579,17 @@ public class SpeciminRunner {
    */
   private static ParserConfiguration updateStaticSolver(String root, List<String> jarPaths)
       throws IOException {
+    MemoryTypeSolver mem = new MemoryTypeSolver();
+
     // Set up the parser's symbol solver, so that we can resolve definitions.
     CombinedTypeSolver typeSolver =
-        new CombinedTypeSolver(new JdkTypeSolver(), new JavaParserTypeSolver(new File(root)));
+        new CombinedTypeSolver(new JdkTypeSolver(), new JavaParserTypeSolver(new File(root)), mem);
 
     for (String path : jarPaths) {
       typeSolver.add(new JarTypeSolver(path));
     }
 
-    JavaParserUtil.setTypeSolver(typeSolver);
+    JavaParserUtil.setTypeSolvers(typeSolver, mem);
 
     JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
 

@@ -1,5 +1,6 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
@@ -53,6 +54,8 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedWildcard;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionFieldDeclaration;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionMethodDeclaration;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Splitter;
 import java.util.AbstractMap;
@@ -97,13 +100,24 @@ public class JavaParserUtil {
   private static @MonotonicNonNull TypeSolver typeSolver = null;
 
   /**
-   * Set the TypeSolver instance to be used by the JavaParserFacade.
+   * Set this MemoryTypeSolver instance to be used by {@link #getResolvablePlaceholderType}, since
+   * {@code TypeSolver} does not expose child type solvers. This field is initialized once in
+   * SpeciminRunner. Note that by the time you evaluate the value of this field, it should already
+   * be non-null.
+   */
+  private static @MonotonicNonNull MemoryTypeSolver memoryTypeSolver = null;
+
+  /**
+   * Set the TypeSolver instances to be used.
    *
    * @param typeSolver the TypeSolver instance to set
+   * @param memoryTypeSolver the MemoryTypeSolver instance to set
    */
   @EnsuresNonNull("JavaParserUtil.typeSolver")
-  public static void setTypeSolver(TypeSolver typeSolver) {
+  @EnsuresNonNull("JavaParserUtil.memoryTypeSolver")
+  public static void setTypeSolvers(TypeSolver typeSolver, MemoryTypeSolver memoryTypeSolver) {
     JavaParserUtil.typeSolver = typeSolver;
+    JavaParserUtil.memoryTypeSolver = memoryTypeSolver;
   }
 
   /**
@@ -114,9 +128,22 @@ public class JavaParserUtil {
   public static TypeSolver getTypeSolver() {
     if (typeSolver == null) {
       throw new RuntimeException(
-          "TypeSolver is not set. Make sure to call setTypeSolver() in SpeciminRunner.");
+          "TypeSolver is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
     }
     return typeSolver;
+  }
+
+  /**
+   * Gets the memory type solver, and ensures it is non-null.
+   *
+   * @return The type solver
+   */
+  public static MemoryTypeSolver getMemoryTypeSolver() {
+    if (memoryTypeSolver == null) {
+      throw new RuntimeException(
+          "MemoryTypeSolver is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
+    }
+    return memoryTypeSolver;
   }
 
   /**
@@ -719,6 +746,362 @@ public class JavaParserUtil {
     }
 
     return null;
+  }
+
+  /**
+   * Tries to get the expression type from an expression with an unresolvable scope. This is done by
+   * replacing all unresolvable type arguments in the scope with resolvable placeholder types, and
+   * then running {@code calculateResolvedType()}. If the expression can be resolved after this
+   * process, its resolved type is returned (alongside a map with the FQNs of placeholder types to
+   * their actual counterparts). Otherwise, null is returned. Note that if this method returns null,
+   * the AST will be unchanged; if this method returns a non-null value, any changes made to the AST
+   * will have been reverted.
+   *
+   * @param expr The expression whose type is to be resolved
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @return The resolved type, or null if it cannot be resolved
+   */
+  public static @Nullable Pair<ResolvedType, Map<String, Type>>
+      tryGetExpresssionTypeFromUnresolvableGenericScope(
+          Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+
+    Pair<Expression, Map<Type, Type>> copyAndPlaceholderMap =
+        copyAndReplaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
+            expr, fqnToCompilationUnits);
+
+    if (copyAndPlaceholderMap == null) {
+      return null;
+    }
+
+    Expression copy = copyAndPlaceholderMap.a;
+    Map<Type, Type> placeholderToOriginal = copyAndPlaceholderMap.b;
+
+    try {
+      return new Pair<>(
+          copy.calculateResolvedType(),
+          placeholderToOriginal.entrySet().stream()
+              // If we're here, everything is resolvable
+              .collect(
+                  Collectors.toMap(
+                      entry -> entry.getKey().resolve().describe(), Map.Entry::getValue)));
+    } catch (UnsolvedSymbolException ex) {
+      return null;
+    } finally {
+      // Revert changes to the AST
+      for (Map.Entry<Type, Type> entry : placeholderToOriginal.entrySet()) {
+        entry.getKey().getParentNode().get().replace(entry.getKey(), entry.getValue());
+      }
+      copy.getParentNode().get().replace(copy, expr);
+    }
+  }
+
+  /**
+   * Similar to {@link #tryGetExpresssionTypeFromUnresolvableGenericScope}, but this is specifically
+   * for uses of lambda parameters in unresolvable generic scopes. For example, resolving x.a() in
+   * foo.bar(x -> x.a()) when foo's type is solvable, but its type arguments are not.
+   *
+   * @param expr The expression whose type is to be resolved
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @return The resolved type, or null if it cannot be resolved
+   */
+  public static @Nullable Pair<ResolvedType, Map<String, Type>>
+      tryGetExpressionTypeForLambdaParameterInUnresolvableGenericScopeMethod(
+          Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    LambdaExpr lambda = expr.findAncestor(LambdaExpr.class).orElse(null);
+    if (lambda == null) {
+      return null;
+    }
+
+    MethodCallExpr methodCall = lambda.findAncestor(MethodCallExpr.class).orElse(null);
+    if (methodCall == null) {
+      return null;
+    }
+
+    Pair<Expression, Map<Type, Type>> copyAndPlaceholderMap =
+        copyAndReplaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
+            methodCall, fqnToCompilationUnits);
+
+    if (copyAndPlaceholderMap == null) {
+      return null;
+    }
+
+    Expression copyOfEnclosingMethodCall = copyAndPlaceholderMap.a;
+    Map<Type, Type> placeholderToOriginal = copyAndPlaceholderMap.b;
+
+    // Take this code: foo.bar(x -> x.method()); copy is the copy of this whole method call, but we
+    // are trying to resolve
+    // the type of x.method() (which is a copy of the parameter "expr"), so we need to find the
+    // corresponding copy
+    // in copyOfEnclosingMethodCall
+    Expression copyOfOriginalExpr =
+        copyOfEnclosingMethodCall.findFirst(Expression.class, e -> e.equals(expr)).orElseThrow();
+
+    try {
+      return new Pair<>(
+          copyOfOriginalExpr.calculateResolvedType(),
+          placeholderToOriginal.entrySet().stream()
+              // If we're here, everything is resolvable
+              .collect(
+                  Collectors.toMap(
+                      entry -> entry.getKey().resolve().describe(), Map.Entry::getValue)));
+    } catch (UnsolvedSymbolException ex) {
+      return null;
+    } finally {
+      // Revert changes to the AST
+      for (Map.Entry<Type, Type> entry : placeholderToOriginal.entrySet()) {
+        entry.getKey().getParentNode().get().replace(entry.getKey(), entry.getValue());
+      }
+      copyOfEnclosingMethodCall
+          .getParentNode()
+          .get()
+          .replace(copyOfEnclosingMethodCall, methodCall);
+    }
+  }
+
+  /**
+   * Copies the given expression and replaces all unresolvable type arguments in its scope. The AST
+   * is modified after this method is run. Use {@code b} of the return method to convert these
+   * placeholder types back to the original types, and use {@code a} to replace the copied
+   * expression.
+   *
+   * @param expr The expression to copy and replace unresolvable type arguments in the scope of
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @return A pair of the copied expression and a map from the placeholder types to the original
+   *     types, or null if any unresolvable erased type is found in the scope
+   */
+  private static @Nullable Pair<Expression, Map<Type, Type>>
+      copyAndReplaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
+          Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+
+    if (!expr.hasScope()) {
+      // Unresolvable for some reason, and we have no scope to try to fix it, so just give up
+      return null;
+    }
+
+    // Use a clone; JavaParser symbol resolution seems to have some internal cache, so we
+    // don't want to mess with the original expression to avoid revealing placeholder types
+    // in resolve() calls on the same expression outside of this method
+    Expression copy = expr.clone();
+    expr.getParentNode().get().replace(expr, copy);
+
+    Expression scope = ((NodeWithTraversableScope) copy).traverseScope().get();
+
+    Map<Type, Type> placeholderToOriginal =
+        replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
+            scope, fqnToCompilationUnits);
+
+    if (placeholderToOriginal == null) {
+      copy.getParentNode().get().replace(copy, expr);
+      // We found an unresolvable erased type in the scope, so we cannot resolve this method call
+      return null;
+    }
+
+    return new Pair<>(copy, placeholderToOriginal);
+  }
+
+  /**
+   * Replaces all unresolvable type arguments in the scope of a method call with resolvable
+   * placeholder types, and stores the mapping from the placeholder types to the original types in
+   * the result map. If any part of the scope has an erased type that cannot be resolved, this
+   * method returns null and reverts any changes that were made. Note that if this method runs
+   * successfully, the AST will be modified with placeholder types, and the caller should use the
+   * returned map to revert those changes after resolving the method call. If this method returns
+   * null, the AST will be unchanged.
+   *
+   * @param scope The expression to replace unresolvable type arguments in
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @return A map from the placeholder types to the original types, or null if any unresolvable
+   *     erased type is found
+   */
+  private static @Nullable Map<Type, Type>
+      replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
+          Expression scope, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    Map<Type, Type> result = new HashMap<>();
+    Set<Expression> handled = new HashSet<>();
+    boolean success =
+        replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
+            scope, result, handled, fqnToCompilationUnits);
+    if (!success) {
+      for (Map.Entry<Type, Type> entry : result.entrySet()) {
+        // Revert changes
+        entry.getKey().getParentNode().get().replace(entry.getKey(), entry.getValue());
+      }
+
+      return null;
+    }
+    return result;
+  }
+
+  /**
+   * Recursively replaces all unresolvable type arguments in the scope of a method call with
+   * resolvable placeholder types, and stores the mapping from the placeholder types to the original
+   * types in the result map. <br>
+   * <br>
+   * If any part of the scope has an erased type that cannot be resolved, this method returns false.
+   * Note that changes may have been applied by this point, so the caller should check the result
+   * map to see what changes were made and revert them if necessary.
+   *
+   * @param scope The expression to replace unresolvable type arguments in
+   * @param result The map to store the mapping from placeholder types to original types
+   * @param handled The set of expressions that have already been handled
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @return True if all unresolvable type arguments were successfully replaced, false if any
+   */
+  private static boolean replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
+      Expression scope,
+      Map<Type, Type> result,
+      Set<Expression> handled,
+      Map<String, CompilationUnit> fqnToCompilationUnits) {
+    if (handled.contains(scope)) {
+      return true;
+    }
+    handled.add(scope);
+
+    // Get the innermost expression if there are parentheses (i.e., getting foo from ((((foo)))))
+    while (scope.isEnclosedExpr()) {
+      scope = scope.asEnclosedExpr().getInner();
+    }
+
+    // Start at the root of the scope expression: in this case, method() will be resolvable from foo
+    // in foo.method()
+    if (scope.hasScope()) {
+      Expression scopeOfScope = ((NodeWithTraversableScope) scope).traverseScope().get();
+
+      boolean success =
+          replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
+              scopeOfScope, result, handled, fqnToCompilationUnits);
+      if (!success) {
+        return false;
+      }
+    }
+
+    Type type = null;
+    if (scope.isNameExpr() || scope.isFieldAccessExpr()) {
+      ResolvedValueDeclaration resolved;
+
+      try {
+        if (scope.isNameExpr()) {
+          resolved = scope.asNameExpr().resolve();
+        } else {
+          resolved = scope.asFieldAccessExpr().resolve();
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // If the scope cannot be resolved, we do not know its erased type
+        return false;
+      }
+
+      type = getTypeFromResolvedValueDeclaration(resolved, fqnToCompilationUnits);
+
+      if (type == null) {
+        // type may be null if the resolved field is from the JDK; in that case, return true because
+        // all types in the JDK are solvable, so we don't need to replace any type arguments with
+        // placeholders
+
+        return resolved instanceof ReflectionFieldDeclaration;
+      }
+    } else if (scope.isMethodCallExpr()) {
+      ResolvedMethodDeclaration resolvedScopeMethod;
+
+      try {
+        resolvedScopeMethod = scope.asMethodCallExpr().resolve();
+      } catch (UnsolvedSymbolException ex) {
+        return false;
+      }
+
+      Node attachedNode = tryFindAttachedNode(resolvedScopeMethod, fqnToCompilationUnits);
+      if (!(attachedNode instanceof MethodDeclaration methodDecl)) {
+        // methodDecl may be null if the resolved method is from the JDK; in that case, return true
+        // because all types in the JDK are solvable, so we don't need to replace any type arguments
+        // with placeholders
+
+        return resolvedScopeMethod instanceof ReflectionMethodDeclaration;
+      }
+
+      type = methodDecl.getType();
+    } else if (scope.isAssignExpr()) {
+      // Assign expressions (x = y) return the assignment (y)
+      return replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
+          scope.asAssignExpr().getValue(), result, handled, fqnToCompilationUnits);
+    } else if (scope.isCastExpr()) {
+      type = scope.asCastExpr().getType();
+    } else if (scope.isConditionalExpr()) {
+      // Do both sides of the conditional expression so the original expression can be resolved
+      boolean success =
+          replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
+              scope.asConditionalExpr().getThenExpr(), result, handled, fqnToCompilationUnits);
+      if (!success) {
+        return false;
+      }
+      success =
+          replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
+              scope.asConditionalExpr().getElseExpr(), result, handled, fqnToCompilationUnits);
+      if (!success) {
+        return false;
+      }
+    } else if (scope.isObjectCreationExpr()) {
+      type = scope.asObjectCreationExpr().getType();
+    }
+
+    if (type == null) {
+      return false;
+    }
+
+    if (type.isClassOrInterfaceType()
+        && type.asClassOrInterfaceType().getTypeArguments().isPresent()
+        && type.asClassOrInterfaceType().getTypeArguments().get().size() > 0) {
+      // Replace all type arguments with resolvable types
+      ClassOrInterfaceType asClass = type.asClassOrInterfaceType();
+      NodeList<Type> typeArgs = asClass.getTypeArguments().get();
+
+      for (int i = 0; i < typeArgs.size(); i++) {
+        try {
+          typeArgs.get(i).resolve();
+        } catch (UnsolvedSymbolException ex) {
+          // Use result.size() to ensure a 1-to-1 mapping between placeholder types and unresolvable
+          // type arguments
+          Type placeholder = getResolvablePlaceholderType(result.size());
+
+          result.put(placeholder, typeArgs.get(i));
+          typeArgs.set(i, placeholder);
+        }
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Keeps track of the placeholder types that have been generated and registered with the type
+   * solver in {@link #getResolvablePlaceholderType(int)}.
+   */
+  private static Set<String> generatedResolvedPlaceholderTypes = new HashSet<>();
+
+  /**
+   * Generates a resolvable placeholder type with the given index. Used as a placeholder for
+   * unsolvable type arguments, so that we can still resolve a resolvable type usage that contains
+   * these type arguments.
+   *
+   * @param index The index of the placeholder type, used to generate different placeholder types
+   * @return A ClassOrInterfaceType that can be resolved to a dummy class
+   */
+  private static ClassOrInterfaceType getResolvablePlaceholderType(int index) {
+    String typeName = "SPECIMIN_PLACEHOLDER_TYPE_" + index;
+
+    if (generatedResolvedPlaceholderTypes.contains(typeName)) {
+      return StaticJavaParser.parseClassOrInterfaceType(typeName);
+    }
+
+    // Register a dummy class with the type solver so that when we try to resolve this type, it
+    // doesn't throw an exception
+    // Add to java.lang so we don't need to worry about imports; this is a bit hacky but it works
+    CompilationUnit dummy =
+        StaticJavaParser.parse("package java.lang; public class " + typeName + " {}");
+    getMemoryTypeSolver().addType("java.lang." + typeName, dummy);
+
+    generatedResolvedPlaceholderTypes.add(typeName);
+    return StaticJavaParser.parseClassOrInterfaceType(typeName);
   }
 
   /**

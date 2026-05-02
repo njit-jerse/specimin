@@ -18,6 +18,22 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public record FullyQualifiedNameSet(
     Set<String> erasedFqns, List<FullyQualifiedNameSet> typeArguments, @Nullable String wildcard) {
+  public FullyQualifiedNameSet {
+    for (String fqn : erasedFqns) {
+      if (fqn.contains("?")) {
+        throw new IllegalArgumentException(
+            "erasedFqns cannot contain a wildcard; use parameter wildcard instead: " + erasedFqns);
+      }
+    }
+
+    if (wildcard != null
+        && !wildcard.equals("?")
+        && !wildcard.equals("? extends")
+        && !wildcard.equals("? super")) {
+      throw new IllegalArgumentException(
+          "wildcard must be either ?, ? extends, or ? super: " + wildcard);
+    }
+  }
 
   /** Represents an unbounded wildcard: ? */
   public static final FullyQualifiedNameSet UNBOUNDED_WILDCARD =

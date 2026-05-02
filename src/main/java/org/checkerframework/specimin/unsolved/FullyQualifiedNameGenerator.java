@@ -48,6 +48,7 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclar
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
@@ -587,6 +588,24 @@ public class FullyQualifiedNameGenerator {
                   fqnOfStaticMember, expr.isMethodCallExpr())));
     }
 
+    // Try to see if replacing type parameters in the types of the scope leads to a resolvable
+    // expression type
+    Pair<ResolvedType, Map<String, Type>> resolvedWithPlaceholders =
+        JavaParserUtil.tryGetExpresssionTypeFromUnresolvableGenericScope(
+            expr, fqnToCompilationUnits);
+
+    if (resolvedWithPlaceholders != null) {
+      ResolvedType expressionResolvedType = resolvedWithPlaceholders.a;
+      Map<String, Type> typeParamsToTypes = resolvedWithPlaceholders.b;
+
+      FullyQualifiedNameSet expressionResolvedTypeFQNs =
+          getFQNsForResolvedType(expressionResolvedType);
+
+      // Now, replace all placeholder types to actual types
+      return Set.of(
+          replacePlaceholderTypesWithActualTypes(expressionResolvedTypeFQNs, typeParamsToTypes));
+    }
+
     if (expr.isNameExpr()) {
       String name = expr.asNameExpr().getNameAsString();
 
@@ -664,6 +683,37 @@ public class FullyQualifiedNameGenerator {
     // Hitting this error means we forgot to account for a case
     throw new RuntimeException(
         "Unknown expression type: " + expr.getClass() + "; expression value: " + expr);
+  }
+
+  /**
+   * Replaces placeholder types in the method return type with actual types based on the provided
+   * map. This is necessary when calling {@link
+   * JavaParserUtil#tryGetMethodDeclarationFromUnresolvableGenericScope(MethodCallExpr, Map)}.
+   *
+   * @param methodReturnTypeFQNs The FQNs of the method return type, which may contain placeholder
+   *     types
+   * @param typeParamsToTypes A map from placeholder type parameters to actual types
+   * @return The FQNs of the method return type with placeholder types replaced by actual types
+   */
+  private FullyQualifiedNameSet replacePlaceholderTypesWithActualTypes(
+      FullyQualifiedNameSet methodReturnTypeFQNs, Map<String, Type> typeParamsToTypes) {
+    Set<String> replacedFQNs = new LinkedHashSet<>();
+    for (String fqn : methodReturnTypeFQNs.erasedFqns()) {
+      if (typeParamsToTypes.containsKey(fqn)) {
+        Set<String> replacementFQNs = getFQNsFromType(typeParamsToTypes.get(fqn)).erasedFqns();
+        replacedFQNs.addAll(replacementFQNs);
+      } else {
+        replacedFQNs.add(fqn);
+      }
+    }
+
+    List<FullyQualifiedNameSet> replacedTypeArgs = new ArrayList<>();
+    for (FullyQualifiedNameSet typeArg : methodReturnTypeFQNs.typeArguments()) {
+      replacedTypeArgs.add(replacePlaceholderTypesWithActualTypes(typeArg, typeParamsToTypes));
+    }
+
+    return new FullyQualifiedNameSet(
+        replacedFQNs, replacedTypeArgs, methodReturnTypeFQNs.wildcard());
   }
 
   /**
@@ -994,6 +1044,15 @@ public class FullyQualifiedNameGenerator {
       } else {
         return FullyQualifiedNameSet.UNBOUNDED_WILDCARD;
       }
+    } else if (resolvedType.isConstraint()) {
+      FullyQualifiedNameSet erasedConstraint =
+          getFQNsForResolvedType(resolvedType.asConstraintType().getBound());
+
+      return new FullyQualifiedNameSet(
+          erasedConstraint.erasedFqns(),
+          erasedConstraint.typeArguments(),
+          "? super" // lambda constraints are always ? super
+          );
     }
 
     if (resolvedType.isNull()) {
@@ -1223,9 +1282,10 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
-   * Given an expression that can be resolved, return a best shot at its type based on a resolved
-   * declaration. May return null if a type cannot be found from the resolved declaration. This
-   * method will also throw an UnsolvedSymbolException if .resolve() fails.
+   * Given an expression that can be resolved (but calculateResolvedType() fails), return a best
+   * shot at its type based on a resolved declaration. May return null if a type cannot be found
+   * from the resolved declaration. This method will also throw an UnsolvedSymbolException if
+   * .resolve() fails.
    *
    * @param expr A resolvable expression
    * @return A set of FQNs, or null if unfound
@@ -1282,17 +1342,29 @@ public class FullyQualifiedNameGenerator {
         return getFQNsForExpressionType(initializer);
       }
 
-      if (!type.isUnknownType()) {
-        // Keep going if var/unknown type
-        return Set.of(getFQNsFromType(type));
-      }
+      return Set.of(getFQNsFromType(type));
     }
     // methods, new ClassName()
     else if (node instanceof NodeWithType<?, ?> withType) {
       Type type = withType.getType();
       if (!type.isUnknownType()) {
-        // Keep going if unknown type: note this is only possible with Parameter
         return Set.of(getFQNsFromType(type));
+      }
+
+      Pair<ResolvedType, Map<String, Type>> resolvedWithPlaceholders =
+          JavaParserUtil.tryGetExpressionTypeForLambdaParameterInUnresolvableGenericScopeMethod(
+              expr, fqnToCompilationUnits);
+
+      if (resolvedWithPlaceholders != null) {
+        ResolvedType expressionResolvedType = resolvedWithPlaceholders.a;
+        Map<String, Type> typeParamsToTypes = resolvedWithPlaceholders.b;
+
+        FullyQualifiedNameSet expressionResolvedTypeFQNs =
+            getFQNsForResolvedType(expressionResolvedType);
+
+        // Now, replace all placeholder types with actual types
+        return Set.of(
+            replacePlaceholderTypesWithActualTypes(expressionResolvedTypeFQNs, typeParamsToTypes));
       }
     }
 
