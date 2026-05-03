@@ -15,7 +15,7 @@ import org.junit.Assert;
 public class SpeciminTestExecutor {
 
   private SpeciminTestExecutor() {
-    throw new UnsupportedOperationException("cannot instatiate this class");
+    throw new UnsupportedOperationException("cannot instantiate this class");
   }
 
   /**
@@ -36,6 +36,7 @@ public class SpeciminTestExecutor {
    *     class.fully.qualified.Name#fieldName for field.
    * @param modularityModel the model to use
    * @param jarPaths the path of jar files for Specimin to solve symbols
+   * @param ambiguityResolutionPolicy the ambiguity resolution policy to use
    * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
@@ -45,6 +46,7 @@ public class SpeciminTestExecutor {
       String[] targetMembers,
       String modularityModel,
       String[] jarPaths,
+      String ambiguityResolutionPolicy,
       String... extraArgs)
       throws IOException {
     // Create output directory
@@ -87,10 +89,17 @@ public class SpeciminTestExecutor {
       speciminArgs.add("--jarPath");
       speciminArgs.add(jarPath);
     }
+    speciminArgs.add("--ambiguityResolutionPolicy");
+    speciminArgs.add(ambiguityResolutionPolicy);
     speciminArgs.addAll(List.of(extraArgs));
 
     // Run specimin on target
-    SpeciminRunner.main(speciminArgs.toArray(new String[0]));
+    try {
+      SpeciminRunner.main(speciminArgs.toArray(new String[0]));
+    } catch (Exception ex) {
+      ex.printStackTrace();
+      throw ex;
+    }
 
     Path expectedDir = Path.of("src/test/resources/" + testName + "/expected/");
     assertDirectoriesEqual(expectedDir, outputDir);
@@ -125,7 +134,9 @@ public class SpeciminTestExecutor {
             "The set of Java files in the expected and actual directories do not match.\nExpected: "
                 + expectedJavaFiles.toString().replace('\\', '/')
                 + "\nActual: "
-                + actualJavaFiles.toString().replace('\\', '/'));
+                + actualJavaFiles.toString().replace('\\', '/')
+                + "\nIn: "
+                + actualDir.toString().replace('\\', '/'));
       }
 
       for (Path relativePath : expectedJavaFiles) {
@@ -141,12 +152,16 @@ public class SpeciminTestExecutor {
                     + "\nExpected:\n"
                     + expectedCu
                     + "\nActual:\n"
-                    + actualCu);
+                    + actualCu
+                    + "\nIn: "
+                    + actualDir.toString().replace('\\', '/'));
           }
         } catch (Exception e) {
           Assert.fail(
               "Error parsing and comparing files: "
                   + relativePath.toString().replace('\\', '/')
+                  + "\nIn: "
+                  + actualDir.toString().replace('\\', '/')
                   + "\n"
                   + e);
         }
@@ -169,7 +184,7 @@ public class SpeciminTestExecutor {
   public static void runTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
       throws IOException {
-    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, extraArgs);
+    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, "best-effort", extraArgs);
   }
 
   /**
@@ -187,6 +202,13 @@ public class SpeciminTestExecutor {
   public static void runNullAwayTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
       throws IOException {
-    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, extraArgs);
+    runTest(
+        testName,
+        targetFiles,
+        targetMembers,
+        "nullaway",
+        new String[] {},
+        "best-effort",
+        extraArgs);
   }
 }

@@ -1,7 +1,7 @@
 package com.example;
 
-import org.example.Outer;
 import org.example.Other;
+import org.example.Outer;
 
 public class Simple {
     public Other bar() {

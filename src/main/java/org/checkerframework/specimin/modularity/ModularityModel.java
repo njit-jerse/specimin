@@ -1,5 +1,7 @@
 package org.checkerframework.specimin.modularity;
 
+import com.google.common.base.Ascii;
+
 /**
  * This interface represents the differences between modularity models. A single instance of a class
  * that implements this one represents a particular modularity model for an analysis.
@@ -19,16 +21,13 @@ public interface ModularityModel {
    * @return the corresponding modularity model
    */
   public static ModularityModel createModularityModel(String modularityModel) {
-    switch (modularityModel) {
-      case "cf":
-      case "javac":
-        return new CheckerFrameworkModularityModel();
-      case "nullaway":
-        return new NullAwayModularityModel();
-      default:
-        throw new RuntimeException(
-            "Unsupported modularity model. Options are: \"cf\", \"javac\", \"nullaway\"");
-    }
+    return switch (Ascii.toLowerCase(modularityModel)) {
+      case "cf", "javac" -> new CheckerFrameworkModularityModel();
+      case "nullaway" -> new NullAwayModularityModel();
+      default ->
+          throw new RuntimeException(
+              "Unsupported modularity model. Options are: \"cf\", \"javac\", \"nullaway\"");
+    };
   }
 
   /**

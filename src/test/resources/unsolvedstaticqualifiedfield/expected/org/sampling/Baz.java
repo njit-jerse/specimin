@@ -2,5 +2,5 @@ package org.sampling;
 
 public class Baz {
 
-    public static OrgSamplingBazMyFieldSyntheticType myField;
+    public static org.sampling.OrgSamplingBazMyFieldSyntheticType myField;
 }

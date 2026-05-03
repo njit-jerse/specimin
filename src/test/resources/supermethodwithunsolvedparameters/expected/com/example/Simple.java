@@ -1,7 +1,7 @@
 package com.example;
 
-import org.simple.SuperSimple;
 import org.example.Unsolved;
+import org.simple.SuperSimple;
 
 class Simple extends SuperSimple {
 

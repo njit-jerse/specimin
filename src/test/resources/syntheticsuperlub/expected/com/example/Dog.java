@@ -1,7 +1,8 @@
 package com.example;
+
 import org.wild.Mammal;
-import org.wild.WebbedPaws;
 import org.wild.RegularPaws;
+import org.wild.WebbedPaws;
 
 public class Dog extends Mammal {
     public void setup(String breed) {
