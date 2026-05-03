@@ -253,6 +253,30 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     }
   }
 
+  /** Sets the return type of this method to be an unconstrained type variable. */
+  public void setUnconstrainedReturnType() {
+    // Remove all alternates based on return type
+    Set<List<MemberType>> parameterLists = new HashSet<>();
+
+    for (int i = 0; i < getAlternates().size(); i++) {
+      UnsolvedMethod alternate = getAlternates().get(i);
+      if (parameterLists.contains(alternate.getParameterList())) {
+        getAlternates().remove(i);
+        i--;
+      }
+
+      parameterLists.add(alternate.getParameterList());
+    }
+
+    for (UnsolvedMethod alternate : getAlternates()) {
+      alternate.setNumberOfTypeVariables(alternate.getNumberOfTypeVariables() + 1);
+      MemberType returnType =
+          new SolvedMemberType(
+              alternate.getTypeVariableName(alternate.getNumberOfTypeVariables() - 1));
+      alternate.setReturnType(returnType);
+    }
+  }
+
   @Override
   public Set<String> getFullyQualifiedNames() {
     Set<String> fqns = new LinkedHashSet<>();

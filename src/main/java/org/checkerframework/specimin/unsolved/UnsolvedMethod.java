@@ -276,10 +276,24 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    */
   private void getTypeVariablesImpl(StringBuilder result) {
     for (int i = 0; i < numberOfTypeVariables; i++) {
-      String typeExpression = "T" + ((i > 0) ? i : "");
-      result.append(typeExpression).append(", ");
+      result.append(getTypeVariableName(i)).append(", ");
     }
     result.delete(result.length() - 2, result.length());
+  }
+
+  /**
+   * Given the index of a type variable, return the name of that type variable.
+   *
+   * @param index The index
+   * @return the name of the type variable with the given index
+   * @throws IllegalArgumentException if the index is out of bounds
+   */
+  public String getTypeVariableName(int index) {
+    if (index < 0 || index >= numberOfTypeVariables) {
+      throw new IllegalArgumentException(
+          "Index out of bounds. There are only " + numberOfTypeVariables + " type variables.");
+    }
+    return "T" + ((index > 0) ? index : "");
   }
 
   @Override

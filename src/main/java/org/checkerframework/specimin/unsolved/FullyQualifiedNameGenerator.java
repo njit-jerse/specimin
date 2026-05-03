@@ -517,6 +517,24 @@ public class FullyQualifiedNameGenerator {
       // Not a local variable or field
     }
 
+    // Try to see if replacing type parameters in the types of the scope leads to a resolvable
+    // expression type
+    Pair<ResolvedType, Map<String, Type>> resolvedWithPlaceholders =
+        JavaParserUtil.tryGetExpresssionTypeFromUnresolvableGenericScope(
+            expr, fqnToCompilationUnits);
+
+    if (resolvedWithPlaceholders != null) {
+      ResolvedType expressionResolvedType = resolvedWithPlaceholders.a;
+      Map<String, Type> typeParamsToTypes = resolvedWithPlaceholders.b;
+
+      FullyQualifiedNameSet expressionResolvedTypeFQNs =
+          getFQNsForResolvedType(expressionResolvedType);
+
+      // Now, replace all placeholder types to actual types
+      return Set.of(
+          replacePlaceholderTypesWithActualTypes(expressionResolvedTypeFQNs, typeParamsToTypes));
+    }
+
     // Handle the cases where the type of the expression can be inferred from surrounding context
     if (expr.hasParentNode()) {
       @Nullable Set<FullyQualifiedNameSet> fromLHS =
@@ -586,24 +604,6 @@ public class FullyQualifiedNameGenerator {
           new FullyQualifiedNameSet(
               generateFQNForTheTypeOfAStaticallyImportedMember(
                   fqnOfStaticMember, expr.isMethodCallExpr())));
-    }
-
-    // Try to see if replacing type parameters in the types of the scope leads to a resolvable
-    // expression type
-    Pair<ResolvedType, Map<String, Type>> resolvedWithPlaceholders =
-        JavaParserUtil.tryGetExpresssionTypeFromUnresolvableGenericScope(
-            expr, fqnToCompilationUnits);
-
-    if (resolvedWithPlaceholders != null) {
-      ResolvedType expressionResolvedType = resolvedWithPlaceholders.a;
-      Map<String, Type> typeParamsToTypes = resolvedWithPlaceholders.b;
-
-      FullyQualifiedNameSet expressionResolvedTypeFQNs =
-          getFQNsForResolvedType(expressionResolvedType);
-
-      // Now, replace all placeholder types to actual types
-      return Set.of(
-          replacePlaceholderTypesWithActualTypes(expressionResolvedTypeFQNs, typeParamsToTypes));
     }
 
     if (expr.isNameExpr()) {

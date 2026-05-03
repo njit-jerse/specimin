@@ -2010,9 +2010,16 @@ public class UnsolvedSymbolGenerator {
 
       Supplier<ResolvedType> getResolvedTypeOfLHS;
 
+      // There is a chance we find a final LHS type below. In this case, we cannot make the RHS a
+      // subtype. This can happen when the RHS is an unsolved method and we created a synthetic
+      // type for its return type, but we need to modify that return type to use a generic
+      // unconstrained type variable instead.
+      Expression rhs;
+      UnsolvedMethodAlternates methodWithPotentiallyUnconstrainedReturnType = null;
+
       if (node instanceof AssignExpr assignExpr) {
         Expression lhs = assignExpr.getTarget();
-        Expression rhs = assignExpr.getValue();
+        rhs = assignExpr.getValue();
         lhsType =
             getMemberTypesAndExpectNonNullFromFQNSets(
                 fullyQualifiedNameGenerator.getFQNsForExpressionType(lhs));
@@ -2028,7 +2035,7 @@ public class UnsolvedSymbolGenerator {
           return UnsolvedGenerationResult.EMPTY;
         }
 
-        Expression rhs = varDecl.getInitializer().get();
+        rhs = varDecl.getInitializer().get();
         MemberType lhsMemberType =
             getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(lhs), false);
         lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
@@ -2042,7 +2049,7 @@ public class UnsolvedSymbolGenerator {
 
         if (methodOrLambda instanceof MethodDeclaration methodDecl) {
           Type lhs = methodDecl.getType();
-          Expression rhs = returnStmt.getExpression().get();
+          rhs = returnStmt.getExpression().get();
           MemberType lhsMemberType =
               getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(lhs), false);
           lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
@@ -2085,10 +2092,12 @@ public class UnsolvedSymbolGenerator {
                   fullyQualifiedNameGenerator.getFQNsForResolvedType(solvableTypeFromLambda),
                   false);
           lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
+
+          rhs = lambdaExpr.getExpressionBody().get();
+
           rhsType =
               getMemberTypesAndExpectNonNullFromFQNSets(
-                  fullyQualifiedNameGenerator.getFQNsForExpressionType(
-                      lambdaExpr.getExpressionBody().get()));
+                  fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
           getResolvedTypeOfLHS = () -> solvableTypeFromLambda;
         } else {
           ReturnStmt returnStmt =
@@ -2107,10 +2116,12 @@ public class UnsolvedSymbolGenerator {
                   fullyQualifiedNameGenerator.getFQNsForResolvedType(solvableTypeFromLambda),
                   false);
           lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
+
+          rhs = returnStmt.getExpression().get();
+
           rhsType =
               getMemberTypesAndExpectNonNullFromFQNSets(
-                  fullyQualifiedNameGenerator.getFQNsForExpressionType(
-                      returnStmt.getExpression().get()));
+                  fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
           getResolvedTypeOfLHS = () -> solvableTypeFromLambda;
         }
       } else {
@@ -2125,7 +2136,79 @@ public class UnsolvedSymbolGenerator {
         throw new RuntimeException("Type has not been generated for the LHS of " + node);
       }
 
-      handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+      if (rhs.isMethodCallExpr()) {
+        methodWithPotentiallyUnconstrainedReturnType =
+            findGeneratedMethodFromMethodCall(rhs.asMethodCallExpr());
+      }
+
+      boolean handled = false;
+      if (methodWithPotentiallyUnconstrainedReturnType != null) {
+        ResolvedType resolvedRHSType;
+
+        try {
+          resolvedRHSType = getResolvedTypeOfLHS.get();
+        } catch (UnsolvedSymbolException ex) {
+          resolvedRHSType = null;
+        }
+
+        if (resolvedRHSType != null
+            && resolvedRHSType.isReferenceType()
+            && resolvedRHSType.asReferenceType().getTypeDeclaration().isPresent()) {
+          ResolvedReferenceTypeDeclaration decl =
+              resolvedRHSType.asReferenceType().getTypeDeclaration().get();
+          boolean isFinal = false;
+
+          // If LHS is solvable, there is only one
+          if (decl.isClass()) {
+            isFinal = JavaLangUtils.isFinalJdkClass(decl.getQualifiedName());
+
+            if (!isFinal) {
+              if (decl.toAst().isPresent()) {
+                ClassOrInterfaceDeclaration ast = (ClassOrInterfaceDeclaration) decl.toAst().get();
+                isFinal = ast.isFinal();
+              }
+            }
+          }
+
+          if (isFinal) {
+            Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
+            for (MemberType returnType :
+                methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
+              if (returnType instanceof UnsolvedMemberType unsolvedReturnType) {
+                // A synthetic return type contains only one FQN, ending with ReturnType
+                if (unsolvedReturnType.getFullyQualifiedNames().size() > 1) {
+                  continue;
+                }
+
+                String returnTypeFQN =
+                    unsolvedReturnType.getFullyQualifiedNames().iterator().next();
+                if (!returnTypeFQN.endsWith("ReturnType")) {
+                  continue;
+                }
+
+                // Next, check to see if it is unused everywhere (no methods or fields)
+                if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
+                  symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
+                }
+              }
+            }
+
+            methodWithPotentiallyUnconstrainedReturnType.setUnconstrainedReturnType();
+            for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
+              removeSymbolAndReplaceUses(
+                  new UnsolvedMemberType(symbolToRemove), new SolvedMemberType("java.lang.Object"));
+            }
+
+            toRemove.addAll(symbolsToRemove);
+
+            handled = true;
+          }
+        }
+      }
+
+      if (!handled) {
+        handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+      }
     } else if (node instanceof MethodCallExpr
         || node instanceof ObjectCreationExpr
         || node instanceof ExplicitConstructorInvocationStmt
@@ -2350,6 +2433,62 @@ public class UnsolvedSymbolGenerator {
     }
 
     return new UnsolvedGenerationResult(toAdd, toRemove);
+  }
+
+  /**
+   * Removes the synthetic type from the generated symbols map, and replaces all uses of this
+   * synthetic type in other generated symbols with the provided replaceWith type.
+   *
+   * @param syntheticType the synthetic type to remove and replace uses of
+   * @param replaceWith the type to replace uses of the synthetic type with
+   */
+  private void removeSymbolAndReplaceUses(
+      UnsolvedMemberType syntheticType, MemberType replaceWith) {
+    if (!generatedSymbols.containsKey(syntheticType.getFullyQualifiedNames().iterator().next())) {
+      return;
+    }
+
+    for (UnsolvedSymbolAlternates<?> symbol : generatedSymbols.values()) {
+      if (symbol instanceof UnsolvedMethodAlternates method) {
+        if (method.getAlternates().stream()
+            .anyMatch(alt -> alt.getParameterList().contains(syntheticType))) {
+          method.applyToAllAlternates(
+              alternate -> alternate.replaceParameterType(syntheticType, replaceWith));
+        }
+        if (method.getReturnTypes().contains(syntheticType)) {
+          method.replaceReturnType(syntheticType, replaceWith);
+        }
+      } else if (symbol instanceof UnsolvedFieldAlternates field) {
+        if (field.getTypes().contains(syntheticType)) {
+          field.replaceFieldType(syntheticType, replaceWith);
+        }
+      }
+    }
+
+    removeSymbolFromGeneratedSymbolsMap(syntheticType.getUnsolvedType());
+  }
+
+  /**
+   * Finds all generated symbols that are members (fields/methods) of the given type.
+   *
+   * @param type The encapsulating type
+   * @return A set of generated fields/methods that may be in the given type
+   */
+  private Set<UnsolvedSymbolAlternates<?>> findAllMembers(UnsolvedClassOrInterfaceAlternates type) {
+    return generatedSymbols.entrySet().stream()
+        .filter(
+            entry -> {
+              int index = entry.getKey().indexOf("#");
+
+              if (index == -1) {
+                return false;
+              }
+
+              String declaringTypeFQN = entry.getKey().substring(0, index);
+              return type.getFullyQualifiedNames().contains(declaringTypeFQN);
+            })
+        .map(Map.Entry::getValue)
+        .collect(Collectors.toSet());
   }
 
   /**
@@ -2662,6 +2801,33 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Given a method call expression, try to find the unsolved symbol generated for it, if it exists.
+   * Otherwise, this returns null.
+   *
+   * @param methodCall The method call expression
+   * @return The unsolved method alternates generated for this method call, or null if it does not
+   *     exist
+   */
+  private @Nullable UnsolvedMethodAlternates findGeneratedMethodFromMethodCall(
+      MethodCallExpr methodCall) {
+    Collection<Set<String>> potentialScopeFQNs =
+        fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
+    Set<String> potentialFQNs =
+        fullyQualifiedNameGenerator.generateMethodFQNsWithSideEffect(
+            methodCall, potentialScopeFQNs, null, false);
+
+    // Do not use findExistingAndUpdateFQNs here since we do not want to update the FQNs with side
+    // effects
+    for (String potentialFQN : potentialFQNs) {
+      if (generatedSymbols.get(potentialFQN) instanceof UnsolvedMethodAlternates alreadyGenerated) {
+        return alreadyGenerated;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Handles the relationship between the LHS and RHS types by making the type of the LHS a
    * supertype of the type of the RHS, if the type of the RHS is unsolved.
    *
@@ -2958,14 +3124,14 @@ public class UnsolvedSymbolGenerator {
     for (UnsolvedSymbolAlternates<?> symbol : generatedSymbols.values()) {
       if (symbol instanceof UnsolvedMethodAlternates method) {
         if (method.getAlternateDeclaringTypes().contains(type)) {
-          String fqn =
+          String methodSignature =
               method.getFullyQualifiedNames().stream()
                   .map(f -> f.substring(f.indexOf('#') + 1))
                   .filter(f -> methods.containsKey(f))
                   .findFirst()
                   .orElse(null);
-          if (fqn != null) {
-            methodsToRemove.put(method, fqn);
+          if (methodSignature != null) {
+            methodsToRemove.put(method, methodSignature);
           }
         }
       }
