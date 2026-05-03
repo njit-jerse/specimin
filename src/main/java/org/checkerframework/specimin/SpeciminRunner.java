@@ -56,14 +56,25 @@ public class SpeciminRunner {
    * @throws IOException if there is an exception
    */
   public static void main(String... args) throws IOException {
+    if (args.length == 0) {
+      System.err.println(
+          "Error: No arguments specified\n"
+              + "usage: ./gradlew run --args='--outputDirectory \"outputDirectory\" --root"
+              + " \"rootDirectory\" --targetFile \"targetFile.java\""
+              + " --targetMethod \"targetMethod()\""
+              + " --jarPath \"jarPath\"'");
+      System.exit(1);
+    }
     OptionParser optionParser = new OptionParser();
-    // This option is the root of the source directory of the target files. It is used
+    // This option is the root of the source directory of the target files. It is
+    // used
     // for symbol resolution from source code and to organize the output directory.
     OptionSpec<String> rootOption = optionParser.accepts("root").withRequiredArg();
 
     var jar = optionParser.accepts("jarPath").withOptionalArg().ofType(String.class);
 
-    // This option is the relative paths to the target file(s) - the .java file(s) containing
+    // This option is the relative paths to the target file(s) - the .java file(s)
+    // containing
     // target method(s) - from the root.
     OptionSpec<String> targetFilesOption = optionParser.accepts("targetFile").withRequiredArg();
 
@@ -92,6 +103,8 @@ public class SpeciminRunner {
     OptionSpec<String> modularityModelOption =
         optionParser.accepts("modularityModel").withOptionalArg().defaultsTo("cf");
 
+    OptionSpec<Void> disableRootValidationOption = optionParser.accepts("disable-root-validation");
+
     OptionSet options = optionParser.parse(args);
 
     String jarDirectory = options.valueOf(jar);
@@ -108,7 +121,8 @@ public class SpeciminRunner {
         options.valuesOf(targetFieldsOptions),
         options.valueOf(outputDirectoryOption),
         options.valueOf(ambiguityResolutionPolicy),
-        options.valueOf(modularityModelOption));
+        options.valueOf(modularityModelOption),
+        options.has(disableRootValidationOption));
   }
 
   /**
@@ -140,7 +154,8 @@ public class SpeciminRunner {
         targetFieldNames,
         outputDirectory,
         "best-effort",
-        "cf");
+        "cf",
+        false);
   }
 
   /**
@@ -168,8 +183,49 @@ public class SpeciminRunner {
       String ambiguityResolutionPolicy,
       String modularityModelCode)
       throws IOException {
-    // The set of path of files that have been created by Specimin. We must be careful to delete all
-    // those files in the end, because otherwise they can pollute the input directory. To do that,
+    performMinimization(
+        root,
+        targetFiles,
+        jarPaths,
+        targetMethodNames,
+        targetFieldNames,
+        outputDirectory,
+        ambiguityResolutionPolicy,
+        modularityModelCode,
+        false);
+  }
+
+  /**
+   * This method acts as an API for users who want to incorporate Specimin as a library into their
+   * projects. It offers an easy way to do the minimization job without needing to directly call
+   * Specimin's main method.
+   *
+   * @param root The root directory of the input files.
+   * @param targetFiles A list of files that contain the target methods.
+   * @param jarPaths Paths to relevant JAR files.
+   * @param targetMethodNames A set of target method names to be preserved.
+   * @param targetFieldNames A set of target field names to be preserved.
+   * @param outputDirectory The directory for the output.
+   * @param ambiguityResolutionPolicy The ambiguity resolution policy to use.
+   * @param modularityModelCode the modularity model to use
+   * @param disableRootValidation whether to disable root validation
+   * @throws IOException if there is an exception
+   */
+  public static void performMinimization(
+      String root,
+      List<String> targetFiles,
+      List<String> jarPaths,
+      List<String> targetMethodNames,
+      List<String> targetFieldNames,
+      String outputDirectory,
+      String ambiguityResolutionPolicy,
+      String modularityModelCode,
+      boolean disableRootValidation)
+      throws IOException {
+    // The set of path of files that have been created by Specimin. We must be
+    // careful to delete all
+    // those files in the end, because otherwise they can pollute the input
+    // directory. To do that,
     // we need to register a shutdown hook with the JVM.
     Set<Path> createdClass = new HashSet<>();
     Runtime.getRuntime()
@@ -193,7 +249,8 @@ public class SpeciminRunner {
         outputDirectory,
         policy,
         model,
-        createdClass);
+        createdClass,
+        disableRootValidation);
   }
 
   /**
@@ -209,6 +266,7 @@ public class SpeciminRunner {
    * @param outputDirectory The directory for the output.
    * @param ambiguityResolutionPolicy The ambiguity resolution policy.
    * @param modularityModel The modularity model.
+   * @param disableRootValidation whether to disable root validation
    * @throws IOException if there is an exception
    */
   @SuppressWarnings("UnusedVariable") // Remove once ambiguityResolutionPolicy is used
@@ -221,16 +279,18 @@ public class SpeciminRunner {
       String outputDirectory,
       AmbiguityResolutionPolicy ambiguityResolutionPolicy,
       ModularityModel modularityModel,
-      Set<Path> createdClass)
+      Set<Path> createdClass,
+      boolean disableRootValidation)
       throws IOException {
-    // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
+    // To facilitate string manipulation in subsequent methods, ensure that 'root'
+    // ends with a
     // trailing slash.
     if (!root.endsWith("/")) {
       root = root + "/";
     }
 
-    if (!Path.of(root).isAbsolute()) {
-      root = Paths.get(root).toAbsolutePath().normalize().toString();
+    if (!disableRootValidation) {
+      validateRoot(root, targetMethodNames, targetFieldNames);
     }
 
     ParserConfiguration config = updateStaticSolver(root, jarPaths);
@@ -240,7 +300,8 @@ public class SpeciminRunner {
     sourceRoot.setParserConfiguration(config);
     sourceRoot.tryToParse();
 
-    // the set of Java classes in the original codebase mapped with their corresponding Java files.
+    // the set of Java classes in the original codebase mapped with their
+    // corresponding Java files.
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
     Map<String, CompilationUnit> fqnToCompilationUnits = new HashMap<>();
 
@@ -304,7 +365,8 @@ public class SpeciminRunner {
             unsolvedSymbolGenerator,
             fqnToCompilationUnits);
 
-    // cache to avoid called Files.createDirectories repeatedly with the same arguments
+    // cache to avoid called Files.createDirectories repeatedly with the same
+    // arguments
     Set<Path> createdDirectories = new HashSet<>();
     Set<String> targetFilesAbsolutePaths = new HashSet<>();
 
@@ -448,8 +510,10 @@ public class SpeciminRunner {
           Path.of(outputDirectory, alternate.getKey().replace('.', '/') + ".java");
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
-      // This null test is very defensive and might not be required? I think getParent can
-      // only return null if its input was a single element path, which targetOutputPath
+      // This null test is very defensive and might not be required? I think getParent
+      // can
+      // only return null if its input was a single element path, which
+      // targetOutputPath
       // should not be unless the user made an error.
       if (dirContainingOutputFile != null
           && !createdDirectories.contains(dirContainingOutputFile)) {
@@ -469,7 +533,89 @@ public class SpeciminRunner {
   }
 
   /**
+   * Checks that the root directory is specified correctly, by checking that the files for the
+   * target methods/fields can be found.
+   *
+   * @param root the root directory
+   * @param targetMethodNames the list of target methods
+   * @param targetFieldNames the list of target fields
+   * @throws IOException if the root is incorrect
+   */
+  private static void validateRoot(
+      String root, List<String> targetMethodNames, List<String> targetFieldNames)
+      throws IOException {
+    Set<String> targetClassFqns = new HashSet<>();
+    for (String targetMethod : targetMethodNames) {
+      if (!targetMethod.contains("#")) {
+        throw new IOException("Invalid target method format: " + targetMethod);
+      }
+      String fqn = targetMethod.substring(0, targetMethod.indexOf('#'));
+      if (fqn.isEmpty() || fqn.endsWith(".") || fqn.startsWith(".") || fqn.contains("..")) {
+        throw new IOException(
+            "Invalid target method format (malformed class name): " + targetMethod);
+      }
+      targetClassFqns.add(fqn);
+    }
+    for (String targetField : targetFieldNames) {
+      if (!targetField.contains("#")) {
+        throw new IOException("Invalid target field format: " + targetField);
+      }
+      String fqn = targetField.substring(0, targetField.indexOf('#'));
+      if (fqn.isEmpty() || fqn.endsWith(".") || fqn.startsWith(".") || fqn.contains("..")) {
+        throw new IOException("Invalid target field format (malformed class name): " + targetField);
+      }
+      targetClassFqns.add(fqn);
+    }
+
+    for (String fqn : targetClassFqns) {
+      String classFqn = fqn;
+      boolean found = false;
+      while (true) {
+        Path expectedPath = Path.of(root, classFqn.replace('.', '/') + ".java");
+        if (Files.exists(expectedPath)) {
+          found = true;
+          break;
+        }
+
+        // The remainder of this code exists to handle the possibility that a target
+        // method or field
+        // is in an inner class.
+        int lastDot = classFqn.lastIndexOf('.');
+        if (lastDot == -1) {
+          break;
+        }
+
+        // Heuristic to avoid stripping package names.
+        if (Character.isLowerCase(classFqn.charAt(lastDot + 1))) {
+          break;
+        }
+        classFqn = classFqn.substring(0, lastDot);
+      }
+
+      if (!found) {
+        Path originalExpectedPath = Path.of(root, fqn.replace('.', '/') + ".java");
+        String errorMessage =
+            "Specimin could not find the file for the target class '"
+                + fqn
+                + "'.\n"
+                + "It looked for '"
+                + originalExpectedPath.toString()
+                + "' and variations for inner classes.\n"
+                + "Please make sure that the --root argument ('"
+                + root
+                + "') is the root of the source code, "
+                + "and that the package name of the target class matches its directory structure.";
+        throw new IOException(errorMessage);
+      }
+    }
+  }
+
+  /**
    * Creates a map of original nodes to cloned nodes.
+   *
+   * <p>Fully solve all annotations by processing all annotations, annotation parameters, and their
+   * types. This method also removes any annotations which are not fully solvable and includes all
+   * necessary files in Specimin's output.
    *
    * @param original The original node
    * @param clone The cloned node
@@ -708,7 +854,8 @@ public class SpeciminRunner {
     File parentDir = fileDir.getParentFile();
     if (parentDir != null && parentDir.exists() && parentDir.isDirectory()) {
       String[] fileContained = parentDir.list();
-      // Be cautious when making any changes to this line, you might actually delete important
+      // Be cautious when making any changes to this line, you might actually delete
+      // important
       // directories in the project.
       if (fileContained != null && fileContained.length == 0) {
         deleteFileFamily(parentDir);
