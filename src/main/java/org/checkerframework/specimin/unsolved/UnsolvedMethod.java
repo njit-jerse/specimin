@@ -28,13 +28,13 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   private final List<MemberType> parameterList;
 
   /** This field is set to true if this method is a static method */
-  private boolean isStatic = false;
+  private boolean isStatic;
 
   /** The list of the types of the exceptions thrown by the method. */
   private final List<MemberType> throwsList;
 
   /** The number of type variables for this method. */
-  private int numberOfTypeVariables = 0;
+  private int numberOfTypeVariables;
 
   /** The access modifier of the method. */
   private String accessModifier;
@@ -54,7 +54,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       List<MemberType> parameterList,
       List<MemberType> throwsList,
       Set<Node> mustPreserve) {
-    this(name, returnType, parameterList, throwsList, mustPreserve, "public");
+    this(name, returnType, parameterList, throwsList, mustPreserve, "public", false, 0);
   }
 
   /**
@@ -74,6 +74,30 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       List<MemberType> throwsList,
       Set<Node> mustPreserve,
       String accessModifier) {
+    this(name, returnType, parameterList, throwsList, mustPreserve, accessModifier, false, 0);
+  }
+
+  /**
+   * Create an instance of UnsolvedMethod.
+   *
+   * @param name the name of the method
+   * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
+   * @param throwsList the list of exceptions thrown by this method
+   * @param accessModifier the access modifier of this method
+   * @param mustPreserve the set of nodes that must be preserved with this alternate
+   * @param isStatic whether this method is static
+   * @param numberOfTypeVariables the number of type variables for this method
+   */
+  public UnsolvedMethod(
+      String name,
+      MemberType returnType,
+      List<MemberType> parameterList,
+      List<MemberType> throwsList,
+      Set<Node> mustPreserve,
+      String accessModifier,
+      boolean isStatic,
+      int numberOfTypeVariables) {
     super(mustPreserve);
     this.name = name;
     this.returnType = returnType;
@@ -81,6 +105,8 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     this.parameterList = new ArrayList<>(parameterList);
     this.throwsList = throwsList;
     this.accessModifier = accessModifier;
+    this.isStatic = isStatic;
+    this.numberOfTypeVariables = numberOfTypeVariables;
   }
 
   /**

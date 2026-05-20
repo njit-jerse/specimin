@@ -118,6 +118,12 @@ public class JavaParserUtil {
   public static void setTypeSolvers(TypeSolver typeSolver, MemoryTypeSolver memoryTypeSolver) {
     JavaParserUtil.typeSolver = typeSolver;
     JavaParserUtil.memoryTypeSolver = memoryTypeSolver;
+
+    // If we reset memoryTypeSolver, we should clear our cache since these old types
+    // are not registered with the new MemoryTypeSolver. This is mainly an issue with
+    // the testing suite since JavaParserUtil is static and is used across different
+    // test cases.
+    generatedResolvedPlaceholderTypes.clear();
   }
 
   /**
@@ -789,9 +795,9 @@ public class JavaParserUtil {
     } finally {
       // Revert changes to the AST
       for (Map.Entry<Type, Type> entry : placeholderToOriginal.entrySet()) {
-        entry.getKey().getParentNode().get().replace(entry.getKey(), entry.getValue());
+        entry.getKey().replace(entry.getValue());
       }
-      copy.getParentNode().get().replace(copy, expr);
+      copy.replace(expr);
     }
   }
 
@@ -849,18 +855,15 @@ public class JavaParserUtil {
     } finally {
       // Revert changes to the AST
       for (Map.Entry<Type, Type> entry : placeholderToOriginal.entrySet()) {
-        entry.getKey().getParentNode().get().replace(entry.getKey(), entry.getValue());
+        entry.getKey().replace(entry.getValue());
       }
-      copyOfEnclosingMethodCall
-          .getParentNode()
-          .get()
-          .replace(copyOfEnclosingMethodCall, methodCall);
+      copyOfEnclosingMethodCall.replace(methodCall);
     }
   }
 
   /**
    * Copies the given expression and replaces all unresolvable type arguments in its scope. The AST
-   * is modified after this method is run. Use {@code b} of the return method to convert these
+   * is modified after this method is run. Use {@code b} of the return value to convert these
    * placeholder types back to the original types, and use {@code a} to replace the copied
    * expression.
    *
@@ -882,7 +885,7 @@ public class JavaParserUtil {
     // don't want to mess with the original expression to avoid revealing placeholder types
     // in resolve() calls on the same expression outside of this method
     Expression copy = expr.clone();
-    expr.getParentNode().get().replace(expr, copy);
+    expr.replace(copy);
 
     Expression scope = ((NodeWithTraversableScope) copy).traverseScope().get();
 
@@ -891,7 +894,7 @@ public class JavaParserUtil {
             scope, fqnToCompilationUnits);
 
     if (placeholderToOriginal == null) {
-      copy.getParentNode().get().replace(copy, expr);
+      copy.replace(expr);
       // We found an unresolvable erased type in the scope, so we cannot resolve this method call
       return null;
     }
@@ -924,7 +927,7 @@ public class JavaParserUtil {
     if (!success) {
       for (Map.Entry<Type, Type> entry : result.entrySet()) {
         // Revert changes
-        entry.getKey().getParentNode().get().replace(entry.getKey(), entry.getValue());
+        entry.getKey().replace(entry.getValue());
       }
 
       return null;
@@ -1046,30 +1049,45 @@ public class JavaParserUtil {
       return false;
     }
 
-    if (type.isClassOrInterfaceType()
-        && type.asClassOrInterfaceType().getTypeArguments().isPresent()
-        && type.asClassOrInterfaceType().getTypeArguments().get().size() > 0) {
-      // Replace all type arguments with resolvable types
-      ClassOrInterfaceType asClass = type.asClassOrInterfaceType();
+    replaceInnermostUnresolvableTypeArgument(type, result);
+    return true;
+  }
+
+  /**
+   * Recursively replaces the innermost unresolvable type argument with a resolvable placeholder
+   * type. For example, List<List<Foo>> should replace Foo with a placeholder, not List<Foo>.
+   *
+   * @param unresolvableType The unresolvable type to replace or to keep looking into
+   * @param clonesToReal A map of cloned types to their original types
+   */
+  private static void replaceInnermostUnresolvableTypeArgument(
+      Type unresolvableType, Map<Type, Type> clonesToReal) {
+    if (unresolvableType.isClassOrInterfaceType()) {
+      if (unresolvableType.asClassOrInterfaceType().getTypeArguments().isEmpty()
+          || unresolvableType.asClassOrInterfaceType().getTypeArguments().get().isEmpty()) {
+        // Use result.size() to ensure a 1-to-1 mapping between placeholder types and unresolvable
+        // type arguments
+        Type placeholder = getResolvablePlaceholderType(clonesToReal.size());
+
+        clonesToReal.put(placeholder, unresolvableType);
+        unresolvableType.replace(placeholder);
+        return;
+      }
+
+      ClassOrInterfaceType asClass = unresolvableType.asClassOrInterfaceType();
       NodeList<Type> typeArgs = asClass.getTypeArguments().get();
 
       for (int i = 0; i < typeArgs.size(); i++) {
         try {
           typeArgs.get(i).resolve();
         } catch (UnsolvedSymbolException ex) {
-          // Use result.size() to ensure a 1-to-1 mapping between placeholder types and unresolvable
-          // type arguments
-          Type placeholder = getResolvablePlaceholderType(result.size());
-
-          result.put(placeholder, typeArgs.get(i));
-          typeArgs.set(i, placeholder);
+          replaceInnermostUnresolvableTypeArgument(typeArgs.get(i), clonesToReal);
         }
       }
-
-      return true;
+    } else if (unresolvableType.isArrayType()) {
+      replaceInnermostUnresolvableTypeArgument(
+          unresolvableType.asArrayType().getComponentType(), clonesToReal);
     }
-
-    return false;
   }
 
   /**

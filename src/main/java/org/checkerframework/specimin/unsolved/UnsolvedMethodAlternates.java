@@ -367,6 +367,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   @Override
   public void setReturnType(MemberType memberType) {
     applyToAllAlternates(UnsolvedMethod::setReturnType, memberType);
+    removeDuplicateAlternates();
   }
 
   /**
@@ -380,6 +381,43 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       if (alternate.getReturnType().equals(oldType)) {
         alternate.setReturnType(newType);
       }
+    }
+  }
+
+  /**
+   * Adds a new alternate with the same name, parameters and thrown exceptions, but with a different
+   * return type.
+   *
+   * @param returnTypes The new return types to add.
+   */
+  public void addReturnTypes(Set<MemberType> returnTypes) {
+    Set<List<MemberType>> seenParameterLists = new HashSet<>();
+    int originalSize = getAlternates().size();
+    for (int i = 0; i < originalSize; i++) {
+      UnsolvedMethod alternate = getAlternates().get(i);
+      if (seenParameterLists.contains(alternate.getParameterList())) {
+        return;
+      }
+
+      for (MemberType returnType : returnTypes) {
+        if (alternate.getReturnType().equals(returnType)) {
+          continue;
+        }
+
+        UnsolvedMethod newAlternate =
+            new UnsolvedMethod(
+                alternate.getName(),
+                returnType,
+                alternate.getParameterList(),
+                alternate.getThrownExceptions(),
+                alternate.getMustPreserveNodes(),
+                alternate.getAccessModifier(),
+                alternate.isStatic(),
+                alternate.getNumberOfTypeVariables());
+        addAlternate(newAlternate);
+      }
+
+      seenParameterLists.add(alternate.getParameterList());
     }
   }
 

@@ -16,6 +16,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -32,6 +33,7 @@ import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.TypeExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -2431,6 +2433,49 @@ public class UnsolvedSymbolGenerator {
         }
       }
     }
+    // If the node is a binary expression, sometimes we can get more type constraints
+    // i.e., x < y means x and y must be numbers
+    else if (node instanceof BinaryExpr binaryExpr) {
+      BinaryExpr.Operator operator = binaryExpr.getOperator();
+      Expression left = binaryExpr.getLeft();
+      Expression right = binaryExpr.getRight();
+
+      Set<MemberType> typesToReplace = new LinkedHashSet<>();
+
+      // == and != are inconclusive for types
+      if (operator != BinaryExpr.Operator.EQUALS && operator != BinaryExpr.Operator.NOT_EQUALS) {
+        for (String validType : JavaLangUtils.getTypesForOp(operator.asString())) {
+          if (JavaParserUtil.isAClassName(validType)) {
+            validType = "java.lang." + validType;
+          }
+          typesToReplace.add(new SolvedMemberType(validType));
+        }
+      }
+
+      if (!typesToReplace.isEmpty()) {
+        for (Expression side : Set.of(left, right)) {
+          if (side.isMethodCallExpr()) {
+            UnsolvedMethodAlternates methodAlternates =
+                findGeneratedMethodFromMethodCall(side.asMethodCallExpr());
+
+            if (methodAlternates != null
+                && !methodAlternates.getReturnTypes().stream().anyMatch(typesToReplace::contains)) {
+              // Set all to same return type which removes duplicates; then we can add
+              // our whole set to make sure that all of the old types are gone
+              methodAlternates.setReturnType(typesToReplace.iterator().next());
+              methodAlternates.addReturnTypes(typesToReplace);
+            }
+          } else if (side.isFieldAccessExpr() || side.isNameExpr()) {
+            UnsolvedFieldAlternates fieldAlternates = findGeneratedFieldFromUsage(side);
+
+            if (fieldAlternates != null
+                && !fieldAlternates.getTypes().stream().anyMatch(typesToReplace::contains)) {
+              fieldAlternates.replaceAllOldFieldTypes(typesToReplace);
+            }
+          }
+        }
+      }
+    }
 
     return new UnsolvedGenerationResult(toAdd, toRemove);
   }
@@ -2820,6 +2865,41 @@ public class UnsolvedSymbolGenerator {
     // effects
     for (String potentialFQN : potentialFQNs) {
       if (generatedSymbols.get(potentialFQN) instanceof UnsolvedMethodAlternates alreadyGenerated) {
+        return alreadyGenerated;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Given a field access expression, try to find the unsolved symbol generated for it, if it
+   * exists. Otherwise, this returns null.
+   *
+   * @param field The field access expression
+   * @return The unsolved field alternates generated for this field access, or null if it does not
+   *     exist
+   */
+  private @Nullable UnsolvedFieldAlternates findGeneratedFieldFromUsage(Expression field) {
+    if (!(field instanceof FieldAccessExpr || field instanceof NameExpr)) {
+      throw new RuntimeException("Expression must be a field access or name expression: " + field);
+    }
+
+    Collection<Set<String>> potentialScopeFQNs =
+        fullyQualifiedNameGenerator.getFQNsForExpressionLocation(field);
+    Set<String> potentialFQNs = new HashSet<>();
+
+    for (Set<String> set : potentialScopeFQNs) {
+      for (String potentialScopeFQN : set) {
+        potentialFQNs.add(
+            potentialScopeFQN + "#" + ((NodeWithSimpleName<?>) field).getNameAsString());
+      }
+    }
+
+    // Do not use findExistingAndUpdateFQNs here since we do not want to update the FQNs with side
+    // effects
+    for (String potentialFQN : potentialFQNs) {
+      if (generatedSymbols.get(potentialFQN) instanceof UnsolvedFieldAlternates alreadyGenerated) {
         return alreadyGenerated;
       }
     }
@@ -3245,6 +3325,7 @@ public class UnsolvedSymbolGenerator {
         || node instanceof AssignExpr
         || node instanceof ReturnStmt
         || node instanceof VariableDeclarator
+        || node instanceof BinaryExpr
         || node instanceof LambdaExpr
         || node instanceof ObjectCreationExpr
         || node instanceof ExplicitConstructorInvocationStmt

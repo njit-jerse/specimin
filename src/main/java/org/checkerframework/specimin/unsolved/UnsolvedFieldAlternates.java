@@ -191,6 +191,43 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
     }
   }
 
+  /**
+   * Replaces all field types with new field types in all alternates.
+   *
+   * @param fieldTypes The new field types to add.
+   */
+  public void replaceAllOldFieldTypes(Set<MemberType> fieldTypes) {
+    // Set all to same field type, then remove all duplicates, then add alternates back in
+    // with our new field types
+
+    for (UnsolvedField alternate : getAlternates()) {
+      alternate.setType(fieldTypes.iterator().next());
+    }
+
+    removeDuplicateAlternates();
+
+    int originalSize = getAlternates().size();
+    for (int i = 0; i < originalSize; i++) {
+      UnsolvedField alternate = getAlternates().get(i);
+
+      for (MemberType fieldType : fieldTypes) {
+        if (alternate.getType().equals(fieldType)) {
+          continue;
+        }
+
+        UnsolvedField newAlternate =
+            new UnsolvedField(
+                alternate.getName(),
+                fieldType,
+                alternate.isStatic(),
+                alternate.isFinal(),
+                alternate.getMustPreserveNodes());
+
+        addAlternate(newAlternate);
+      }
+    }
+  }
+
   @Override
   public String getName() {
     return getAlternates().get(0).getName();
