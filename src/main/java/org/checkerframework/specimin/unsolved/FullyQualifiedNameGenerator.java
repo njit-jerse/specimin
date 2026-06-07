@@ -519,20 +519,21 @@ public class FullyQualifiedNameGenerator {
 
     // Try to see if replacing type parameters in the types of the scope leads to a resolvable
     // expression type
-    Pair<ResolvedType, Map<String, Type>> resolvedWithPlaceholders =
-        JavaParserUtil.tryGetExpresssionTypeFromUnresolvableGenericScope(
+    Pair<ResolvedType, Map<String, Node>> resolvedWithPlaceholders =
+        JavaParserUtil.tryGetExpresssionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas(
             expr, fqnToCompilationUnits);
 
     if (resolvedWithPlaceholders != null) {
       ResolvedType expressionResolvedType = resolvedWithPlaceholders.a;
-      Map<String, Type> typeParamsToTypes = resolvedWithPlaceholders.b;
+      Map<String, Node> placeholderFQNsToTypeHolding = resolvedWithPlaceholders.b;
 
       FullyQualifiedNameSet expressionResolvedTypeFQNs =
           getFQNsForResolvedType(expressionResolvedType);
 
       // Now, replace all placeholder types to actual types
       return Set.of(
-          replacePlaceholderTypesWithActualTypes(expressionResolvedTypeFQNs, typeParamsToTypes));
+          replacePlaceholderTypesWithActualTypes(
+              expressionResolvedTypeFQNs, placeholderFQNsToTypeHolding));
     }
 
     // Handle the cases where the type of the expression can be inferred from surrounding context
@@ -692,16 +693,27 @@ public class FullyQualifiedNameGenerator {
    *
    * @param methodReturnTypeFQNs The FQNs of the method return type, which may contain placeholder
    *     types
-   * @param typeParamsToTypes A map from placeholder type parameters to actual types
+   * @param placeholderFQNsToTypeHolding A map from placeholder type parameters to type-holding
+   *     nodes
    * @return The FQNs of the method return type with placeholder types replaced by actual types
    */
   private FullyQualifiedNameSet replacePlaceholderTypesWithActualTypes(
-      FullyQualifiedNameSet methodReturnTypeFQNs, Map<String, Type> typeParamsToTypes) {
+      FullyQualifiedNameSet methodReturnTypeFQNs, Map<String, Node> placeholderFQNsToTypeHolding) {
     Set<String> replacedFQNs = new LinkedHashSet<>();
     for (String fqn : methodReturnTypeFQNs.erasedFqns()) {
-      if (typeParamsToTypes.containsKey(fqn)) {
-        Set<String> replacementFQNs = getFQNsFromType(typeParamsToTypes.get(fqn)).erasedFqns();
-        replacedFQNs.addAll(replacementFQNs);
+      if (placeholderFQNsToTypeHolding.containsKey(fqn)) {
+        if (placeholderFQNsToTypeHolding.get(fqn) instanceof Type type) {
+          Set<String> replacementFQNs = getFQNsFromType(type).erasedFqns();
+          replacedFQNs.addAll(replacementFQNs);
+        } else if (placeholderFQNsToTypeHolding.get(fqn) instanceof Expression expr) {
+          Set<String> replacementFQNs =
+              getFQNsForExpressionType(expr).iterator().next().erasedFqns();
+          replacedFQNs.addAll(replacementFQNs);
+        } else {
+          throw new RuntimeException(
+              "Unexpected node type in placeholderFQNsToTypeHolding: "
+                  + placeholderFQNsToTypeHolding.get(fqn).getClass());
+        }
       } else {
         replacedFQNs.add(fqn);
       }
@@ -709,7 +721,8 @@ public class FullyQualifiedNameGenerator {
 
     List<FullyQualifiedNameSet> replacedTypeArgs = new ArrayList<>();
     for (FullyQualifiedNameSet typeArg : methodReturnTypeFQNs.typeArguments()) {
-      replacedTypeArgs.add(replacePlaceholderTypesWithActualTypes(typeArg, typeParamsToTypes));
+      replacedTypeArgs.add(
+          replacePlaceholderTypesWithActualTypes(typeArg, placeholderFQNsToTypeHolding));
     }
 
     return new FullyQualifiedNameSet(
@@ -1351,20 +1364,21 @@ public class FullyQualifiedNameGenerator {
         return Set.of(getFQNsFromType(type));
       }
 
-      Pair<ResolvedType, Map<String, Type>> resolvedWithPlaceholders =
+      Pair<ResolvedType, Map<String, Node>> resolvedWithPlaceholders =
           JavaParserUtil.tryGetExpressionTypeForLambdaParameterInUnresolvableGenericScopeMethod(
               expr, fqnToCompilationUnits);
 
       if (resolvedWithPlaceholders != null) {
         ResolvedType expressionResolvedType = resolvedWithPlaceholders.a;
-        Map<String, Type> typeParamsToTypes = resolvedWithPlaceholders.b;
+        Map<String, Node> placeholderFQNsToTypeHolding = resolvedWithPlaceholders.b;
 
         FullyQualifiedNameSet expressionResolvedTypeFQNs =
             getFQNsForResolvedType(expressionResolvedType);
 
         // Now, replace all placeholder types with actual types
         return Set.of(
-            replacePlaceholderTypesWithActualTypes(expressionResolvedTypeFQNs, typeParamsToTypes));
+            replacePlaceholderTypesWithActualTypes(
+                expressionResolvedTypeFQNs, placeholderFQNsToTypeHolding));
       }
     }
 

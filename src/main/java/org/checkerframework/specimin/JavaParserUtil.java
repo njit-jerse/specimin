@@ -33,6 +33,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -64,6 +65,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -759,124 +762,197 @@ public class JavaParserUtil {
    * replacing all unresolvable type arguments in the scope with resolvable placeholder types, and
    * then running {@code calculateResolvedType()}. If the expression can be resolved after this
    * process, its resolved type is returned (alongside a map with the FQNs of placeholder types to
-   * their actual counterparts). Otherwise, null is returned. Note that if this method returns null,
-   * the AST will be unchanged; if this method returns a non-null value, any changes made to the AST
-   * will have been reverted.
+   * their corresponding nodes--either Type or Expression). Otherwise, null is returned. Note that
+   * if this method returns null, the AST will be unchanged; if this method returns a non-null
+   * value, any changes made to the AST will have been reverted.
    *
    * @param expr The expression whose type is to be resolved
    * @param fqnToCompilationUnits The map of FQNs to compilation units
    * @return The resolved type, or null if it cannot be resolved
    */
-  public static @Nullable Pair<ResolvedType, Map<String, Type>>
-      tryGetExpresssionTypeFromUnresolvableGenericScope(
+  public static @Nullable Pair<ResolvedType, Map<String, Node>>
+      tryGetExpresssionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas(
           Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
 
-    Pair<Expression, Map<Type, Type>> copyAndPlaceholderMap =
-        copyAndReplaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
-            expr, fqnToCompilationUnits);
+    Expression copy = expr.clone();
+    Pair<Map<Type, Node>, IdentityHashMap<Node, Node>> copyAndPlaceholderMap =
+        copyAndReplaceAllUnresolvableScopeTypeArgumentsAndLambdasWithResolvablePlaceholders(
+            expr, copy, fqnToCompilationUnits);
 
     if (copyAndPlaceholderMap == null) {
       return null;
     }
 
-    Expression copy = copyAndPlaceholderMap.a;
-    Map<Type, Type> placeholderToOriginal = copyAndPlaceholderMap.b;
+    Map<Type, Node> placeholderTypeToTypeHolding = copyAndPlaceholderMap.a;
+    IdentityHashMap<Node, Node> originalToCopies = copyAndPlaceholderMap.b;
 
-    try {
-      return new Pair<>(
-          copy.calculateResolvedType(),
-          placeholderToOriginal.entrySet().stream()
-              // If we're here, everything is resolvable
-              .collect(
-                  Collectors.toMap(
-                      entry -> entry.getKey().resolve().describe(), Map.Entry::getValue)));
-    } catch (UnsolvedSymbolException ex) {
-      return null;
-    } finally {
-      // Revert changes to the AST
-      for (Map.Entry<Type, Type> entry : placeholderToOriginal.entrySet()) {
-        entry.getKey().replace(entry.getValue());
-      }
-      copy.replace(expr);
-    }
+    originalToCopies.put(expr, copy);
+    return collectResolvedTypeAndPlaceholderMappingAndRevertChanges(
+        expr, copy, placeholderTypeToTypeHolding, originalToCopies);
   }
 
   /**
-   * Similar to {@link #tryGetExpresssionTypeFromUnresolvableGenericScope}, but this is specifically
-   * for uses of lambda parameters in unresolvable generic scopes. For example, resolving x.a() in
-   * foo.bar(x -> x.a()) when foo's type is solvable, but its type arguments are not.
+   * Similar to {@link #tryGetExpresssionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas}, but
+   * this is specifically for uses of lambda parameters in unresolvable generic scopes. For example,
+   * resolving x.a() in foo.bar(x -> x.a()) when foo's type is solvable, but its type arguments are
+   * not.
    *
    * @param expr The expression whose type is to be resolved
    * @param fqnToCompilationUnits The map of FQNs to compilation units
    * @return The resolved type, or null if it cannot be resolved
    */
-  public static @Nullable Pair<ResolvedType, Map<String, Type>>
+  public static @Nullable Pair<ResolvedType, Map<String, Node>>
       tryGetExpressionTypeForLambdaParameterInUnresolvableGenericScopeMethod(
           Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+
+    @SuppressWarnings("unchecked")
     LambdaExpr lambda = expr.findAncestor(LambdaExpr.class).orElse(null);
     if (lambda == null) {
       return null;
     }
 
+    @SuppressWarnings("unchecked")
     MethodCallExpr methodCall = lambda.findAncestor(MethodCallExpr.class).orElse(null);
     if (methodCall == null) {
       return null;
     }
 
-    Pair<Expression, Map<Type, Type>> copyAndPlaceholderMap =
-        copyAndReplaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
-            methodCall, fqnToCompilationUnits);
+    MethodCallExpr copyOfEnclosingMethodCall = methodCall.clone();
+    Pair<Map<Type, Node>, IdentityHashMap<Node, Node>> copyAndPlaceholderMap =
+        copyAndReplaceAllUnresolvableScopeTypeArgumentsAndLambdasWithResolvablePlaceholders(
+            methodCall, copyOfEnclosingMethodCall, fqnToCompilationUnits);
 
     if (copyAndPlaceholderMap == null) {
       return null;
     }
 
-    Expression copyOfEnclosingMethodCall = copyAndPlaceholderMap.a;
-    Map<Type, Type> placeholderToOriginal = copyAndPlaceholderMap.b;
+    Map<Type, Node> placeholderToTypeHolding = copyAndPlaceholderMap.a;
+    IdentityHashMap<Node, Node> originalToCopies = copyAndPlaceholderMap.b;
 
     // Take this code: foo.bar(x -> x.method()); copy is the copy of this whole method call, but we
-    // are trying to resolve
-    // the type of x.method() (which is a copy of the parameter "expr"), so we need to find the
-    // corresponding copy
-    // in copyOfEnclosingMethodCall
+    // are trying to resolve the type of x.method() (which is a copy of the parameter "expr"), so
+    // we need to find the corresponding copy in copyOfEnclosingMethodCall
     Expression copyOfOriginalExpr =
         copyOfEnclosingMethodCall.findFirst(Expression.class, e -> e.equals(expr)).orElseThrow();
 
+    // We need to do this since the below method call will replace copyOfOriginalExpr with expr,
+    // but methodCall is what was cloned, so that is what we actually have to replace.
+    originalToCopies.put(methodCall, copyOfEnclosingMethodCall);
+
+    return collectResolvedTypeAndPlaceholderMappingAndRevertChanges(
+        methodCall, copyOfOriginalExpr, placeholderToTypeHolding, originalToCopies);
+  }
+
+  /**
+   * Helper method for the above two methods to collect the resolved type and placeholder mapping,
+   * and then revert changes to the AST. This is separated out since the logic is the same for both
+   * methods.
+   *
+   * @param originalExpressionBeforeClone the original expression that was cloned; not necessarily
+   *     the same as the real version of clonedExpressionToEvaluate
+   * @param clonedExpressionToEvaluate the cloned expression whose type we should evaluate
+   * @param placeholderToTypeHolding the map from the placeholder types to the nodes that are
+   *     holding the original types/lambda return expressions. Ensure that the original expression
+   *     is included in this map with its corresponding copy.
+   * @param originalToCopies the map from original nodes to their copies, used to revert changes to
+   *     the AST
+   * @return a pair of the resolved type and a map from placeholder type FQNs to their corresponding
+   *     original nodes, or null if the type cannot be resolved
+   */
+  private static @Nullable Pair<ResolvedType, Map<String, Node>>
+      collectResolvedTypeAndPlaceholderMappingAndRevertChanges(
+          Expression originalExpressionBeforeClone,
+          Expression clonedExpressionToEvaluate,
+          Map<Type, Node> placeholderToTypeHolding,
+          IdentityHashMap<Node, Node> originalToCopies) {
+    @Nullable ResolvedType resolvedType;
+
     try {
-      return new Pair<>(
-          copyOfOriginalExpr.calculateResolvedType(),
-          placeholderToOriginal.entrySet().stream()
-              // If we're here, everything is resolvable
-              .collect(
-                  Collectors.toMap(
-                      entry -> entry.getKey().resolve().describe(), Map.Entry::getValue)));
+      resolvedType = clonedExpressionToEvaluate.calculateResolvedType();
     } catch (UnsolvedSymbolException ex) {
-      return null;
-    } finally {
-      // Revert changes to the AST
-      for (Map.Entry<Type, Type> entry : placeholderToOriginal.entrySet()) {
-        entry.getKey().replace(entry.getValue());
-      }
-      copyOfEnclosingMethodCall.replace(methodCall);
+      resolvedType = null;
     }
+
+    Map<String, Node> placeholderFQNToOriginalNode;
+
+    placeholderFQNToOriginalNode =
+        placeholderToTypeHolding.entrySet().stream()
+            // If we're here, everything is resolvable
+            .collect(
+                Collectors.toMap(
+                    entry -> entry.getKey().resolve().describe(),
+                    Map.Entry::getValue,
+                    (a, b) -> {
+                      throw new IllegalStateException("Duplicate key");
+                    },
+                    HashMap::new));
+
+    // Revert changes to the AST
+    for (Map.Entry<Node, Node> entry : originalToCopies.entrySet()) {
+      entry.getValue().replace(entry.getKey());
+    }
+
+    if (resolvedType == null) {
+      return null;
+    }
+
+    Iterator<String> iterator = placeholderFQNToOriginalNode.keySet().iterator();
+    while (iterator.hasNext()) {
+      String placeholderType = iterator.next();
+      Node originalNode = placeholderFQNToOriginalNode.get(placeholderType);
+
+      if (originalNode == null) {
+        throw new RuntimeException("cannot be non-null: satisfy null checker");
+      }
+
+      if (originalNode.findCompilationUnit().isPresent()) {
+        continue;
+      }
+
+      // There's a chance that the "original" node is from a copy of the initial expression
+      // (and thus not in a compilation unit), so we need to fix those. This is only a problem
+      // for lambda arguments, not for scopes.
+      System.out.println(originalNode);
+      System.out.println(originalToCopies.containsKey(originalNode));
+      System.out.println(originalNode.findCompilationUnit());
+
+      Node traverse = originalNode;
+      while (traverse.hasParentNode()) {
+        System.out.println(traverse);
+        traverse = traverse.getParentNode().get();
+      }
+
+      placeholderFQNToOriginalNode.put(
+          placeholderType,
+          originalExpressionBeforeClone
+              .findFirst(Node.class, n -> n.equals(originalNode))
+              .orElseThrow());
+    }
+
+    return new Pair<>(resolvedType, placeholderFQNToOriginalNode);
   }
 
   /**
    * Copies the given expression and replaces all unresolvable type arguments in its scope. The AST
-   * is modified after this method is run. Use {@code b} of the return value to convert these
-   * placeholder types back to the original types, and use {@code a} to replace the copied
-   * expression.
+   * is modified after this method is run. {@code a} in the returned pair is a map of placeholder
+   * types back to the original types (placeholder types to either a Type or Expression representing
+   * a lambda return), and {@code b} should be used to replace modified nodes to their originals.
    *
-   * @param expr The expression to copy and replace unresolvable type arguments in the scope of
+   * @param originalExpr The expression to copy and replace unresolvable type arguments in the scope
+   *     of
+   * @param copyOfExpr A clone of originalExpr
    * @param fqnToCompilationUnits The map of FQNs to compilation units
-   * @return A pair of the copied expression and a map from the placeholder types to the original
-   *     types, or null if any unresolvable erased type is found in the scope
+   * @return A pair of a map from the placeholder types to the original types/lambda return expr and
+   *     a map of original to modified nodes, or null if any unresolvable erased type is found in
+   *     the scope
    */
-  private static @Nullable Pair<Expression, Map<Type, Type>>
-      copyAndReplaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
-          Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+  private static @Nullable Pair<Map<Type, Node>, IdentityHashMap<Node, Node>>
+      copyAndReplaceAllUnresolvableScopeTypeArgumentsAndLambdasWithResolvablePlaceholders(
+          Expression originalExpr,
+          Expression copyOfExpr,
+          Map<String, CompilationUnit> fqnToCompilationUnits) {
 
-    if (!expr.hasScope()) {
+    if (!copyOfExpr.hasScope()) {
       // Unresolvable for some reason, and we have no scope to try to fix it, so just give up
       return null;
     }
@@ -884,55 +960,60 @@ public class JavaParserUtil {
     // Use a clone; JavaParser symbol resolution seems to have some internal cache, so we
     // don't want to mess with the original expression to avoid revealing placeholder types
     // in resolve() calls on the same expression outside of this method
-    Expression copy = expr.clone();
-    expr.replace(copy);
+    originalExpr.replace(copyOfExpr);
 
-    Expression scope = ((NodeWithTraversableScope) copy).traverseScope().get();
+    Expression scope = ((NodeWithTraversableScope) copyOfExpr).traverseScope().get();
 
-    Map<Type, Type> placeholderToOriginal =
+    Pair<Map<Type, Node>, IdentityHashMap<Node, Node>> placeholderToOriginalAndCopies =
         replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
             scope, fqnToCompilationUnits);
 
-    if (placeholderToOriginal == null) {
-      copy.replace(expr);
-      // We found an unresolvable erased type in the scope, so we cannot resolve this method call
-      return null;
+    if (placeholderToOriginalAndCopies == null) {
+      copyOfExpr.replace(originalExpr);
     }
-
-    return new Pair<>(copy, placeholderToOriginal);
+    return placeholderToOriginalAndCopies;
   }
 
   /**
-   * Replaces all unresolvable type arguments in the scope of a method call with resolvable
-   * placeholder types, and stores the mapping from the placeholder types to the original types in
-   * the result map. If any part of the scope has an erased type that cannot be resolved, this
-   * method returns null and reverts any changes that were made. Note that if this method runs
-   * successfully, the AST will be modified with placeholder types, and the caller should use the
-   * returned map to revert those changes after resolving the method call. If this method returns
-   * null, the AST will be unchanged.
+   * Replaces all unresolvable type arguments in the scope or unsolved lambda arguments in a method
+   * call with resolvable placeholder types, and stores the mapping from the placeholder types to
+   * the original types/lambda return expressions in the result map. If any part of the scope has an
+   * erased type that cannot be resolved, this method returns null and reverts any changes that were
+   * made. Note that if this method runs successfully, the AST will be modified with placeholder
+   * types, and the caller should use the returned map (b in the pair) to revert those changes after
+   * resolving the method call. If this method returns null, the AST will be unchanged.
    *
-   * @param scope The expression to replace unresolvable type arguments in
+   * @param expr The expression to replace unresolvable type arguments in
    * @param fqnToCompilationUnits The map of FQNs to compilation units
-   * @return A map from the placeholder types to the original types, or null if any unresolvable
-   *     erased type is found
+   * @return A pair of a map of placeholder types to the original types/lambda return expr and a map
+   *     of original nodes to their copies, or null if any unresolvable erased type is found
    */
-  private static @Nullable Map<Type, Type>
+  private static @Nullable Pair<Map<Type, Node>, IdentityHashMap<Node, Node>>
       replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholders(
-          Expression scope, Map<String, CompilationUnit> fqnToCompilationUnits) {
-    Map<Type, Type> result = new HashMap<>();
+          Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    Map<Type, Node> placeholderToTypeHolding = new HashMap<>();
+    IdentityHashMap<Node, Node> originalToCopiedNodes = new IdentityHashMap<>();
     Set<Expression> handled = new HashSet<>();
+
+    if (expr.isMethodCallExpr()) {
+      replaceUnsolvableLambdaBodiesInMethodCallArguments(
+          expr.asMethodCallExpr(), originalToCopiedNodes, placeholderToTypeHolding);
+    }
+
     boolean success =
         replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
-            scope, result, handled, fqnToCompilationUnits);
+            expr, placeholderToTypeHolding, originalToCopiedNodes, handled, fqnToCompilationUnits);
+
     if (!success) {
-      for (Map.Entry<Type, Type> entry : result.entrySet()) {
+      for (Map.Entry<Node, Node> entry : originalToCopiedNodes.entrySet()) {
         // Revert changes
-        entry.getKey().replace(entry.getValue());
+        entry.getValue().replace(entry.getKey());
       }
 
       return null;
     }
-    return result;
+
+    return new Pair<>(placeholderToTypeHolding, originalToCopiedNodes);
   }
 
   /**
@@ -944,49 +1025,56 @@ public class JavaParserUtil {
    * Note that changes may have been applied by this point, so the caller should check the result
    * map to see what changes were made and revert them if necessary.
    *
-   * @param scope The expression to replace unresolvable type arguments in
-   * @param result The map to store the mapping from placeholder types to original types
+   * @param expr The expression to replace unresolvable type arguments in
+   * @param placeholderToTypeHoldingNode A map of placeholder types to a "type-holding node", which
+   *     is either an original Type or an Expression representing the lambda's return
+   * @param originalToCopiedNodes A map of original nodes to their copies
    * @param handled The set of expressions that have already been handled
    * @param fqnToCompilationUnits The map of FQNs to compilation units
    * @return True if all unresolvable type arguments were successfully replaced, false if any
    */
   private static boolean replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
-      Expression scope,
-      Map<Type, Type> result,
+      Expression expr,
+      Map<Type, Node> placeholderToTypeHoldingNode,
+      IdentityHashMap<Node, Node> originalToCopiedNodes,
       Set<Expression> handled,
       Map<String, CompilationUnit> fqnToCompilationUnits) {
-    if (handled.contains(scope)) {
+    if (handled.contains(expr)) {
       return true;
     }
-    handled.add(scope);
+    handled.add(expr);
 
     // Get the innermost expression if there are parentheses (i.e., getting foo from ((((foo)))))
-    while (scope.isEnclosedExpr()) {
-      scope = scope.asEnclosedExpr().getInner();
+    while (expr.isEnclosedExpr()) {
+      expr = expr.asEnclosedExpr().getInner();
     }
 
     // Start at the root of the scope expression: in this case, method() will be resolvable from foo
     // in foo.method()
-    if (scope.hasScope()) {
-      Expression scopeOfScope = ((NodeWithTraversableScope) scope).traverseScope().get();
+    if (expr.hasScope()) {
+      Expression scopeOfScope = ((NodeWithTraversableScope) expr).traverseScope().get();
 
       boolean success =
           replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
-              scopeOfScope, result, handled, fqnToCompilationUnits);
+              scopeOfScope,
+              placeholderToTypeHoldingNode,
+              originalToCopiedNodes,
+              handled,
+              fqnToCompilationUnits);
       if (!success) {
         return false;
       }
     }
 
     Type type = null;
-    if (scope.isNameExpr() || scope.isFieldAccessExpr()) {
+    if (expr.isNameExpr() || expr.isFieldAccessExpr()) {
       ResolvedValueDeclaration resolved;
 
       try {
-        if (scope.isNameExpr()) {
-          resolved = scope.asNameExpr().resolve();
+        if (expr.isNameExpr()) {
+          resolved = expr.asNameExpr().resolve();
         } else {
-          resolved = scope.asFieldAccessExpr().resolve();
+          resolved = expr.asFieldAccessExpr().resolve();
         }
       } catch (UnsolvedSymbolException ex) {
         // If the scope cannot be resolved, we do not know its erased type
@@ -1002,11 +1090,11 @@ public class JavaParserUtil {
 
         return resolved instanceof ReflectionFieldDeclaration;
       }
-    } else if (scope.isMethodCallExpr()) {
+    } else if (expr.isMethodCallExpr()) {
       ResolvedMethodDeclaration resolvedScopeMethod;
 
       try {
-        resolvedScopeMethod = scope.asMethodCallExpr().resolve();
+        resolvedScopeMethod = expr.asMethodCallExpr().resolve();
       } catch (UnsolvedSymbolException ex) {
         return false;
       }
@@ -1021,36 +1109,114 @@ public class JavaParserUtil {
       }
 
       type = methodDecl.getType();
-    } else if (scope.isAssignExpr()) {
+
+      replaceUnsolvableLambdaBodiesInMethodCallArguments(
+          expr.asMethodCallExpr(), originalToCopiedNodes, placeholderToTypeHoldingNode);
+    } else if (expr.isAssignExpr()) {
       // Assign expressions (x = y) return the assignment (y)
       return replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
-          scope.asAssignExpr().getValue(), result, handled, fqnToCompilationUnits);
-    } else if (scope.isCastExpr()) {
-      type = scope.asCastExpr().getType();
-    } else if (scope.isConditionalExpr()) {
+          expr.asAssignExpr().getValue(),
+          placeholderToTypeHoldingNode,
+          originalToCopiedNodes,
+          handled,
+          fqnToCompilationUnits);
+    } else if (expr.isCastExpr()) {
+      type = expr.asCastExpr().getType();
+    } else if (expr.isConditionalExpr()) {
       // Do both sides of the conditional expression so the original expression can be resolved
       boolean success =
           replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
-              scope.asConditionalExpr().getThenExpr(), result, handled, fqnToCompilationUnits);
+              expr.asConditionalExpr().getThenExpr(),
+              placeholderToTypeHoldingNode,
+              originalToCopiedNodes,
+              handled,
+              fqnToCompilationUnits);
       if (!success) {
         return false;
       }
       success =
           replaceAllUnresolvableScopeTypeArgumentsWithResolvablePlaceholdersImpl(
-              scope.asConditionalExpr().getElseExpr(), result, handled, fqnToCompilationUnits);
+              expr.asConditionalExpr().getElseExpr(),
+              placeholderToTypeHoldingNode,
+              originalToCopiedNodes,
+              handled,
+              fqnToCompilationUnits);
       if (!success) {
         return false;
       }
-    } else if (scope.isObjectCreationExpr()) {
-      type = scope.asObjectCreationExpr().getType();
+    } else if (expr.isObjectCreationExpr()) {
+      type = expr.asObjectCreationExpr().getType();
     }
 
     if (type == null) {
       return false;
     }
 
-    replaceInnermostUnresolvableTypeArgument(type, result);
+    replaceInnermostUnresolvableTypeArgument(
+        type, placeholderToTypeHoldingNode, originalToCopiedNodes);
     return true;
+  }
+
+  /**
+   * Replaces unsolvable lambda bodies in method call arguments with resolvable placeholder types,
+   * and stores the mapping from the placeholder types to the original lambda return expressions in
+   * the result map. For example, in foo(x -> x.method()) where x.method() is unsolvable, this
+   * method will replace the body of the lambda with a resolvable placeholder type, and store the
+   * mapping from that placeholder type to the original lambda body expression (x.method()) in the
+   * result map.
+   *
+   * @param methodCall The method call expression to replace unsolvable lambda bodies in
+   * @param originalToCopiedNodes A map of original nodes to their copies, used to revert changes
+   *     after resolving
+   * @param placeholderToTypeHoldingNode A map of placeholder types to the original lambda return
+   *     expressions
+   */
+  private static void replaceUnsolvableLambdaBodiesInMethodCallArguments(
+      MethodCallExpr methodCall,
+      Map<Node, Node> originalToCopiedNodes,
+      Map<Type, Node> placeholderToTypeHoldingNode) {
+    List<LambdaExpr> lambdas = methodCall.findAll(LambdaExpr.class).stream().toList();
+
+    for (LambdaExpr lambda : lambdas) {
+      // Try to replace unsolvable lambdas with known return types
+      if (isExprTypeResolvable(lambda)) {
+        continue;
+      }
+
+      if (lambda.getBody().isBlockStmt()
+          && lambda.getBody().asBlockStmt().findFirst(ReturnStmt.class).isEmpty()) {
+        // If void, do not replace with a non-void return type
+        continue;
+      }
+
+      LambdaExpr copy = lambda.clone();
+      lambda.replace(copy);
+
+      ClassOrInterfaceType placeholder =
+          getResolvablePlaceholderType(placeholderToTypeHoldingNode.size());
+
+      ObjectCreationExpr placeholderInstantiation = new ObjectCreationExpr();
+      placeholderInstantiation.setType(placeholder);
+
+      copy.setBody(new ExpressionStmt(placeholderInstantiation));
+
+      // Find the "type-holding" node of the lambda expression (the expression stmt, or a return
+      // stmt)
+
+      if (lambda.getBody().isExpressionStmt()) {
+        // If the lambda body is an expression statement, then the lambda itself is the
+        // type-holding node
+        placeholderToTypeHoldingNode.put(placeholder, lambda.getExpressionBody().get());
+      } else {
+        // If the lambda body is a block statement, then the return statement is the type-holding
+        // node
+        ReturnStmt returnStmt =
+            lambda.getBody().asBlockStmt().findFirst(ReturnStmt.class).orElseThrow();
+        placeholderToTypeHoldingNode.put(placeholder, returnStmt);
+      }
+
+      originalToCopiedNodes.put(lambda, copy);
+    }
   }
 
   /**
@@ -1058,18 +1224,21 @@ public class JavaParserUtil {
    * type. For example, List<List<Foo>> should replace Foo with a placeholder, not List<Foo>.
    *
    * @param unresolvableType The unresolvable type to replace or to keep looking into
-   * @param clonesToReal A map of cloned types to their original types
+   * @param placeholderToReal A map of cloned types to their original types
    */
   private static void replaceInnermostUnresolvableTypeArgument(
-      Type unresolvableType, Map<Type, Type> clonesToReal) {
+      Type unresolvableType,
+      Map<Type, Node> placeholderToReal,
+      IdentityHashMap<Node, Node> originalToCopiedNodes) {
     if (unresolvableType.isClassOrInterfaceType()) {
       if (unresolvableType.asClassOrInterfaceType().getTypeArguments().isEmpty()
           || unresolvableType.asClassOrInterfaceType().getTypeArguments().get().isEmpty()) {
         // Use result.size() to ensure a 1-to-1 mapping between placeholder types and unresolvable
         // type arguments
-        Type placeholder = getResolvablePlaceholderType(clonesToReal.size());
+        Type placeholder = getResolvablePlaceholderType(placeholderToReal.size());
 
-        clonesToReal.put(placeholder, unresolvableType);
+        placeholderToReal.put(placeholder, unresolvableType);
+        originalToCopiedNodes.put(unresolvableType, placeholder);
         unresolvableType.replace(placeholder);
         return;
       }
@@ -1081,12 +1250,15 @@ public class JavaParserUtil {
         try {
           typeArgs.get(i).resolve();
         } catch (UnsolvedSymbolException ex) {
-          replaceInnermostUnresolvableTypeArgument(typeArgs.get(i), clonesToReal);
+          replaceInnermostUnresolvableTypeArgument(
+              typeArgs.get(i), placeholderToReal, originalToCopiedNodes);
         }
       }
     } else if (unresolvableType.isArrayType()) {
       replaceInnermostUnresolvableTypeArgument(
-          unresolvableType.asArrayType().getComponentType(), clonesToReal);
+          unresolvableType.asArrayType().getComponentType(),
+          placeholderToReal,
+          originalToCopiedNodes);
     }
   }
 

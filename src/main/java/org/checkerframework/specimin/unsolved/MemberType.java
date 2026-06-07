@@ -25,7 +25,7 @@ public abstract class MemberType {
   }
 
   /**
-   * Gets the set of fully qualified names for this type.
+   * Gets the set of fully qualified names for this type (erasures).
    *
    * @return The set of fully qualified names representing this type
    */

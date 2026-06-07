@@ -2143,7 +2143,7 @@ public class UnsolvedSymbolGenerator {
             findGeneratedMethodFromMethodCall(rhs.asMethodCallExpr());
       }
 
-      boolean handled = false;
+      boolean handledAsFinalClass = false;
       if (methodWithPotentiallyUnconstrainedReturnType != null) {
         ResolvedType resolvedRHSType;
 
@@ -2203,12 +2203,12 @@ public class UnsolvedSymbolGenerator {
 
             toRemove.addAll(symbolsToRemove);
 
-            handled = true;
+            handledAsFinalClass = true;
           }
         }
       }
 
-      if (!handled) {
+      if (!handledAsFinalClass) {
         handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
       }
     } else if (node instanceof MethodCallExpr
@@ -2964,6 +2964,15 @@ public class UnsolvedSymbolGenerator {
 
       List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParameters =
           resolved.asReferenceType().getTypeParametersMap();
+
+      @Nullable SolvedMemberType rhsTypeAsSolvedWithSameErasure = null;
+      if (rhsTypes.size() == 1
+          && rhsTypes.iterator().next() instanceof SolvedMemberType solved
+          && JavaParserUtil.erase(solved.getFullyQualifiedNames().iterator().next())
+              .equals(resolved.erasure().describe())) {
+        rhsTypeAsSolvedWithSameErasure = solved;
+      }
+
       for (int i = 0; i < typeParameters.size(); i++) {
         ResolvedType typeParam = typeParameters.get(i).b;
 
@@ -3017,6 +3026,30 @@ public class UnsolvedSymbolGenerator {
             // If an issue arises in the future, we could find the unsolvable super classes of this
             // resolvable type bound and then apply these bounds there
           }
+        } else if (!typeParam.isWildcard()
+            && rhsTypeAsSolvedWithSameErasure != null
+            && rhsTypeAsSolvedWithSameErasure.getTypeArguments().size() > i) {
+          // In the case of List<String> = List<SomeConcreteSyntheticType>, we know that
+          // SomeConcreteSyntheticType must be String
+          // Also, since we know that the LHS is resolvable, the RHS must be a SolvedMemberType to
+          // satisfy this.
+
+          MemberType rhsTypeArg = rhsTypeAsSolvedWithSameErasure.getTypeArguments().get(i);
+
+          if (!(rhsTypeArg instanceof UnsolvedMemberType rhsUnsolvedTypeArg)) {
+            continue;
+          }
+
+          MemberType toReplaceWith =
+              getMemberTypeFromFQNs(
+                  fullyQualifiedNameGenerator.getFQNsForResolvedType(typeParam), false);
+
+          if (toReplaceWith == null) {
+            throw new RuntimeException(
+                "Impossible error: typeParam is solved and toReplaceWith should never be null");
+          }
+
+          removeSymbolAndReplaceUses(rhsUnsolvedTypeArg, toReplaceWith);
         }
       }
 
@@ -3027,63 +3060,79 @@ public class UnsolvedSymbolGenerator {
       for (int i = 0; i < lhsType.getTypeArguments().size(); i++) {
         MemberType typeParam = lhsType.getTypeArguments().get(i);
 
-        if (!(typeParam instanceof WildcardMemberType wildcard)
-            || wildcard.equals(WildcardMemberType.UNBOUNDED)) {
-          continue;
-        }
-
-        MemberType bound = wildcard.getBound();
-
-        if (bound == null) {
-          continue;
-        }
-        boolean isUpperBound = wildcard.isUpperBounded();
-
-        Set<String> erased =
-            lhsType.getFullyQualifiedNames().stream()
-                .map(JavaParserUtil::erase)
-                .collect(Collectors.toSet());
-
-        Set<MemberType> rhsTypeParameters = new LinkedHashSet<>();
-        for (MemberType rhsType : rhsTypes) {
-          // There are many possibilities for this: for example, if rhsType is a raw type,
-          // if rhsType is a non-generic type that extends a generic type, etc.
-          if (rhsType.getTypeArguments().size() <= i) {
+        if (typeParam instanceof WildcardMemberType wildcard) {
+          if (wildcard.equals(WildcardMemberType.UNBOUNDED)) {
             continue;
           }
 
-          MemberType typeArg = rhsType.getTypeArguments().get(i);
+          MemberType bound = wildcard.getBound();
 
-          if (typeArg instanceof WildcardMemberType rhsWildcard) {
-            MemberType memberTypeBound = rhsWildcard.getBound();
+          if (bound == null) {
+            continue;
+          }
+          boolean isUpperBound = wildcard.isUpperBounded();
 
-            if (memberTypeBound != null) {
-              typeArg = memberTypeBound;
+          Set<MemberType> rhsTypeParameters = new LinkedHashSet<>();
+          for (MemberType rhsType : rhsTypes) {
+            // There are many possibilities for this: for example, if rhsType is a raw type,
+            // if rhsType is a non-generic type that extends a generic type, etc.
+            if (rhsType.getTypeArguments().size() <= i) {
+              continue;
             }
+
+            MemberType typeArg = rhsType.getTypeArguments().get(i);
+
+            if (typeArg instanceof WildcardMemberType rhsWildcard) {
+              MemberType memberTypeBound = rhsWildcard.getBound();
+
+              if (memberTypeBound != null) {
+                typeArg = memberTypeBound;
+              }
+            }
+
+            if (!rhsType.getFullyQualifiedNames().stream()
+                .anyMatch(lhsType.getFullyQualifiedNames()::contains)) {
+              continue;
+            }
+
+            rhsTypeParameters.add(typeArg);
           }
 
-          if (!rhsType.getFullyQualifiedNames().stream().anyMatch(erased::contains)) {
-            continue;
+          // ? extends with ? extends; there is no ? extends with ? super
+          if (isUpperBound) {
+            handleLHSAndRHSRelationship(
+                Set.of(bound),
+                rhsTypeParameters,
+                () -> {
+                  throw new UnsolvedSymbolException("");
+                });
+          } else {
+            handleLHSAndRHSRelationship(
+                rhsTypeParameters,
+                rhsTypes,
+                () -> {
+                  throw new UnsolvedSymbolException("");
+                });
           }
-
-          rhsTypeParameters.add(typeArg);
-        }
-
-        // ? extends with ? extends; there is no ? extends with ? super
-        if (isUpperBound) {
-          handleLHSAndRHSRelationship(
-              Set.of(bound),
-              rhsTypeParameters,
-              () -> {
-                throw new UnsolvedSymbolException("");
-              });
         } else {
-          handleLHSAndRHSRelationship(
-              rhsTypeParameters,
-              rhsTypes,
-              () -> {
-                throw new UnsolvedSymbolException("");
-              });
+          for (MemberType rhsType : rhsTypes) {
+            // In the case of Foo<String> = Foo<SomeConcreteSyntheticType>, we know that
+            // SomeConcreteSyntheticType must be String
+            if (rhsType.getFullyQualifiedNames().stream()
+                    .noneMatch(lhsType.getFullyQualifiedNames()::contains)
+                || rhsType.getTypeArguments().size() <= i) {
+              continue;
+            }
+
+            MemberType rhsTypeArg = rhsType.getTypeArguments().get(i);
+
+            if (!(rhsTypeArg instanceof UnsolvedMemberType rhsUnsolvedTypeArg)
+                || rhsUnsolvedTypeArg.equals(typeParam)) {
+              continue;
+            }
+
+            removeSymbolAndReplaceUses(rhsUnsolvedTypeArg, typeParam);
+          }
         }
       }
     }
