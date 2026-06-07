@@ -912,15 +912,6 @@ public class JavaParserUtil {
       // There's a chance that the "original" node is from a copy of the initial expression
       // (and thus not in a compilation unit), so we need to fix those. This is only a problem
       // for lambda arguments, not for scopes.
-      System.out.println(originalNode);
-      System.out.println(originalToCopies.containsKey(originalNode));
-      System.out.println(originalNode.findCompilationUnit());
-
-      Node traverse = originalNode;
-      while (traverse.hasParentNode()) {
-        System.out.println(traverse);
-        traverse = traverse.getParentNode().get();
-      }
 
       placeholderFQNToOriginalNode.put(
           placeholderType,
