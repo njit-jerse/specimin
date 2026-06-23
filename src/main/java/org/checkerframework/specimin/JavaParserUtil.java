@@ -43,6 +43,7 @@ import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.TypeSolver;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
@@ -1376,6 +1377,84 @@ public class JavaParserUtil {
     }
 
     return false;
+  }
+
+  /**
+   * Tries to get the method definition if the method call expression matches that of a method
+   * included in the JDK. Returns an empty list if it cannot be resolved.
+   *
+   * @param methodCall The method call expression to resolve
+   * @return A list of matching method definitions, or an empty list if none are found
+   */
+  public static List<MethodUsage> tryGetJDKDefsWithUnresolvableArguments(
+      MethodCallExpr methodCall) {
+    ResolvedReferenceTypeDeclaration typeDecl;
+
+    if (methodCall.hasScope()) {
+      Expression scope = methodCall.getScope().get();
+      try {
+        ResolvedType scopeType = scope.calculateResolvedType();
+
+        if (scopeType.isReferenceType()) {
+          typeDecl = scopeType.asReferenceType().getTypeDeclaration().get();
+        } else {
+          return Collections.emptyList();
+        }
+      } catch (UnsolvedSymbolException e) {
+        return Collections.emptyList();
+      }
+    } else {
+      return Collections.emptyList();
+    }
+
+    int numArgs = methodCall.getArguments().size();
+    String name = methodCall.getNameAsString();
+
+    return typeDecl.getAllMethods().stream()
+        .filter(m -> m.getName().equals(name) && m.getParamTypes().size() == numArgs)
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Tries to get the constructor definition if the constructor call expression matches that of a
+   * constructor included in the JDK. Returns an empty list if it cannot be resolved. For method
+   * call expressions, use {@link #tryGetJDKDefsWithUnresolvableArguments(MethodCallExpr)} instead.
+   *
+   * @param withArgs The node with arguments to resolve (a constructor call or enum constant
+   *     declaration)
+   * @return A list of matching constructor definitions, or an empty list if none are found
+   */
+  public static List<ResolvedConstructorDeclaration> tryGetJDKDefsWithUnresolvableArguments(
+      NodeWithArguments<?> withArgs) {
+    ResolvedReferenceTypeDeclaration typeDecl;
+
+    if (withArgs instanceof NodeWithTraversableScope withScope
+        && withScope.traverseScope().isPresent()) {
+      Expression scope = withScope.traverseScope().get();
+      try {
+        ResolvedType scopeType = scope.calculateResolvedType();
+
+        if (scopeType.isReferenceType()) {
+          typeDecl = scopeType.asReferenceType().getTypeDeclaration().get();
+        } else {
+          return Collections.emptyList();
+        }
+      } catch (UnsolvedSymbolException e) {
+        return Collections.emptyList();
+      }
+    } else {
+      return Collections.emptyList();
+    }
+
+    int numArgs = withArgs.getArguments().size();
+    if (withArgs instanceof MethodCallExpr) {
+      throw new RuntimeException(
+          "Call tryGetJDKDefsWithUnresolvableArguments(MethodCallExpr, Map) instead");
+    } else {
+      return typeDecl.getConstructors().stream()
+          .filter(c -> c.getNumberOfParams() == numArgs)
+          .collect(Collectors.toList());
+    }
   }
 
   /**

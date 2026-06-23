@@ -91,10 +91,16 @@ public class UnsolvedSymbolGenerator {
    *
    * @param fqnsToCompilationUnits A set of fully-qualified names to compilation units
    */
+  @SuppressWarnings("method.invocation")
   public UnsolvedSymbolGenerator(Map<String, CompilationUnit> fqnsToCompilationUnits) {
     this.fqnsToCompilationUnits = fqnsToCompilationUnits;
+
     fullyQualifiedNameGenerator =
-        new FullyQualifiedNameGenerator(fqnsToCompilationUnits, generatedSymbols);
+        new FullyQualifiedNameGenerator(
+            fqnsToCompilationUnits,
+            generatedSymbols,
+            // This is safe; the lambda is always called after the constructor finishes
+            (fqns) -> getMemberTypeFromFQNs(fqns, false));
   }
 
   /**
@@ -982,8 +988,75 @@ public class UnsolvedSymbolGenerator {
     if (generated instanceof UnsolvedMethodAlternates) {
       generatedMethod = (UnsolvedMethodAlternates) generated;
 
+      boolean returnTypeReplaced = false;
+
       if (!returnTypeToMustPreserveNode.isEmpty()) {
+        Set<MemberType> oldReturnTypes = generatedMethod.getReturnTypes();
         generatedMethod.updateReturnTypesAndMustPreserveNodes(returnTypeToMustPreserveNode);
+
+        // Handle the case where more information gives a single possible return type that is the
+        // actual name of the return type, when all we knew earlier was a generated return type
+        // name that was used as a placeholder.
+        if (!generatedMethod.getReturnTypes().equals(oldReturnTypes)
+            && oldReturnTypes.size() == 1
+            && oldReturnTypes.iterator().next() instanceof UnsolvedMemberType unsolved
+            && unsolved.usesGeneratedName()
+            && generatedMethod.getReturnTypes().size() == 1) {
+          removeTypeAndReplaceUses(unsolved, generatedMethod.getReturnTypes().iterator().next());
+          returnTypeReplaced = true;
+        }
+      } else if (generatedMethod.getReturnTypes().size() == 1
+          && generatedMethod.getReturnTypes().iterator().next()
+              instanceof UnsolvedMemberType unsolved
+          && unsolved.usesGeneratedName()) {
+        Set<FullyQualifiedNameSet> returnTypeFQNs =
+            fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall);
+        Set<MemberType> returnTypes =
+            returnTypeFQNs.stream()
+                .map(this::getOrCreateMemberTypeFromFQNs)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (returnTypeFQNs.size() > 0 && !returnTypeFQNs.iterator().next().usesGeneratedName()) {
+          generatedMethod.replaceReturnType(unsolved, returnTypes.iterator().next());
+          generatedMethod.addReturnTypes(returnTypes);
+          removeTypeAndReplaceUses(unsolved, returnTypes.stream().toArray(MemberType[]::new));
+          returnTypeReplaced = true;
+        }
+      }
+
+      if (returnTypeReplaced) {
+        // Special case: since we now know the method's return type, we may need to update its
+        // parent/child nodes since they may have used outdated type information
+
+        // For example, if this an unsolved method as an argument to this method call was
+        // already generated with a generated return type as its type, and we now know
+        // what the actual return type should be, we need to update it now in case we
+        // do not encounter that inner method again.
+
+        // We also find all instances of the method and method calls with methodCall
+        // in its scope, which guarantees we find most cases where the method call is used.
+        // This is relatively expensive, but ok since this shouldn't need to run in most cases.
+
+        // Ignore generated symbols so we can get updated types
+        fullyQualifiedNameGenerator.setShouldCheckGeneratedSymbols(false);
+        for (MethodCallExpr methodToUpdate :
+            methodCall
+                .findCompilationUnit()
+                .get()
+                .findAll(
+                    MethodCallExpr.class,
+                    m -> m.toString().contains(methodCall.getNameAsString()))) {
+          Node parentNode = methodToUpdate.getParentNode().get();
+          while (parentNode != null) {
+            inferContextImpl(parentNode, result);
+            parentNode = parentNode.getParentNode().orElse(null);
+          }
+
+          for (Node argument : methodToUpdate.getArguments()) {
+            inferContextImpl(argument, result);
+          }
+        }
+        fullyQualifiedNameGenerator.setShouldCheckGeneratedSymbols(true);
       }
     } else {
       List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
@@ -2176,19 +2249,9 @@ public class UnsolvedSymbolGenerator {
             Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
             for (MemberType returnType :
                 methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
-              if (returnType instanceof UnsolvedMemberType unsolvedReturnType) {
-                // A synthetic return type contains only one FQN, ending with ReturnType
-                if (unsolvedReturnType.getFullyQualifiedNames().size() > 1) {
-                  continue;
-                }
-
-                String returnTypeFQN =
-                    unsolvedReturnType.getFullyQualifiedNames().iterator().next();
-                if (!returnTypeFQN.endsWith("ReturnType")) {
-                  continue;
-                }
-
-                // Next, check to see if it is unused everywhere (no methods or fields)
+              if (returnType instanceof UnsolvedMemberType unsolvedReturnType
+                  && unsolvedReturnType.usesGeneratedName()) {
+                // Check to see if it is unused everywhere (no methods or fields)
                 if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
                   symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
                 }
@@ -2197,8 +2260,9 @@ public class UnsolvedSymbolGenerator {
 
             methodWithPotentiallyUnconstrainedReturnType.setUnconstrainedReturnType();
             for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
-              removeSymbolAndReplaceUses(
-                  new UnsolvedMemberType(symbolToRemove), new SolvedMemberType("java.lang.Object"));
+              removeTypeAndReplaceUses(
+                  new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
+                  new SolvedMemberType("java.lang.Object"));
             }
 
             toRemove.addAll(symbolsToRemove);
@@ -2487,30 +2551,78 @@ public class UnsolvedSymbolGenerator {
    * @param syntheticType the synthetic type to remove and replace uses of
    * @param replaceWith the type to replace uses of the synthetic type with
    */
-  private void removeSymbolAndReplaceUses(
-      UnsolvedMemberType syntheticType, MemberType replaceWith) {
+  private void removeTypeAndReplaceUses(
+      UnsolvedMemberType syntheticType, MemberType... replaceWith) {
     if (!generatedSymbols.containsKey(syntheticType.getFullyQualifiedNames().iterator().next())) {
       return;
+    }
+
+    Set<UnsolvedSymbolAlternates<?>> symbolsToRemove = new HashSet<>();
+    symbolsToRemove.add(syntheticType.getUnsolvedType());
+
+    Map<Set<String>, UnsolvedSymbolAlternates<?>> oldFQNsToUpdated = new HashMap<>();
+
+    List<UnsolvedMemberType> unsolvedReplacements = new ArrayList<>();
+    for (MemberType type : replaceWith) {
+      if (type instanceof UnsolvedMemberType unsolved) {
+        unsolvedReplacements.add(unsolved);
+      }
     }
 
     for (UnsolvedSymbolAlternates<?> symbol : generatedSymbols.values()) {
       if (symbol instanceof UnsolvedMethodAlternates method) {
         if (method.getAlternates().stream()
             .anyMatch(alt -> alt.getParameterList().contains(syntheticType))) {
-          method.applyToAllAlternates(
-              alternate -> alternate.replaceParameterType(syntheticType, replaceWith));
+          oldFQNsToUpdated.put(method.getFullyQualifiedNames(), method);
+          method.replaceParameterType(syntheticType, Set.of(replaceWith));
         }
         if (method.getReturnTypes().contains(syntheticType)) {
-          method.replaceReturnType(syntheticType, replaceWith);
+          method.replaceReturnType(syntheticType, replaceWith[0]);
+          method.addReturnTypes(Set.of(replaceWith));
         }
       } else if (symbol instanceof UnsolvedFieldAlternates field) {
         if (field.getTypes().contains(syntheticType)) {
-          field.replaceFieldType(syntheticType, replaceWith);
+          field.replaceAllOldFieldTypes(Set.of(replaceWith));
+        }
+      }
+
+      if (!symbol.getAlternateDeclaringTypes().contains(syntheticType.getUnsolvedType())) {
+        continue;
+      }
+
+      // All are solved; this symbol exists in the codebase/JDK
+      if (unsolvedReplacements.isEmpty()) {
+        if (symbol.getAlternateDeclaringTypes().size() == 1) {
+          symbolsToRemove.add(symbol);
+        }
+      } else {
+        int index = symbol.getAlternateDeclaringTypes().indexOf(syntheticType.getUnsolvedType());
+        symbol.getAlternateDeclaringTypes().remove(index);
+        for (int i = unsolvedReplacements.size() - 1; i >= 0; i--) {
+          symbol
+              .getAlternateDeclaringTypes()
+              .add(index, unsolvedReplacements.get(i).getUnsolvedType());
         }
       }
     }
 
-    removeSymbolFromGeneratedSymbolsMap(syntheticType.getUnsolvedType());
+    for (UnsolvedSymbolAlternates<?> symbol : symbolsToRemove) {
+      removeSymbolFromGeneratedSymbolsMap(symbol);
+      // Call this after because removeSymbolFromGeneratedSymbolsMap relies on FQNs, but if we
+      // remove
+      // the synthetic type before, then that FQN will be gone and we won't be able to find the
+      // symbol in the map
+      symbol.getAlternateDeclaringTypes().remove(syntheticType.getUnsolvedType());
+    }
+
+    for (Map.Entry<Set<String>, UnsolvedSymbolAlternates<?>> entry : oldFQNsToUpdated.entrySet()) {
+      for (String fqn : entry.getKey()) {
+        generatedSymbols.remove(fqn);
+      }
+      for (String fqn : entry.getValue().getFullyQualifiedNames()) {
+        generatedSymbols.put(fqn, entry.getValue());
+      }
+    }
   }
 
   /**
@@ -2632,6 +2744,7 @@ public class UnsolvedSymbolGenerator {
       if (methodCall.getArguments().stream().anyMatch(Expression::isNullLiteralExpr)) {
         return;
       }
+
       throw new RuntimeException(
           "Unresolvable method is not generated when all unsolved symbols should be: "
               + potentialFQNs);
@@ -3049,7 +3162,7 @@ public class UnsolvedSymbolGenerator {
                 "Impossible error: typeParam is solved and toReplaceWith should never be null");
           }
 
-          removeSymbolAndReplaceUses(rhsUnsolvedTypeArg, toReplaceWith);
+          removeTypeAndReplaceUses(rhsUnsolvedTypeArg, toReplaceWith);
         }
       }
 
@@ -3131,7 +3244,7 @@ public class UnsolvedSymbolGenerator {
               continue;
             }
 
-            removeSymbolAndReplaceUses(rhsUnsolvedTypeArg, typeParam);
+            removeTypeAndReplaceUses(rhsUnsolvedTypeArg, typeParam);
           }
         }
       }
@@ -3491,7 +3604,8 @@ public class UnsolvedSymbolGenerator {
 
       if (type == null) {
         throw new RuntimeException(
-            "Cannot have generated fields/methods before its type is generated.");
+            "Cannot have generated fields/methods before its type is generated. potentialFQNs: "
+                + potentialFQNs);
       }
 
       Set<String> alreadyGeneratedFQNs = alreadyGenerated.getFullyQualifiedNames();
@@ -3669,7 +3783,8 @@ public class UnsolvedSymbolGenerator {
       return new UnsolvedMemberType(
           unsolved,
           JavaParserUtil.countNumberOfArrayBrackets(fqns.erasedFqns().iterator().next()),
-          typeArguments);
+          typeArguments,
+          fqns.usesGeneratedName());
     }
   }
 

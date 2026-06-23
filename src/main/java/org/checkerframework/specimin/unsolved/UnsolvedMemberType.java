@@ -19,23 +19,10 @@ public class UnsolvedMemberType extends MemberType {
   private int numArrayBrackets;
 
   /**
-   * Creates a new UnsolvedMemberType with the given unsolved type and no array brackets.
-   *
-   * @param unsolved The unsolved type
+   * Represents whether this UnsolvedMemberType uses a generated type name (i.e.,
+   * GetListReturnType).
    */
-  public UnsolvedMemberType(UnsolvedClassOrInterfaceAlternates unsolved) {
-    this(unsolved, 0);
-  }
-
-  /**
-   * Creates a new UnsolvedMemberType with the given unsolved type and number of array brackets.
-   *
-   * @param unsolved The unsolved type
-   * @param numArrayBrackets The number of array brackets
-   */
-  public UnsolvedMemberType(UnsolvedClassOrInterfaceAlternates unsolved, int numArrayBrackets) {
-    this(unsolved, numArrayBrackets, List.of());
-  }
+  private boolean usesGeneratedName;
 
   /**
    * Creates a new UnsolvedMemberType with the given unsolved type, number of array brackets, and
@@ -44,14 +31,18 @@ public class UnsolvedMemberType extends MemberType {
    * @param unsolved The unsolved type
    * @param numArrayBrackets The number of array brackets
    * @param typeArguments The type arguments for this type
+   * @param usesGeneratedName Whether this UnsolvedMemberType uses a generated type name (i.e.,
+   *     GetListReturnType)
    */
   public UnsolvedMemberType(
       UnsolvedClassOrInterfaceAlternates unsolved,
       int numArrayBrackets,
-      List<MemberType> typeArguments) {
+      List<MemberType> typeArguments,
+      boolean usesGeneratedName) {
     super(typeArguments);
     this.unsolved = unsolved;
     this.numArrayBrackets = numArrayBrackets;
+    this.usesGeneratedName = usesGeneratedName;
   }
 
   /**
@@ -66,6 +57,15 @@ public class UnsolvedMemberType extends MemberType {
   @Override
   public Set<String> getFullyQualifiedNames() {
     return unsolved.getFullyQualifiedNames();
+  }
+
+  /**
+   * Returns whether this UnsolvedMemberType uses a generated type name (i.e., GetListReturnType).
+   *
+   * @return Whether this UnsolvedMemberType uses a generated type name
+   */
+  public boolean usesGeneratedName() {
+    return usesGeneratedName;
   }
 
   @Override
@@ -110,6 +110,6 @@ public class UnsolvedMemberType extends MemberType {
 
   @Override
   public MemberType copyWithNewTypeArgs(List<MemberType> newTypeArgs) {
-    return new UnsolvedMemberType(unsolved, numArrayBrackets, newTypeArgs);
+    return new UnsolvedMemberType(unsolved, numArrayBrackets, newTypeArgs, usesGeneratedName);
   }
 }

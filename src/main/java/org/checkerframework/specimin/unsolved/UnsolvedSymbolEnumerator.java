@@ -35,8 +35,16 @@ public class UnsolvedSymbolEnumerator {
       if (unsolvedSymbol instanceof UnsolvedClassOrInterfaceAlternates type) {
         unsolvedTypes.add(type);
       } else if (unsolvedSymbol instanceof UnsolvedFieldAlternates field) {
+        if (unsolvedSymbol.getAlternateDeclaringTypes().isEmpty()) {
+          continue;
+        }
+
         unsolvedFields.add(field);
       } else if (unsolvedSymbol instanceof UnsolvedMethodAlternates method) {
+        if (unsolvedSymbol.getAlternateDeclaringTypes().isEmpty()) {
+          continue;
+        }
+
         unsolvedMethods.add(method);
       }
     }

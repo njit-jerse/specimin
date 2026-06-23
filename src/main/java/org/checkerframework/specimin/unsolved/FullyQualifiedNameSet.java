@@ -15,9 +15,15 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * com.example.A<com.example.B>]}, then pass in a set of erasedFqns {@code [org.example.A,
  * com.example.A]}, a list of FullyQualifiedNameSet {@code [org.example.B, com.example.B]} for type
  * arguments, and a wildcard of {@code ? extends}.
+ *
+ * <p>usesGeneratedName represents whether this FullyQualifiedNameSet uses a generated type name
+ * (i.e., GetListReturnType).
  */
 public record FullyQualifiedNameSet(
-    Set<String> erasedFqns, List<FullyQualifiedNameSet> typeArguments, @Nullable String wildcard) {
+    Set<String> erasedFqns,
+    List<FullyQualifiedNameSet> typeArguments,
+    @Nullable String wildcard,
+    boolean usesGeneratedName) {
   public FullyQualifiedNameSet {
     for (String fqn : erasedFqns) {
       if (fqn.contains("?")) {
@@ -40,7 +46,22 @@ public record FullyQualifiedNameSet(
       new FullyQualifiedNameSet(Set.of(), List.of(), "?");
 
   /**
-   * Creates a FullyQualifiedNameSet with erased FQNs, type arguments, but no wildcard.
+   * Creates a non-synthetic FullyQualifiedNameSet with erased FQNs, type arguments, and a wildcard.
+   *
+   * @param erasedFqns A set of erased fully qualified names.
+   * @param typeArguments A list of type arguments.
+   * @param wildcard The wildcard for the fully qualified name set.
+   */
+  public FullyQualifiedNameSet(
+      Set<String> erasedFqns,
+      List<FullyQualifiedNameSet> typeArguments,
+      @Nullable String wildcard) {
+    this(erasedFqns, typeArguments, wildcard, false);
+  }
+
+  /**
+   * Creates a non-synthetic FullyQualifiedNameSet with erased FQNs, type arguments, but no
+   * wildcard.
    *
    * @param erasedFqns A set of erased fully qualified names.
    * @param typeArguments A list of type arguments
@@ -50,7 +71,7 @@ public record FullyQualifiedNameSet(
   }
 
   /**
-   * Creates a FullyQualifiedNameSet with erased FQNs and no type arguments.
+   * Creates a non-synthetic FullyQualifiedNameSet with erased FQNs and no type arguments.
    *
    * @param erasedFqns A set of erased fully qualified names.
    */
@@ -59,7 +80,7 @@ public record FullyQualifiedNameSet(
   }
 
   /**
-   * Creates a FullyQualifiedNameSet with erased FQNs and no type arguments.
+   * Creates a non-synthetic FullyQualifiedNameSet with erased FQNs and no type arguments.
    *
    * @param erasedFqns A varargs of erased fully qualified names.
    */

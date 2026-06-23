@@ -232,23 +232,28 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
     UnsolvedMethod old = getAlternates().get(0);
-    Set<MemberType> oldReturnTypes = getReturnTypes();
+
+    Set<List<MemberType>> parameterLists =
+        getAlternates().stream()
+            .map(alternate -> alternate.getParameterList())
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+
     getAlternates()
         .removeIf(alternate -> !returnsToPreserveNodes.containsKey(alternate.getReturnType()));
 
-    if (getAlternates().isEmpty() && oldReturnTypes.size() == 1) {
-      // If it's now empty and old return types was of size 1, it was probably a synthetic return
-      // type
+    if (getAlternates().isEmpty()) {
       for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
           returnsToPreserveNodes.entrySet()) {
-        UnsolvedMethod method =
-            new UnsolvedMethod(
-                old.getName(),
-                entry.getKey(),
-                old.getParameterList(),
-                old.getThrownExceptions(),
-                Set.of(entry.getValue()));
-        addAlternate(method);
+        for (List<MemberType> parameterList : parameterLists) {
+          UnsolvedMethod method =
+              new UnsolvedMethod(
+                  old.getName(),
+                  entry.getKey(),
+                  parameterList,
+                  old.getThrownExceptions(),
+                  Set.of(entry.getValue()));
+          addAlternate(method);
+        }
       }
     }
   }
@@ -418,6 +423,48 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
       }
 
       seenParameterLists.add(alternate.getParameterList());
+    }
+  }
+
+  /**
+   * Replaces a parameter type with new parameter types in all alternates.
+   *
+   * @param oldType The parameter type to replace
+   * @param newTypes The parameter types to replace with
+   */
+  public void replaceParameterType(MemberType oldType, Set<MemberType> newTypes) {
+    int originalSize = getAlternates().size();
+    for (int i = 0; i < originalSize; i++) {
+      UnsolvedMethod alternate = getAlternates().get(i);
+
+      List<MemberType> parameterList = alternate.getParameterList();
+      boolean hasOldType = parameterList.contains(oldType);
+
+      if (hasOldType) {
+        boolean isFirst = true;
+        for (MemberType newType : newTypes) {
+          if (isFirst) {
+            alternate.replaceParameterType(oldType, newType);
+            isFirst = false;
+            continue;
+          }
+
+          List<MemberType> newParameterList =
+              parameterList.stream().map(param -> param.equals(oldType) ? newType : param).toList();
+          UnsolvedMethod newAlternate =
+              new UnsolvedMethod(
+                  alternate.getName(),
+                  alternate.getReturnType(),
+                  newParameterList,
+                  alternate.getThrownExceptions(),
+                  alternate.getMustPreserveNodes(),
+                  alternate.getAccessModifier(),
+                  alternate.isStatic(),
+                  alternate.getNumberOfTypeVariables());
+
+          addAlternate(newAlternate);
+        }
+      }
     }
   }
 
