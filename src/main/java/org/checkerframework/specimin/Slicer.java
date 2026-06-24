@@ -238,7 +238,9 @@ public class Slicer {
         if (resolved == null) {
           throw ex;
         }
-      } catch (UnsolvedSymbolException ex) {
+      } catch (UnsolvedSymbolException | IllegalStateException ex) {
+        // IllegalStateException when trying to resolve an expression whose scope is
+        // a lambda parameter that has the type of an unbounded wildcard
         boolean shouldTryToResolve = true;
         if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {
           // We may encounter this if the user includes a FQN in their input, since the type rule
@@ -269,9 +271,9 @@ public class Slicer {
           // an UnsolvedSymbolException, even if the type is resolvable
           if (node instanceof FieldAccessExpr || node instanceof NameExpr) {
             if (!JavaParserUtil.isProbablyAPackage((Expression) node)) {
-              try {
-                resolved = ((Expression) node).calculateResolvedType();
-              } catch (UnsolvedSymbolException ex2) {
+              resolved = JavaParserUtil.calculateResolvedType((Expression) node);
+
+              if (resolved == null) {
                 generateUnsolvedSymbol = true;
               }
             } else {
@@ -394,7 +396,10 @@ public class Slicer {
                                     .equals(resolved.declaringType().getQualifiedName())
                                 && target.getName().equals(resolved.getName());
                           }
-                        } catch (UnsolvedSymbolException e) {
+                        } catch (UnsolvedSymbolException | IllegalStateException ex) {
+                          // IllegalStateException when trying to resolve an expression whose scope
+                          // is
+                          // a lambda parameter that has the type of an unbounded wildcard
                           return false;
                         }
                       } else if (assignExpr.getTarget().isNameExpr()) {
@@ -411,7 +416,10 @@ public class Slicer {
                                 && target.getName().equals(resolved.getName());
                           }
                           return target.equals(resolved);
-                        } catch (UnsolvedSymbolException e) {
+                        } catch (UnsolvedSymbolException | IllegalStateException ex) {
+                          // IllegalStateException when trying to resolve an expression whose scope
+                          // is
+                          // a lambda parameter that has the type of an unbounded wildcard
                           return false;
                         }
                       }

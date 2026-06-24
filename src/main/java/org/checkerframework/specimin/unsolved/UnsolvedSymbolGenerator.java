@@ -190,13 +190,10 @@ public class UnsolvedSymbolGenerator {
       int numberOfTypeParams = 0;
 
       if (node instanceof ObjectCreationExpr constructor) {
-        try {
-          constructor.calculateResolvedType();
+        if (JavaParserUtil.calculateResolvedType(constructor) != null) {
           // If the type is resolvable, the constructor is too; a type in the constructor is not
           // solvable. Return because we don't need to generate a new constructor.
           return;
-        } catch (UnsolvedSymbolException ex) {
-          // continue
         }
 
         inferContextImpl(constructor.getType(), result);
@@ -589,10 +586,13 @@ public class UnsolvedSymbolGenerator {
       }
 
       return;
-    } catch (UnsolvedSymbolException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+      // IllegalStateException when trying to resolve an expression whose scope is
+      // a lambda parameter that has the type of an unbounded wildcard
+
       // If the declaration is not resolvable, then check to see if it is a
       // known class that has been passed in
-      if (JavaParserUtil.isExprTypeResolvable(field)) {
+      if (JavaParserUtil.calculateResolvedType(field) != null) {
         // This is most likely a class; resolve() only works on field declarations.
         // System.out, for example, would fail to resolve() but calculateResolvedType() would work.
         return;
@@ -729,10 +729,13 @@ public class UnsolvedSymbolGenerator {
       }
 
       return;
-    } catch (UnsolvedSymbolException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+      // IllegalStateException when trying to resolve an expression whose scope is
+      // a lambda parameter that has the type of an unbounded wildcard
+
       // If the declaration is not resolvable, then check to see if it is a
       // known class that has been passed in
-      if (JavaParserUtil.isExprTypeResolvable(nameExpr)) {
+      if (JavaParserUtil.calculateResolvedType(nameExpr) != null) {
         // This is most likely a class; resolve() only works on field/variable declarations.
         // System, for example, would fail to resolve() but calculateResolvedType() would work.
         return;
@@ -848,7 +851,10 @@ public class UnsolvedSymbolGenerator {
       }
 
       return;
-    } catch (UnsolvedSymbolException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+      // IllegalStateException when trying to resolve an expression whose scope is
+      // a lambda parameter that has the type of an unbounded wildcard
+
       if (JavaParserUtil.tryResolveNodeIfInAnonymousClass(methodCall) != null) {
         return;
       }
@@ -869,7 +875,7 @@ public class UnsolvedSymbolGenerator {
         && methodCall.getArguments().stream()
             .allMatch(
                 arg ->
-                    JavaParserUtil.isExprTypeResolvable(arg)
+                    JavaParserUtil.calculateResolvedType(arg) != null
                         || JavaParserUtil.isExprDefinitionResolvable(arg))) {
       // Special case: method declaration is findable, arguments are all solvable, but a parameter
       // type is not. In this case, the type of the parameters are unsolved, and should be preserved
@@ -2097,7 +2103,7 @@ public class UnsolvedSymbolGenerator {
       Set<MemberType> lhsType;
       Set<MemberType> rhsType;
 
-      Supplier<ResolvedType> getResolvedTypeOfLHS;
+      Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS;
 
       // There is a chance we find a final LHS type below. In this case, we cannot make the RHS a
       // subtype. This can happen when the RHS is an unsolved method and we created a synthetic
@@ -2116,7 +2122,7 @@ public class UnsolvedSymbolGenerator {
             getMemberTypesAndExpectNonNullFromFQNSets(
                 fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
 
-        getResolvedTypeOfLHS = () -> lhs.calculateResolvedType();
+        getResolvedTypeOfLHS = () -> JavaParserUtil.calculateResolvedType(lhs);
       } else if (node instanceof VariableDeclarator varDecl) {
         Type lhs = varDecl.getType();
 
@@ -2154,26 +2160,23 @@ public class UnsolvedSymbolGenerator {
         // See if the lambda expression type is available. If not, we can't get a relationship
 
         ResolvedType solvableTypeFromLambda;
-        try {
-          ResolvedType functionalInterface = lambdaExpr.calculateResolvedType();
+        ResolvedType functionalInterface = JavaParserUtil.calculateResolvedType(lambdaExpr);
 
-          if (!functionalInterface.isReferenceType()
-              || !functionalInterface.asReferenceType().getTypeDeclaration().isPresent()) {
-            return UnsolvedGenerationResult.EMPTY;
-          }
-
-          ResolvedReferenceTypeDeclaration functionalInterfaceDecl =
-              functionalInterface.asReferenceType().getTypeDeclaration().get();
-
-          if (!functionalInterfaceDecl.isFunctionalInterface()) {
-            return UnsolvedGenerationResult.EMPTY;
-          }
-
-          solvableTypeFromLambda =
-              functionalInterfaceDecl.getAllMethods().iterator().next().returnType();
-        } catch (UnsolvedSymbolException ex) {
+        if (functionalInterface == null
+            || !functionalInterface.isReferenceType()
+            || !functionalInterface.asReferenceType().getTypeDeclaration().isPresent()) {
           return UnsolvedGenerationResult.EMPTY;
         }
+
+        ResolvedReferenceTypeDeclaration functionalInterfaceDecl =
+            functionalInterface.asReferenceType().getTypeDeclaration().get();
+
+        if (!functionalInterfaceDecl.isFunctionalInterface()) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
+
+        solvableTypeFromLambda =
+            functionalInterfaceDecl.getAllMethods().iterator().next().returnType();
 
         if (lambdaExpr.getExpressionBody().isPresent()) {
           MemberType lhsMemberType =
@@ -2236,7 +2239,9 @@ public class UnsolvedSymbolGenerator {
 
         try {
           resolvedRHSType = getResolvedTypeOfLHS.get();
-        } catch (UnsolvedSymbolException ex) {
+        } catch (UnsolvedSymbolException | IllegalStateException ex) {
+          // IllegalStateException when trying to resolve an expression whose scope is
+          // a lambda parameter that has the type of an unbounded wildcard
           resolvedRHSType = null;
         }
 
@@ -2308,7 +2313,9 @@ public class UnsolvedSymbolGenerator {
         } else {
           resolved = null;
         }
-      } catch (UnsolvedSymbolException ex) {
+      } catch (UnsolvedSymbolException | IllegalStateException ex) {
+        // IllegalStateException when trying to resolve an expression whose scope is
+        // a lambda parameter that has the type of an unbounded wildcard
         resolved = null;
       } catch (UnsupportedOperationException ex) {
         if (node instanceof MethodCallExpr methodCall) {
@@ -2686,7 +2693,9 @@ public class UnsolvedSymbolGenerator {
     MethodDeclaration ast = null;
     try {
       resolvedMethod = methodCall.resolve();
-    } catch (UnsolvedSymbolException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+      // IllegalStateException when trying to resolve an expression whose scope is
+      // a lambda parameter that has the type of an unbounded wildcard
       ast =
           (MethodDeclaration)
               JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
@@ -2794,27 +2803,36 @@ public class UnsolvedSymbolGenerator {
         }
 
         for (VariableDeclarator varDecl : variables) {
-          if (varDecl.getInitializer().isPresent()
-              && JavaParserUtil.isExprTypeResolvable(varDecl.getInitializer().get())) {
-            potentialTypes.add(varDecl.getInitializer().get().calculateResolvedType());
+          if (varDecl.getInitializer().isPresent()) {
+            ResolvedType resolvedType = varDecl.getInitializer().get().calculateResolvedType();
+
+            if (resolvedType == null) {
+              continue;
+            }
+
+            potentialTypes.add(resolvedType);
           }
         }
-      } catch (UnsolvedSymbolException ex) {
+      } catch (UnsolvedSymbolException | IllegalStateException ex) {
+        // IllegalStateException when trying to resolve an expression whose scope is
+        // a lambda parameter that has the type of an unbounded wildcard
+
         // Initializer could not be resolved, but the field could still be set somewhere
       }
 
       // Now, find all places where the NameExpr/FieldAccessExpr is set to another type
       TypeDeclaration<?> typeDecl = JavaParserUtil.getEnclosingClassLike(methodCall);
 
-      potentialTypes.addAll(
-          typeDecl.findAll(AssignExpr.class).stream()
-              .filter(
-                  assign ->
-                      assign.getOperator() == AssignExpr.Operator.ASSIGN
-                          && assign.getTarget().toString().equals(scope.toString())
-                          && JavaParserUtil.isExprTypeResolvable(assign.getValue()))
-              .map(assign -> assign.calculateResolvedType())
-              .toList());
+      for (AssignExpr assignExpr : typeDecl.findAll(AssignExpr.class)) {
+        if (assignExpr.getOperator() == AssignExpr.Operator.ASSIGN
+            && assignExpr.getTarget().toString().equals(scope.toString())) {
+          ResolvedType resolvedType = JavaParserUtil.calculateResolvedType(assignExpr.getValue());
+
+          if (resolvedType != null) {
+            potentialTypes.add(resolvedType);
+          }
+        }
+      }
 
       String methodSignature = potentialFQNs.iterator().next();
       methodSignature = methodSignature.substring(potentialFQNs.iterator().next().indexOf('#') + 1);
@@ -3046,12 +3064,14 @@ public class UnsolvedSymbolGenerator {
   private void handleLHSAndRHSRelationship(
       Set<MemberType> lhsTypes,
       Set<MemberType> rhsTypes,
-      Supplier<ResolvedType> getResolvedTypeOfLHS) {
+      Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS) {
 
     @Nullable ResolvedType resolved;
     try {
       resolved = getResolvedTypeOfLHS.get();
-    } catch (UnsolvedSymbolException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+      // IllegalStateException when trying to resolve an expression whose scope is
+      // a lambda parameter that has the type of an unbounded wildcard
       resolved = null;
     }
 

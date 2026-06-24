@@ -205,73 +205,69 @@ public class FullyQualifiedNameGenerator {
           .values();
     }
 
-    try {
-      ResolvedType resolved = scope.calculateResolvedType();
+    ResolvedType resolved = JavaParserUtil.calculateResolvedType(scope);
 
-      if (resolved.isTypeVariable()) {
-        ResolvedTypeParameterDeclaration typeParam = resolved.asTypeVariable().asTypeParameter();
+    if (resolved != null && resolved.isTypeVariable()) {
+      ResolvedTypeParameterDeclaration typeParam = resolved.asTypeVariable().asTypeParameter();
 
-        TypeParameter attachedTypeParameter =
-            (TypeParameter) JavaParserUtil.findAttachedNode(typeParam, fqnToCompilationUnits);
+      TypeParameter attachedTypeParameter =
+          (TypeParameter) JavaParserUtil.findAttachedNode(typeParam, fqnToCompilationUnits);
 
-        NodeList<ClassOrInterfaceType> bound = attachedTypeParameter.getTypeBound();
+      NodeList<ClassOrInterfaceType> bound = attachedTypeParameter.getTypeBound();
 
-        if (bound == null) {
-          return Set.of();
-        }
+      if (bound == null) {
+        return Set.of();
+      }
 
-        Map<String, Set<String>> potentialFQNs = new LinkedHashMap<>();
+      Map<String, Set<String>> potentialFQNs = new LinkedHashMap<>();
 
-        for (ClassOrInterfaceType type : bound) {
-          try {
-            resolved = type.resolve();
+      for (ClassOrInterfaceType type : bound) {
+        try {
+          resolved = type.resolve();
 
-            Optional<ResolvedReferenceTypeDeclaration> optionalTypeDecl =
-                resolved.asReferenceType().getTypeDeclaration();
+          Optional<ResolvedReferenceTypeDeclaration> optionalTypeDecl =
+              resolved.asReferenceType().getTypeDeclaration();
 
-            if (optionalTypeDecl.isPresent() && optionalTypeDecl.get().toAst().isPresent()) {
-              TypeDeclaration<?> typeDecl =
-                  (TypeDeclaration<?>)
-                      JavaParserUtil.getTypeFromQualifiedName(
-                          optionalTypeDecl.get().getQualifiedName(), fqnToCompilationUnits);
+          if (optionalTypeDecl.isPresent() && optionalTypeDecl.get().toAst().isPresent()) {
+            TypeDeclaration<?> typeDecl =
+                (TypeDeclaration<?>)
+                    JavaParserUtil.getTypeFromQualifiedName(
+                        optionalTypeDecl.get().getQualifiedName(), fqnToCompilationUnits);
 
-              if (typeDecl == null) {
-                // We shouldn't ever encounter this error. If toAst() returns a non-empty value,
-                // then it is in the project
-                throw new RuntimeException("Cannot be null here");
-              }
+            if (typeDecl == null) {
+              // We shouldn't ever encounter this error. If toAst() returns a non-empty value,
+              // then it is in the project
+              throw new RuntimeException("Cannot be null here");
+            }
 
-              Map<String, Set<String>> toAdd = getFQNsOfAllUnresolvableParents(typeDecl, type);
+            Map<String, Set<String>> toAdd = getFQNsOfAllUnresolvableParents(typeDecl, type);
 
-              for (String key : toAdd.keySet()) {
-                if (potentialFQNs.containsKey(key)) {
-                  potentialFQNs.get(key).addAll(toAdd.get(key));
-                } else {
-                  potentialFQNs.put(key, new LinkedHashSet<>(toAdd.get(key)));
-                }
+            for (String key : toAdd.keySet()) {
+              if (potentialFQNs.containsKey(key)) {
+                potentialFQNs.get(key).addAll(toAdd.get(key));
+              } else {
+                potentialFQNs.put(key, new LinkedHashSet<>(toAdd.get(key)));
               }
             }
-          } catch (UnsolvedSymbolException ex) {
-            // Type not resolvable
           }
-
-          String simpleClassName = JavaParserUtil.erase(type.getNameAsString());
-
-          // Since we're looking at the location of the expression, the type arguments are not
-          // relevant here.
-          if (potentialFQNs.containsKey(simpleClassName)) {
-            potentialFQNs
-                .get(simpleClassName)
-                .addAll(getFQNsFromClassOrInterfaceType(type).erasedFqns());
-          } else {
-            potentialFQNs.put(simpleClassName, getFQNsFromClassOrInterfaceType(type).erasedFqns());
-          }
+        } catch (UnsolvedSymbolException | IllegalStateException ex) {
+          // Type not resolvable
         }
 
-        return potentialFQNs.values();
+        String simpleClassName = JavaParserUtil.erase(type.getNameAsString());
+
+        // Since we're looking at the location of the expression, the type arguments are not
+        // relevant here.
+        if (potentialFQNs.containsKey(simpleClassName)) {
+          potentialFQNs
+              .get(simpleClassName)
+              .addAll(getFQNsFromClassOrInterfaceType(type).erasedFqns());
+        } else {
+          potentialFQNs.put(simpleClassName, getFQNsFromClassOrInterfaceType(type).erasedFqns());
+        }
       }
-    } catch (UnsolvedSymbolException ex) {
-      // Type not resolvable
+
+      return potentialFQNs.values();
     }
 
     // Handle union types (NameExpr could be an exception capture in a catch clause)
@@ -320,7 +316,9 @@ public class FullyQualifiedNameGenerator {
 
           return result.values();
         }
-      } catch (UnsolvedSymbolException ex) {
+      } catch (UnsolvedSymbolException | IllegalStateException ex) {
+        // IllegalStateException when trying to resolve an expression whose scope is
+        // a lambda parameter that has the type of an unbounded wildcard
         // Not a union type since declaration is unresolvable
       }
     }
@@ -571,12 +569,12 @@ public class FullyQualifiedNameGenerator {
     // Throws UnsupportedOperationException for annotation expressions
     // Handle class expressions separately; their type argument may be a private type, which
     // is handled below.
-    if (!expr.isAnnotationExpr()
-        && !expr.isClassExpr()
-        && JavaParserUtil.isExprTypeResolvable(expr)) {
-      ResolvedType type = expr.calculateResolvedType();
+    if (!expr.isAnnotationExpr() && !expr.isClassExpr()) {
+      ResolvedType type = JavaParserUtil.calculateResolvedType(expr);
 
-      return Set.of(getFQNsForResolvedType(type));
+      if (type != null) {
+        return Set.of(getFQNsForResolvedType(type));
+      }
     }
 
     if (shouldCheckGeneratedSymbols) {
@@ -1479,7 +1477,9 @@ public class FullyQualifiedNameGenerator {
     } catch (UnsupportedOperationException ex) {
       resolved =
           JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
-    } catch (UnsolvedSymbolException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+      // IllegalStateException when trying to resolve an expression whose scope is
+      // a lambda parameter that has the type of an unbounded wildcard
       if (expr instanceof NodeWithArguments<?> withArguments) {
         resolved =
             JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
@@ -1642,7 +1642,9 @@ public class FullyQualifiedNameGenerator {
 
               return Set.of(getFQNsForResolvedType(paramType));
             }
-          } catch (UnsolvedSymbolException ex) {
+          } catch (UnsolvedSymbolException | IllegalStateException ex) {
+            // IllegalStateException when trying to resolve an expression whose scope is
+            // a lambda parameter that has the type of an unbounded wildcard
             // Argument type is not resolvable; i.e., method is unsolvable
           }
 
