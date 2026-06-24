@@ -51,11 +51,13 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclar
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.resolution.types.ResolvedTypeVariable;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -976,9 +978,13 @@ public class FullyQualifiedNameGenerator {
     } else if (expression.isConditionalExpr()) {
       ConditionalExpr conditionalExpr = expression.asConditionalExpr();
       Collection<Set<String>> potentialScopeFQNs1 =
-          getFQNsForExpressionLocation(conditionalExpr.getThenExpr());
+          conditionalExpr.getThenExpr().isLiteralExpr()
+              ? Collections.emptySet()
+              : getFQNsForExpressionLocation(conditionalExpr.getThenExpr());
       Collection<Set<String>> potentialScopeFQNs2 =
-          getFQNsForExpressionLocation(conditionalExpr.getElseExpr());
+          conditionalExpr.getElseExpr().isLiteralExpr()
+              ? Collections.emptySet()
+              : getFQNsForExpressionLocation(conditionalExpr.getElseExpr());
       Set<String> potentialFQNs = new HashSet<>();
 
       for (Set<String> scopeFQNs : potentialScopeFQNs1) {
@@ -1551,7 +1557,7 @@ public class FullyQualifiedNameGenerator {
    * @return A set of FQNs, or null if unfound
    */
   private @Nullable FullyQualifiedNameSet getFQNsForExpressionInAnonymousClass(Expression expr) {
-    Object resolved = JavaParserUtil.tryResolveExpressionIfInAnonymousClass(expr);
+    Object resolved = JavaParserUtil.tryResolveNodeIfInAnonymousClass(expr);
 
     BodyDeclaration<?> decl = null;
     if (resolved instanceof AssociableToAST associableToAST) {
@@ -1563,6 +1569,8 @@ public class FullyQualifiedNameGenerator {
       } else if (node instanceof BodyDeclaration<?> bodyDecl) {
         decl = bodyDecl;
       }
+    } else if (resolved instanceof ResolvedType resolvedType) {
+      return getFQNsForResolvedType(resolvedType);
     }
 
     if (decl == null) {
@@ -1910,6 +1918,12 @@ public class FullyQualifiedNameGenerator {
    */
   private FullyQualifiedNameSet getFQNsFromClassOrInterfaceTypeImpl(
       ClassOrInterfaceType type, Set<TypeDeclaration<?>> alreadyTraversed) {
+    // Sometimes, a type parameter usage can be mistaken for a ClassOrInterfaceType if located
+    // inside an anonymous class.
+    if (JavaParserUtil.tryResolveNodeIfInAnonymousClass(type) instanceof ResolvedTypeVariable) {
+      return new FullyQualifiedNameSet(type.getNameAsString());
+    }
+
     // If a ClassOrInterfaceType is Map.Entry, we need to find the import with java.util.Map, not
     // java.util.Map.Entry.
     // Hence, look for the import with the "earliest" scope (with Map.Entry, this would be Map).

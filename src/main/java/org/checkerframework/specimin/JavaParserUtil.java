@@ -2233,14 +2233,14 @@ public class JavaParserUtil {
   }
 
   /**
-   * Given an expression that may be in an anonymous class, try to resolve it. If it is not in an
-   * anonymous class or cannot be resolved, return null.
+   * Given a resolvable node that may be in an anonymous class, try to resolve it. If it is not in
+   * an anonymous class or cannot be resolved, return null.
    *
-   * @param expression The expression to resolve
+   * @param nodeToResolve The node to resolve
    * @return The resolved value, or null if not found
    */
-  public static @Nullable Object tryResolveExpressionIfInAnonymousClass(Expression expression) {
-    ObjectCreationExpr anonymousClassDecl = getEnclosingAnonymousClassIfExists(expression);
+  public static @Nullable Object tryResolveNodeIfInAnonymousClass(Node nodeToResolve) {
+    ObjectCreationExpr anonymousClassDecl = getEnclosingAnonymousClassIfExists(nodeToResolve);
 
     if (anonymousClassDecl == null) {
       return null;
@@ -2262,32 +2262,37 @@ public class JavaParserUtil {
       return null;
     }
 
-    // Temporarily insert a copy of the expression outside of the anonymous class and
-    // see if it is resolvable
-    Expression copy = expression.clone();
-    copy.setParentNode(current.getParentNode().get());
-
-    if (copy instanceof Resolvable<?> resolvable) {
-      try {
-        Object result = resolvable.resolve();
-        copy.remove();
-        return result;
-      } catch (RuntimeException e) {
-        // Go below and try to see if calculateResolvedType works
-      }
-    }
+    Node copy = nodeToResolve.clone();
 
     try {
-      Object result = copy.calculateResolvedType();
-      copy.remove();
-      return result;
-    } catch (RuntimeException e) {
-      // A RuntimeException can also occur when we try to call calculateResolvedType.
-      // UnsolvedSymbolException is caught by RuntimeException.
-    }
+      // Temporarily insert a copy of the node outside of the anonymous class and
+      // see if it is resolvable
+      copy.setParentNode(current.getParentNode().get());
 
-    copy.remove();
-    return null;
+      // Not all nodes are resolvable (some expressions aren't)
+      if (copy instanceof Resolvable<?> resolvable) {
+        try {
+          Object result = resolvable.resolve();
+          return result;
+        } catch (RuntimeException e) {
+          // Go below and try to see if calculateResolvedType works
+        }
+      }
+
+      if (copy instanceof Expression expression) {
+        try {
+          Object result = expression.calculateResolvedType();
+          return result;
+        } catch (RuntimeException e) {
+          // A RuntimeException can also occur when we try to call calculateResolvedType.
+          // UnsolvedSymbolException is caught by RuntimeException.
+        }
+      }
+
+      return null;
+    } finally {
+      copy.remove();
+    }
   }
 
   /**

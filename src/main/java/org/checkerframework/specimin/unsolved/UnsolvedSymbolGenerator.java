@@ -289,9 +289,19 @@ public class UnsolvedSymbolGenerator {
    */
   private void handleClassOrInterfaceType(
       ClassOrInterfaceType type, List<UnsolvedSymbolAlternates<?>> result) {
-    try {
-      ResolvedType resolved = type.resolve();
+    ResolvedType resolved = null;
 
+    try {
+      resolved = type.resolve();
+    } catch (UnsolvedSymbolException ex) {
+      Object resolvedAsObject = JavaParserUtil.tryResolveNodeIfInAnonymousClass(type);
+
+      if (resolvedAsObject instanceof ResolvedType resolvedType) {
+        resolved = resolvedType;
+      }
+    }
+
+    if (resolved != null) {
       if (resolved.isTypeVariable()) {
         TypeParameter typeParam =
             (TypeParameter)
@@ -306,9 +316,8 @@ public class UnsolvedSymbolGenerator {
       }
 
       return;
-    } catch (UnsolvedSymbolException ex) {
-      // Ok to continue
     }
+
     FullyQualifiedNameSet potentialFQNs = fullyQualifiedNameGenerator.getFQNsFromType(type);
 
     // ClassOrInterfaceType may be Set<UnknownType>, which would be unresolvable because of
@@ -704,7 +713,6 @@ public class UnsolvedSymbolGenerator {
     // In this case, while the declaration may be solvable, the type may not be
     try {
       ResolvedValueDeclaration resolved = nameExpr.resolve();
-
       Type type =
           JavaParserUtil.getTypeFromResolvedValueDeclaration(resolved, fqnsToCompilationUnits);
 
@@ -730,7 +738,7 @@ public class UnsolvedSymbolGenerator {
         return;
       }
 
-      if (JavaParserUtil.tryResolveExpressionIfInAnonymousClass(nameExpr) != null) {
+      if (JavaParserUtil.tryResolveNodeIfInAnonymousClass(nameExpr) != null) {
         return;
       }
 
@@ -841,7 +849,13 @@ public class UnsolvedSymbolGenerator {
 
       return;
     } catch (UnsolvedSymbolException ex) {
-      if (JavaParserUtil.tryResolveExpressionIfInAnonymousClass(methodCall) != null) {
+      if (JavaParserUtil.tryResolveNodeIfInAnonymousClass(methodCall) != null) {
+        return;
+      }
+
+      if (JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+              methodCall, fqnsToCompilationUnits)
+          != null) {
         return;
       }
     } catch (UnsupportedOperationException ex) {

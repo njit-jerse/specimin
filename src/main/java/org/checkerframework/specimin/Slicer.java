@@ -283,7 +283,7 @@ public class Slicer {
         }
 
         if (generateUnsolvedSymbol && node instanceof Expression expr) {
-          Object result = JavaParserUtil.tryResolveExpressionIfInAnonymousClass(expr);
+          Object result = JavaParserUtil.tryResolveNodeIfInAnonymousClass(expr);
           if (result != null) {
             resolved = result;
             generateUnsolvedSymbol = false;
