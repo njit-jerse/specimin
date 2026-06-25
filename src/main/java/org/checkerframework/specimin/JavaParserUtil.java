@@ -3402,4 +3402,15 @@ public class JavaParserUtil {
         : typeParametersMap.stream()
             .collect(Collectors.toMap(pair -> pair.b.describe(), pair -> pair.a.getName()));
   }
+
+  /**
+   * Given an index, return a generated type parameter name. For example, if the index is 0, return
+   * "T". If the index is 1, return "T1".
+   *
+   * @param index The index of the type parameter
+   * @return The generated type parameter name
+   */
+  public static String getGeneratedTypeParameterName(int index) {
+    return "T" + ((index > 0) ? index : "");
+  }
 }

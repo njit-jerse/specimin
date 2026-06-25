@@ -933,10 +933,29 @@ public class UnsolvedSymbolGenerator {
     }
 
     Map<Expression, Set<FullyQualifiedNameSet>> argumentToParameterPotentialFQNs = new HashMap<>();
+    // inner map: original --> replaced
+    Map<Expression, Map<FullyQualifiedNameSet, FullyQualifiedNameSet>>
+        argumentToParameterPotentialFQNsWithMethodRefsHandled = new HashMap<>();
 
     Set<String> potentialFQNs =
         fullyQualifiedNameGenerator.generateMethodFQNsWithSideEffect(
             methodCall, potentialScopeFQNs, argumentToParameterPotentialFQNs, true);
+
+    // For each method reference argument, we should replace the functional interface type arguments
+    // with type parameters defined in this method in case this method generation is called
+    // somewhere else with different wildcard bounds
+
+    // This should be possible to handle even if the method call already has type arguments;
+    // however, we don't have a good way to handle this yet, so we will just skip it for now.
+    int totalNumberOfTypeParametersNeeded =
+        handleMethodRefExprsInArgumentList(
+            methodCall.getTypeArguments().isPresent()
+                ? methodCall.getTypeArguments().get().size()
+                : 0,
+            methodCall.getArguments(),
+            argumentToParameterPotentialFQNs,
+            argumentToParameterPotentialFQNsWithMethodRefsHandled);
+
     boolean hasNullInSignature =
         argumentToParameterPotentialFQNs.keySet().stream().anyMatch(Expression::isNullLiteralExpr);
 
@@ -1101,7 +1120,9 @@ public class UnsolvedSymbolGenerator {
 
       List<Map<MemberType, @Nullable Node>> parametersToMustPreserve =
           generateParameterToMustPreserveMap(
-              methodCall.getArguments(), argumentToParameterPotentialFQNs);
+              methodCall.getArguments(),
+              argumentToParameterPotentialFQNs,
+              argumentToParameterPotentialFQNsWithMethodRefsHandled);
 
       if (returnTypeToMustPreserveNode.isEmpty()) {
         MethodDeclaration declarationInThisTypeWithSameSignature =
@@ -1137,6 +1158,8 @@ public class UnsolvedSymbolGenerator {
                 parametersToMustPreserve,
                 List.of());
       }
+
+      generatedMethod.setNumberOfTypeVariables(totalNumberOfTypeParametersNeeded);
 
       if (hasNullInSignature) {
         methodsWithNullInSignature.add(generatedMethod);
@@ -1213,10 +1236,6 @@ public class UnsolvedSymbolGenerator {
         }
       }
       addNewSymbolToGeneratedSymbolsMap(generatedMethod);
-
-      if (methodCall.getTypeArguments().isPresent()) {
-        generatedMethod.setNumberOfTypeVariables(methodCall.getTypeArguments().get().size());
-      }
     }
 
     if (JavaParserUtil.getFQNIfStaticMember(methodCall) != null) {
@@ -1247,6 +1266,22 @@ public class UnsolvedSymbolGenerator {
       int numberOfTypeParams,
       List<UnsolvedSymbolAlternates<?>> result) {
     Map<Expression, Set<FullyQualifiedNameSet>> argumentToParameterPotentialFQNs = new HashMap<>();
+
+    // inner map: original --> replaced
+    Map<Expression, Map<FullyQualifiedNameSet, FullyQualifiedNameSet>>
+        argumentToParameterPotentialFQNsWithMethodRefsHandled = new HashMap<>();
+
+    // For each method reference argument, we should replace the functional interface type arguments
+    // with type parameters defined in this method in case this method generation is called
+    // somewhere else with different wildcard bounds
+
+    // This should be possible to handle even if the method call already has type arguments;
+    // however, we don't have a good way to handle this yet, so we will just skip it for now.
+    numberOfTypeParams =
+        handleMethodRefExprsInArgumentList(
+            numberOfTypeParams, arguments,
+            argumentToParameterPotentialFQNs,
+                argumentToParameterPotentialFQNsWithMethodRefsHandled);
     List<Set<String>> simpleNames = new ArrayList<>();
 
     for (Expression argument : arguments) {
@@ -1286,7 +1321,10 @@ public class UnsolvedSymbolGenerator {
       }
 
       List<Map<MemberType, @Nullable Node>> parametersToMustPreserve =
-          generateParameterToMustPreserveMap(arguments, argumentToParameterPotentialFQNs);
+          generateParameterToMustPreserveMap(
+              arguments,
+              argumentToParameterPotentialFQNs,
+              argumentToParameterPotentialFQNsWithMethodRefsHandled);
 
       generatedMethod =
           UnsolvedMethodAlternates.createWithPreservation(
@@ -1305,6 +1343,88 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * For each method reference argument, we should replace the functional interface type arguments
+   * with type parameters defined in this method in case this method generation is called somewhere
+   * else with different wildcard bounds
+   *
+   * <p>This method currently does not support method calls that already have type arguments, but
+   * this should be added in the future.
+   *
+   * @param existingTypeParams The number of type parameters already defined in the method
+   * @param arguments The list of argument expressions to check for method references
+   * @param argumentToParameterPotentialFQNs A map from each argument expression to its potential
+   *     fully qualified name sets (modified by side-effect)
+   * @param argumentToParameterPotentialFQNsWithMethodRefsHandled A map from each argument
+   *     expression to a map from original fully qualified name sets to modified fully qualified
+   *     name sets, used for method references. (modified by side-effect)
+   * @return The updated number of type parameters after handling method reference arguments
+   */
+  private int handleMethodRefExprsInArgumentList(
+      int existingTypeParams,
+      List<Expression> arguments,
+      Map<Expression, Set<FullyQualifiedNameSet>> argumentToParameterPotentialFQNs,
+      Map<Expression, Map<FullyQualifiedNameSet, FullyQualifiedNameSet>>
+          argumentToParameterPotentialFQNsWithMethodRefsHandled) {
+    if (existingTypeParams > 0) {
+      return existingTypeParams;
+    }
+    for (Expression argument : arguments) {
+      if (argument.isMethodReferenceExpr()) {
+        Set<FullyQualifiedNameSet> potentialFQNsForArgument =
+            argumentToParameterPotentialFQNs.get(argument);
+
+        if (potentialFQNsForArgument == null) {
+          // Impossible: satisfy null checker
+          throw new RuntimeException(
+              "Potential FQNs for argument should have been generated for method reference"
+                  + " argument: "
+                  + argument);
+        }
+
+        Map<FullyQualifiedNameSet, FullyQualifiedNameSet> potentialFQNsForArgumentWithTypeArgs =
+            new LinkedHashMap<>();
+        // Use the maximum number of type parameters. Doesn't matter if we have extra since
+        // UnsolvedMethod handles it.
+        int maxNumberOfTypeParameters = 0;
+        for (FullyQualifiedNameSet fqnSet : potentialFQNsForArgument) {
+          // Don't worry about nested type arguments since these should all be functional
+          // interfaces
+          maxNumberOfTypeParameters =
+              Math.max(maxNumberOfTypeParameters, fqnSet.typeArguments().size());
+
+          List<FullyQualifiedNameSet> typeArgumentsWithTypeParams = new ArrayList<>();
+          for (int i = 0; i < fqnSet.typeArguments().size(); i++) {
+            typeArgumentsWithTypeParams.add(
+                new FullyQualifiedNameSet(
+                    JavaParserUtil.getGeneratedTypeParameterName(existingTypeParams + i)));
+          }
+
+          potentialFQNsForArgumentWithTypeArgs.put(
+              fqnSet,
+              new FullyQualifiedNameSet(
+                  fqnSet.erasedFqns(),
+                  typeArgumentsWithTypeParams,
+                  null,
+                  fqnSet.usesGeneratedName()));
+
+          if (argumentToParameterPotentialFQNsWithMethodRefsHandled == null) {
+            argumentToParameterPotentialFQNsWithMethodRefsHandled = new HashMap<>();
+          }
+
+          argumentToParameterPotentialFQNsWithMethodRefsHandled.put(
+              argument, potentialFQNsForArgumentWithTypeArgs);
+          argumentToParameterPotentialFQNs.put(
+              argument, new LinkedHashSet<>(potentialFQNsForArgumentWithTypeArgs.values()));
+        }
+
+        existingTypeParams += maxNumberOfTypeParameters;
+      }
+    }
+
+    return existingTypeParams;
+  }
+
+  /**
    * Given a list of argument expressions (from a method call, constructor call) and a map of
    * arguments to potential FQN sets, return a list of maps, each representing mutually exclusive
    * parameter types to nodes that must be preserved if that parameter type is used.
@@ -1312,12 +1432,16 @@ public class UnsolvedSymbolGenerator {
    * @param args The collection of argument expressions
    * @param argumentToParameterPotentialFQNs A map from each argument expression to its potential
    *     fully qualified name sets
+   * @param originalToModifiedParameterPotentialFQNs A map of arguments to a map from original fully
+   *     qualified name sets to modified fully qualified name sets, used for method references.
    * @return A list of maps, each representing mutually exclusive parameter types to nodes that must
    *     be preserved
    */
   private List<Map<MemberType, @Nullable Node>> generateParameterToMustPreserveMap(
       Collection<Expression> args,
-      Map<Expression, Set<FullyQualifiedNameSet>> argumentToParameterPotentialFQNs) {
+      Map<Expression, Set<FullyQualifiedNameSet>> argumentToParameterPotentialFQNs,
+      Map<Expression, Map<FullyQualifiedNameSet, FullyQualifiedNameSet>>
+          originalToModifiedParameterPotentialFQNs) {
     List<Map<MemberType, @Nullable Node>> parametersToMustPreserve = new ArrayList<>();
 
     for (Expression argument : args) {
@@ -1343,10 +1467,17 @@ public class UnsolvedSymbolGenerator {
             continue;
           }
 
-          potentialParameterToMustPreserveNode.put(
+          FullyQualifiedNameSet potentialParameterType =
               fullyQualifiedNameGenerator.getFunctionalInterfaceForResolvedMethod(
-                  argument.asMethodReferenceExpr(), method),
-              ast);
+                  argument.asMethodReferenceExpr(), method);
+
+          Map<FullyQualifiedNameSet, FullyQualifiedNameSet> modifiedFQNs =
+              originalToModifiedParameterPotentialFQNs.get(argument);
+          if (modifiedFQNs != null && modifiedFQNs.containsKey(potentialParameterType)) {
+            potentialParameterType = modifiedFQNs.get(potentialParameterType);
+          }
+
+          potentialParameterToMustPreserveNode.put(potentialParameterType, ast);
         }
       }
 

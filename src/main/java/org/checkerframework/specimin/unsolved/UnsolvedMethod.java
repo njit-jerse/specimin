@@ -1,12 +1,16 @@
 package org.checkerframework.specimin.unsolved;
 
+import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.specimin.JavaParserUtil;
 
 /**
  * An UnsolvedMethod instance is a representation of a method that can not be solved by
@@ -287,24 +291,52 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     if (numberOfTypeVariables == 0) {
       return "";
     }
-    StringBuilder result = new StringBuilder();
-    // if class A has three type variables, the expression will be A<T, T1, T2>
-    result.append("<");
-    getTypeVariablesImpl(result);
-    result.append(">");
-    return result.toString();
+
+    return "<" + String.join(", ", getTypeVariablesImpl()) + ">";
   }
 
-  /**
-   * Helper method for {@link #getTypeVariablesAsString()}.
-   *
-   * @param result a string builder. Will be side-effected.
-   */
-  private void getTypeVariablesImpl(StringBuilder result) {
-    for (int i = 0; i < numberOfTypeVariables; i++) {
-      result.append(getTypeVariableName(i)).append(", ");
+  /** Gets a list of the type variable names that are used in this method. */
+  private List<String> getTypeVariablesImpl() {
+    // While it is better to have the exact type number of type variables
+    // on a per-alternate basis, it's easier for other parts of this codebase
+    // to deal with the same number of type variables for all alternates of a given method.
+    // So, we'll deal with that limitation here and not include any type variables
+    // that are not used in this specific alternate.
+
+    // Parse to properly handle type arguments (i.e., a class named TheUnsolved should not be
+    // considered to use T)
+    List<ClassOrInterfaceType> usedTypes = new ArrayList<>();
+    for (MemberType parameterType : parameterList) {
+      Type parsedType = StaticJavaParser.parseType(parameterType.toString());
+
+      if (!parsedType.isClassOrInterfaceType()) {
+        continue;
+      }
+
+      usedTypes.add(parsedType.asClassOrInterfaceType());
     }
-    result.delete(result.length() - 2, result.length());
+
+    if (returnType != null) {
+      Type parsedType = StaticJavaParser.parseType(returnType.toString());
+
+      if (parsedType.isClassOrInterfaceType()) {
+        usedTypes.add(parsedType.asClassOrInterfaceType());
+      }
+    }
+
+    List<String> typeVariableNames = new ArrayList<>();
+    for (int i = 0; i < numberOfTypeVariables; i++) {
+      String typeVariableName = getTypeVariableName(i);
+
+      for (ClassOrInterfaceType usedType : usedTypes) {
+        if (usedType.findAll(ClassOrInterfaceType.class).stream()
+            .anyMatch(t -> t.getNameAsString().equals(typeVariableName))) {
+          typeVariableNames.add(typeVariableName);
+          break;
+        }
+      }
+    }
+    return typeVariableNames;
   }
 
   /**
@@ -319,7 +351,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       throw new IllegalArgumentException(
           "Index out of bounds. There are only " + numberOfTypeVariables + " type variables.");
     }
-    return "T" + ((index > 0) ? index : "");
+    return JavaParserUtil.getGeneratedTypeParameterName(index);
   }
 
   @Override

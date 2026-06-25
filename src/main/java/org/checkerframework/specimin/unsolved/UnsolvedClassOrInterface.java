@@ -12,6 +12,7 @@ import java.util.Set;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.specimin.JavaParserUtil;
 
 /** Represents a single unsolved class or interface alternate. */
 public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
@@ -341,8 +342,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
     List<String> result = new ArrayList<>();
 
     for (int i = 0; i < numberOfTypeVariables; i++) {
-      String typeExpression = "T" + ((i > 0) ? i : "");
-      result.add(typeExpression);
+      result.add(JavaParserUtil.getGeneratedTypeParameterName(i));
     }
 
     setTypeVariables(result);

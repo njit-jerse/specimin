@@ -1325,8 +1325,9 @@ public class FullyQualifiedNameGenerator {
     List<FullyQualifiedNameSet> parameters = new ArrayList<>();
 
     if (methodRef.getScope().isTypeExpr()
-        && resolved.isMethod()
-        && resolved.asMethod().isStatic()) {
+        // Yes, resolved.isMethod() and asMethod() exist, but JavaParser never implemented those
+        && resolved instanceof ResolvedMethodDeclaration resolvedMethodDecl
+        && !resolvedMethodDecl.isStatic()) {
       FullyQualifiedNameSet nonWildcard =
           getFQNsFromType(methodRef.getScope().asTypeExpr().getType());
       parameters.add(
