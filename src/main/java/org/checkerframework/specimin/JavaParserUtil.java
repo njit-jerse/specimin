@@ -38,6 +38,7 @@ import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.TypeSolver;
@@ -3347,5 +3348,58 @@ public class JavaParserUtil {
       }
     }
     return false;
+  }
+
+  /**
+   * Given a class or interface declaration and a class or interface type, generate a map of type
+   * parameter names to their resolved types. {@code from} is the subtype; {@code to} is the
+   * ancestor in question. The resulting map will contain keys that map to the {@code from}'s type
+   * parameters to their values in the context of {@code to}.
+   *
+   * @param from The class or interface declaration that is the subtype
+   * @param to The class or interface declaration that is the ancestor
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return A map of type parameter names to their resolved types
+   */
+  public static Map<String, String> generateTypeParameterMap(
+      ClassOrInterfaceDeclaration from,
+      ClassOrInterfaceDeclaration to,
+      Map<String, CompilationUnit> fqnToCompilationUnits) {
+    if (from.equals(to)) {
+      return from.getTypeParameters().stream()
+          .collect(
+              Collectors.toMap(TypeParameter::getNameAsString, TypeParameter::getNameAsString));
+    }
+
+    List<ResolvedReferenceType> path = getTypesInBetween(from, to.resolve()).get(0);
+
+    // Foo<A, B> extends Bar<A, B> --> Bar<C, D> extends Baz<C, String> --> Baz<E, F> extends some
+    // Unsolved<E, F>
+
+    // tpm: {E --> C, F --> String}
+    // tpm: {C --> A, D --> B}
+
+    // We want A --> E, B --> D, but this code will give us E --> A, F --> B. So we need to reverse
+    // the map at the end.
+
+    @MonotonicNonNull List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap = null;
+    for (int i = path.size(); i >= 0; i--) {
+      if (i > 0) {
+        ResolvedReferenceType type = path.get(i - 1);
+        if (typeParametersMap == null) {
+          typeParametersMap = type.getTypeParametersMap();
+        } else {
+          typeParametersMap =
+              composeTypeParameterMap(type.getTypeParametersMap(), typeParametersMap);
+        }
+      } else if (typeParametersMap == null) {
+        typeParametersMap = List.of();
+      }
+    }
+
+    return typeParametersMap == null
+        ? Map.of()
+        : typeParametersMap.stream()
+            .collect(Collectors.toMap(pair -> pair.b.describe(), pair -> pair.a.getName()));
   }
 }

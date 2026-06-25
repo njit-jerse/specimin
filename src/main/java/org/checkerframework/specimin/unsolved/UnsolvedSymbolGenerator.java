@@ -65,6 +65,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -1370,7 +1371,7 @@ public class UnsolvedSymbolGenerator {
    */
   private void handleMethodDeclarationWithOverride(
       MethodDeclaration methodDecl, List<UnsolvedSymbolAlternates<?>> result) {
-    Collection<Set<String>> potentialScopeFQNs;
+    Map<ClassOrInterfaceType, Set<String>> potentialScopeFQNs;
     if (methodDecl.getParentNode().orElse(null) instanceof ObjectCreationExpr anonClass) {
       try {
         ResolvedType resolvedType = anonClass.getType().resolve();
@@ -1384,19 +1385,17 @@ public class UnsolvedSymbolGenerator {
         }
 
         potentialScopeFQNs =
-            fullyQualifiedNameGenerator
-                .getFQNsOfAllUnresolvableParents(parentClass, methodDecl)
-                .values();
+            fullyQualifiedNameGenerator.getFQNsOfAllUnresolvableParents(parentClass, methodDecl);
       } catch (UnsolvedSymbolException ex) {
         potentialScopeFQNs =
-            Set.of(fullyQualifiedNameGenerator.getFQNsFromType(anonClass.getType()).erasedFqns());
+            Map.of(
+                anonClass.getType(),
+                fullyQualifiedNameGenerator.getFQNsFromType(anonClass.getType()).erasedFqns());
       }
     } else {
       potentialScopeFQNs =
-          fullyQualifiedNameGenerator
-              .getFQNsOfAllUnresolvableParents(
-                  JavaParserUtil.getEnclosingClassLike(methodDecl), methodDecl)
-              .values();
+          fullyQualifiedNameGenerator.getFQNsOfAllUnresolvableParents(
+              JavaParserUtil.getEnclosingClassLike(methodDecl), methodDecl);
     }
 
     if (potentialScopeFQNs.isEmpty()) {
@@ -1416,10 +1415,15 @@ public class UnsolvedSymbolGenerator {
     simpleSignature += ")";
 
     Set<String> potentialMethodFQNs = new LinkedHashSet<>();
-    for (Set<String> set : potentialScopeFQNs) {
+    for (Set<String> set : potentialScopeFQNs.values()) {
       for (String fqn : set) {
         potentialMethodFQNs.add(fqn + "#" + simpleSignature);
       }
+    }
+
+    // Ensure all the scope types are generated (including type parameters)
+    for (ClassOrInterfaceType scopeType : potentialScopeFQNs.keySet()) {
+      inferContextImpl(scopeType, result);
     }
 
     UnsolvedMethodAlternates generated =
@@ -1439,13 +1443,35 @@ public class UnsolvedSymbolGenerator {
 
     List<UnsolvedClassOrInterfaceAlternates> potentialDeclaringTypes = new ArrayList<>();
 
-    for (Set<String> fqns : potentialScopeFQNs) {
+    for (Set<String> fqns : potentialScopeFQNs.values()) {
       potentialDeclaringTypes.add(findExistingAndUpdateFQNsOrCreateNewType(fqns));
     }
 
     MemberType returnType =
         getOrCreateMemberTypeFromFQNs(
             fullyQualifiedNameGenerator.getFQNsFromType(methodDecl.getType()));
+
+    // If returnType contains any type parameter usages, they will not be available in
+    // the generated method, so we must replace them with the type parameters available
+    // in the generated method's declaring type. Since getFQNsFromType always returns
+    // FQNs for reference types, we can safely assume that other non-primitive types
+    // are those type parameter usages.
+
+    Set<MemberType> replacedReturnTypes = new LinkedHashSet<>();
+    for (ClassOrInterfaceType declaringType : potentialScopeFQNs.keySet()) {
+      MemberType replacedReturnType =
+          replaceReturnTypeTypeArgumentsWithActual(
+              returnType,
+              (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(methodDecl),
+              declaringType,
+              findExistingAndUpdateFQNsOrCreateNewType(potentialScopeFQNs.get(declaringType)));
+
+      if (replacedReturnType == null) {
+        continue;
+      }
+
+      replacedReturnTypes.add(replacedReturnType);
+    }
 
     List<MemberType> exceptions = new ArrayList<>();
     for (ReferenceType exception : methodDecl.getThrownExceptions()) {
@@ -1463,10 +1489,15 @@ public class UnsolvedSymbolGenerator {
           case NONE -> "";
         };
 
+    // Ideally, we'd have alternates generate with pairs of the proper declaring type to
+    // the proper return type, but this is currently a lot of work since each alternate
+    // does not contain information about the declaring type. Since the cases where this method
+    // is called AND where there are multiple possible declaring types are rare, we can just
+    // generate them all for now.
     generated =
         UnsolvedMethodAlternates.create(
             methodDecl.getNameAsString(),
-            Set.of(returnType),
+            replacedReturnTypes.isEmpty() ? Set.of(returnType) : replacedReturnTypes,
             potentialDeclaringTypes,
             parameters.stream().map(p -> Set.of(p)).toList(),
             exceptions,
@@ -1474,6 +1505,79 @@ public class UnsolvedSymbolGenerator {
 
     addNewSymbolToGeneratedSymbolsMap(generated);
     result.add(generated);
+  }
+
+  private @Nullable MemberType replaceReturnTypeTypeArgumentsWithActual(
+      MemberType returnType,
+      ClassOrInterfaceDeclaration currentType,
+      ClassOrInterfaceType generateIn,
+      UnsolvedClassOrInterfaceAlternates declaringType) {
+    ClassOrInterfaceDeclaration generateInDecl =
+        (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(generateIn);
+
+    // For the enclosing class of generateIn
+    Map<String, String> typeParamMapping =
+        JavaParserUtil.generateTypeParameterMap(
+            currentType, generateInDecl, fqnsToCompilationUnits);
+
+    // Now, we need to compose the above map onto the type parameters of the declaringType
+    Map<String, String> finalTypeParamMapping = new HashMap<>();
+
+    Optional<NodeList<Type>> typeArgs = generateIn.getTypeArguments();
+
+    if (typeArgs.isEmpty()) {
+      return null;
+    }
+
+    for (Map.Entry<String, String> entry : typeParamMapping.entrySet()) {
+      String key = entry.getKey();
+      String value = entry.getValue();
+
+      for (int i = 0; i < typeArgs.get().size(); i++) {
+        Type typeArg = typeArgs.get().get(i);
+
+        if (typeArg.toString().equals(value)) {
+          finalTypeParamMapping.put(key, declaringType.getTypeVariables().get(i));
+        }
+      }
+    }
+
+    // Now, we need to replace the type arguments in returnType with the actual types from
+    // finalTypeParamMapping. Since JavaParserUtil#generateTypeParameterMap currently only
+    // works with solvable types (we should probably fix this in the future so it works
+    // with unsolved types), we can just use SolvedMemberType here
+
+    return replaceAllTypeArgumentsWith(
+        returnType,
+        finalTypeParamMapping.entrySet().stream()
+            .collect(
+                Collectors.toMap(
+                    e -> new SolvedMemberType(e.getKey()),
+                    e -> new SolvedMemberType(e.getValue()))));
+  }
+
+  /**
+   * Helper method for {@link #replaceReturnTypeTypeArgumentsWithActual(MemberType,
+   * ClassOrInterfaceDeclaration, ClassOrInterfaceType, UnsolvedClassOrInterfaceAlternates)}.
+   * Recursively replaces all type arguments in a MemberType with the corresponding types in the
+   * replacement map.
+   *
+   * @param type The MemberType to replace type arguments in
+   * @param replacementMap A map of type arguments to their replacements
+   * @return A new MemberType with all type arguments replaced
+   */
+  private MemberType replaceAllTypeArgumentsWith(
+      MemberType type, Map<MemberType, MemberType> replacementMap) {
+    if (replacementMap.containsKey(type)) {
+      return replacementMap.get(type);
+    }
+
+    List<MemberType> newTypeArguments = new ArrayList<>();
+    for (MemberType arg : type.getTypeArguments()) {
+      newTypeArguments.add(replaceAllTypeArgumentsWith(arg, replacementMap));
+    }
+
+    return type.copyWithNewTypeArgs(newTypeArguments);
   }
 
   /**

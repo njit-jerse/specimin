@@ -240,13 +240,14 @@ public class FullyQualifiedNameGenerator {
               throw new RuntimeException("Cannot be null here");
             }
 
-            Map<String, Set<String>> toAdd = getFQNsOfAllUnresolvableParents(typeDecl, type);
+            Map<ClassOrInterfaceType, Set<String>> toAdd =
+                getFQNsOfAllUnresolvableParents(typeDecl, type);
 
-            for (String key : toAdd.keySet()) {
-              if (potentialFQNs.containsKey(key)) {
-                potentialFQNs.get(key).addAll(toAdd.get(key));
+            for (ClassOrInterfaceType key : toAdd.keySet()) {
+              if (potentialFQNs.containsKey(key.getNameWithScope())) {
+                potentialFQNs.get(key.getNameWithScope()).addAll(toAdd.get(key));
               } else {
-                potentialFQNs.put(key, new LinkedHashSet<>(toAdd.get(key)));
+                potentialFQNs.put(key.getNameWithScope(), new LinkedHashSet<>(toAdd.get(key)));
               }
             }
           }
@@ -2288,12 +2289,12 @@ public class FullyQualifiedNameGenerator {
    * @param typeDecl the type declaration
    * @param currentNode the current node. If the current node is found to be one of the
    *     implemented/extended types, then we will not go down that path.
-   * @return A map of all class/interface FQNs representing all {@code typeDecl}'s parents; simple
-   *     class name --> set of potential FQNs
+   * @return A map of all class/interface FQNs representing all {@code typeDecl}'s parents; type -->
+   *     set of potential FQNs
    */
-  public Map<String, Set<String>> getFQNsOfAllUnresolvableParents(
+  public Map<ClassOrInterfaceType, Set<String>> getFQNsOfAllUnresolvableParents(
       TypeDeclaration<?> typeDecl, Node currentNode) {
-    Map<String, Set<String>> map = new LinkedHashMap<>();
+    Map<ClassOrInterfaceType, Set<String>> map = new LinkedHashMap<>();
     Set<TypeDeclaration<?>> traversedTypeDeclarations = new HashSet<>();
 
     getAllUnresolvableParentsImpl(typeDecl, currentNode, map, traversedTypeDeclarations);
@@ -2316,7 +2317,7 @@ public class FullyQualifiedNameGenerator {
   private void getAllUnresolvableParentsImpl(
       TypeDeclaration<?> typeDecl,
       Node currentNode,
-      Map<String, Set<String>> map,
+      Map<ClassOrInterfaceType, Set<String>> map,
       Set<TypeDeclaration<?>> traversedTypeDeclarations) {
     if (traversedTypeDeclarations.contains(typeDecl)) {
       return;
@@ -2342,7 +2343,7 @@ public class FullyQualifiedNameGenerator {
 
         } catch (UnsolvedSymbolException ex) {
           map.put(
-              type.getNameWithScope(),
+              type,
               getFQNsFromClassOrInterfaceTypeImpl(type, traversedTypeDeclarations).erasedFqns());
         }
       }
@@ -2367,7 +2368,7 @@ public class FullyQualifiedNameGenerator {
 
         } catch (UnsolvedSymbolException ex) {
           map.put(
-              type.getNameWithScope(),
+              type,
               getFQNsFromClassOrInterfaceTypeImpl(type, traversedTypeDeclarations).erasedFqns());
         }
       }
