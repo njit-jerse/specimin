@@ -1138,6 +1138,69 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
+   * Generates all potential fully qualified names (FQNs) for a method call expression, correcting
+   * for type variables in the method's declaring type. Useful ONLY for search purposes; do not use
+   * this to generate FQNs for actual method calls, as it may not be accurate. We blindly generate
+   * all combinations of type variables in the declaring type, which may not be correct.
+   *
+   * @param methodCall The method call expression
+   * @param potentialScopes The potential declaring types of the method call
+   * @param keepNullInsteadOfObject True if you want to use null instead of Object as part of the
+   *     signature.
+   */
+  public Set<String> generateAllMethodFQNsWithTypeVariableCorrection(
+      MethodCallExpr methodCall,
+      Collection<UnsolvedClassOrInterfaceAlternates> potentialScopes,
+      boolean keepNullInsteadOfObject) {
+    List<Set<String>> simpleNames = new ArrayList<>();
+
+    for (Expression argument : methodCall.getArguments()) {
+      if (argument.isNullLiteralExpr() && keepNullInsteadOfObject) {
+        simpleNames.add(Set.of("null"));
+        continue;
+      }
+
+      Set<FullyQualifiedNameSet> fqns = getFQNsForExpressionType(argument);
+
+      Set<String> simpleNamesOfThisParameterType = new LinkedHashSet<>();
+      for (FullyQualifiedNameSet fqnSet : fqns) {
+        String first = fqnSet.erasedFqns().iterator().next();
+
+        String simpleName = JavaParserUtil.getSimpleNameFromQualifiedName(first);
+
+        // Likely a type variable, since FullyQualifiedNameSet should otherwise contain FQNs
+        if (simpleName.equals(first)
+            && !JavaLangUtils.isPrimitive(JavaParserUtil.removeArrayBrackets(simpleName))) {
+          simpleNamesOfThisParameterType.addAll(
+              potentialScopes.stream().flatMap(type -> type.getTypeVariables().stream()).toList());
+        } else {
+          simpleNamesOfThisParameterType.add(simpleName);
+        }
+      }
+
+      simpleNames.add(simpleNamesOfThisParameterType);
+    }
+
+    Set<String> potentialFQNs = new LinkedHashSet<>();
+
+    for (List<String> simpleNamesCombo : JavaParserUtil.generateAllCombinations(simpleNames)) {
+      for (UnsolvedClassOrInterfaceAlternates type : potentialScopes) {
+        for (String potentialScopeFQN : type.getFullyQualifiedNames()) {
+          potentialFQNs.add(
+              potentialScopeFQN
+                  + "#"
+                  + methodCall.getNameAsString()
+                  + "("
+                  + String.join(", ", simpleNamesCombo)
+                  + ")");
+        }
+      }
+    }
+
+    return potentialFQNs;
+  }
+
+  /**
    * Converts MemberType to a FullyQualifiedNameSet.
    *
    * @param memberType The member type
@@ -1927,7 +1990,6 @@ public class FullyQualifiedNameGenerator {
     if (JavaParserUtil.tryResolveNodeIfInAnonymousClass(type) instanceof ResolvedTypeVariable) {
       return new FullyQualifiedNameSet(type.getNameAsString());
     }
-
     // If a ClassOrInterfaceType is Map.Entry, we need to find the import with java.util.Map, not
     // java.util.Map.Entry.
     // Hence, look for the import with the "earliest" scope (with Map.Entry, this would be Map).

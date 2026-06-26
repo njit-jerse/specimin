@@ -2,6 +2,7 @@ package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -354,6 +355,32 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
+  /**
+   * Gets the parameter list, where each index contains a set of all possible parameter types at
+   * that index.
+   *
+   * @return The parameter list
+   */
+  public List<Set<MemberType>> getParameterList() {
+    List<Set<MemberType>> parameterList = new ArrayList<>();
+
+    for (UnsolvedMethod alternate : getAlternates()) {
+      List<MemberType> parameters = alternate.getParameterList();
+
+      for (int i = 0; i < parameters.size(); i++) {
+        MemberType param = parameters.get(i);
+
+        if (parameterList.size() <= i) {
+          parameterList.add(new LinkedHashSet<>());
+        }
+
+        parameterList.get(i).add(param);
+      }
+    }
+
+    return parameterList;
+  }
+
   @Override
   public String getName() {
     return getAlternates().get(0).getName();
@@ -387,6 +414,23 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
         alternate.setReturnType(newType);
       }
     }
+  }
+
+  /**
+   * For all the alternates that have oldType as return type, replace it with newType.
+   *
+   * @param oldType The old return type
+   * @param newType The new return type
+   */
+  public void replaceReturnType(MemberType oldType, Set<MemberType> newType) {
+    if (newType.isEmpty()) {
+      throw new RuntimeException("New return type set cannot be empty.");
+    }
+
+    // Replacing the current old type with the first new type and then adding the rest
+    // of the return types effectively removes the original old type.
+    replaceReturnType(oldType, newType.iterator().next());
+    addReturnTypes(newType);
   }
 
   /**

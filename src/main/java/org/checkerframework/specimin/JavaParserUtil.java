@@ -1657,7 +1657,25 @@ public class JavaParserUtil {
       MethodCallExpr methodCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
     boolean isSuperOnly = false;
 
+    ObjectCreationExpr enclosingAnonymousClass = getEnclosingAnonymousClassIfExists(methodCall);
+
     List<TypeDeclaration<?>> enclosingClass = new ArrayList<>();
+
+    if (enclosingAnonymousClass != null) {
+      try {
+        TypeDeclaration<?> enclosingAnonymousClassType =
+            getTypeFromQualifiedName(
+                enclosingAnonymousClass.getType().resolve().describe(), fqnToCompilationUnits);
+
+        if (enclosingAnonymousClassType != null) {
+          enclosingClass.add(enclosingAnonymousClassType);
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // If the enclosing anonymous class cannot be resolved, then we don't know what methods are
+        // available
+      }
+    }
+
     if (methodCall.hasScope()) {
       Expression scope = methodCall.getScope().get();
 
@@ -1740,6 +1758,18 @@ public class JavaParserUtil {
             methodCall.getNameAsString(),
             MethodDeclaration.class);
       }
+    }
+
+    if (enclosingAnonymousClass != null) {
+      addAllMatchingCallablesToListImpl(
+          enclosingAnonymousClass.getAnonymousClassBody().get().stream()
+              .filter(c -> c.isCallableDeclaration())
+              .map(c -> (CallableDeclaration<?>) c)
+              .toList(),
+          parameterTypes,
+          candidates,
+          methodCall.getNameAsString(),
+          MethodDeclaration.class);
     }
 
     return candidates;
@@ -1895,6 +1925,25 @@ public class JavaParserUtil {
       throw new IllegalArgumentException("Impossible CallableDeclaration type.");
     }
 
+    addAllMatchingCallablesToListImpl(callables, parameterTypes, result, methodName, callableType);
+  }
+
+  /**
+   * Actual logic for {@link #addAllMatchingCallablesToList}.
+   *
+   * @param callables The list of callables to check against
+   * @param parameterTypes The resolved parameter types. Fully qualified names if resolvable, simple
+   *     names if not, and null if no type could be found at all.
+   * @param result The list to append to
+   * @param methodName The method name, if the callable is a method (it is ignored otherwise)
+   * @param callableType The type of callable (i.e., ConstructorDeclaration or MethodDeclaration)
+   */
+  private static <T extends CallableDeclaration<?>> void addAllMatchingCallablesToListImpl(
+      List<? extends CallableDeclaration<?>> callables,
+      List<@Nullable ResolvedType> parameterTypes,
+      List<T> result,
+      @Nullable String methodName,
+      Class<T> callableType) {
     for (CallableDeclaration<?> callable : callables) {
       if (callable.getParameters().size() != parameterTypes.size()) {
         continue;
@@ -2209,6 +2258,13 @@ public class JavaParserUtil {
       if (parent instanceof ObjectCreationExpr objectCreationExpr) {
         if (objectCreationExpr.getAnonymousClassBody().isEmpty()) {
           return null;
+        }
+
+        if (objectCreationExpr
+            .getType()
+            .findFirst(node.getClass(), n -> n.equals(node))
+            .isPresent()) {
+          return objectCreationExpr;
         }
 
         for (BodyDeclaration<?> anonymousBodyDecl :
