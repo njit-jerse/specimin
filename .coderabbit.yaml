@@ -13,6 +13,7 @@ reviews:
   in_progress_fortune: false
   poem: false
   path_filters:
+    - "**/*"
     - "!**/build/**"
     - "!**/out/**"
     - "!**/.gradle/**"
