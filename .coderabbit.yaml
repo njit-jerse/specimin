@@ -4,22 +4,20 @@ language: "en-US"
 
 reviews:
   profile: "assertive"
-  high_level_summary: true
-  review_status: true
+  high_level_summary: false
+  review_status: false
   collapse_walkthrough: true
-  changed_files_summary: true
+  changed_files_summary: false
   sequence_diagrams: false
   estimate_code_review_effort: false
   in_progress_fortune: false
   poem: false
   path_filters:
-    - "**/*"
     - "!**/build/**"
     - "!**/out/**"
     - "!**/.gradle/**"
     - "!**/.idea/**"
     - "!**/node_modules/**"
-    - "!**/test/**"
   auto_review:
     ignore_title_keywords:
       - "wip"
