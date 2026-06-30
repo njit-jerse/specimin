@@ -4,10 +4,10 @@ language: "en-US"
 
 reviews:
   profile: "assertive"
-  high_level_summary: false
-  review_status: false
+  high_level_summary: true
+  review_status: true
   collapse_walkthrough: true
-  changed_files_summary: false
+  changed_files_summary: true
   sequence_diagrams: false
   estimate_code_review_effort: false
   in_progress_fortune: false
