@@ -13,11 +13,8 @@ reviews:
   in_progress_fortune: false
   poem: false
   path_filters:
-    - "!**/build/**"
-    - "!**/out/**"
-    - "!**/.gradle/**"
-    - "!**/.idea/**"
-    - "!**/node_modules/**"
+    - "!**"
+    - "src/main/java/org/checkerframework/specimin/**"
   auto_review:
     ignore_title_keywords:
       - "wip"
