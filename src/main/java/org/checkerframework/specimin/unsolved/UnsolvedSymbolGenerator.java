@@ -1023,6 +1023,12 @@ public class UnsolvedSymbolGenerator {
     Map<MemberType, CallableDeclaration<?>> returnTypeToMustPreserveNode =
         getTypeToCallableDeclarationFromArgument(methodCall);
 
+    List<Map<MemberType, @Nullable Node>> parametersToMustPreserve =
+        generateParameterToMustPreserveMap(
+            methodCall.getArguments(),
+            argumentToParameterPotentialFQNs,
+            argumentToParameterPotentialFQNsWithMethodRefsHandled);
+
     UnsolvedMethodAlternates generatedMethod;
 
     if (generated instanceof UnsolvedMethodAlternates) {
@@ -1056,10 +1062,151 @@ public class UnsolvedSymbolGenerator {
                 .map(this::getOrCreateMemberTypeFromFQNs)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (returnTypeFQNs.size() > 0 && !returnTypeFQNs.iterator().next().usesGeneratedName()) {
+        if (!returnTypeFQNs.isEmpty() && !returnTypeFQNs.iterator().next().usesGeneratedName()) {
           generatedMethod.replaceReturnType(unsolved, returnTypes);
-          removeTypeAndReplaceUses(unsolved, returnTypes.stream().toArray(MemberType[]::new));
+          removeTypeAndReplaceUses(unsolved, returnTypes.toArray(MemberType[]::new));
           returnTypeReplaced = true;
+        }
+      }
+
+      // Handle these cases when the generated and new differ:
+      // 1: same erasure, but different type argument value(s) in parameter list --> use
+      // unconstrained type variables for the type variable
+      // 2: #1 and different return type (or same erasure but different type argument value(s)) -->
+      // use unconstrained type variable for the return type (match the type variable in the
+      // parameter list if it is the same type variable)
+
+      // Case 1
+      Set<MemberType> typesInOriginalToReplaceWithTypeVariables = new LinkedHashSet<>();
+      for (List<MemberType> paramList :
+          JavaParserUtil.generateAllCombinations(generatedMethod.getParameterList())) {
+        for (int i = 0; i < paramList.size(); i++) {
+          MemberType generatedType = paramList.get(i);
+          Set<MemberType> newTypes = parametersToMustPreserve.get(i).keySet();
+
+          for (MemberType newType : newTypes) {
+            if (!generatedType.getFullyQualifiedNames().equals(newType.getFullyQualifiedNames())) {
+              continue;
+            }
+
+            Map<MemberType, MemberType> differences =
+                SpeciminGenerationUtils.getDifferentMemberTypes(generatedType, newType);
+
+            if (differences.isEmpty()) {
+              continue;
+            }
+
+            typesInOriginalToReplaceWithTypeVariables.addAll(
+                differences.keySet().stream()
+                    .filter(t -> !SpeciminGenerationUtils.isATypeVariable(t))
+                    .collect(Collectors.toSet()));
+          }
+        }
+      }
+
+      Map<MemberType, MemberType> originalToReplacement = new HashMap<>();
+      if (methodCall.getTypeArguments().isPresent()
+          && !methodCall.getTypeArguments().get().isEmpty()) {
+        generatedMethod.setNumberOfTypeVariables(methodCall.getTypeArguments().get().size());
+
+        for (int i = 0; i < methodCall.getTypeArguments().get().size(); i++) {
+          Type typeArg = methodCall.getTypeArguments().get().get(i);
+
+          FullyQualifiedNameSet fqn = fullyQualifiedNameGenerator.getFQNsFromType(typeArg);
+          MemberType memberTypeForTypeArg = getMemberTypeFromFQNs(fqn, false);
+
+          if (memberTypeForTypeArg == null
+              || !typesInOriginalToReplaceWithTypeVariables.contains(memberTypeForTypeArg)) {
+            continue;
+          }
+
+          originalToReplacement.put(
+              memberTypeForTypeArg,
+              new SolvedMemberType(JavaParserUtil.getGeneratedTypeParameterName(i)));
+        }
+      } else {
+        int typeVar = generatedMethod.getNumberOfTypeVariables();
+        generatedMethod.setNumberOfTypeVariables(
+            generatedMethod.getNumberOfTypeVariables()
+                + typesInOriginalToReplaceWithTypeVariables.size());
+
+        for (MemberType typeToReplace : typesInOriginalToReplaceWithTypeVariables) {
+          MemberType newTypeVariable =
+              new SolvedMemberType(JavaParserUtil.getGeneratedTypeParameterName(typeVar));
+
+          if (typeToReplace.equals(newTypeVariable)) {
+            continue;
+          }
+
+          originalToReplacement.put(typeToReplace, newTypeVariable);
+
+          typeVar++;
+        }
+      }
+
+      for (Map.Entry<MemberType, MemberType> entry : originalToReplacement.entrySet()) {
+        for (MemberType param :
+            generatedMethod.getParameterList().stream()
+                .flatMap(Set::stream)
+                .collect(Collectors.toSet())) {
+          MemberType newParamType =
+              SpeciminGenerationUtils.copyTypeWithReplacedMemberType(
+                  param, entry.getKey(), entry.getValue());
+          generatedMethod.replaceParameterType(param, Set.of(newParamType));
+        }
+      }
+
+      // Case 2
+      boolean before = fullyQualifiedNameGenerator.getShouldCheckGeneratedSymbols();
+      fullyQualifiedNameGenerator.setShouldCheckGeneratedSymbols(false);
+      Set<FullyQualifiedNameSet> returnTypeFQNs =
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall);
+      fullyQualifiedNameGenerator.setShouldCheckGeneratedSymbols(before);
+
+      Set<MemberType> returnTypes =
+          returnTypeFQNs.stream()
+              .filter(fqnSet -> !fqnSet.usesGeneratedName())
+              .map(this::getOrCreateMemberTypeFromFQNs)
+              .collect(Collectors.toCollection(LinkedHashSet::new));
+
+      Set<MemberType> generatedMethodReturnTypes = generatedMethod.getReturnTypes();
+      if (!returnTypes.isEmpty() && !generatedMethodReturnTypes.equals(returnTypes)) {
+        if (generatedMethod.getNumberOfTypeVariables() > 0
+            && generatedMethodReturnTypes.size() == 1
+            && generatedMethodReturnTypes.iterator().next() instanceof UnsolvedMemberType unsolved
+            && unsolved.usesGeneratedName()) {
+          Set<MemberType> potentialReturns = new LinkedHashSet<>();
+          for (int i = 0; i < generatedMethod.getNumberOfTypeVariables(); i++) {
+            potentialReturns.add(
+                new SolvedMemberType(JavaParserUtil.getGeneratedTypeParameterName(i)));
+          }
+
+          generatedMethod.replaceReturnType(unsolved, potentialReturns);
+
+          // If we don't know the return type, we will just use Object as a placeholder
+          // so the output still compiles.
+
+          // This can be the case with foo(mock(...)):
+          // If mock is discovered to be mock(T) returns T, and foo was already generated with
+          // foo(MockReturnType), then we replace MockReturnType with Object so the output is
+          // compilable. Perhaps it is better to make foo also use a type variable; but these
+          // cases should be rare anyway.
+          removeTypeAndReplaceUses(unsolved, SolvedMemberType.JAVA_LANG_OBJECT);
+          returnTypeReplaced = true;
+        } else if (!originalToReplacement.isEmpty()
+            && !(generatedMethodReturnTypes.size() == 1
+                && SpeciminGenerationUtils.isATypeVariable(
+                    generatedMethodReturnTypes.iterator().next()))) {
+          for (MemberType returnType : generatedMethodReturnTypes) {
+            MemberType replaceWith = originalToReplacement.get(returnType);
+
+            if (replaceWith == null) {
+              continue;
+            }
+
+            generatedMethod.replaceReturnType(returnType, replaceWith);
+            returnTypeReplaced = true;
+          }
         }
       }
 
@@ -1077,6 +1224,7 @@ public class UnsolvedSymbolGenerator {
         // This is relatively expensive, but ok since this shouldn't need to run in most cases.
 
         // Ignore generated symbols so we can get updated types
+        before = fullyQualifiedNameGenerator.getShouldCheckGeneratedSymbols();
         fullyQualifiedNameGenerator.setShouldCheckGeneratedSymbols(false);
         for (MethodCallExpr methodToUpdate :
             methodCall
@@ -1085,7 +1233,7 @@ public class UnsolvedSymbolGenerator {
                 .findAll(
                     MethodCallExpr.class,
                     m -> m.toString().contains(methodCall.getNameAsString()))) {
-          Node parentNode = methodToUpdate.getParentNode().get();
+          Node parentNode = methodToUpdate;
           while (parentNode != null) {
             inferContextImpl(parentNode, result);
             parentNode = parentNode.getParentNode().orElse(null);
@@ -1095,7 +1243,7 @@ public class UnsolvedSymbolGenerator {
             inferContextImpl(argument, result);
           }
         }
-        fullyQualifiedNameGenerator.setShouldCheckGeneratedSymbols(true);
+        fullyQualifiedNameGenerator.setShouldCheckGeneratedSymbols(before);
       }
     } else {
       List<UnsolvedClassOrInterfaceAlternates> potentialParents = new ArrayList<>();
@@ -1116,12 +1264,6 @@ public class UnsolvedSymbolGenerator {
       for (Expression argument : methodCall.getArguments()) {
         inferContextImpl(argument, result);
       }
-
-      List<Map<MemberType, @Nullable Node>> parametersToMustPreserve =
-          generateParameterToMustPreserveMap(
-              methodCall.getArguments(),
-              argumentToParameterPotentialFQNs,
-              argumentToParameterPotentialFQNsWithMethodRefsHandled);
 
       if (returnTypeToMustPreserveNode.isEmpty()) {
         MethodDeclaration declarationInThisTypeWithSameSignature =

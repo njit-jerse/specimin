@@ -26,6 +26,8 @@ import org.checkerframework.specimin.JavaParserUtil;
  * </code></pre>
  *
  * where B and C are both unresolvable, method a() could be in either one.
+ *
+ * <p>For type parameters, you may always assume the following convention: T, T1, T2, ...
  */
 public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedMethod>
     implements UnsolvedMethodCommon {

@@ -55,17 +55,8 @@ import com.github.javaparser.resolution.types.ResolvedTypeVariable;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Ascii;
 import com.google.common.base.Splitter;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -119,14 +110,19 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
-   * Sets whether to check generated symbols when getting expression types. Default is true; ensure
-   * that this is set back to true after your operation is done if you set it to false.
+   * Sets whether generated symbols should be checked when getting expression types. Default is
+   * true; ensure that this is set back to true after your operation is done if you set it to false.
    *
    * @param shouldCheckGeneratedSymbols Whether to check generated symbols when getting expression
    *     types
    */
   public void setShouldCheckGeneratedSymbols(boolean shouldCheckGeneratedSymbols) {
     this.shouldCheckGeneratedSymbols = shouldCheckGeneratedSymbols;
+  }
+
+  /** Returns whether generated symbols should be checked when getting expression types. */
+  public boolean getShouldCheckGeneratedSymbols() {
+    return shouldCheckGeneratedSymbols;
   }
 
   /**
@@ -377,16 +373,7 @@ public class FullyQualifiedNameGenerator {
         return List.of(Set.of(location));
       }
     } else if (scope instanceof MethodCallExpr scopeAsMethodCall) {
-      // Try an overly-generous approach by using both null and java.lang.Object
-      Set<String> potentialScopeScopeFQNs =
-          generateMethodFQNsWithSideEffect(
-              scopeAsMethodCall, getFQNsForExpressionLocation(scopeAsMethodCall), null, true);
-      potentialScopeScopeFQNs.addAll(
-          generateMethodFQNsWithSideEffect(
-              scopeAsMethodCall, getFQNsForExpressionLocation(scopeAsMethodCall), null, false));
-
-      UnsolvedMethodAlternates genMethod =
-          (UnsolvedMethodAlternates) findUnsolvedSymbolIfGenerated(potentialScopeScopeFQNs);
+      UnsolvedMethodAlternates genMethod = findUnsolvedMethodIfGenerated(scopeAsMethodCall);
       if (genMethod != null) {
         return genMethod.getReturnTypes().stream()
             .map(returnTypes -> returnTypes.getFullyQualifiedNames())
@@ -896,22 +883,32 @@ public class FullyQualifiedNameGenerator {
       Expression expression) {
     if (expression.isMethodCallExpr()) {
       MethodCallExpr methodCall = expression.asMethodCallExpr();
-      Collection<Set<String>> potentialScopeFQNs = getFQNsForExpressionLocation(methodCall);
-      // Try an overly-generous approach by using both null and java.lang.Object
-      Set<String> methodFQNs =
-          generateMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, true);
-      methodFQNs.addAll(
-          generateMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, false));
-
-      UnsolvedMethodAlternates unsolvedMethodAlternates =
-          (UnsolvedMethodAlternates) findUnsolvedSymbolIfGenerated(methodFQNs);
+      UnsolvedMethodAlternates unsolvedMethodAlternates = findUnsolvedMethodIfGenerated(methodCall);
 
       if (unsolvedMethodAlternates != null) {
-        return unsolvedMethodAlternates.getReturnTypes().stream()
-            .map(this::convertMemberTypeToFQNSet)
-            .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<MemberType, Set<FullyQualifiedNameSet>> typeVariableUsageMap =
+            constructTypeParameterUsageMap(methodCall, unsolvedMethodAlternates);
+
+        Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
+
+        for (MemberType returnType : unsolvedMethodAlternates.getReturnTypes()) {
+          Set<FullyQualifiedNameSet> typeVariableUsage = typeVariableUsageMap.get(returnType);
+
+          if (typeVariableUsage != null) {
+            result.addAll(typeVariableUsage);
+            continue;
+          }
+
+          FullyQualifiedNameSet fullyQualifiedNameSet = convertMemberTypeToFQNSet(returnType);
+          result.add(fullyQualifiedNameSet);
+        }
+
+        return result;
       }
 
+      Collection<Set<String>> potentialScopeFQNs = getFQNsForExpressionLocation(methodCall);
+      Set<String> methodFQNs =
+          generateMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, true);
       if (!methodFQNs.isEmpty()) {
         // For purposes of seeing if the method is part of Throwable/Exception/RuntimeException,
         // getting the signature of the first is enough since they should all be the same if their
@@ -1074,6 +1071,87 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
+   * Tries to find the unsolved method definition for the given method call, if one exists. Returns
+   * null otherwise.
+   *
+   * @param methodCall The method call
+   * @return The generated unsolved method, or null
+   */
+  private @Nullable UnsolvedMethodAlternates findUnsolvedMethodIfGenerated(
+      MethodCallExpr methodCall) {
+    Collection<Set<String>> potentialScopeFQNs = getFQNsForExpressionLocation(methodCall);
+
+    // Try an overly-generous approach by using both null and java.lang.Object
+    Set<String> methodFQNs =
+        generateMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, true);
+    methodFQNs.addAll(
+        generateMethodFQNsWithSideEffect(methodCall, potentialScopeFQNs, null, false));
+
+    return (UnsolvedMethodAlternates) findUnsolvedSymbolIfGenerated(methodFQNs);
+  }
+
+  /**
+   * Constructs a type parameter usage map for a method call expression, if possible.
+   *
+   * @param methodCall The method call expression
+   * @param generatedDefinition The generated definition of the method
+   * @return The map
+   */
+  private Map<MemberType, Set<FullyQualifiedNameSet>> constructTypeParameterUsageMap(
+      MethodCallExpr methodCall, UnsolvedMethodAlternates generatedDefinition) {
+    if (generatedDefinition.getNumberOfTypeVariables() == 0) {
+      return Map.of();
+    }
+
+    Map<MemberType, Set<FullyQualifiedNameSet>> typeParameterUsageMap = new HashMap<>();
+
+    // Easiest: methodCall provides the type arguments
+    if (methodCall.getTypeArguments().isPresent()) {
+      List<Type> typeArguments = methodCall.getTypeArguments().get();
+
+      for (int i = 0; i < typeArguments.size(); i++) {
+        Type typeArgument = typeArguments.get(i);
+        MemberType typeParameter =
+            new SolvedMemberType(JavaParserUtil.getGeneratedTypeParameterName(i));
+
+        FullyQualifiedNameSet fqnSet = getFQNsFromType(typeArgument);
+        typeParameterUsageMap.put(typeParameter, Set.of(fqnSet));
+      }
+    } else {
+      List<Set<FullyQualifiedNameSet>> argTypes = new ArrayList<>();
+      for (Expression argument : methodCall.getArguments()) {
+        Set<FullyQualifiedNameSet> types = getFQNsForExpressionType(argument);
+        argTypes.add(types);
+      }
+
+      for (List<MemberType> paramList :
+          JavaParserUtil.generateAllCombinations(generatedDefinition.getParameterList())) {
+        for (int i = 0; i < paramList.size(); i++) {
+          MemberType paramType = paramList.get(i);
+          for (FullyQualifiedNameSet fqnSet : argTypes.get(i)) {
+            Map<MemberType, FullyQualifiedNameSet> tempMap =
+                SpeciminGenerationUtils.getDifferentTypes(paramType, fqnSet);
+            for (Map.Entry<MemberType, FullyQualifiedNameSet> entry : tempMap.entrySet()) {
+              if (!SpeciminGenerationUtils.isATypeVariable(entry.getKey())
+                  || entry.getValue().wildcard() == null) {
+                continue;
+              }
+
+              Set<FullyQualifiedNameSet> existingSet =
+                  typeParameterUsageMap.computeIfAbsent(entry.getKey(), k -> new LinkedHashSet<>());
+              existingSet.add(
+                  new FullyQualifiedNameSet(
+                      entry.getValue().erasedFqns(), entry.getValue().typeArguments()));
+            }
+          }
+        }
+      }
+    }
+
+    return typeParameterUsageMap;
+  }
+
+  /**
    * Gets method FQNs given a method call expression and a collection of sets of potential FQNs
    * (each set represents a different potential declaring type). argumentToParameterPotentialFQNs is
    * passed in and modified as a side effect (argument mapping to potential type FQNs); if this is
@@ -1162,6 +1240,17 @@ public class FullyQualifiedNameGenerator {
 
       Set<FullyQualifiedNameSet> fqns = getFQNsForExpressionType(argument);
 
+      if (argument.isMethodCallExpr()) {
+        UnsolvedMethodAlternates method =
+            findUnsolvedMethodIfGenerated(argument.asMethodCallExpr());
+
+        if (method != null) {
+          if (method.getReturnTypes().stream().anyMatch(SpeciminGenerationUtils::isATypeVariable)) {
+            fqns.add(convertMemberTypeToFQNSet(SolvedMemberType.JAVA_LANG_OBJECT));
+          }
+        }
+      }
+
       Set<String> simpleNamesOfThisParameterType = new LinkedHashSet<>();
       for (FullyQualifiedNameSet fqnSet : fqns) {
         String first = fqnSet.erasedFqns().iterator().next();
@@ -1173,9 +1262,10 @@ public class FullyQualifiedNameGenerator {
             && !JavaLangUtils.isPrimitive(JavaParserUtil.removeArrayBrackets(simpleName))) {
           simpleNamesOfThisParameterType.addAll(
               potentialScopes.stream().flatMap(type -> type.getTypeVariables().stream()).toList());
-        } else {
-          simpleNamesOfThisParameterType.add(simpleName);
+          // But, it may also be the method's own type variable, so we add simpleName anyway below
         }
+
+        simpleNamesOfThisParameterType.add(simpleName);
       }
 
       simpleNames.add(simpleNamesOfThisParameterType);
