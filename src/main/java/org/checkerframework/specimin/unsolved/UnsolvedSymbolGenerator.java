@@ -44,6 +44,7 @@ import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
+import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
@@ -2783,9 +2784,11 @@ public class UnsolvedSymbolGenerator {
         } else {
           resolved = null;
         }
-      } catch (IllegalStateException ex) {
+      } catch (IllegalStateException | MethodAmbiguityException ex) {
         // IllegalStateException when trying to resolve an expression whose scope is
         // a lambda parameter that has the type of an unbounded wildcard
+
+        // MethodAmbiguityException is usually a JavaParser bug
         resolved = null;
       } catch (UnsolvedSymbolException ex) {
         resolved = null;
@@ -3174,7 +3177,7 @@ public class UnsolvedSymbolGenerator {
     MethodDeclaration ast = null;
     try {
       resolvedMethod = methodCall.resolve();
-    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException | MethodAmbiguityException ex) {
       // IllegalStateException when trying to resolve an expression whose scope is
       // a lambda parameter that has the type of an unbounded wildcard
       ast =

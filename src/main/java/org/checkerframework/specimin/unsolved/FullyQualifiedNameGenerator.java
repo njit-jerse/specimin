@@ -39,6 +39,7 @@ import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnionType;
+import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -921,35 +922,26 @@ public class FullyQualifiedNameGenerator {
       }
     } else if (expression.isConditionalExpr()) {
       ConditionalExpr conditionalExpr = expression.asConditionalExpr();
-      Collection<Set<String>> potentialScopeFQNs1 =
-          conditionalExpr.getThenExpr().isLiteralExpr()
-              ? Collections.emptySet()
-              : getFQNsForExpressionLocation(conditionalExpr.getThenExpr());
-      Collection<Set<String>> potentialScopeFQNs2 =
-          conditionalExpr.getElseExpr().isLiteralExpr()
-              ? Collections.emptySet()
-              : getFQNsForExpressionLocation(conditionalExpr.getElseExpr());
-      Set<String> potentialFQNs = new HashSet<>();
 
-      for (Set<String> scopeFQNs : potentialScopeFQNs1) {
-        for (String fqn : scopeFQNs) {
-          potentialFQNs.add(fqn + "#" + conditionalExpr.getCondition().toString());
-        }
-      }
-      for (Set<String> scopeFQNs : potentialScopeFQNs2) {
-        for (String fqn : scopeFQNs) {
-          potentialFQNs.add(fqn + "#" + conditionalExpr.getCondition().toString());
-        }
+      Set<FullyQualifiedNameSet> thenTypes =
+          getExpressionTypesIfRepresentsGenerated(conditionalExpr.getThenExpr());
+      Set<FullyQualifiedNameSet> elseTypes =
+          getExpressionTypesIfRepresentsGenerated(conditionalExpr.getElseExpr());
+
+      if (thenTypes == null && elseTypes == null) {
+        return null;
       }
 
-      UnsolvedFieldAlternates unsolvedFieldAlternates =
-          (UnsolvedFieldAlternates) findUnsolvedSymbolIfGenerated(potentialFQNs);
-
-      if (unsolvedFieldAlternates != null) {
-        return unsolvedFieldAlternates.getTypes().stream()
-            .map(this::convertMemberTypeToFQNSet)
-            .collect(Collectors.toCollection(LinkedHashSet::new));
+      if (thenTypes == null) {
+        thenTypes = Set.of();
       }
+
+      if (elseTypes == null) {
+        elseTypes = Set.of();
+      }
+
+      return Stream.concat(thenTypes.stream(), elseTypes.stream())
+          .collect(Collectors.toCollection(LinkedHashSet::new));
     } else if (expression.isMethodReferenceExpr()) {
       MethodReferenceExpr methodRef = expression.asMethodReferenceExpr();
       Collection<Set<String>> potentialScopeFQNs = getFQNsForExpressionLocation(methodRef);
@@ -1590,6 +1582,10 @@ public class FullyQualifiedNameGenerator {
       if (resolved == null) {
         throw ex;
       }
+    } catch (MethodAmbiguityException ex) {
+      // This is usually a JavaParser bug; unfortunately, we don't have a good way to handle this
+      // right now
+      resolved = null;
     }
 
     if (resolved instanceof AssociableToAST associableToAST) {
