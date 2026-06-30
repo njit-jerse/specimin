@@ -1,5 +1,7 @@
 package org.checkerframework.specimin;
 
+import static org.junit.jupiter.api.Assertions.fail;
+
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.visitor.EqualsVisitor;
@@ -9,7 +11,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
-import org.junit.Assert;
 
 /** Utility class containing routines to run Specimin's tests. */
 public class SpeciminTestExecutor {
@@ -27,7 +28,7 @@ public class SpeciminTestExecutor {
    * Unix diff program.
    *
    * <p>The expected way to use this routine is to create a JUnit test method using the {@link
-   * org.junit.Test} annotation that contains a single call to this method.
+   * org.junit.jupiter.api.Test} annotation that contains a single call to this method.
    *
    * @param testName the name of the test folder
    * @param targetFiles the targeted files
@@ -54,11 +55,11 @@ public class SpeciminTestExecutor {
     try {
       outputDir = Files.createTempDirectory("specimin-test-");
     } catch (IOException e) {
-      Assert.fail("cannot create temporary directory for test output: " + e);
+      fail("cannot create temporary directory for test output: " + e);
       return;
     }
     if (outputDir == null) {
-      Assert.fail("temporary directory for output was null");
+      fail("temporary directory for output was null");
       return;
     }
 
@@ -130,7 +131,7 @@ public class SpeciminTestExecutor {
               .toList();
 
       if (!expectedJavaFiles.equals(actualJavaFiles)) {
-        Assert.fail(
+        fail(
             "The set of Java files in the expected and actual directories do not match.\nExpected: "
                 + expectedJavaFiles.toString().replace('\\', '/')
                 + "\nActual: "
@@ -146,7 +147,7 @@ public class SpeciminTestExecutor {
           CompilationUnit expectedCu = StaticJavaParser.parse(expectedFile);
           CompilationUnit actualCu = StaticJavaParser.parse(actualFile);
           if (!EqualsVisitor.equals(actualCu, expectedCu)) {
-            Assert.fail(
+            fail(
                 "ASTs do not match for file: "
                     + relativePath.toString().replace('\\', '/')
                     + "\nExpected:\n"
@@ -157,7 +158,7 @@ public class SpeciminTestExecutor {
                     + actualDir.toString().replace('\\', '/'));
           }
         } catch (Exception e) {
-          Assert.fail(
+          fail(
               "Error parsing and comparing files: "
                   + relativePath.toString().replace('\\', '/')
                   + "\nIn: "

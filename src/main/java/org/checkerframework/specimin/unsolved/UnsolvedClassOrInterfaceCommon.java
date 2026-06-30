@@ -15,21 +15,21 @@ public interface UnsolvedClassOrInterfaceCommon {
    *
    * @return The type of this type
    */
-  public UnsolvedClassOrInterfaceType getType();
+  UnsolvedClassOrInterfaceType getType();
 
   /**
    * Sets the type of this type.
    *
    * @param type The type to set this type to
    */
-  public void setType(UnsolvedClassOrInterfaceType type);
+  void setType(UnsolvedClassOrInterfaceType type);
 
   /**
    * Returns true if this class has an extends clause.
    *
    * @return True if this class has an extends clause.
    */
-  public boolean hasExtends();
+  boolean hasExtends();
 
   /**
    * Returns true if any alternate extends the given extendsType.
@@ -37,14 +37,14 @@ public interface UnsolvedClassOrInterfaceCommon {
    * @param extendsType The superclass
    * @return True if any alternate extends the given extendsType.
    */
-  public boolean doesExtend(MemberType extendsType);
+  boolean doesExtend(MemberType extendsType);
 
   /**
    * Adds an annotation to this class.
    *
    * @param annotation a fully-qualified annotation to apply
    */
-  public void addAnnotation(String annotation);
+  void addAnnotation(String annotation);
 
   /**
    * Returns true if any alternate implements the given interface.
@@ -52,33 +52,33 @@ public interface UnsolvedClassOrInterfaceCommon {
    * @param interfaceType The type of the interface
    * @return True if this type implements the given interface.
    */
-  public boolean doesImplement(MemberType interfaceType);
+  boolean doesImplement(MemberType interfaceType);
 
   /**
    * Autogenerates the given amount of type variables (T, T1, T2, ...)
    *
    * @param number The number of type variables.
    */
-  public void setTypeVariables(int number);
+  void setTypeVariables(int number);
 
   /**
    * Sets the preferred type variables.
    *
    * @param preferredTypeVariables The preferred type variables.
    */
-  public void setTypeVariables(List<String> preferredTypeVariables);
+  void setTypeVariables(List<String> preferredTypeVariables);
 
   /**
    * Gets the type variables as a list.
    *
    * @return The type variables as a list
    */
-  public List<String> getTypeVariables();
+  List<String> getTypeVariables();
 
   /**
    * Get the name of this class (note: without any generic type variables).
    *
    * @return the name of the class
    */
-  public @ClassGetSimpleName String getClassName();
+  @ClassGetSimpleName String getClassName();
 }

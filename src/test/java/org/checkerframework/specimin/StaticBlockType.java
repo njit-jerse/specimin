@@ -1,12 +1,9 @@
 package org.checkerframework.specimin;
 
-import org.junit.Test;
-
 import java.io.IOException;
+import org.junit.jupiter.api.Test;
 
-/**
- * This test checks if Specimin can remove static blocks
- */
+/** This test checks if Specimin can remove static blocks */
 public class StaticBlockType {
   @Test
   public void runTest() throws IOException {

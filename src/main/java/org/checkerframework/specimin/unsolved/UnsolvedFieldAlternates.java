@@ -173,7 +173,7 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
    */
   public Set<MemberType> getTypes() {
     return getAlternates().stream()
-        .map(alternate -> alternate.getType())
+        .map(UnsolvedField::getType)
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 

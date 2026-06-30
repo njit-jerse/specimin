@@ -228,14 +228,7 @@ public class SpeciminRunner {
     // directory. To do that,
     // we need to register a shutdown hook with the JVM.
     Set<Path> createdClass = new HashSet<>();
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread() {
-              @Override
-              public void run() {
-                deleteFiles(createdClass);
-              }
-            });
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteFiles(createdClass)));
 
     AmbiguityResolutionPolicy policy = AmbiguityResolutionPolicy.parse(ambiguityResolutionPolicy);
     ModularityModel model = ModularityModel.createModularityModel(modularityModelCode);
@@ -418,7 +411,7 @@ public class SpeciminRunner {
       throws IOException {
     Set<String> usedPackages = new HashSet<>();
     for (CompilationUnit cu : sliceResult.solvedSlice()) {
-      if (!cu.getPackageDeclaration().isPresent()) {
+      if (cu.getPackageDeclaration().isEmpty()) {
         usedPackages.add("");
         continue;
       }
@@ -599,7 +592,7 @@ public class SpeciminRunner {
                 + fqn
                 + "'.\n"
                 + "It looked for '"
-                + originalExpectedPath.toString()
+                + originalExpectedPath
                 + "' and variations for inner classes.\n"
                 + "Please make sure that the --root argument ('"
                 + root
@@ -673,7 +666,7 @@ public class SpeciminRunner {
       argsToDecompile.addAll(jarPaths);
       argsToDecompile.add(root);
       ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
-      // delete unneccessary legal files
+      // delete unnecessary legal files
       try {
         FileUtils.deleteDirectory(new File(root + "META-INF"));
       } catch (IOException ex) {
@@ -705,7 +698,7 @@ public class SpeciminRunner {
           .append("\n  Considered these ")
           .append(isMethod ? "methods" : "fields")
           .append(" from the same class:\n");
-      if (unfoundMembers.get(unfoundMember).size() == 0) {
+      if (unfoundMembers.get(unfoundMember).isEmpty()) {
         sb.append("No suitable methods found");
       } else {
         for (String consideredMember : unfoundMembers.get(unfoundMember)) {
@@ -784,8 +777,8 @@ public class SpeciminRunner {
     Set<Path> pathsOfFile = new HashSet<>();
     for (String path : jarPaths) {
       JarTypeSolver jarSolver = new JarTypeSolver(path);
-      for (String qualifedClassName : jarSolver.getKnownClasses()) {
-        String relativePath = qualifedClassName.replace(".", "/") + ".java";
+      for (String qualifiedClassName : jarSolver.getKnownClasses()) {
+        String relativePath = qualifiedClassName.replace(".", "/") + ".java";
         String absolutePath = outputDirectory + relativePath;
         Path filePath = Paths.get(absolutePath);
         if (Files.exists(filePath)) {
@@ -833,11 +826,10 @@ public class SpeciminRunner {
    * @return A comment-free version of the compilation unit.
    */
   private static CompilationUnit getCompilationUnitWithCommentsTrimmed(CompilationUnit cu) {
-    CompilationUnit cuWithNoComments = cu;
-    for (Comment child : cuWithNoComments.getAllComments()) {
+    for (Comment child : cu.getAllComments()) {
       child.remove();
     }
-    return cuWithNoComments;
+    return cu;
   }
 
   /**
@@ -868,12 +860,12 @@ public class SpeciminRunner {
    *
    * @param directoryPath the directory of the jar files
    */
-  private static List<String> getJarFiles(String directoryPath) throws IOException {
+  private static List<String> getJarFiles(String directoryPath) {
     Path jarPath = Path.of(directoryPath);
     try (Stream<Path> stream = Files.walk(jarPath)) {
       return stream
           .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar"))
-          .map(path -> path.toString())
+          .map(Path::toString)
           .collect(Collectors.toList());
     } catch (IOException e) {
       throw new RuntimeException(e);

@@ -238,7 +238,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
 
     Set<List<MemberType>> parameterLists =
         getAlternates().stream()
-            .map(alternate -> alternate.getParameterList())
+            .map(UnsolvedMethod::getParameterList)
             .collect(Collectors.toCollection(LinkedHashSet::new));
 
     getAlternates()
@@ -312,7 +312,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
 
       for (UnsolvedClassOrInterfaceAlternates alternate : getAlternateDeclaringTypes()) {
         for (String fqn : alternate.getFullyQualifiedNames()) {
-          fqns.add(fqn + "#" + methodSignature.toString());
+          fqns.add(fqn + "#" + methodSignature);
         }
       }
     }
@@ -353,7 +353,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    */
   public Set<MemberType> getReturnTypes() {
     return getAlternates().stream()
-        .map(alternate -> alternate.getReturnType())
+        .map(UnsolvedMethod::getReturnType)
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 

@@ -14,13 +14,13 @@ import com.google.common.base.Ascii;
 public interface ModularityModel {
 
   /**
-   * Factory for creating instances that implement this inferface, given an input string. This
+   * Factory for creating instances that implement this interface, given an input string. This
    * method throws if the input string isn't recognized.
    *
    * @param modularityModel an input from the user about which modularity to use
    * @return the corresponding modularity model
    */
-  public static ModularityModel createModularityModel(String modularityModel) {
+  static ModularityModel createModularityModel(String modularityModel) {
     return switch (Ascii.toLowerCase(modularityModel)) {
       case "cf", "javac" -> new CheckerFrameworkModularityModel();
       case "nullaway" -> new NullAwayModularityModel();

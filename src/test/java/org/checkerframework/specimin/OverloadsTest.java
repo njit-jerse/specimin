@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /** This test checks that Specimin respects Java's rules for overloading methods. */
 public class OverloadsTest {

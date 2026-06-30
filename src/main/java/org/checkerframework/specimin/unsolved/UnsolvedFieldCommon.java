@@ -11,19 +11,19 @@ public interface UnsolvedFieldCommon {
    *
    * @return the name of this field
    */
-  public String getName();
+  String getName();
 
   /**
    * Check if this field is static
    *
    * @return true if this field is static, false otherwise
    */
-  public boolean isStatic();
+  boolean isStatic();
 
   /**
    * Check if this field is final
    *
    * @return true if this field is final, false otherwise
    */
-  public boolean isFinal();
+  boolean isFinal();
 }

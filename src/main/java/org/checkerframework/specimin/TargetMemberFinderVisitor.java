@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.modularity.ModularityModel;
 
 /**
@@ -40,9 +39,6 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
 
   /** The names of the target fields. The format is class.fully.qualified.Name#fieldName. */
   private final Set<String> targetFields;
-
-  /** The simple name of the class currently visited */
-  protected @ClassGetSimpleName String className = "";
 
   /** The qualified name of the class currently being visited. */
   protected String currentClassQualifiedName = "";
@@ -80,7 +76,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
       Deque<Node> worklist,
       ModularityModel modularityModel) {
     this.modularityModel = modularityModel;
-    this.targetMethodNames = new HashSet<String>();
+    this.targetMethodNames = new HashSet<>();
 
     for (String methodSignature : targetMethods) {
       this.targetMethodNames.add(methodSignature.replaceAll("\\s", ""));
@@ -242,9 +238,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
             (ClassOrInterfaceDeclaration) JavaParserUtil.getEnclosingClassLike(method);
         for (FieldDeclaration field : thisClass.getFields()) {
           worklist.add(field);
-          for (VariableDeclarator variable : field.getVariables()) {
-            worklist.add(variable);
-          }
+          worklist.addAll(field.getVariables());
         }
       }
     } else {
@@ -289,9 +283,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
     } else {
       Optional<BlockStmt> body = ((MethodDeclaration) method).getBody();
 
-      if (body.isPresent()) {
-        worklist.add(body.get());
-      }
+      body.ifPresent(worklist::add);
     }
   }
 

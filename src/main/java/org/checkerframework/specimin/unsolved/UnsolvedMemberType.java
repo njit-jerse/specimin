@@ -16,13 +16,13 @@ public class UnsolvedMemberType extends MemberType {
   private final UnsolvedClassOrInterfaceAlternates unsolved;
 
   /** The number of array brackets (e.g., 2 for int[][]). */
-  private int numArrayBrackets;
+  private final int numArrayBrackets;
 
   /**
    * Represents whether this UnsolvedMemberType uses a generated type name (i.e.,
    * GetListReturnType).
    */
-  private boolean usesGeneratedName;
+  private final boolean usesGeneratedName;
 
   /**
    * Creates a new UnsolvedMemberType with the given unsolved type, number of array brackets, and

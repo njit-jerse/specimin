@@ -23,7 +23,7 @@ public class SolvedMemberType extends MemberType {
   public static final SolvedMemberType JAVA_LANG_OBJECT = new SolvedMemberType("java.lang.Object");
 
   /** The fully-qualified name represented by this type. */
-  private String fqn;
+  private final String fqn;
 
   /**
    * Creates a new SolvedMemberType based on a fully-qualified name. May include array brackets.
@@ -59,7 +59,7 @@ public class SolvedMemberType extends MemberType {
     String arrayBrackets;
     if (arrayBracketsIndex != -1) {
       arrayBrackets = fqn.substring(arrayBracketsIndex);
-      sb.append(fqn.substring(0, arrayBracketsIndex));
+      sb.append(fqn, 0, arrayBracketsIndex);
     } else {
       arrayBrackets = "";
       sb.append(fqn);

@@ -7,7 +7,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -17,7 +16,7 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
   private final List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes;
 
   /** A list of alternate definitions for this symbol. */
-  private List<T> alternates = new ArrayList<>();
+  private final List<T> alternates = new ArrayList<>();
 
   /**
    * Base constructor for setting alternate declaring types.
@@ -100,25 +99,6 @@ public abstract class UnsolvedSymbolAlternates<T extends UnsolvedSymbolAlternate
   protected boolean doAllAlternatesReturnTrueFor(Predicate<T> predicate) {
     for (T alternate : alternates) {
       if (!predicate.test(alternate)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Returns true if all alternates return true for a predicate. You can pass in a method reference
-   * (like UnsolvedClassOrInterface::doesImplement) and an interface "MyInterface" to check if all
-   * alternates implement the "MyInterface" interface.
-   *
-   * @param <U> The type of the input parameter to the BiPredicate
-   * @param predicate A BiPredicate; pass in an instance method from {@link T} with one parameter.
-   * @param input The input to use for the predicate
-   * @return True if all alternates return true for the predicate
-   */
-  protected <U> boolean doAllAlternatesReturnTrueFor(BiPredicate<T, U> predicate, U input) {
-    for (T alternate : alternates) {
-      if (!predicate.test(alternate, input)) {
         return false;
       }
     }

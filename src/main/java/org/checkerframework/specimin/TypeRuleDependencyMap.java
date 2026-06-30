@@ -15,7 +15,7 @@ public interface TypeRuleDependencyMap {
    * @return All relevant nodes to the input node. For example, this could be annotations, type
    *     parameters, parameters, return type, etc. for methods.
    */
-  public List<Node> getRelevantElements(Node node);
+  List<Node> getRelevantElements(Node node);
 
   /**
    * Given a resolved object, return all relevant nodes. For example, a resolved method declaration
@@ -24,5 +24,5 @@ public interface TypeRuleDependencyMap {
    * @param resolved The resolved object
    * @return All relevant nodes to the input resolved object.
    */
-  public List<Node> getRelevantElements(Object resolved);
+  List<Node> getRelevantElements(Object resolved);
 }

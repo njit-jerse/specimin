@@ -8,18 +8,6 @@ import java.util.Set;
 
 /** Utility class for questions related to the java.lang package. */
 public final class JavaLangUtils {
-
-  /**
-   * Checks if the given simple name is a member of the java.lang package. This method returns false
-   * for primitive names (e.g., "int").
-   *
-   * @param simpleName a simple name
-   * @return true if this name is defined by java.lang
-   */
-  public static boolean isJavaLangName(String simpleName) {
-    return javaLangClassesAndInterfaces.contains(simpleName);
-  }
-
   /**
    * Checks if the given simple name is a member of the java.lang package. This method also returns
    * true for primitive types (like "int").
@@ -323,7 +311,7 @@ public final class JavaLangUtils {
    * issued by Javac.
    *
    * @param binOp a string representation of a binary operator, such as "||"
-   * @return the set of compatible types, such as ["boolean", "Boolean"]
+   * @return the array of compatible types, such as ["boolean", "Boolean"]
    */
   public static String[] getTypesForOp(String binOp) {
     return switch (binOp) {
@@ -381,19 +369,6 @@ public final class JavaLangUtils {
     }
 
     return converted;
-  }
-
-  /**
-   * Returns true iff both input types are java.lang.Class followed by some type parameter.
-   *
-   * @param type1 a type
-   * @param type2 another type
-   * @return true iff they're both Class
-   */
-  public static boolean bothAreJavaLangClass(String type1, String type2) {
-    boolean type1IsClass = type1.startsWith("Class<") || type1.startsWith("java.lang.Class<");
-    boolean type2IsClass = type2.startsWith("Class<") || type2.startsWith("java.lang.Class<");
-    return type1IsClass && type2IsClass;
   }
 
   /**

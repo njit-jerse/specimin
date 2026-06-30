@@ -13,57 +13,57 @@ public interface UnsolvedMethodCommon {
    *
    * @return the name of this method
    */
-  public String getName();
+  String getName();
 
   /**
    * Getter for the throws list.
    *
    * @return the throws list
    */
-  public List<MemberType> getThrownExceptions();
+  List<MemberType> getThrownExceptions();
 
   /**
    * Gets the access modifier (i.e., public, private)
    *
    * @return the access modifier
    */
-  public String getAccessModifier();
+  String getAccessModifier();
 
   /** Makes this method static. */
-  public void setStatic();
+  void setStatic();
 
   /**
    * Returns true if this method is static
    *
    * @return True if the method is static
    */
-  public boolean isStatic();
+  boolean isStatic();
 
   /**
    * Gets the number of type variables.
    *
    * @return The number of type variables
    */
-  public int getNumberOfTypeVariables();
+  int getNumberOfTypeVariables();
 
   /**
    * Sets the number of type variables.
    *
    * @param number The number of type variables
    */
-  public void setNumberOfTypeVariables(int number);
+  void setNumberOfTypeVariables(int number);
 
   /**
    * Sets the return type.
    *
    * @param memberType The return type
    */
-  public void setReturnType(MemberType memberType);
+  void setReturnType(MemberType memberType);
 
   /**
    * Sets the access modifier (i.e., public, private)
    *
    * @param accessModifier The access modifier
    */
-  public void setAccessModifier(String accessModifier);
+  void setAccessModifier(String accessModifier);
 }

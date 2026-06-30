@@ -19,6 +19,7 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
+import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
@@ -29,7 +30,6 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -126,10 +126,8 @@ public class Slicer {
 
     Set<Node> dependentSlice = new HashSet<>();
     // Use getGeneratedSymbols() instead of Slicer.generatedSymbolSlice here because we want to
-    // include
-    // nodes which are included by generated symbols that are conditionally included as well, not
-    // just
-    // those in the slice
+    // include nodes which are included by generated symbols that are conditionally included as
+    // well, not just those in the slice
     for (UnsolvedSymbolAlternates<?> gen :
         slicer.unsolvedSymbolGenerator.getGeneratedSymbols().values()) {
       for (Node node : gen.getDependentNodes()) {
@@ -164,12 +162,10 @@ public class Slicer {
 
     if (!generatedSymbolSlice.isEmpty()) {
       // Step 2: Add more information to generated symbols based on context
-      Iterator<Node> ppwIterator = postProcessingWorklist.iterator();
-      while (ppwIterator.hasNext()) {
-        Node element = ppwIterator.next();
+      for (Node element : postProcessingWorklist) {
         UnsolvedGenerationResult result = unsolvedSymbolGenerator.addInformation(element);
         generatedSymbolSlice.addAll(result.toAdd());
-        generatedSymbolSlice.removeAll(result.toRemove());
+        result.toRemove().forEach(generatedSymbolSlice::remove);
       }
     }
   }
@@ -205,9 +201,8 @@ public class Slicer {
     // UnknownType#resolve() throws an IllegalArgumentException (see docs,
     // #convertToUsage(Context)).
     // https://www.javadoc.io/doc/com.github.javaparser/javaparser-core/latest/com/github/javaparser/ast/type/UnknownType.html
-    if (node instanceof Resolvable<?>
+    if (node instanceof Resolvable<?> asResolvable
         && !(node instanceof TypeParameter || node instanceof UnknownType)) {
-      Resolvable<?> asResolvable = (Resolvable<?>) node;
 
       boolean generateUnsolvedSymbol = false;
       Object resolved = null;
@@ -220,33 +215,30 @@ public class Slicer {
           // if there are unresolvable argument types
           resolved = asResolvable.resolve();
         }
-      } catch (UnsupportedOperationException ex) {
-        // java.lang.UnsupportedOperationException: The type declaration cannot be found on
-        // constraint T
-        // Workaround for resolving methods/fields with a qualifier that is resolvable, but returns
-        // a lambda constraint type with a type parameter instead of a type
+      } catch (MethodAmbiguityException ex) {
+        // JavaParser bug: check ArrayTypeTest. JavaParser cannot resolve Arrays.sort(int[])
+        // and has other candidates instead. If we see ReflectionMethodDeclaration in the
+        // error message, that means that the method is in the JDK and we don't need to include
+        // it in the slice or generate a symbol for it.
 
-        // If not this case, then throw the error.
-        if (!(node instanceof Expression)) {
-          throw ex;
-        }
-
-        resolved =
-            JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
-                (Expression) node);
-
-        if (resolved == null) {
+        if (!ex.toString().contains("ReflectionMethodDeclaration")) {
           throw ex;
         }
       } catch (UnsolvedSymbolException | IllegalStateException ex) {
+        // Workaround for resolving methods/fields with a qualifier that is resolvable, but returns
+        // a lambda constraint type with a type parameter instead of a type
+        if (node instanceof Expression expr) {
+          resolved =
+              JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
+        }
+
         // IllegalStateException when trying to resolve an expression whose scope is
         // a lambda parameter that has the type of an unbounded wildcard
-        boolean shouldTryToResolve = true;
+        boolean shouldTryToResolve = resolved == null;
         if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {
           // We may encounter this if the user includes a FQN in their input, since the type rule
           // dependency map returns the scope of the type, even if it's a package.
           shouldTryToResolve = false;
-          generateUnsolvedSymbol = false;
         }
 
         // Handle cases where a method/constructor call cannot be resolved because of unresolvable
@@ -257,7 +249,7 @@ public class Slicer {
                     withArgs, fqnToCompilationUnits)
                 : null;
 
-        if (potentiallyResolvableCallable != null) {
+        if (potentiallyResolvableCallable != null && shouldTryToResolve) {
           try {
             resolved = ((Resolvable<?>) potentiallyResolvableCallable).resolve();
             shouldTryToResolve = false;
@@ -276,8 +268,6 @@ public class Slicer {
               if (resolved == null) {
                 generateUnsolvedSymbol = true;
               }
-            } else {
-              generateUnsolvedSymbol = false;
             }
           } else {
             generateUnsolvedSymbol = true;
@@ -335,8 +325,8 @@ public class Slicer {
         && (methodDecl.getAnnotationByName("Override").isPresent()
             || (methodDecl.getParentNode().orElse(null) instanceof ObjectCreationExpr
                 && methodDecl.isPublic()))) {
-      return !toAddToWorklist.stream()
-          .anyMatch(n -> n instanceof MethodDeclaration && !n.equals(methodDecl));
+      return toAddToWorklist.stream()
+          .noneMatch(n -> n instanceof MethodDeclaration && !n.equals(methodDecl));
     }
 
     return false;
@@ -381,7 +371,7 @@ public class Slicer {
             slice.stream()
                 .filter(n -> n instanceof AssignExpr)
                 .map(n -> (AssignExpr) n)
-                .filter(
+                .anyMatch(
                     assignExpr -> {
                       if (assignExpr.getTarget().isFieldAccessExpr()) {
                         try {
@@ -425,9 +415,7 @@ public class Slicer {
                       }
 
                       return false;
-                    })
-                .findFirst()
-                .isPresent();
+                    });
 
         if (!isSet) {
           fieldDeclarator.setInitializer(

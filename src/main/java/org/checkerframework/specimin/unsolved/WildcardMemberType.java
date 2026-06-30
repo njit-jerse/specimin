@@ -87,7 +87,7 @@ public class WildcardMemberType extends MemberType {
       return "?";
     }
 
-    return getBoundString() + bound.toString();
+    return getBoundString() + bound;
   }
 
   @Override

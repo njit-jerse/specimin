@@ -15,10 +15,10 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
   private MemberType type;
 
   /** This is set to true if this field is a static field */
-  private boolean isStatic = false;
+  private final boolean isStatic;
 
   /** This is set to true if this field is a final field */
-  private boolean isFinal = false;
+  private final boolean isFinal;
 
   /**
    * Create an instance of UnsolvedField.

@@ -12,7 +12,7 @@ import java.util.Set;
  */
 public abstract class MemberType {
   /** The type arguments of this type. */
-  private List<MemberType> typeArguments;
+  private final List<MemberType> typeArguments;
 
   /**
    * Creates a new MemberType with the given type arguments.

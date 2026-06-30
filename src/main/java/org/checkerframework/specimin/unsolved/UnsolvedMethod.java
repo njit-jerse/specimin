@@ -196,10 +196,9 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    */
   @Override
   public boolean equals(@Nullable Object o) {
-    if (!(o instanceof UnsolvedMethod)) {
+    if (!(o instanceof UnsolvedMethod other)) {
       return false;
     }
-    UnsolvedMethod other = (UnsolvedMethod) o;
     return other.name.equals(this.name)
         && other.parameterList.equals(parameterList)
         && other.returnType.equals(this.returnType);
@@ -227,7 +226,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       }
     }
     StringBuilder signature = new StringBuilder();
-    if (accessModifier != null || accessModifier.isEmpty()) {
+    if (accessModifier != null) {
       signature.append(accessModifier);
       signature.append(" ");
     }
@@ -238,19 +237,19 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
 
     String typeVariables = getTypeVariablesAsString();
 
-    if (!typeVariables.equals("")) {
+    if (!typeVariables.isEmpty()) {
       signature.append(getTypeVariablesAsString()).append(" ");
     }
 
     String returnTypeAsString = returnType.toString();
-    if (!"".equals(returnTypeAsString)) {
+    if (!returnTypeAsString.isEmpty()) {
       signature.append(returnTypeAsString).append(" ");
     }
     signature.append(name).append("(");
     signature.append(arguments);
     signature.append(")");
 
-    if (throwsList.size() > 0) {
+    if (!throwsList.isEmpty()) {
       signature.append(" throws ");
     }
 

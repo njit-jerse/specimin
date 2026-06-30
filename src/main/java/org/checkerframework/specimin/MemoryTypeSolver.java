@@ -14,9 +14,11 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * them.
  */
 public class MemoryTypeSolver implements TypeSolver {
-
+  /** The parent type solver */
   private @Nullable TypeSolver parent;
-  private Map<String, CompilationUnit> cache = new HashMap<>();
+
+  /** A cache of FQNs to their compilation units */
+  private final Map<String, CompilationUnit> cache = new HashMap<>();
 
   @Override
   @SuppressWarnings(
@@ -27,7 +29,7 @@ public class MemoryTypeSolver implements TypeSolver {
   }
 
   @Override
-  public void setParent(TypeSolver parent) {
+  public void setParent(@Nullable TypeSolver parent) {
     this.parent = parent;
   }
 
@@ -47,6 +49,12 @@ public class MemoryTypeSolver implements TypeSolver {
                       .get()));
     }
     return SymbolReference.unsolved();
+  }
+
+  @Override
+  public SymbolReference<ResolvedReferenceTypeDeclaration> tryToSolveTypeInModule(
+      String packageQualifiedName, String simpleName) {
+    return tryToSolveType(packageQualifiedName + "." + simpleName);
   }
 
   /**

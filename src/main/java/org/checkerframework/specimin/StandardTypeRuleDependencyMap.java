@@ -222,7 +222,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             ResolvedReferenceTypeDeclaration parentDecl =
                 parentResolvedType.asReferenceType().getTypeDeclaration().get();
 
-            boolean hasDefaultConstructor = parentDecl.getConstructors().size() == 0;
+            boolean hasDefaultConstructor = parentDecl.getConstructors().isEmpty();
 
             for (ResolvedConstructorDeclaration resolvedConstructor :
                 parentDecl.getConstructors()) {
@@ -238,7 +238,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
               // No default constructor = first statement must be super()/this()
               Statement firstStatement =
                   constructor.getBody().getStatements().stream()
-                      .filter(s -> s.isExplicitConstructorInvocationStmt())
+                      .filter(Statement::isExplicitConstructorInvocationStmt)
                       .findFirst()
                       .get();
 
@@ -252,7 +252,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
 
           Statement firstStatement =
               constructor.getBody().getStatements().stream()
-                  .filter(s -> s.isExplicitConstructorInvocationStmt())
+                  .filter(Statement::isExplicitConstructorInvocationStmt)
                   .findFirst()
                   .orElse(null);
 

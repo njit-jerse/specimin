@@ -5,19 +5,16 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -61,24 +58,12 @@ import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionFieldDeclara
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionMethodDeclaration;
 import com.github.javaparser.utils.Pair;
 import com.google.common.base.Splitter;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 import org.checkerframework.specimin.unsolved.SolvedMemberType;
 
 /**
@@ -111,6 +96,12 @@ public class JavaParserUtil {
    * be non-null.
    */
   private static @MonotonicNonNull MemoryTypeSolver memoryTypeSolver = null;
+
+  /**
+   * Keeps track of the placeholder types that have been generated and registered with the type
+   * solver in {@link #getResolvablePlaceholderType(int)}.
+   */
+  private static final Set<String> generatedResolvedPlaceholderTypes = new HashSet<>();
 
   /**
    * Set the TypeSolver instances to be used.
@@ -158,23 +149,6 @@ public class JavaParserUtil {
   }
 
   /**
-   * Removes a node from its compilation unit. If a node cannot be removed directly, it might be
-   * wrapped inside another node, causing removal failure. This method iterates through the parent
-   * nodes until it successfully removes the specified node.
-   *
-   * <p>If this explanation does not make sense to you, please refer to the following link for
-   * further details: <a
-   * href="https://github.com/javaparser/javaparser/issues/858">https://github.com/javaparser/javaparser/issues/858</a>
-   *
-   * @param node The node to be removed.
-   */
-  public static void removeNode(Node node) {
-    while (!node.remove()) {
-      node = node.getParentNode().get();
-    }
-  }
-
-  /**
    * This method checks if a string has the form of a class path.
    *
    * @param potentialClassPath the string to be checked
@@ -201,10 +175,10 @@ public class JavaParserUtil {
     }
 
     // A class name should have its first letter capitalized but its second letter
-    // should be lower case. If otherwise, then it may be a constant
-    Character first = string.charAt(0);
+    // should be lowercase. If otherwise, then it may be a constant
+    char first = string.charAt(0);
     if (string.length() > 1) {
-      Character second = string.charAt(1);
+      char second = string.charAt(1);
 
       return Character.isUpperCase(first) && Character.isLowerCase(second);
     }
@@ -243,26 +217,6 @@ public class JavaParserUtil {
   }
 
   /**
-   * Given a ClassOrInterfaceType instance, this method returns a corresponding
-   * ResolvedReferenceType. This method might throw an exception if the given instance is
-   * unresolved.
-   *
-   * <p>Note: In JavaParser, ClassOrInterfaceType is a subtype of ReferenceType (check an example
-   * here:
-   * https://github.com/javaparser/javaparser/blob/9c133d19d5b85b3b758f05762fb4d7c9875ef681/javaparser-core/src/main/java/com/github/javaparser/ast/type/ClassOrInterfaceType.java#L258).
-   * However, the resolve() method in ClassOrInterfaceType only returns a ResolvedType instead of a
-   * specific ResolvedReferenceType. This appears to be an inaccuracy within JavaParser's type
-   * hierarchy.
-   *
-   * @param type the ClassOrInterfaceType instance
-   * @return the corresponding ResolvedReferenceType instance
-   */
-  public static ResolvedReferenceType classOrInterfaceTypeToResolvedReferenceType(
-      ClassOrInterfaceType type) {
-    return type.resolve().asReferenceType();
-  }
-
-  /**
    * Erases type arguments from a method or type signature string.
    *
    * @param signature the signature
@@ -270,78 +224,6 @@ public class JavaParserUtil {
    */
   public static String erase(String signature) {
     return signature.replaceAll("<.*>", "");
-  }
-
-  /**
-   * Returns the corresponding type name for an Expression within an annotation.
-   *
-   * @param value The value to evaluate the type of
-   * @return The corresponding type name for the value: constrained to a primitive type, String,
-   *     Class&lt;?&gt;, an enum, an annotation, or an array of any of those types, as per
-   *     annotation parameter requirements.
-   */
-  public static String getValueTypeFromAnnotationExpression(Expression value) {
-    if (value.isBooleanLiteralExpr()) {
-      return "boolean";
-    } else if (value.isStringLiteralExpr()) {
-      return "String";
-    } else if (value.isIntegerLiteralExpr()) {
-      return "int";
-    } else if (value.isLongLiteralExpr()) {
-      return "long";
-    } else if (value.isDoubleLiteralExpr()) {
-      return "double";
-    } else if (value.isCharLiteralExpr()) {
-      return "char";
-    } else if (value.isArrayInitializerExpr()) {
-      ArrayInitializerExpr array = value.asArrayInitializerExpr();
-      if (!array.getValues().isEmpty()) {
-        Expression firstElement = array.getValues().get(0);
-        return getValueTypeFromAnnotationExpression(firstElement) + "[]";
-      }
-      // Handle empty arrays (i.e. @Anno({})); we have no way of telling
-      // what it actually is
-      return "String[]";
-    } else if (value.isAnnotationExpr()) {
-      return value.asAnnotationExpr().getNameAsString();
-    } else if (value.isFieldAccessExpr()) {
-      // Enums are FieldAccessExprs (Enum.SOMETHING)
-      return value.asFieldAccessExpr().getScope().toString();
-    } else if (value.isClassExpr()) {
-      // Handle all classes
-      return "Class<?>";
-    } else if (value.isNameExpr()) {
-      // Constant/variable
-      ResolvedType resolvedType = calculateResolvedType(value.asNameExpr());
-      if (resolvedType != null) {
-
-        if (resolvedType.isPrimitive()) {
-          return resolvedType.asPrimitive().describe();
-        } else if (resolvedType.isReferenceType()) {
-          return resolvedType.asReferenceType().getQualifiedName();
-        } else {
-          return resolvedType.describe();
-        }
-      } else {
-        return value.toString();
-      }
-    }
-    return value.toString();
-  }
-
-  /**
-   * Searches the ancestors of the given node until it finds a class or interface node, and then
-   * returns the fully-qualified name of that class or interface.
-   *
-   * <p>This method will fail if it is called on a node that is not contained in a class or
-   * interface.
-   *
-   * @param node a node contained in a class or interface
-   * @return the fully-qualified name of the inner-most containing class or interface
-   */
-  @SuppressWarnings("signature") // result is a fully-qualified name or else this throws
-  public static @FullyQualifiedName String getEnclosingClassName(Node node) {
-    return getEnclosingClassLike(node).getFullyQualifiedName().orElseThrow();
   }
 
   /**
@@ -392,62 +274,13 @@ public class JavaParserUtil {
    * Given a qualified class name, return the simple name. i.e., org.example.ClassName -->
    * ClassName.
    *
-   * <p>This is also safe to call on non qualified names as well; it simply returns the input.
+   * <p>This is also safe to call on nonqualified names as well; it simply returns the input.
    *
    * @param qualified The qualified class name
    * @return The simple class name
    */
   public static String getSimpleNameFromQualifiedName(String qualified) {
     return qualified.substring(qualified.lastIndexOf('.') + 1);
-  }
-
-  /**
-   * Returns a package prefix that can be prepended to a class name, for a given method or
-   * constructor declaration.
-   *
-   * @param decl declaration to extract a package prefix from(using getPackageName)
-   * @return empty string if default package, otherwise package name followed by "."
-   */
-  public static String packagePrefix(ResolvedMethodLikeDeclaration decl) {
-    String packageName = decl.getPackageName();
-    return packageName.isEmpty() ? "" : packageName + ".";
-  }
-
-  /**
-   * Returns true iff the innermost enclosing class/interface is an enum.
-   *
-   * @param node any node
-   * @return true if the enclosing class is an enum, false otherwise
-   */
-  public static boolean isInEnum(Node node) {
-    Optional<Node> parent = node.getParentNode();
-    while (parent.isPresent()) {
-      Node actualParent = parent.get();
-      if (actualParent instanceof EnumDeclaration) {
-        return true;
-      }
-      parent = actualParent.getParentNode();
-    }
-    return false;
-  }
-
-  /**
-   * Finds the closest method, field, or class-like declaration (enums, annos)
-   *
-   * @param node The node to find the parent for
-   * @return the Node of the closest member or class declaration
-   */
-  public static Node findClosestParentMemberOrClassLike(Node node) {
-    Node parent = node.getParentNode().orElseThrow();
-    while (!(parent instanceof ClassOrInterfaceDeclaration
-        || parent instanceof EnumDeclaration
-        || parent instanceof AnnotationDeclaration
-        || parent instanceof ConstructorDeclaration
-        || parent instanceof MethodDeclaration
-        || parent instanceof FieldDeclaration)) {
-      parent = parent.getParentNode().orElseThrow();
-    }
-    return parent;
   }
 
   /**
@@ -460,18 +293,6 @@ public class JavaParserUtil {
   public static String removeMethodReturnTypeAndAnnotations(NodeWithDeclaration decl) {
     String declAsString = decl.getDeclarationAsString(false, false, false);
     return removeMethodReturnTypeAndAnnotationsImpl(declAsString);
-  }
-
-  /**
-   * Given a method or constructor declaration, this method returns the declaration of that method
-   * without the return type, internal spaces, and any possible annotation.
-   *
-   * @param decl the declaration to be used as input
-   * @return decl without the return type and any possible annotation.
-   */
-  public static String removeMethodReturnTypeSpacesAndAnnotations(NodeWithDeclaration decl) {
-    String declAsString = decl.getDeclarationAsString(false, false, false);
-    return removeMethodReturnTypeAndAnnotationsImpl(declAsString).replaceAll("\\s", "");
   }
 
   /**
@@ -499,8 +320,7 @@ public class JavaParserUtil {
         filteredMethodDeclaration.substring(0, filteredMethodDeclaration.indexOf(methodName));
     String methodWithoutReturnType = filteredMethodDeclaration.replace(methodReturnType, "");
     // sometimes an extra space may occur if an annotation right after a < was removed
-    String result = methodWithoutReturnType.replace("< ", "<");
-    return result;
+    return methodWithoutReturnType.replace("< ", "<");
   }
 
   /**
@@ -621,10 +441,12 @@ public class JavaParserUtil {
    * Returns true if this expression is resolvable to a definition.
    *
    * @param expr The expression to resolve
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
    * @return True if this expression is of type {@code Resolvable<?>} and also has a resolvable
    *     definition
    */
-  public static boolean isExprDefinitionResolvable(Expression expr) {
+  public static boolean isExprDefinitionResolvable(
+      Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
     if (!(expr instanceof Resolvable<?> resolvable)) {
       return false;
     }
@@ -635,12 +457,15 @@ public class JavaParserUtil {
     } catch (UnsolvedSymbolException | IllegalStateException ex) {
       // IllegalStateException when trying to resolve an expression whose scope is
       // a lambda parameter that has the type of an unbounded wildcard
-      return false;
-    } catch (UnsupportedOperationException ex) {
-      if (tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr) != null) {
+
+      if (expr.isMethodCallExpr()
+          && tryFindSingleCallableForNodeWithUnresolvableArguments(
+                  expr.asMethodCallExpr(), fqnToCompilationUnits)
+              != null) {
         return true;
       }
-      return false;
+
+      return tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr) != null;
     }
   }
 
@@ -770,7 +595,7 @@ public class JavaParserUtil {
    * @return The resolved type, or null if it cannot be resolved
    */
   public static @Nullable Pair<ResolvedType, Map<String, Node>>
-      tryGetExpresssionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas(
+      tryGetExpressionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas(
           Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
 
     Expression copy = expr.clone();
@@ -791,8 +616,8 @@ public class JavaParserUtil {
   }
 
   /**
-   * Similar to {@link #tryGetExpresssionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas}, but
-   * this is specifically for uses of lambda parameters in unresolvable generic scopes. For example,
+   * Similar to {@link #tryGetExpressionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas}, but this
+   * is specifically for uses of lambda parameters in unresolvable generic scopes. For example,
    * resolving x.a() in foo.bar(x -> x.a()) when foo's type is solvable, but its type arguments are
    * not.
    *
@@ -1235,12 +1060,12 @@ public class JavaParserUtil {
       ClassOrInterfaceType asClass = unresolvableType.asClassOrInterfaceType();
       NodeList<Type> typeArgs = asClass.getTypeArguments().get();
 
-      for (int i = 0; i < typeArgs.size(); i++) {
+      for (Type typeArg : typeArgs) {
         try {
-          typeArgs.get(i).resolve();
+          typeArg.resolve();
         } catch (UnsolvedSymbolException ex) {
           replaceInnermostUnresolvableTypeArgument(
-              typeArgs.get(i), placeholderToReal, originalToCopiedNodes);
+              typeArg, placeholderToReal, originalToCopiedNodes);
         }
       }
     } else if (unresolvableType.isArrayType()) {
@@ -1250,12 +1075,6 @@ public class JavaParserUtil {
           originalToCopiedNodes);
     }
   }
-
-  /**
-   * Keeps track of the placeholder types that have been generated and registered with the type
-   * solver in {@link #getResolvablePlaceholderType(int)}.
-   */
-  private static Set<String> generatedResolvedPlaceholderTypes = new HashSet<>();
 
   /**
    * Generates a resolvable placeholder type with the given index. Used as a placeholder for
@@ -1290,7 +1109,7 @@ public class JavaParserUtil {
    * @return The name of the type, without the array brackets
    */
   public static String removeArrayBrackets(String name) {
-    return name.replaceAll("(\\[\\])+$", "");
+    return name.replaceAll("(\\[])+$", "");
   }
 
   /**
@@ -1763,7 +1582,7 @@ public class JavaParserUtil {
     if (enclosingAnonymousClass != null) {
       addAllMatchingCallablesToListImpl(
           enclosingAnonymousClass.getAnonymousClassBody().get().stream()
-              .filter(c -> c.isCallableDeclaration())
+              .filter(BodyDeclaration::isCallableDeclaration)
               .map(c -> (CallableDeclaration<?>) c)
               .toList(),
           parameterTypes,
@@ -1829,7 +1648,7 @@ public class JavaParserUtil {
     if (!(expr instanceof Resolvable<?> resolvable)) {
       return null;
     }
-    Object resolved = null;
+    Object resolved;
 
     try {
       resolved = resolvable.resolve();
@@ -2161,7 +1980,7 @@ public class JavaParserUtil {
       return null;
     }
 
-    TypeDeclaration<?> type =
+    return (TypeDeclaration<?>)
         someCandidate
             .findFirst(
                 TypeDeclaration.class,
@@ -2169,8 +1988,6 @@ public class JavaParserUtil {
                     n.getFullyQualifiedName().isPresent()
                         && n.getFullyQualifiedName().get().equals(erased))
             .orElse(null);
-
-    return type;
   }
 
   /**
@@ -2221,7 +2038,8 @@ public class JavaParserUtil {
       return null;
     }
 
-    return attached.findFirst(detachedNode.getClass(), n -> n.equals(detachedNode)).get();
+    Class<? extends Node> nodeClass = detachedNode.getClass();
+    return attached.findFirst(nodeClass, n -> n.equals(detachedNode)).get();
   }
 
   /**
@@ -2260,10 +2078,8 @@ public class JavaParserUtil {
           return null;
         }
 
-        if (objectCreationExpr
-            .getType()
-            .findFirst(node.getClass(), n -> n.equals(node))
-            .isPresent()) {
+        Class<? extends Node> nodeClass = node.getClass();
+        if (objectCreationExpr.getType().findFirst(nodeClass, n -> n.equals(node)).isPresent()) {
           return objectCreationExpr;
         }
 
@@ -2316,9 +2132,9 @@ public class JavaParserUtil {
     Node copy = nodeToResolve.clone();
 
     try {
-      // Temporarily insert a copy of the node outside of the anonymous class and
+      // Temporarily insert a copy of the node outside the anonymous class and
       // see if it is resolvable
-      copy.setParentNode(current.getParentNode().get());
+      copy.setParentNode(current);
 
       // Not all nodes are resolvable (some expressions aren't)
       if (copy instanceof Resolvable<?> resolvable) {
@@ -2424,7 +2240,7 @@ public class JavaParserUtil {
     LambdaExpr parentLambda = null;
     Node parent = expression.getParentNode().orElse(null);
 
-    while (parent != null && parentLambda == null) {
+    while (parent != null) {
       if (parent instanceof LambdaExpr) {
         parentLambda = (LambdaExpr) parent;
         break;
@@ -2710,7 +2526,7 @@ public class JavaParserUtil {
             .map(
                 map ->
                     map.entrySet().stream()
-                        .<Map.Entry<T, U>>map(
+                        .map(
                             entry ->
                                 (Map.Entry<T, U>)
                                     new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue()))
@@ -2730,11 +2546,8 @@ public class JavaParserUtil {
     @SuppressWarnings("unchecked")
     Node ancestor =
         returnStmt
-            .<Node>findAncestor(
-                n -> {
-                  return n instanceof MethodDeclaration || n instanceof LambdaExpr;
-                },
-                Node.class)
+            .findAncestor(
+                n -> n instanceof MethodDeclaration || n instanceof LambdaExpr, Node.class)
             .get();
     return ancestor;
   }
@@ -2758,7 +2571,7 @@ public class JavaParserUtil {
 
     Type scopeType = tryGetTypeFromExpression(scope, fqnToCompilationUnit);
 
-    if (scopeType == null) {
+    if (!(scopeType instanceof ClassOrInterfaceType)) {
       return null;
     }
 
@@ -2796,11 +2609,7 @@ public class JavaParserUtil {
 
     clone.remove();
 
-    if (method != null) {
-      return method;
-    }
-
-    return null;
+    return method;
   }
 
   /**
@@ -3115,7 +2924,7 @@ public class JavaParserUtil {
         allSolvableAncestors.addAll(getAllJDKAncestors(typeDecl));
         allSolvableAncestors.addAll(
             getAllSolvableAncestors(typeDecl, fqnToCompilationUnits).stream()
-                .map(anc -> anc.resolve())
+                .map(TypeDeclaration::resolve)
                 .toList());
         allSolvableAncestors.removeAll(exploredTypes);
         allSolvableAncestors.remove(resolvedMethodDecl.declaringType());
@@ -3399,8 +3208,6 @@ public class JavaParserUtil {
 
         typeDecl = outerType;
         outerType = getEnclosingClassLikeOptional(outerType);
-
-        return true;
       }
     }
     return false;
@@ -3414,13 +3221,10 @@ public class JavaParserUtil {
    *
    * @param from The class or interface declaration that is the subtype
    * @param to The class or interface declaration that is the ancestor
-   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
    * @return A map of type parameter names to their resolved types
    */
   public static Map<String, String> generateTypeParameterMap(
-      ClassOrInterfaceDeclaration from,
-      ClassOrInterfaceDeclaration to,
-      Map<String, CompilationUnit> fqnToCompilationUnits) {
+      ClassOrInterfaceDeclaration from, ClassOrInterfaceDeclaration to) {
     if (from.equals(to)) {
       return from.getTypeParameters().stream()
           .collect(

@@ -83,15 +83,6 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   }
 
   /**
-   * Get the package where this class belongs to
-   *
-   * @return the value of packageName
-   */
-  public String getPackageName() {
-    return packageName;
-  }
-
-  /**
    * Adds new interfaces to the set of implemented interfaces.
    *
    * @param interfaceTypes The interface types
@@ -162,11 +153,10 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
 
   @Override
   public boolean equals(@Nullable Object other) {
-    if (!(other instanceof UnsolvedClassOrInterface)) {
+    if (!(other instanceof UnsolvedClassOrInterface otherClass)) {
       return false;
     }
-    UnsolvedClassOrInterface otherClass = (UnsolvedClassOrInterface) other;
-    // Note: an UnsovledClass cannot represent an anonymous class
+    // Note: an UnsolvedClass cannot represent an anonymous class
     // (each UnsolvedClass corresponds to a source file), so this
     // check is sufficient for equality (it is checking the canonical name).
     return otherClass.className.equals(this.className)
@@ -259,7 +249,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       @NonNull MemberType nonNullExtends = extendsClause;
       sb.append(" extends ").append(nonNullExtends).append(" ");
     }
-    if (implementsClauses.size() > 0) {
+    if (!implementsClauses.isEmpty()) {
       if (typeOfType == UnsolvedClassOrInterfaceType.INTERFACE) {
         if (extendsClause != null) {
           sb.append(", ");

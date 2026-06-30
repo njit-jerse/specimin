@@ -226,9 +226,8 @@ public class FullyQualifiedNameGenerator {
 
           if (optionalTypeDecl.isPresent() && optionalTypeDecl.get().toAst().isPresent()) {
             TypeDeclaration<?> typeDecl =
-                (TypeDeclaration<?>)
-                    JavaParserUtil.getTypeFromQualifiedName(
-                        optionalTypeDecl.get().getQualifiedName(), fqnToCompilationUnits);
+                JavaParserUtil.getTypeFromQualifiedName(
+                    optionalTypeDecl.get().getQualifiedName(), fqnToCompilationUnits);
 
             if (typeDecl == null) {
               // We shouldn't ever encounter this error. If toAst() returns a non-empty value,
@@ -286,10 +285,8 @@ public class FullyQualifiedNameGenerator {
               // be in a built-in Java superclass. In this case, return an empty map. Follow this
               // reasoning:
               // If a union type is UnsolvedException | NullPointerException, then any method
-              // called on the NameExpr
-              // representing an exception of this type will be in Exception or Throwable (or
-              // NullPointerException if
-              // UnsolvedException extended it).
+              // called on the NameExpr representing an exception of this type will be in Exception
+              // or Throwable (or NullPointerException if UnsolvedException extended it).
 
               // TODO: handle a case where a user-defined exception could be solvable but a parent
               // class of that exception is not.
@@ -375,9 +372,7 @@ public class FullyQualifiedNameGenerator {
     } else if (scope instanceof MethodCallExpr scopeAsMethodCall) {
       UnsolvedMethodAlternates genMethod = findUnsolvedMethodIfGenerated(scopeAsMethodCall);
       if (genMethod != null) {
-        return genMethod.getReturnTypes().stream()
-            .map(returnTypes -> returnTypes.getFullyQualifiedNames())
-            .toList();
+        return genMethod.getReturnTypes().stream().map(MemberType::getFullyQualifiedNames).toList();
       }
     }
     // Handle FieldAccessExpr/NameExpr together here
@@ -394,7 +389,7 @@ public class FullyQualifiedNameGenerator {
       UnsolvedFieldAlternates genField =
           (UnsolvedFieldAlternates) findUnsolvedSymbolIfGenerated(potentialScopeScopeFQNs);
       if (genField != null) {
-        return genField.getTypes().stream().map(type -> type.getFullyQualifiedNames()).toList();
+        return genField.getTypes().stream().map(MemberType::getFullyQualifiedNames).toList();
       }
     }
 
@@ -413,61 +408,11 @@ public class FullyQualifiedNameGenerator {
    */
   public Set<FullyQualifiedNameSet> getFQNsForExpressionType(Expression expr) {
     boolean isRoot = inProgress == null;
-    if (isRoot) {
+    if (inProgress == null) {
       inProgress = new HashSet<>();
     }
 
-    if (inProgress != null) {
-      inProgress.add(expr);
-    }
-
-    try {
-      if (expr.hasScope()) {
-        Expression scope = ((NodeWithTraversableScope) expr).traverseScope().get();
-
-        Expression replacementScope =
-            getReplacementExpressionIfRepresentsGeneratedSymbolWithSolvableType(scope);
-
-        if (replacementScope != null) {
-          try {
-            scope.replace(replacementScope);
-
-            return getFQNsForExpressionTypeImpl(expr);
-          } finally {
-            // Change it back so that we don't mess up other analyses
-            replacementScope.replace(scope);
-          }
-        }
-      }
-
-      return getFQNsForExpressionTypeImpl(expr);
-    } finally {
-      if (inProgress != null) {
-        inProgress.remove(expr);
-      }
-      if (isRoot) {
-        inProgress = null;
-      }
-    }
-  }
-
-  /**
-   * Same thing as {@link #getFQNsForExpressionType(Expression)}, but ignores any existing generated
-   * symbols.
-   *
-   * @param expr The expression
-   * @return The potential FQNs of the type of the given expression.
-   */
-  public Set<FullyQualifiedNameSet> getFQNsForExpressionTypeIgnoringExistingGenerations(
-      Expression expr) {
-    boolean isRoot = inProgress == null;
-    if (isRoot) {
-      inProgress = new HashSet<>();
-    }
-
-    if (inProgress != null) {
-      inProgress.add(expr);
-    }
+    inProgress.add(expr);
 
     try {
       if (expr.hasScope()) {
@@ -505,8 +450,8 @@ public class FullyQualifiedNameGenerator {
    * @param expr The expression to check
    * @return True if the expression is currently being processed, false otherwise
    */
-  private boolean isExpressionInProgress(Expression expr) {
-    return inProgress != null && inProgress.contains(expr);
+  private boolean isExpressionNotInProgress(Expression expr) {
+    return inProgress == null || !inProgress.contains(expr);
   }
 
   /**
@@ -534,7 +479,7 @@ public class FullyQualifiedNameGenerator {
 
         // getInitializerRHS returns a string of "null" if the type is not primitive
         if (defaultValue.equals("null")) {
-          return StaticJavaParser.parseExpression("((" + solvedType.toString() + ") null)");
+          return StaticJavaParser.parseExpression("((" + solvedType + ") null)");
         } else {
           return StaticJavaParser.parseExpression("(" + defaultValue + ")");
         }
@@ -666,7 +611,7 @@ public class FullyQualifiedNameGenerator {
     // Try to see if replacing type parameters in the types of the scope leads to a resolvable
     // expression type
     Pair<ResolvedType, Map<String, Node>> resolvedWithPlaceholders =
-        JavaParserUtil.tryGetExpresssionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas(
+        JavaParserUtil.tryGetExpressionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas(
             expr, fqnToCompilationUnits);
 
     if (resolvedWithPlaceholders != null) {
@@ -831,7 +776,10 @@ public class FullyQualifiedNameGenerator {
   /**
    * Replaces placeholder types in the method return type with actual types based on the provided
    * map. This is necessary when calling {@link
-   * JavaParserUtil#tryGetMethodDeclarationFromUnresolvableGenericScope(MethodCallExpr, Map)}.
+   * JavaParserUtil#tryGetExpressionTypeFromUnresolvableGenericScopeOrUnsolvedLambdas(Expression,
+   * Map)} or {@link
+   * JavaParserUtil#tryGetExpressionTypeForLambdaParameterInUnresolvableGenericScopeMethod(Expression,
+   * Map)}.
    *
    * @param methodReturnTypeFQNs The FQNs of the method return type, which may contain placeholder
    *     types
@@ -1330,7 +1278,7 @@ public class FullyQualifiedNameGenerator {
    */
   private @Nullable UnsolvedSymbolAlternates<?> findUnsolvedSymbolIfGenerated(
       Set<String> potentialFQNs) {
-    UnsolvedSymbolAlternates<?> alreadyGenerated = null;
+    UnsolvedSymbolAlternates<?> alreadyGenerated;
     for (String potentialFQN : potentialFQNs) {
       alreadyGenerated = generatedSymbols.get(potentialFQN);
 
@@ -1527,9 +1475,7 @@ public class FullyQualifiedNameGenerator {
     try {
       // Constructors are never void
       isVoid =
-          resolved instanceof ResolvedMethodDeclaration method
-              ? method.getReturnType().isVoid()
-              : false;
+          resolved instanceof ResolvedMethodDeclaration method && method.getReturnType().isVoid();
     } catch (UnsolvedSymbolException ex) {
       isVoid = false;
     }
@@ -1552,8 +1498,8 @@ public class FullyQualifiedNameGenerator {
       isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
     } else {
       isVoid =
-          !lambda.getBody().asBlockStmt().getStatements().stream()
-              .anyMatch(stmt -> stmt instanceof ReturnStmt);
+          lambda.getBody().asBlockStmt().getStatements().stream()
+              .noneMatch(stmt -> stmt instanceof ReturnStmt);
     }
 
     FullyQualifiedNameSet functionalInterface =
@@ -1611,7 +1557,7 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
-   * Given an expression that can be resolved (but calculateResolvedType() fails), return a best
+   * Given an expression that can be resolved (but calculateResolvedType() fails), return the best
    * shot at its type based on a resolved declaration. May return null if a type cannot be found
    * from the resolved declaration. This method will also throw an UnsolvedSymbolException if
    * .resolve() fails.
@@ -1625,17 +1571,17 @@ public class FullyQualifiedNameGenerator {
     }
 
     Node node = null;
-    Object resolved = null;
+    Object resolved;
 
     try {
       resolved = ((Resolvable<?>) expr).resolve();
-    } catch (UnsupportedOperationException ex) {
+    } catch (UnsolvedSymbolException | IllegalStateException ex) {
       resolved =
           JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
-    } catch (UnsolvedSymbolException | IllegalStateException ex) {
+
       // IllegalStateException when trying to resolve an expression whose scope is
       // a lambda parameter that has the type of an unbounded wildcard
-      if (expr instanceof NodeWithArguments<?> withArguments) {
+      if (resolved == null && expr instanceof NodeWithArguments<?> withArguments) {
         resolved =
             JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
                 withArguments, fqnToCompilationUnits);
@@ -1762,8 +1708,7 @@ public class FullyQualifiedNameGenerator {
     Node parentNode = expr.getParentNode().get();
 
     // Method call, constructor call, super() call
-    if (parentNode instanceof NodeWithArguments<?>) {
-      NodeWithArguments<?> withArguments = (NodeWithArguments<?>) parentNode;
+    if (parentNode instanceof NodeWithArguments<?> withArguments) {
 
       int param = -1;
       for (int i = 0; i < withArguments.getArguments().size(); i++) {
@@ -1777,7 +1722,7 @@ public class FullyQualifiedNameGenerator {
 
       if (parentNode instanceof NodeWithTraversableScope withScope
           && withScope.traverseScope().isPresent()
-          && !isExpressionInProgress(withScope.traverseScope().get())) {
+          && isExpressionNotInProgress(withScope.traverseScope().get())) {
         originalScope = withScope.traverseScope().get();
         replacementScope =
             getReplacementExpressionIfRepresentsGeneratedSymbolWithSolvableType(originalScope);
@@ -1822,7 +1767,7 @@ public class FullyQualifiedNameGenerator {
                 }
               }
 
-              if (!result.isEmpty() && !couldBeObject) {
+              if (!couldBeObject) {
                 return result;
               }
             }
@@ -1845,7 +1790,7 @@ public class FullyQualifiedNameGenerator {
                 }
               }
 
-              if (!result.isEmpty() && !couldBeObject) {
+              if (!couldBeObject) {
                 return result;
               }
             }
@@ -1878,27 +1823,25 @@ public class FullyQualifiedNameGenerator {
         }
       }
       // scope of the method call, not an argument, continue
-    } else if (parentNode instanceof VariableDeclarator) {
-      VariableDeclarator declarator = (VariableDeclarator) parentNode;
+    } else if (parentNode instanceof VariableDeclarator declarator) {
 
       // When the parent is a VariableDeclarator, the child (expr) is on the right hand side
       // The type is on the left hand side
       if (!declarator.getType().isVarType()) {
         return Set.of(getFQNsFromType(declarator.getType()));
       }
-    } else if (parentNode instanceof AssignExpr) {
-      AssignExpr assignment = (AssignExpr) parentNode;
+    } else if (parentNode instanceof AssignExpr assignment) {
 
       // We could be on either side of the assignment operator
       // In that case, take the type of the other side
 
       if (assignment.getTarget().equals(expr)
           && !assignment.getValue().isNullLiteralExpr()
-          && !isExpressionInProgress(assignment.getValue())) {
+          && isExpressionNotInProgress(assignment.getValue())) {
         return getFQNsForExpressionType(assignment.getValue());
       } else if (assignment.getValue().equals(expr)
           && !assignment.getTarget().isNullLiteralExpr()
-          && !isExpressionInProgress(assignment.getTarget())) {
+          && isExpressionNotInProgress(assignment.getTarget())) {
         return getFQNsForExpressionType(assignment.getTarget());
       }
     }
@@ -1917,7 +1860,9 @@ public class FullyQualifiedNameGenerator {
           other = conditionalExpr.getThenExpr();
         }
 
-        return getFQNsForExpressionType(other);
+        if (isExpressionNotInProgress(other)) {
+          return getFQNsForExpressionType(other);
+        }
       }
     }
     // If it's in a binary expression (i.e., + - / * == != etc.), then set it to the type of the
@@ -1936,7 +1881,7 @@ public class FullyQualifiedNameGenerator {
       // Boolean
       if (operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR) {
         return Set.of(new FullyQualifiedNameSet("boolean"));
-      } else if (!isExpressionInProgress(other) && !isExpressionInProgress(binary)) {
+      } else if (isExpressionNotInProgress(other) && isExpressionNotInProgress(binary)) {
         // Treat all other cases; type on one side is equal to the other
         Set<FullyQualifiedNameSet> otherType = getFQNsForExpressionType(other);
 
@@ -1978,8 +1923,7 @@ public class FullyQualifiedNameGenerator {
           instanceof MethodDeclaration methodDecl) {
         return Set.of(getFQNsFromType(methodDecl.getType()));
       }
-    } else if (parentNode instanceof ForEachStmt) {
-      ForEachStmt forEachStmt = (ForEachStmt) parentNode;
+    } else if (parentNode instanceof ForEachStmt forEachStmt) {
 
       if (forEachStmt.getIterable().equals(expr)) {
         FullyQualifiedNameSet notArray =
@@ -2198,7 +2142,7 @@ public class FullyQualifiedNameGenerator {
     // If a class or interface type is unresolvable, it must be imported or be in the same package.
     for (ImportDeclaration importDecl : compilationUnit.getImports()) {
       if (importDecl.getNameAsString().endsWith("." + firstIdentifier)) {
-        return Set.of(importDecl.getName().getQualifier().get().toString() + "." + fullName);
+        return Set.of(importDecl.getName().getQualifier().get() + "." + fullName);
       } else if (importDecl.isAsterisk()
           && !JavaLangUtils.inJdkPackage(importDecl.getNameAsString())) {
         fqns.add(importDecl.getNameAsString() + "." + fullName);
@@ -2296,10 +2240,7 @@ public class FullyQualifiedNameGenerator {
         .append(isMethod ? RETURN_TYPE : "SyntheticType");
 
     return new FullyQualifiedNameSet(
-        Set.of(packageName.toString() + "." + fieldTypeClassName.toString()),
-        List.of(),
-        null,
-        true);
+        Set.of(packageName + "." + fieldTypeClassName), List.of(), null, true);
   }
 
   /**
@@ -2461,8 +2402,8 @@ public class FullyQualifiedNameGenerator {
    * to the map.
    *
    * @param typeDecl The type declaration to find parents from
-   * @param currentNode The current node, to determine whether or not we should continue down that
-   *     path (if node.equals(currentNode), do not do recurse)
+   * @param currentNode The current node, to determine whether we should continue down that path (if
+   *     node.equals(currentNode), do not do recurse)
    * @param map The map to add to
    * @param traversedTypeDeclarations A set of type declarations that have already been traversed to
    *     avoid infinite recursion

@@ -41,7 +41,7 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /** A set of fully qualified names for this type. */
-  private Set<String> fullyQualifiedNames = new LinkedHashSet<>();
+  private final Set<String> fullyQualifiedNames = new LinkedHashSet<>();
 
   /**
    * A flag to ensure that {@link #createAlternatesBasedOnSuperTypeRelationships()} is only called
@@ -50,7 +50,7 @@ public class UnsolvedClassOrInterfaceAlternates
   private boolean alreadyHandledAllSuperRelationships = false;
 
   /** A map of super types to their relationships to the type represented by this object. */
-  private Map<Set<MemberType>, SuperTypeRelationship> superTypeRelationships =
+  private final Map<Set<MemberType>, SuperTypeRelationship> superTypeRelationships =
       new LinkedHashMap<>();
 
   /**
@@ -271,9 +271,9 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
-   * Removes a the set containing only superClass from superTypeRelationships. Right now, this
-   * method serves no purpose other than placing Exception before Error to generate a checked
-   * exception as a best-effort result.
+   * Removes the set containing only superClass from superTypeRelationships. Right now, this method
+   * serves no purpose other than placing Exception before Error to generate a checked exception as
+   * a best-effort result.
    *
    * @param superClass The super class to remove
    */
@@ -602,7 +602,7 @@ public class UnsolvedClassOrInterfaceAlternates
       boolean allTrue = true;
       for (MemberType potentialMemberType : superType.getKey()) {
         if (potentialMemberType instanceof UnsolvedMemberType unsolved) {
-          allTrue &=
+          allTrue =
               unsolved.getUnsolvedType().getType() == UnsolvedClassOrInterfaceType.CLASS
                   || isAnySuperTypeAClass(unsolved.getUnsolvedType());
 
@@ -655,17 +655,6 @@ public class UnsolvedClassOrInterfaceAlternates
   @Override
   public boolean doesImplement(MemberType interfaceType) {
     return getSuperTypeRelationship(interfaceType) == SuperTypeRelationship.IMPLEMENTS;
-  }
-
-  /**
-   * Returns true if the given superType is indeed a super type of this current class (does not
-   * matter if the relationship is extends, implements, or unknown).
-   *
-   * @param superType The super type
-   * @return True if this instance is a child of the given superType
-   */
-  public boolean isAChildOf(MemberType superType) {
-    return getSuperTypeRelationship(superType) != null;
   }
 
   /**

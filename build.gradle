@@ -4,9 +4,9 @@ plugins {
     id("java-library")
     id("maven-publish")
     id("signing")
-    id("com.diffplug.spotless").version("7.1.0")
-    id("org.checkerframework").version("0.6.56")
-    id("net.ltgt.errorprone").version("4.3.0")
+    id("com.diffplug.spotless").version("8.8.0")
+    id("org.checkerframework").version("1.0.2")
+    id("net.ltgt.errorprone").version("5.1.0")
     id("com.adarshr.test-logger").version("4.0.0")
 }
 
@@ -22,20 +22,22 @@ application {
 
 dependencies {
 
-    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.27.1")
+    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.2")
 
     implementation("net.sf.jopt-simple:jopt-simple:5.0.4")
 
-    implementation("org.vineflower:vineflower:1.11.1")
+    implementation("org.vineflower:vineflower:1.12.0")
 
-    implementation("commons-io:commons-io:2.21.0")
+    implementation("commons-io:commons-io:2.22.0")
 
-    // Use JUnit test framework.
-    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.1")
 
-    errorprone("com.google.errorprone:error_prone_core:2.40.0")
+    // Error Prone 2.42.0 and Google Java Format 1.28.0 are the maximum versions available to Java 17.
+    errorprone("com.google.errorprone:error_prone_core:2.42.0")
 
-    implementation 'com.google.googlejavaformat:google-java-format:1.28.0'
+    implementation("com.google.googlejavaformat:google-java-format:1.28.0")
+
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 // Use require-javadoc. From https://github.com/plume-lib/require-javadoc.
@@ -136,6 +138,7 @@ checkerFramework {
     extraJavacArgs = [
             "-Astubs=${projectDir}/JavaParser.astub"
     ]
+    version = "4.2.0"
 }
 
 spotless {
@@ -204,6 +207,7 @@ tasks.withType(Test).configureEach {
 }
 
 test {
+    useJUnitPlatform()
     testLogging {
         showStandardStreams = true
     }

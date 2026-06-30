@@ -14,7 +14,7 @@ import org.checkerframework.framework.qual.SubtypeOf;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ ElementType.TYPE_USE, ElementType.TYPE_PARAMETER })
 @SubtypeOf({})
-@QualifierForLiterals({ LiteralKind.NULL })
-@DefaultFor(types = { Void.class })
+@QualifierForLiterals(LiteralKind.NULL)
+@DefaultFor(types = Void.class)
 public @interface Nullable {
 }

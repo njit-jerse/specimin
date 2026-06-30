@@ -8,9 +8,18 @@ import java.util.Objects;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
 
+/**
+ * Utility class for Specimin-specific operations, such as those dealing with MemberTypes or
+ * FullyQualifiedNameSets.
+ */
 public class SpeciminGenerationUtils {
+  /**
+   * Private constructor to prevent instantiation.
+   *
+   * @throws UnsupportedOperationException if an attempt is made to instantiate this class.
+   */
   private SpeciminGenerationUtils() {
-    // Utility class, do not instantiate
+    throw new UnsupportedOperationException("This class cannot be instantiated.");
   }
 
   /**
