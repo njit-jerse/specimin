@@ -18,7 +18,6 @@ reviews:
     - "!**/.gradle/**"
     - "!**/.idea/**"
     - "!**/node_modules/**"
-    - "!**/test/**"
   auto_review:
     ignore_title_keywords:
       - "wip"
