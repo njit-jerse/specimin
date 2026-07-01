@@ -24,6 +24,15 @@ public record FullyQualifiedNameSet(
     List<FullyQualifiedNameSet> typeArguments,
     @Nullable String wildcard,
     boolean usesGeneratedName) {
+  /**
+   * Creates a new FullyQualifiedNameSet.
+   *
+   * @param erasedFqns A set of FQNs with no type arguments.
+   * @param typeArguments The list of type arguments, or an empty list if none.
+   * @param wildcard The wildcard (?, ? extends, ? super) or null if none.
+   * @param usesGeneratedName Whether this FQNSet represents an inferred, generated type name versus
+   *     a known type name (i.e., FooReturnType)
+   */
   public FullyQualifiedNameSet {
     for (String fqn : erasedFqns) {
       if (fqn.contains("?")) {

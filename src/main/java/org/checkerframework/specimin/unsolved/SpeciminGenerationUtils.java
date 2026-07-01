@@ -24,9 +24,9 @@ public class SpeciminGenerationUtils {
 
   /**
    * Get a map of different member types between two otherwise-similar MemberTypes. For example, for
-   * List<Integer> and List<String>, return a map with the entry Integer -> String. For Foo<List<?
-   * extends String>, Integer> and Foo<List<? extends Number>, Integer>, return a map with the entry
-   * String --> Number.
+   * {@code List<Integer>} and {@code List<String>}, return a map with the entry {@code Integer} ->
+   * {@code String}. For {@code Foo<List<? extends String>, Integer>} and {@code Foo<List<? extends
+   * Number>, Integer>}, return a map with the entry {@code String} --> {@code Number}.
    *
    * @param type1 The first type
    * @param type2 The second type

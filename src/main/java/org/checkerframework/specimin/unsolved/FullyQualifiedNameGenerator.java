@@ -121,7 +121,11 @@ public class FullyQualifiedNameGenerator {
     this.shouldCheckGeneratedSymbols = shouldCheckGeneratedSymbols;
   }
 
-  /** Returns whether generated symbols should be checked when getting expression types. */
+  /**
+   * Returns whether generated symbols should be checked when getting expression types.
+   *
+   * @return Whether this FullyQualifiedNameGenerator should check generated symbols
+   */
   public boolean getShouldCheckGeneratedSymbols() {
     return shouldCheckGeneratedSymbols;
   }
@@ -1165,6 +1169,7 @@ public class FullyQualifiedNameGenerator {
    * @param potentialScopes The potential declaring types of the method call
    * @param keepNullInsteadOfObject True if you want to use null instead of Object as part of the
    *     signature.
+   * @return The method FQNs with type variables corrected
    */
   public Set<String> generateAllMethodFQNsWithTypeVariableCorrection(
       MethodCallExpr methodCall,
