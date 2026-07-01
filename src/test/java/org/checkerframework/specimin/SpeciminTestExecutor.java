@@ -37,7 +37,6 @@ public class SpeciminTestExecutor {
    *     class.fully.qualified.Name#fieldName for field.
    * @param modularityModel the model to use
    * @param jarPaths the path of jar files for Specimin to solve symbols
-   * @param ambiguityResolutionPolicy the ambiguity resolution policy to use
    * @param extraArgs additional arguments to Specimin
    * @throws IOException if some operation fails
    */
@@ -47,7 +46,6 @@ public class SpeciminTestExecutor {
       String[] targetMembers,
       String modularityModel,
       String[] jarPaths,
-      String ambiguityResolutionPolicy,
       String... extraArgs)
       throws IOException {
     // Create output directory
@@ -90,8 +88,6 @@ public class SpeciminTestExecutor {
       speciminArgs.add("--jarPath");
       speciminArgs.add(jarPath);
     }
-    speciminArgs.add("--ambiguityResolutionPolicy");
-    speciminArgs.add(ambiguityResolutionPolicy);
     speciminArgs.addAll(List.of(extraArgs));
 
     // Run specimin on target
@@ -185,7 +181,7 @@ public class SpeciminTestExecutor {
   public static void runTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
       throws IOException {
-    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, "best-effort", extraArgs);
+    runTest(testName, targetFiles, targetMembers, "cf", new String[] {}, extraArgs);
   }
 
   /**
@@ -203,13 +199,6 @@ public class SpeciminTestExecutor {
   public static void runNullAwayTestWithoutJarPaths(
       String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
       throws IOException {
-    runTest(
-        testName,
-        targetFiles,
-        targetMembers,
-        "nullaway",
-        new String[] {},
-        "best-effort",
-        extraArgs);
+    runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, extraArgs);
   }
 }

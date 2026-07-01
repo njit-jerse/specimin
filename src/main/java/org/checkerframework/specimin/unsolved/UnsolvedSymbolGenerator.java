@@ -93,16 +93,16 @@ public class UnsolvedSymbolGenerator {
    *
    * @param fqnsToCompilationUnits A set of fully-qualified names to compilation units
    */
-  @SuppressWarnings("method.invocation")
+
+  // This warning is triggered on the lambda, but the lambda is always called after the constructor
+  // finishes, so it's safe
+  @SuppressWarnings("nullness:method.invocation")
   public UnsolvedSymbolGenerator(Map<String, CompilationUnit> fqnsToCompilationUnits) {
     this.fqnsToCompilationUnits = fqnsToCompilationUnits;
 
     fullyQualifiedNameGenerator =
         new FullyQualifiedNameGenerator(
-            fqnsToCompilationUnits,
-            generatedSymbols,
-            // This is safe; the lambda is always called after the constructor finishes
-            (fqns) -> getMemberTypeFromFQNs(fqns, false));
+            fqnsToCompilationUnits, generatedSymbols, (fqns) -> getMemberTypeFromFQNs(fqns, false));
   }
 
   /**

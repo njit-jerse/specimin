@@ -6,13 +6,12 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import org.checkerframework.specimin.AmbiguityResolutionPolicy;
 import org.checkerframework.specimin.JavaParserUtil;
 import org.checkerframework.specimin.Slicer;
 
 /**
  * Enumerates possible combinations of unsolved symbols, given a set of generated unsolved symbols
- * from the {@link Slicer}. Depending on the {@link AmbiguityResolutionPolicy}, this class may
+ * from the {@link Slicer}. Depending on the (TODO: ambiguity resolution policy), this class may
  * enumerate one to all possibilities.
  */
 public class UnsolvedSymbolEnumerator {

@@ -90,14 +90,6 @@ public class SpeciminRunner {
     OptionSpec<String> outputDirectoryOption =
         optionParser.accepts("outputDirectory").withRequiredArg();
 
-    // This option determines how ambiguities are to be resolved.
-    // Accepts the arguments: "best-effort", "all", "input-condition"
-    OptionSpec<String> ambiguityResolutionPolicy =
-        optionParser
-            .accepts("ambiguityResolutionPolicy")
-            .withOptionalArg()
-            .defaultsTo("best-effort");
-
     // the model for the javac type system, which is shared by the Checker Framework.
     // Accepts the arguments: "javac", "cf", "nullaway"
     OptionSpec<String> modularityModelOption =
@@ -120,7 +112,6 @@ public class SpeciminRunner {
         options.valuesOf(targetMethodsOption),
         options.valuesOf(targetFieldsOptions),
         options.valueOf(outputDirectoryOption),
-        options.valueOf(ambiguityResolutionPolicy),
         options.valueOf(modularityModelOption),
         options.has(disableRootValidationOption));
   }
@@ -153,7 +144,6 @@ public class SpeciminRunner {
         targetMethodNames,
         targetFieldNames,
         outputDirectory,
-        "best-effort",
         "cf",
         false);
   }
@@ -169,44 +159,6 @@ public class SpeciminRunner {
    * @param targetMethodNames A set of target method names to be preserved.
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
-   * @param ambiguityResolutionPolicy The ambiguity resolution policy to use.
-   * @param modularityModelCode The modularity model to use.
-   * @throws IOException if there is an exception
-   */
-  public static void performMinimization(
-      String root,
-      List<String> targetFiles,
-      List<String> jarPaths,
-      List<String> targetMethodNames,
-      List<String> targetFieldNames,
-      String outputDirectory,
-      String ambiguityResolutionPolicy,
-      String modularityModelCode)
-      throws IOException {
-    performMinimization(
-        root,
-        targetFiles,
-        jarPaths,
-        targetMethodNames,
-        targetFieldNames,
-        outputDirectory,
-        ambiguityResolutionPolicy,
-        modularityModelCode,
-        false);
-  }
-
-  /**
-   * This method acts as an API for users who want to incorporate Specimin as a library into their
-   * projects. It offers an easy way to do the minimization job without needing to directly call
-   * Specimin's main method.
-   *
-   * @param root The root directory of the input files.
-   * @param targetFiles A list of files that contain the target methods.
-   * @param jarPaths Paths to relevant JAR files.
-   * @param targetMethodNames A set of target method names to be preserved.
-   * @param targetFieldNames A set of target field names to be preserved.
-   * @param outputDirectory The directory for the output.
-   * @param ambiguityResolutionPolicy The ambiguity resolution policy to use.
    * @param modularityModelCode the modularity model to use
    * @param disableRootValidation whether to disable root validation
    * @throws IOException if there is an exception
@@ -218,7 +170,6 @@ public class SpeciminRunner {
       List<String> targetMethodNames,
       List<String> targetFieldNames,
       String outputDirectory,
-      String ambiguityResolutionPolicy,
       String modularityModelCode,
       boolean disableRootValidation)
       throws IOException {
@@ -230,7 +181,6 @@ public class SpeciminRunner {
     Set<Path> createdClass = new HashSet<>();
     Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteFiles(createdClass)));
 
-    AmbiguityResolutionPolicy policy = AmbiguityResolutionPolicy.parse(ambiguityResolutionPolicy);
     ModularityModel model = ModularityModel.createModularityModel(modularityModelCode);
 
     performMinimizationImpl(
@@ -240,7 +190,6 @@ public class SpeciminRunner {
         targetMethodNames,
         targetFieldNames,
         outputDirectory,
-        policy,
         model,
         createdClass,
         disableRootValidation);
@@ -257,12 +206,10 @@ public class SpeciminRunner {
    * @param targetMethodNames A set of target method names to be preserved.
    * @param targetFieldNames A set of target field names to be preserved.
    * @param outputDirectory The directory for the output.
-   * @param ambiguityResolutionPolicy The ambiguity resolution policy.
    * @param modularityModel The modularity model.
    * @param disableRootValidation whether to disable root validation
    * @throws IOException if there is an exception
    */
-  @SuppressWarnings("UnusedVariable") // Remove once ambiguityResolutionPolicy is used
   private static void performMinimizationImpl(
       String root,
       List<String> targetFiles,
@@ -270,7 +217,6 @@ public class SpeciminRunner {
       List<String> targetMethodNames,
       List<String> targetFieldNames,
       String outputDirectory,
-      AmbiguityResolutionPolicy ambiguityResolutionPolicy,
       ModularityModel modularityModel,
       Set<Path> createdClass,
       boolean disableRootValidation)

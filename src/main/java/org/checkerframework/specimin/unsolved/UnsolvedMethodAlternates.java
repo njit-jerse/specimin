@@ -14,7 +14,7 @@ import org.checkerframework.specimin.JavaParserUtil;
 
 /**
  * /** Given a name, return type, a set of parameters and a set of potential encapsulating classes,
- * this class allows for alternates of a same field to be generated in different locations. If a
+ * this class allows for alternates of the same method to be generated in different locations. If a
  * class were:
  *
  * <pre><code>
