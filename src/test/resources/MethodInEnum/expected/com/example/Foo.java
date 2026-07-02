@@ -7,7 +7,7 @@ class Foo {
         ON {
 
             public void testing() {
-                throw new RuntimeException();
+                throw new java.lang.Error();
             }
         }
         ;

@@ -1,7 +1,7 @@
 package com.example;
 
-import static org.example.TestUtil.when;
 import static org.example.TestUtil.mock;
+import static org.example.TestUtil.when;
 
 class Simple {
 

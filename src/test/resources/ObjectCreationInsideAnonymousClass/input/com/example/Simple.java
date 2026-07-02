@@ -5,12 +5,17 @@ import org.testing.Foo;
 
 public class Simple {
 
-    public Baz getBaz (){
+    public Baz getBaz() {
         return new Baz() {
             private Foo foo = new Foo("starting");
 
             public void remove() {
+                other();
                 foo.remove();
+            }
+
+            private void other() {
+
             }
         };
     }

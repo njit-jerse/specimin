@@ -2,7 +2,7 @@ package org.example;
 
 public class Baz {
 
-    public String printValue() {
+    public java.lang.String printValue() {
         throw new java.lang.Error();
     }
 }

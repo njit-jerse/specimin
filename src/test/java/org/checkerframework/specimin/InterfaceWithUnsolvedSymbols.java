@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /** This test makes sure that Specimin will not crash if an interface contains unsolved symbols. */
 public class InterfaceWithUnsolvedSymbols {

@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /** The test for <a href="https://github.com/kelloggm/specimin/issues/185">...</a>. */
 public class OverrideDoubleTest {

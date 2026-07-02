@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /** This test checks if Specimin can handle jar files as input */
 public class JarFileTest {
@@ -12,6 +12,7 @@ public class JarFileTest {
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#test()"},
         "cf",
-        new String[] {"src/test/resources/jarfile/input/Book.jar"});
+        new String[] {"src/test/resources/jarfile/input/Book.jar"},
+        "best-effort");
   }
 }

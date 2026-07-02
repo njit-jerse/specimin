@@ -1,12 +1,9 @@
 package org.checkerframework.specimin;
 
-import org.junit.Test;
-
 import java.io.IOException;
+import org.junit.jupiter.api.Test;
 
-/**
- * This test checks if Specimin can handle constraint type.
- */
+/** This test checks if Specimin can handle constraint type. */
 public class ConstraintTypeTest {
   @Test
   public void runTest() throws IOException {
