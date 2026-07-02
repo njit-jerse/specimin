@@ -2772,7 +2772,7 @@ public class UnsolvedSymbolGenerator {
             && enumConstantDeclaration.getArguments().isNonEmpty())) {
       NodeWithArguments<?> nodeWithArgs = (NodeWithArguments<?>) node;
 
-      ResolvedMethodLikeDeclaration resolved;
+      ResolvedMethodLikeDeclaration resolved = null;
       try {
         if (!(node instanceof EnumConstantDeclaration)) {
           resolved = (ResolvedMethodLikeDeclaration) ((Resolvable<?>) nodeWithArgs).resolve();
@@ -2800,6 +2800,24 @@ public class UnsolvedSymbolGenerator {
           if (decl instanceof ResolvedMethodDeclaration methodDecl) {
             resolved = methodDecl;
           }
+        }
+      } catch (UnsupportedOperationException ex) {
+        // JavaParser bug: cannot resolve a method if in an annotation declaration
+        if (node instanceof MethodCallExpr methodCallExpr
+            && methodCallExpr.getArguments().isEmpty()) {
+          // This method name is technically a little misleading for this application,
+          // since annotation methods have no parameters
+          // (https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.6.1)
+          // But it works for this case.
+          CallableDeclaration<?> potentialAnnotationMethod =
+              JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                  methodCallExpr, fqnsToCompilationUnits);
+
+          if (potentialAnnotationMethod != null) {
+            resolved = potentialAnnotationMethod.asMethodDeclaration().resolve();
+          }
+        } else {
+          throw ex;
         }
       }
 

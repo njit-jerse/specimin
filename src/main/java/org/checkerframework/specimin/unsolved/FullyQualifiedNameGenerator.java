@@ -1568,7 +1568,7 @@ public class FullyQualifiedNameGenerator {
     }
 
     Node node = null;
-    Object resolved;
+    Object resolved = null;
 
     try {
       resolved = ((Resolvable<?>) expr).resolve();
@@ -1585,6 +1585,24 @@ public class FullyQualifiedNameGenerator {
       }
 
       if (resolved == null) {
+        throw ex;
+      }
+    } catch (UnsupportedOperationException ex) {
+      // JavaParser bug: cannot resolve a method if in an annotation declaration
+      if (expr instanceof MethodCallExpr methodCallExpr
+          && methodCallExpr.getArguments().isEmpty()) {
+        // This method name is technically a little misleading for this application,
+        // since annotation methods have no parameters
+        // (https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.6.1)
+        // But it works for this case.
+        CallableDeclaration<?> potentialAnnotationMethod =
+            JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                methodCallExpr, fqnToCompilationUnits);
+
+        if (potentialAnnotationMethod != null) {
+          resolved = potentialAnnotationMethod.asMethodDeclaration().resolve();
+        }
+      } else {
         throw ex;
       }
     } catch (MethodAmbiguityException ex) {

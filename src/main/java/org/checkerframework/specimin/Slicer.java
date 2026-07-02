@@ -9,11 +9,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -222,6 +218,24 @@ public class Slicer {
         // it in the slice or generate a symbol for it.
 
         if (!ex.toString().contains("ReflectionMethodDeclaration")) {
+          throw ex;
+        }
+      } catch (UnsupportedOperationException ex) {
+        // JavaParser bug: cannot resolve a method if in an annotation declaration
+        if (node instanceof MethodCallExpr methodCallExpr
+            && methodCallExpr.getArguments().isEmpty()) {
+          // This method name is technically a little misleading for this application,
+          // since annotation methods have no parameters
+          // (https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.6.1)
+          // But it works for this case.
+          CallableDeclaration<?> potentialAnnotationMethod =
+              JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                  methodCallExpr, fqnToCompilationUnits);
+
+          if (potentialAnnotationMethod != null) {
+            resolved = potentialAnnotationMethod.asMethodDeclaration().resolve();
+          }
+        } else {
           throw ex;
         }
       } catch (UnsolvedSymbolException | IllegalStateException ex) {
