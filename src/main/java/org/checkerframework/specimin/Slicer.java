@@ -10,12 +10,10 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.*;
-import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
-import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
@@ -28,7 +26,6 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.unsolved.UnsolvedGenerationResult;
@@ -37,8 +34,8 @@ import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 
 /**
  * Slices a program, given an initial worklist and a type rule dependency map. This class cannot be
- * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque, UnsolvedSymbolGenerator,
- * Map)} to use this class.
+ * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque, UnsolvedSymbolGenerator)}
+ * to use this class.
  */
 public class Slicer {
   /**
@@ -75,26 +72,20 @@ public class Slicer {
   /** The type rule dependency map. */
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
-  /** The map of fully-qualified names to their compilation units. */
-  private final Map<String, CompilationUnit> fqnToCompilationUnits;
-
   /**
    * Creates a new instance of {@link Slicer}.
    *
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
    * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
-   * @param fqnToCompilationUnits The fully qualified name to compilation units map.
    */
   private Slicer(
       TypeRuleDependencyMap typeRuleDependencyMap,
       Deque<Node> worklist,
-      UnsolvedSymbolGenerator unsolvedSymbolGenerator,
-      Map<String, CompilationUnit> fqnToCompilationUnits) {
+      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
     this.typeRuleDependencyMap = typeRuleDependencyMap;
     this.worklist = worklist;
     this.unsolvedSymbolGenerator = unsolvedSymbolGenerator;
-    this.fqnToCompilationUnits = fqnToCompilationUnits;
   }
 
   /**
@@ -105,16 +96,13 @@ public class Slicer {
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
    * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
-   * @param fqnToCompilationUnits The map of type FQNs to their compilation units.
    * @return A {@link SliceResult} representing the output of the slice.
    */
   public static SliceResult slice(
       TypeRuleDependencyMap typeRuleDependencyMap,
       Deque<Node> worklist,
-      UnsolvedSymbolGenerator unsolvedSymbolGenerator,
-      Map<String, CompilationUnit> fqnToCompilationUnits) {
-    Slicer slicer =
-        new Slicer(typeRuleDependencyMap, worklist, unsolvedSymbolGenerator, fqnToCompilationUnits);
+      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
+    Slicer slicer = new Slicer(typeRuleDependencyMap, worklist, unsolvedSymbolGenerator);
 
     slicer.buildSlice();
 
@@ -202,74 +190,19 @@ public class Slicer {
 
       boolean generateUnsolvedSymbol = false;
       Object resolved = null;
-      try {
-        // Do not call resolve on a FieldDeclaration, since it will throw an
-        // UnsupportedOperationException
-        // if the field has multiple declarators. We will resolve the declarators instead.
-        if (!(node instanceof FieldDeclaration)) {
-          // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
-          // if there are unresolvable argument types
-          resolved = asResolvable.resolve();
-        }
-      } catch (MethodAmbiguityException ex) {
-        // JavaParser bug: check ArrayTypeTest. JavaParser cannot resolve Arrays.sort(int[])
-        // and has other candidates instead. If we see ReflectionMethodDeclaration in the
-        // error message, that means that the method is in the JDK and we don't need to include
-        // it in the slice or generate a symbol for it.
 
-        if (!ex.toString().contains("ReflectionMethodDeclaration")) {
-          throw ex;
-        }
-      } catch (UnsupportedOperationException ex) {
-        // JavaParser bug: cannot resolve a method if in an annotation declaration
-        if (node instanceof MethodCallExpr methodCallExpr
-            && methodCallExpr.getArguments().isEmpty()) {
-          // This method name is technically a little misleading for this application,
-          // since annotation methods have no parameters
-          // (https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.6.1)
-          // But it works for this case.
-          CallableDeclaration<?> potentialAnnotationMethod =
-              JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                  methodCallExpr, fqnToCompilationUnits);
+      if (!(node instanceof FieldDeclaration)) {
+        // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
+        // if there are unresolvable argument types
+        resolved = Resolver.resolve(asResolvable);
+      }
 
-          if (potentialAnnotationMethod != null) {
-            resolved = potentialAnnotationMethod.asMethodDeclaration().resolve();
-          }
-        } else {
-          throw ex;
-        }
-      } catch (UnsolvedSymbolException | IllegalStateException ex) {
-        // Workaround for resolving methods/fields with a qualifier that is resolvable, but returns
-        // a lambda constraint type with a type parameter instead of a type
-        if (node instanceof Expression expr) {
-          resolved =
-              JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
-        }
-
-        // IllegalStateException when trying to resolve an expression whose scope is
-        // a lambda parameter that has the type of an unbounded wildcard
-        boolean shouldTryToResolve = resolved == null;
+      if (resolved == null) {
+        boolean shouldTryToResolve = true;
         if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {
           // We may encounter this if the user includes a FQN in their input, since the type rule
           // dependency map returns the scope of the type, even if it's a package.
           shouldTryToResolve = false;
-        }
-
-        // Handle cases where a method/constructor call cannot be resolved because of unresolvable
-        // arguments, but its definition exists
-        CallableDeclaration<?> potentiallyResolvableCallable =
-            node instanceof NodeWithArguments<?> withArgs
-                ? JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                    withArgs, fqnToCompilationUnits)
-                : null;
-
-        if (potentiallyResolvableCallable != null && shouldTryToResolve) {
-          try {
-            resolved = ((Resolvable<?>) potentiallyResolvableCallable).resolve();
-            shouldTryToResolve = false;
-          } catch (UnsolvedSymbolException e) {
-            // This should never happen
-          }
         }
 
         if (shouldTryToResolve) {
@@ -277,7 +210,7 @@ public class Slicer {
           // an UnsolvedSymbolException, even if the type is resolvable
           if (node instanceof FieldAccessExpr || node instanceof NameExpr) {
             if (!JavaParserUtil.isProbablyAPackage((Expression) node)) {
-              resolved = JavaParserUtil.calculateResolvedType((Expression) node);
+              resolved = Resolver.calculateResolvedType((Expression) node);
 
               if (resolved == null) {
                 generateUnsolvedSymbol = true;
@@ -285,14 +218,6 @@ public class Slicer {
             }
           } else {
             generateUnsolvedSymbol = true;
-          }
-        }
-
-        if (generateUnsolvedSymbol && node instanceof Expression expr) {
-          Object result = JavaParserUtil.tryResolveNodeIfInAnonymousClass(expr);
-          if (result != null) {
-            resolved = result;
-            generateUnsolvedSymbol = false;
           }
         }
       }

@@ -39,7 +39,6 @@ import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnionType;
-import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -65,6 +64,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
+import org.checkerframework.specimin.Resolver;
 
 /**
  * Helper class for {@link UnsolvedSymbolGenerator}. Generates all FQNs based on an expression or
@@ -206,7 +206,7 @@ public class FullyQualifiedNameGenerator {
           .values();
     }
 
-    ResolvedType resolved = JavaParserUtil.calculateResolvedType(scope);
+    ResolvedType resolved = Resolver.calculateResolvedType(scope);
 
     if (resolved != null && resolved.isTypeVariable()) {
       ResolvedTypeParameterDeclaration typeParam = resolved.asTypeVariable().asTypeParameter();
@@ -223,8 +223,8 @@ public class FullyQualifiedNameGenerator {
       Map<String, Set<String>> potentialFQNs = new LinkedHashMap<>();
 
       for (ClassOrInterfaceType type : bound) {
-        try {
-          resolved = type.resolve();
+        resolved = Resolver.resolve(type);
+        if (resolved != null) {
 
           Optional<ResolvedReferenceTypeDeclaration> optionalTypeDecl =
               resolved.asReferenceType().getTypeDeclaration();
@@ -251,8 +251,6 @@ public class FullyQualifiedNameGenerator {
               }
             }
           }
-        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-          // Type not resolvable
         }
 
         String simpleClassName = JavaParserUtil.erase(type.getNameAsString());
@@ -273,9 +271,9 @@ public class FullyQualifiedNameGenerator {
 
     // Handle union types (NameExpr could be an exception capture in a catch clause)
     if (scope.isNameExpr()) {
-      try {
-        ResolvedValueDeclaration resolvedValueDeclaration = scope.asNameExpr().resolve();
+      ResolvedValueDeclaration resolvedValueDeclaration = Resolver.resolve(scope.asNameExpr());
 
+      if (resolvedValueDeclaration != null) {
         Node toAst =
             JavaParserUtil.tryFindAttachedNode(resolvedValueDeclaration, fqnToCompilationUnits);
 
@@ -285,7 +283,7 @@ public class FullyQualifiedNameGenerator {
           Map<String, Set<String>> result = new LinkedHashMap<>();
 
           for (ReferenceType type : unionType.getElements()) {
-            try {
+            if (Resolver.resolve(type) != null) {
               // If a type in the union type is resolvable, the location of the expression will
               // be in a built-in Java superclass. In this case, return an empty map. Follow this
               // reasoning:
@@ -295,10 +293,7 @@ public class FullyQualifiedNameGenerator {
 
               // TODO: handle a case where a user-defined exception could be solvable but a parent
               // class of that exception is not.
-              type.resolve();
               return Set.of();
-            } catch (UnsolvedSymbolException ex) {
-              // continue
             }
 
             // Safe to just use erased fqns: member location does not depend on what the type
@@ -315,10 +310,6 @@ public class FullyQualifiedNameGenerator {
 
           return result.values();
         }
-      } catch (UnsolvedSymbolException | IllegalStateException ex) {
-        // IllegalStateException when trying to resolve an expression whose scope is
-        // a lambda parameter that has the type of an unbounded wildcard
-        // Not a union type since declaration is unresolvable
       }
     }
 
@@ -508,7 +499,7 @@ public class FullyQualifiedNameGenerator {
     // Handle class expressions separately; their type argument may be a private type, which
     // is handled below.
     if (!expr.isAnnotationExpr() && !expr.isClassExpr()) {
-      ResolvedType type = JavaParserUtil.calculateResolvedType(expr);
+      ResolvedType type = Resolver.calculateResolvedType(expr);
 
       if (type != null) {
         return Set.of(getFQNsForResolvedType(type));
@@ -598,19 +589,10 @@ public class FullyQualifiedNameGenerator {
 
     // local variable / field / method call / object creation expression / any other case
     // where the expression is resolvable BUT the type of the expression may not be.
-    try {
-      @Nullable Set<FullyQualifiedNameSet> solvableDeclarationTypeFQNs =
-          getFQNsForTypeOfSolvableExpression(expr);
-      if (solvableDeclarationTypeFQNs != null) {
-        return solvableDeclarationTypeFQNs;
-      }
-    } catch (UnsolvedSymbolException ex) {
-      @Nullable FullyQualifiedNameSet findableDeclarationTypeFQNs =
-          getFQNsForExpressionInAnonymousClass(expr);
-      if (findableDeclarationTypeFQNs != null) {
-        return Set.of(findableDeclarationTypeFQNs);
-      }
-      // Not a local variable or field
+    Set<FullyQualifiedNameSet> solvableDeclarationTypeFQNs =
+        getFQNsForTypeOfSolvableExpression(expr);
+    if (solvableDeclarationTypeFQNs != null) {
+      return solvableDeclarationTypeFQNs;
     }
 
     // Try to see if replacing type parameters in the types of the scope leads to a resolvable
@@ -1568,47 +1550,20 @@ public class FullyQualifiedNameGenerator {
     }
 
     Node node = null;
-    Object resolved = null;
+    Object resolved = Resolver.resolve((Resolvable<?>) expr);
 
-    try {
-      resolved = ((Resolvable<?>) expr).resolve();
-    } catch (UnsolvedSymbolException | IllegalStateException ex) {
-      resolved =
-          JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
-
-      // IllegalStateException when trying to resolve an expression whose scope is
-      // a lambda parameter that has the type of an unbounded wildcard
-      if (resolved == null && expr instanceof NodeWithArguments<?> withArguments) {
+    if (resolved == null) {
+      if (expr instanceof NodeWithArguments<?> withArguments) {
         resolved =
             JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
                 withArguments, fqnToCompilationUnits);
       }
 
-      if (resolved == null) {
-        throw ex;
+      @Nullable FullyQualifiedNameSet findableDeclarationTypeFQNs =
+          getFQNsForExpressionInAnonymousClass(expr);
+      if (findableDeclarationTypeFQNs != null) {
+        return Set.of(findableDeclarationTypeFQNs);
       }
-    } catch (UnsupportedOperationException ex) {
-      // JavaParser bug: cannot resolve a method if in an annotation declaration
-      if (expr instanceof MethodCallExpr methodCallExpr
-          && methodCallExpr.getArguments().isEmpty()) {
-        // This method name is technically a little misleading for this application,
-        // since annotation methods have no parameters
-        // (https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.6.1)
-        // But it works for this case.
-        CallableDeclaration<?> potentialAnnotationMethod =
-            JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                methodCallExpr, fqnToCompilationUnits);
-
-        if (potentialAnnotationMethod != null) {
-          resolved = potentialAnnotationMethod.asMethodDeclaration().resolve();
-        }
-      } else {
-        throw ex;
-      }
-    } catch (MethodAmbiguityException ex) {
-      // This is usually a JavaParser bug; unfortunately, we don't have a good way to handle this
-      // right now
-      resolved = null;
     }
 
     if (resolved instanceof AssociableToAST associableToAST) {
@@ -1752,19 +1707,17 @@ public class FullyQualifiedNameGenerator {
 
       try {
         if (param != -1) {
-          try {
-            Object resolved = ((Resolvable<?>) withArguments).resolve();
-            // Constructors and methods both are ResolvedMethodLikeDeclaration
+          Object resolved = Resolver.resolve((Resolvable<?>) withArguments);
 
-            if (resolved instanceof ResolvedMethodLikeDeclaration resolvedMethodLike) {
+          // Constructors and methods both are ResolvedMethodLikeDeclaration
+          if (resolved instanceof ResolvedMethodLikeDeclaration resolvedMethodLike) {
+            try {
               ResolvedType paramType = resolvedMethodLike.getParam(param).getType();
 
               return Set.of(getFQNsForResolvedType(paramType));
+            } catch (UnsolvedSymbolException ex) {
+              // getType() may throw an UnsolvedSymbolException
             }
-          } catch (UnsolvedSymbolException | IllegalStateException ex) {
-            // IllegalStateException when trying to resolve an expression whose scope is
-            // a lambda parameter that has the type of an unbounded wildcard
-            // Argument type is not resolvable; i.e., method is unsolvable
           }
 
           if (withArguments instanceof MethodCallExpr methodCall) {
@@ -1999,12 +1952,10 @@ public class FullyQualifiedNameGenerator {
       }
     }
 
-    try {
-      ResolvedType resolved = type.resolve();
+    ResolvedType resolved = Resolver.resolve(type);
 
+    if (resolved != null) {
       return getFQNsForResolvedType(resolved);
-    } catch (UnsolvedSymbolException ex) {
-      // continue
     }
 
     if (type.isClassOrInterfaceType()) {
@@ -2437,53 +2388,35 @@ public class FullyQualifiedNameGenerator {
     }
     traversedTypeDeclarations.add(typeDecl);
 
-    if (typeDecl instanceof NodeWithImplements<?>) {
-      for (ClassOrInterfaceType type : ((NodeWithImplements<?>) typeDecl).getImplementedTypes()) {
-        if (type.equals(currentNode)) {
-          continue;
-        }
-
-        try {
-          ResolvedReferenceType resolved = type.resolve().asReferenceType();
-          TypeDeclaration<?> parentTypeDecl =
-              JavaParserUtil.getTypeFromQualifiedName(
-                  resolved.getQualifiedName(), fqnToCompilationUnits);
-
-          if (parentTypeDecl != null) {
-            getAllUnresolvableParentsImpl(
-                parentTypeDecl, currentNode, map, traversedTypeDeclarations);
-          }
-
-        } catch (UnsolvedSymbolException ex) {
-          map.put(
-              type,
-              getFQNsFromClassOrInterfaceTypeImpl(type, traversedTypeDeclarations).erasedFqns());
-        }
-      }
+    List<ClassOrInterfaceType> implementedAndExtendedTypes = new ArrayList<>();
+    if (typeDecl instanceof NodeWithImplements<?> withImplements) {
+      implementedAndExtendedTypes.addAll(withImplements.getImplementedTypes());
     }
 
-    if (typeDecl instanceof NodeWithExtends<?>) {
-      for (ClassOrInterfaceType type : ((NodeWithExtends<?>) typeDecl).getExtendedTypes()) {
-        if (type.equals(currentNode)) {
-          continue;
+    if (typeDecl instanceof NodeWithExtends<?> withExtends) {
+      implementedAndExtendedTypes.addAll(withExtends.getExtendedTypes());
+    }
+
+    for (ClassOrInterfaceType type : implementedAndExtendedTypes) {
+      if (type.equals(currentNode)) {
+        continue;
+      }
+      ResolvedType resolvedType = Resolver.resolve(type);
+
+      if (resolvedType != null) {
+        ResolvedReferenceType resolved = resolvedType.asReferenceType();
+        TypeDeclaration<?> parentTypeDecl =
+            JavaParserUtil.getTypeFromQualifiedName(
+                resolved.getQualifiedName(), fqnToCompilationUnits);
+
+        if (parentTypeDecl != null) {
+          getAllUnresolvableParentsImpl(
+              parentTypeDecl, currentNode, map, traversedTypeDeclarations);
         }
-
-        try {
-          ResolvedReferenceType resolved = type.resolve().asReferenceType();
-          TypeDeclaration<?> parentTypeDecl =
-              JavaParserUtil.getTypeFromQualifiedName(
-                  resolved.getQualifiedName(), fqnToCompilationUnits);
-
-          if (parentTypeDecl != null) {
-            getAllUnresolvableParentsImpl(
-                parentTypeDecl, currentNode, map, traversedTypeDeclarations);
-          }
-
-        } catch (UnsolvedSymbolException ex) {
-          map.put(
-              type,
-              getFQNsFromClassOrInterfaceTypeImpl(type, traversedTypeDeclarations).erasedFqns());
-        }
+      } else {
+        map.put(
+            type,
+            getFQNsFromClassOrInterfaceTypeImpl(type, traversedTypeDeclarations).erasedFqns());
       }
     }
   }

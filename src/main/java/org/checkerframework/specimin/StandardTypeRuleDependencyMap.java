@@ -40,12 +40,7 @@ import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
 import com.github.javaparser.utils.Pair;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /** The standard type rule dependency map */
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
@@ -119,7 +114,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.add(withType.getType());
 
       if (withType instanceof MethodDeclaration methodDecl && methodDecl.isAbstract()) {
-        ResolvedMethodDeclaration resolvedMethod = methodDecl.resolve();
+        // Method declarations can always be resolved
+        ResolvedMethodDeclaration resolvedMethod = Resolver.resolveGuaranteeNonNull(methodDecl);
         nonJDKMustImplementMethods.add(resolvedMethod);
         if (methodsWithAbstractSuperDefinitions.containsKey(
             resolvedMethod.getQualifiedSignature())) {
@@ -149,12 +145,13 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         if (mustImplement.contains(method)) {
           continue;
         }
-        try {
-          ResolvedMethodDeclaration resolvedMethod = method.resolve();
-          if (resolvedMethod.isAbstract()) {
-            continue;
-          }
 
+        ResolvedMethodDeclaration resolvedMethod = Resolver.resolveGuaranteeNonNull(method);
+        if (resolvedMethod.isAbstract()) {
+          continue;
+        }
+
+        try {
           for (ResolvedReferenceType ancestor : resolvedMethod.declaringType().getAllAncestors()) {
             // Approximate: check to see if name and arity matches.
             for (ResolvedMethodDeclaration ancestorMethod :
@@ -169,7 +166,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
             }
           }
         } catch (UnsolvedSymbolException ex) {
-          // Ignore
+          // Methods like getAllAncestors() can throw an UnsolvedSymbolException
         }
       }
     }
@@ -214,9 +211,8 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         // statement in all constructors that are being preserved.
 
         ClassOrInterfaceType parentType = withExtends.getExtendedTypes().get(0);
-        try {
-          ResolvedType parentResolvedType = parentType.resolve();
-
+        ResolvedType parentResolvedType = Resolver.resolve(parentType);
+        if (parentResolvedType != null) {
           if (parentResolvedType.isReferenceType()
               && parentResolvedType.asReferenceType().getTypeDeclaration().isPresent()) {
             ResolvedReferenceTypeDeclaration parentDecl =
@@ -245,7 +241,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
               elements.add(firstStatement);
             }
           }
-        } catch (UnsolvedSymbolException ex) {
+        } else {
           // Always preserve super/this if the parent type is not resolvable, since we don't
           // know if there is a default constructor. See UnsolvedSuperConstructor2Test for an
           // example of why this is necessary.
@@ -404,19 +400,18 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       if (resolvedMethodLikeDeclaration.toAst().isPresent()
           && resolvedMethodLikeDeclaration.toAst().get().getParentNode().get()
               instanceof ObjectCreationExpr objCreationExpr) {
-        try {
-          // Try to get the parent class of the anonymous class
-          ResolvedType resolvedAnonParent = objCreationExpr.getType().resolve();
-          type =
-              JavaParserUtil.getTypeFromQualifiedName(
-                  resolvedAnonParent.describe(), fqnToCompilationUnits);
-          typeParametersMapForAnonClass =
-              resolvedAnonParent.asReferenceType().getTypeParametersMap();
-          isAnonymousClass = true;
-        } catch (UnsolvedSymbolException ex) {
+        ResolvedType resolvedAnonParent = Resolver.resolve(objCreationExpr.getType());
+        if (resolvedAnonParent == null) {
           // Handle in UnsolvedSymbolGenerator
           return elements;
         }
+
+        // Try to get the parent class of the anonymous class
+        type =
+            JavaParserUtil.getTypeFromQualifiedName(
+                resolvedAnonParent.describe(), fqnToCompilationUnits);
+        typeParametersMapForAnonClass = resolvedAnonParent.asReferenceType().getTypeParametersMap();
+        isAnonymousClass = true;
       } else {
         type =
             JavaParserUtil.getTypeFromQualifiedName(
@@ -536,10 +531,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     List<ClassOrInterfaceType> parents = JavaParserUtil.getDirectSuperTypes(type);
 
     for (ClassOrInterfaceType parent : parents) {
-      ResolvedType parentType;
-      try {
-        parentType = parent.resolve();
-      } catch (UnsolvedSymbolException ex) {
+      ResolvedType parentType = Resolver.resolve(parent);
+
+      if (parentType == null) {
         continue;
       }
 
@@ -579,15 +573,26 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap,
       List<MethodDeclaration> result) {
     for (MethodDeclaration method : typeDecl.getMethods()) {
-      try {
-        if (original
-            .getSignature()
-            .equals(
-                JavaParserUtil.getSignatureFromResolvedMethodWithTypeVariablesMap(
-                    method.resolve(), typeParametersMap))) {
+      ResolvedMethodDeclaration resolved = Resolver.resolve(method);
+
+      String signature = null;
+      String signatureOfDeclarationWithTypeParamsAdjusted = null;
+      if (resolved != null) {
+        try {
+          signature = original.getSignature();
+          signatureOfDeclarationWithTypeParamsAdjusted =
+              JavaParserUtil.getSignatureFromResolvedMethodWithTypeVariablesMap(
+                  resolved, typeParametersMap);
+        } catch (UnsolvedSymbolException ex) {
+          // getSignature() and getSignature...Map() both could throw
+        }
+      }
+
+      if (resolved != null && signature != null) {
+        if (signature.equals(signatureOfDeclarationWithTypeParamsAdjusted)) {
           result.add(method);
         }
-      } catch (UnsolvedSymbolException ex) {
+      } else {
         // At least one parameter type may not be solvable. In this case, try comparing
         // simple names.
         if (areAstAndResolvedMethodLikelyEqual(original, method)) {

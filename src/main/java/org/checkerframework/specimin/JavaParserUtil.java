@@ -5,16 +5,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.CallableDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -36,19 +27,9 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
-import com.github.javaparser.resolution.MethodUsage;
-import com.github.javaparser.resolution.Resolvable;
-import com.github.javaparser.resolution.TypeSolver;
-import com.github.javaparser.resolution.UnsolvedSymbolException;
-import com.github.javaparser.resolution.declarations.AssociableToAST;
-import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.*;
+import com.github.javaparser.resolution.declarations.*;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration.Bound;
-import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -372,7 +353,7 @@ public class JavaParserUtil {
         return null;
       }
 
-      ResolvedType scopeType = calculateResolvedType(expr);
+      ResolvedType scopeType = Resolver.calculateResolvedType(expr);
       if (scopeType != null
           && getSimpleNameFromQualifiedName(scopeType.describe()).endsWith(scope.toString())) {
         return scopeType.describe() + "." + nameOfExpr;
@@ -412,64 +393,6 @@ public class JavaParserUtil {
   }
 
   /**
-   * Equivalent to {@code expr.calculateResolvedType()}, but returns null if the type cannot be
-   * resolved. Use instead of {@code expr.calculateResolvedType()} and try/catch {@link
-   * UnsolvedSymbolException} since this handles edge cases JavaParser cannot handle.
-   *
-   * @param expr The expression
-   * @return The resolved type of the expression, or null if it cannot be resolved
-   */
-  public static @Nullable ResolvedType calculateResolvedType(Expression expr) {
-    try {
-      return expr.calculateResolvedType();
-    } catch (UnsolvedSymbolException | UnsupportedOperationException | IllegalStateException ex) {
-      // We can get:
-      // * UnsupportedOperationException when trying to resolve an unsolvable method reference
-      // * IllegalStateException when trying to resolve a lambda parameter that has the type of an
-      // unbounded wildcard
-      // * RuntimeException in certain cases with a block statement (unclear exactly why this
-      // happens;
-      // all it matters is that it's an internal JavaParser bug)
-      return null;
-    } catch (RuntimeException ex) {
-      // Put separately here because the exceptions above are all types of RuntimeExceptions
-      return null;
-    }
-  }
-
-  /**
-   * Returns true if this expression is resolvable to a definition.
-   *
-   * @param expr The expression to resolve
-   * @param fqnToCompilationUnits The map of FQNs to compilation units
-   * @return True if this expression is of type {@code Resolvable<?>} and also has a resolvable
-   *     definition
-   */
-  public static boolean isExprDefinitionResolvable(
-      Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
-    if (!(expr instanceof Resolvable<?> resolvable)) {
-      return false;
-    }
-
-    try {
-      resolvable.resolve();
-      return true;
-    } catch (UnsolvedSymbolException | IllegalStateException ex) {
-      // IllegalStateException when trying to resolve an expression whose scope is
-      // a lambda parameter that has the type of an unbounded wildcard
-
-      if (expr.isMethodCallExpr()
-          && tryFindSingleCallableForNodeWithUnresolvableArguments(
-                  expr.asMethodCallExpr(), fqnToCompilationUnits)
-              != null) {
-        return true;
-      }
-
-      return tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr) != null;
-    }
-  }
-
-  /**
    * Gets the type from a {@code ResolvedValueDeclaration}. Returns null if unable to be found.
    *
    * @param resolved The resolved value declaration
@@ -503,6 +426,8 @@ public class JavaParserUtil {
       return fieldDecl.getElementType();
     } else if (attached instanceof Parameter param) {
       return param.getType();
+    } else if (attached instanceof AnnotationMemberDeclaration annoMemberDecl) {
+      return annoMemberDecl.getType();
     }
 
     return null;
@@ -517,27 +442,23 @@ public class JavaParserUtil {
    */
   private static @Nullable Type tryGetTypeFromExpression(
       Expression expression, Map<String, CompilationUnit> fqnToCompilationUnits) {
-    try {
-      if (expression.isNameExpr()) {
-        ResolvedValueDeclaration resolved = expression.asNameExpr().resolve();
+    Object resolved = null;
 
-        return getTypeFromResolvedValueDeclaration(resolved, fqnToCompilationUnits);
-      } else if (expression.isFieldAccessExpr()) {
-        ResolvedValueDeclaration resolved = expression.asFieldAccessExpr().resolve();
+    if (expression.isNameExpr()) {
+      resolved = Resolver.resolve(expression.asNameExpr());
+    } else if (expression.isFieldAccessExpr()) {
+      resolved = Resolver.resolve(expression.asFieldAccessExpr());
+    } else if (expression.isMethodCallExpr()) {
+      resolved = Resolver.resolve(expression.asMethodCallExpr());
+    }
 
-        return getTypeFromResolvedValueDeclaration(resolved, fqnToCompilationUnits);
-      } else if (expression.isMethodCallExpr()) {
-        ResolvedMethodDeclaration resolved = expression.asMethodCallExpr().resolve();
-
-        if (resolved.toAst().isPresent()) {
-          MethodDeclaration methodDecl = (MethodDeclaration) resolved.toAst().get();
-          return methodDecl.getType();
-        }
+    if (resolved instanceof ResolvedValueDeclaration valueDecl) {
+      return getTypeFromResolvedValueDeclaration(valueDecl, fqnToCompilationUnits);
+    } else if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDecl) {
+      if (resolvedMethodDecl.toAst().isPresent()) {
+        MethodDeclaration methodDecl = (MethodDeclaration) resolvedMethodDecl.toAst().get();
+        return methodDecl.getType();
       }
-    } catch (UnsolvedSymbolException | IllegalStateException ex) {
-      // IllegalStateException when trying to resolve an expression whose scope is
-      // a lambda parameter that has the type of an unbounded wildcard
-      return null;
     }
 
     if (expression.isArrayCreationExpr()) {
@@ -561,7 +482,7 @@ public class JavaParserUtil {
    */
   public static @Nullable String tryGetTypeAsStringFromExpression(
       Expression expression, Map<String, CompilationUnit> fqnToCompilationUnits) {
-    ResolvedType scopeType = calculateResolvedType(expression);
+    ResolvedType scopeType = Resolver.calculateResolvedType(expression);
     if (scopeType != null) {
       return scopeType.describe();
     }
@@ -689,7 +610,8 @@ public class JavaParserUtil {
           Expression clonedExpressionToEvaluate,
           Map<Type, Node> placeholderToTypeHolding,
           IdentityHashMap<Node, Node> originalToCopies) {
-    @Nullable ResolvedType resolvedType = calculateResolvedType(clonedExpressionToEvaluate);
+    @Nullable ResolvedType resolvedType =
+        Resolver.calculateResolvedType(clonedExpressionToEvaluate);
 
     Map<String, Node> placeholderFQNToOriginalNode;
 
@@ -698,7 +620,7 @@ public class JavaParserUtil {
             // If we're here, everything is resolvable
             .collect(
                 Collectors.toMap(
-                    entry -> entry.getKey().resolve().describe(),
+                    entry -> Resolver.resolveGuaranteeNonNull(entry.getKey()).describe(),
                     Map.Entry::getValue,
                     (a, b) -> {
                       throw new IllegalStateException("Duplicate key");
@@ -877,19 +799,15 @@ public class JavaParserUtil {
 
     Type type = null;
     if (expr.isNameExpr() || expr.isFieldAccessExpr()) {
-      ResolvedValueDeclaration resolved;
+      ResolvedValueDeclaration resolved = null;
 
-      try {
-        if (expr.isNameExpr()) {
-          resolved = expr.asNameExpr().resolve();
-        } else {
-          resolved = expr.asFieldAccessExpr().resolve();
-        }
-      } catch (UnsolvedSymbolException | IllegalStateException ex) {
-        // IllegalStateException when trying to resolve an expression whose scope is
-        // a lambda parameter that has the type of an unbounded wildcard
+      if (expr.isNameExpr()) {
+        resolved = Resolver.resolve(expr.asNameExpr());
+      } else {
+        resolved = Resolver.resolve(expr.asFieldAccessExpr());
+      }
 
-        // If the scope cannot be resolved, we do not know its erased type
+      if (resolved == null) {
         return false;
       }
 
@@ -903,13 +821,9 @@ public class JavaParserUtil {
         return resolved instanceof ReflectionFieldDeclaration;
       }
     } else if (expr.isMethodCallExpr()) {
-      ResolvedMethodDeclaration resolvedScopeMethod;
+      ResolvedMethodDeclaration resolvedScopeMethod = Resolver.resolve(expr.asMethodCallExpr());
 
-      try {
-        resolvedScopeMethod = expr.asMethodCallExpr().resolve();
-      } catch (UnsolvedSymbolException | IllegalStateException ex) {
-        // IllegalStateException when trying to resolve an expression whose scope is
-        // a lambda parameter that has the type of an unbounded wildcard
+      if (resolvedScopeMethod == null) {
         return false;
       }
 
@@ -993,7 +907,7 @@ public class JavaParserUtil {
 
     for (LambdaExpr lambda : lambdas) {
       // Try to replace unsolvable lambdas with known return types
-      if (calculateResolvedType(lambda) != null) {
+      if (Resolver.calculateResolvedType(lambda) != null) {
         continue;
       }
 
@@ -1061,12 +975,10 @@ public class JavaParserUtil {
       NodeList<Type> typeArgs = asClass.getTypeArguments().get();
 
       for (Type typeArg : typeArgs) {
-        try {
-          typeArg.resolve();
-        } catch (UnsolvedSymbolException ex) {
-          replaceInnermostUnresolvableTypeArgument(
-              typeArg, placeholderToReal, originalToCopiedNodes);
+        if (Resolver.resolve(typeArg) != null) {
+          continue;
         }
+        replaceInnermostUnresolvableTypeArgument(typeArg, placeholderToReal, originalToCopiedNodes);
       }
     } else if (unresolvableType.isArrayType()) {
       replaceInnermostUnresolvableTypeArgument(
@@ -1208,7 +1120,7 @@ public class JavaParserUtil {
 
     if (methodCall.hasScope()) {
       Expression scope = methodCall.getScope().get();
-      ResolvedType scopeType = calculateResolvedType(scope);
+      ResolvedType scopeType = Resolver.calculateResolvedType(scope);
 
       if (scopeType == null) {
         return Collections.emptyList();
@@ -1247,7 +1159,7 @@ public class JavaParserUtil {
     if (withArgs instanceof NodeWithTraversableScope withScope
         && withScope.traverseScope().isPresent()) {
       Expression scope = withScope.traverseScope().get();
-      ResolvedType scopeType = calculateResolvedType(scope);
+      ResolvedType scopeType = Resolver.calculateResolvedType(scope);
 
       if (scopeType == null) {
         return Collections.emptyList();
@@ -1402,16 +1314,15 @@ public class JavaParserUtil {
 
     TypeDeclaration<?> enclosingClass;
 
-    try {
-      ResolvedType type = constructorCall.getType().resolve();
+    ResolvedType type = Resolver.resolve(constructorCall.getType());
 
-      enclosingClass = getTypeFromQualifiedName(type.describe(), fqnToCompilationUnits);
+    if (type == null) {
+      return List.of();
+    }
 
-      if (enclosingClass == null) {
-        return List.of();
-      }
-    } catch (UnsolvedSymbolException ex) {
-      // not relevant
+    enclosingClass = getTypeFromQualifiedName(type.describe(), fqnToCompilationUnits);
+
+    if (enclosingClass == null) {
       return List.of();
     }
 
@@ -1446,12 +1357,11 @@ public class JavaParserUtil {
           enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
     } else {
       TypeDeclaration<?> parent = null;
-      try {
-        parent =
-            getTypeFromQualifiedName(
-                getSuperClass(constructorCall).resolve().describe(), fqnToCompilationUnits);
-      } catch (UnsolvedSymbolException ex) {
-        // continue
+
+      ResolvedType resolvedSuperClass = Resolver.resolve(getSuperClass(constructorCall));
+
+      if (resolvedSuperClass != null) {
+        parent = getTypeFromQualifiedName(resolvedSuperClass.describe(), fqnToCompilationUnits);
       }
 
       if (parent != null) {
@@ -1481,17 +1391,14 @@ public class JavaParserUtil {
     List<TypeDeclaration<?>> enclosingClass = new ArrayList<>();
 
     if (enclosingAnonymousClass != null) {
-      try {
+      ResolvedType resolvedAnonClassType = Resolver.resolve(enclosingAnonymousClass.getType());
+      if (resolvedAnonClassType != null) {
         TypeDeclaration<?> enclosingAnonymousClassType =
-            getTypeFromQualifiedName(
-                enclosingAnonymousClass.getType().resolve().describe(), fqnToCompilationUnits);
+            getTypeFromQualifiedName(resolvedAnonClassType.describe(), fqnToCompilationUnits);
 
         if (enclosingAnonymousClassType != null) {
           enclosingClass.add(enclosingAnonymousClassType);
         }
-      } catch (UnsolvedSymbolException ex) {
-        // If the enclosing anonymous class cannot be resolved, then we don't know what methods are
-        // available
       }
     }
 
@@ -1502,7 +1409,7 @@ public class JavaParserUtil {
         isSuperOnly = true;
       }
 
-      ResolvedType scopeType = calculateResolvedType(scope);
+      ResolvedType scopeType = Resolver.calculateResolvedType(scope);
 
       if (scopeType != null) {
         if (scopeType.isTypeVariable()) {
@@ -1558,7 +1465,6 @@ public class JavaParserUtil {
         getArgumentTypesAsResolved(methodCall.getArguments());
 
     List<MethodDeclaration> candidates = new ArrayList<>();
-
     for (TypeDeclaration<?> typeDecl : enclosingClass) {
       if (!isSuperOnly) {
         addAllMatchingCallablesToList(
@@ -1612,16 +1518,16 @@ public class JavaParserUtil {
 
     TypeDeclaration<?> enclosingClass;
 
-    try {
-      ResolvedType type = enumConstant.resolve().getType();
+    ResolvedEnumConstantDeclaration resolvedDecl = Resolver.resolve(enumConstant);
 
-      enclosingClass = getTypeFromQualifiedName(type.describe(), fqnToCompilationUnits);
+    if (resolvedDecl == null) {
+      return List.of();
+    }
+    ResolvedType type = resolvedDecl.getType();
 
-      if (enclosingClass == null) {
-        return List.of();
-      }
-    } catch (UnsolvedSymbolException ex) {
-      // not relevant
+    enclosingClass = getTypeFromQualifiedName(type.describe(), fqnToCompilationUnits);
+
+    if (enclosingClass == null) {
       return List.of();
     }
 
@@ -1648,13 +1554,9 @@ public class JavaParserUtil {
     if (!(expr instanceof Resolvable<?> resolvable)) {
       return null;
     }
-    Object resolved;
+    Object resolved = Resolver.resolve(resolvable);
 
-    try {
-      resolved = resolvable.resolve();
-    } catch (UnsolvedSymbolException | IllegalStateException ex) {
-      // IllegalStateException when trying to resolve an expression whose scope is
-      // a lambda parameter that has the type of an unbounded wildcard
+    if (resolved == null) {
       return null;
     }
 
@@ -1687,18 +1589,17 @@ public class JavaParserUtil {
     Optional<NodeList<Type>> typeArgs = classOrInterfaceType.getTypeArguments();
     classOrInterfaceType.removeTypeArguments();
 
-    try {
-      ResolvedType resolvedType = classOrInterfaceType.resolve();
-      if (typeArgs.isPresent()) {
-        classOrInterfaceType.setTypeArguments(typeArgs.get());
-      }
-      return resolvedType.describe();
-    } catch (UnsolvedSymbolException ex2) {
-      if (typeArgs.isPresent()) {
-        classOrInterfaceType.setTypeArguments(typeArgs.get());
-      }
+    ResolvedType resolvedType = Resolver.resolve(classOrInterfaceType);
+
+    if (typeArgs.isPresent()) {
+      classOrInterfaceType.setTypeArguments(typeArgs.get());
+    }
+
+    if (resolvedType == null) {
       return null;
     }
+
+    return resolvedType.describe();
   }
 
   /**
@@ -1710,9 +1611,7 @@ public class JavaParserUtil {
    */
   public static List<@Nullable ResolvedType> getArgumentTypesAsResolved(
       List<Expression> arguments) {
-    return arguments.stream()
-        .map(JavaParserUtil::calculateResolvedType)
-        .collect(Collectors.toList());
+    return arguments.stream().map(Resolver::calculateResolvedType).collect(Collectors.toList());
   }
 
   /**
@@ -1777,10 +1676,19 @@ public class JavaParserUtil {
       for (int i = 0; i < callable.getParameters().size(); i++) {
         ResolvedType typeInCall = parameterTypes.get(i);
 
-        try {
-          ResolvedType resolvedParameterType = callable.getParameter(i).resolve().getType();
+        ResolvedParameterDeclaration resolvedParam = Resolver.resolve(callable.getParameter(i));
+        boolean isParamTypeUnsolved = resolvedParam == null;
 
-          if (typeInCall == null) {
+        if (resolvedParam != null) {
+          ResolvedType resolvedParameterType = null;
+          try {
+            resolvedParameterType = resolvedParam.getType();
+          } catch (UnsolvedSymbolException ex) {
+            isParamTypeUnsolved = true;
+            // getType() may throw an UnsolvedSymbolException
+          }
+
+          if (typeInCall == null || isParamTypeUnsolved || resolvedParameterType == null) {
             continue;
           }
 
@@ -1790,11 +1698,11 @@ public class JavaParserUtil {
               break;
             }
           }
-        } catch (UnsolvedSymbolException ex) {
-          if (typeInCall != null) {
-            isAMatch = false;
-            break;
-          }
+        }
+
+        if (isParamTypeUnsolved && typeInCall != null) {
+          isAMatch = false;
+          break;
         }
       }
 
@@ -1854,19 +1762,21 @@ public class JavaParserUtil {
     List<ClassOrInterfaceType> extendedOrImplemented = getDirectSuperTypes(start);
 
     for (ClassOrInterfaceType type : extendedOrImplemented) {
-      try {
-        ResolvedType resolvedType = type.resolve();
-        TypeDeclaration<?> typeDecl =
-            getTypeFromQualifiedName(resolvedType.describe(), fqnToCompilationUnits);
+      ResolvedType resolvedType = Resolver.resolve(type);
 
-        if (typeDecl == null) {
-          continue;
-        }
-
-        getAllUnsolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
-      } catch (UnsolvedSymbolException ex) {
+      if (resolvedType == null) {
         result.add(type);
+        continue;
       }
+
+      TypeDeclaration<?> typeDecl =
+          getTypeFromQualifiedName(resolvedType.describe(), fqnToCompilationUnits);
+
+      if (typeDecl == null) {
+        continue;
+      }
+
+      getAllUnsolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
     }
   }
 
@@ -1880,11 +1790,13 @@ public class JavaParserUtil {
   public static Set<ResolvedReferenceTypeDeclaration> getAllJDKAncestors(TypeDeclaration<?> start) {
     Set<ResolvedReferenceTypeDeclaration> result = new HashSet<>();
 
-    try {
-      ResolvedReferenceTypeDeclaration resolved = start.resolve();
+    // TypeDeclaration<?> doesn't implement Resolvable<ResolvedReferenceTypeDeclaration>, but
+    // contains
+    // an abstract method resolve() returning type ResolvedReferenceTypeDeclaration
+    ResolvedReferenceTypeDeclaration resolved =
+        (ResolvedReferenceTypeDeclaration) Resolver.resolve((Resolvable<?>) start);
+    if (resolved != null) {
       getAllJDKAncestorsImpl(resolved, result);
-    } catch (UnsolvedSymbolException ex) {
-      // continue
     }
 
     return result;
@@ -1938,20 +1850,21 @@ public class JavaParserUtil {
     List<ClassOrInterfaceType> extendedOrImplemented = getDirectSuperTypes(start);
 
     for (ClassOrInterfaceType type : extendedOrImplemented) {
-      try {
-        ResolvedType resolvedType = type.resolve();
-        TypeDeclaration<?> typeDecl =
-            getTypeFromQualifiedName(resolvedType.describe(), fqnToCompilationUnits);
+      ResolvedType resolvedType = Resolver.resolve(type);
 
-        if (typeDecl == null) {
-          continue;
-        }
-
-        result.add(typeDecl);
-        getAllSolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
-      } catch (UnsolvedSymbolException ex) {
-        // continue
+      if (resolvedType == null) {
+        continue;
       }
+
+      TypeDeclaration<?> typeDecl =
+          getTypeFromQualifiedName(resolvedType.describe(), fqnToCompilationUnits);
+
+      if (typeDecl == null) {
+        continue;
+      }
+
+      result.add(typeDecl);
+      getAllSolvableAncestorsImpl(typeDecl, fqnToCompilationUnits, result);
     }
   }
 
@@ -2138,15 +2051,15 @@ public class JavaParserUtil {
 
       // Not all nodes are resolvable (some expressions aren't)
       if (copy instanceof Resolvable<?> resolvable) {
-        try {
-          return resolvable.resolve();
-        } catch (RuntimeException e) {
-          // Go below and try to see if calculateResolvedType works
+        Object resolved = Resolver.resolve(resolvable);
+
+        if (resolved != null) {
+          return resolved;
         }
       }
 
       if (copy instanceof Expression expression) {
-        return calculateResolvedType(expression);
+        return Resolver.calculateResolvedType(expression);
       }
 
       return null;
@@ -2219,7 +2132,7 @@ public class JavaParserUtil {
     Expression scope = ((NodeWithTraversableScope) expression).traverseScope().get();
     ResolvedTypeParameterDeclaration bound;
 
-    ResolvedType resolvedType = calculateResolvedType(scope);
+    ResolvedType resolvedType = Resolver.calculateResolvedType(scope);
 
     if (resolvedType == null) {
       return null;
@@ -2307,37 +2220,33 @@ public class JavaParserUtil {
       if (methodCallParent.getParentNode().orElse(null) instanceof ReturnStmt returnStmt
           && returnStmt.getParentNode().orElse(null) instanceof BlockStmt blockStmt
           && blockStmt.getParentNode().orElse(null) instanceof MethodDeclaration methodDecl) {
-        try {
-          ResolvedType returnTypeResolved = methodDecl.getType().resolve();
+        ResolvedType returnTypeResolved = Resolver.resolve(methodDecl.getType());
 
+        if (returnTypeResolved != null) {
           resolvedTypeToPotentialASTTypes.add(
               new Pair<>(method.getReturnType(), returnTypeResolved));
-        } catch (UnsolvedSymbolException ex) {
-          // continue
         }
       } else if (methodCallParent.getParentNode().orElse(null) instanceof VariableDeclarator varDecl
           && varDecl.getInitializer().isPresent()
           && varDecl.getInitializer().get().equals(methodCallParent)) {
-        try {
-          ResolvedType typeResolved = varDecl.getType().resolve();
+        ResolvedType typeResolved = Resolver.resolve(varDecl.getType());
 
+        if (typeResolved != null) {
           resolvedTypeToPotentialASTTypes.add(new Pair<>(method.getReturnType(), typeResolved));
-        } catch (UnsolvedSymbolException ex) {
-          // continue
         }
       } else if (methodCallParent.getParentNode().orElse(null) instanceof AssignExpr assignExpr
           && assignExpr.getValue().equals(methodCallParent)) {
         try {
+          ResolvedValueDeclaration resolved = null;
           if (assignExpr.getTarget().isNameExpr()) {
-            resolvedTypeToPotentialASTTypes.add(
-                new Pair<>(
-                    method.getReturnType(),
-                    assignExpr.getTarget().asNameExpr().resolve().getType()));
+            resolved = Resolver.resolve(assignExpr.getTarget().asNameExpr());
           } else if (assignExpr.getTarget().isFieldAccessExpr()) {
+            resolved = Resolver.resolve(assignExpr.getTarget().asFieldAccessExpr());
+          }
+
+          if (resolved != null) {
             resolvedTypeToPotentialASTTypes.add(
-                new Pair<>(
-                    method.getReturnType(),
-                    assignExpr.getTarget().asFieldAccessExpr().resolve().getType()));
+                new Pair<>(method.getReturnType(), resolved.getType()));
           }
         } catch (UnsolvedSymbolException | IllegalStateException ex) {
           // IllegalStateException when trying to resolve an expression whose scope is
@@ -2346,23 +2255,23 @@ public class JavaParserUtil {
         }
       } else if (methodCallParent.getParentNode().orElse(null) instanceof MethodCallExpr methodCall
           && methodCall.getArguments().contains(methodCallParent)) {
-        try {
-          ResolvedMethodDeclaration methodDecl = methodCall.resolve();
+        ResolvedMethodDeclaration methodDecl = Resolver.resolve(methodCall);
 
+        if (methodDecl != null) {
           int argPos = methodCall.getArgumentPosition(methodCallParent);
 
-          resolvedTypeToPotentialASTTypes.add(
-              new Pair<>(method.getReturnType(), methodDecl.getParam(argPos).getType()));
-        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-          // IllegalStateException when trying to resolve an expression whose scope is
-          // a lambda parameter that has the type of an unbounded wildcard
-          // continue
+          try {
+            resolvedTypeToPotentialASTTypes.add(
+                new Pair<>(method.getReturnType(), methodDecl.getParam(argPos).getType()));
+          } catch (UnsolvedSymbolException ex) {
+            // getParam().getType() could throw an UnsolvedSymbolException
+          }
         }
       }
 
       for (int i = 0; i < methodCallParent.getArguments().size(); i++) {
         Expression argument = methodCallParent.getArguments().get(i);
-        ResolvedType argType = calculateResolvedType(argument);
+        ResolvedType argType = Resolver.calculateResolvedType(argument);
         if (argType != null) {
           resolvedTypeToPotentialASTTypes.add(new Pair<>(method.getParam(i).getType(), argType));
         }
@@ -2696,7 +2605,7 @@ public class JavaParserUtil {
    */
   public static List<? extends ResolvedMethodLikeDeclaration> getMethodDeclarationsFromMethodRef(
       MethodReferenceExpr methodReference) {
-    ResolvedType methodDeclaringType = calculateResolvedType(methodReference.getScope());
+    ResolvedType methodDeclaringType = Resolver.calculateResolvedType(methodReference.getScope());
 
     if (methodDeclaringType == null || !methodDeclaringType.isReferenceType()) {
       return Collections.emptyList();
@@ -2856,7 +2765,9 @@ public class JavaParserUtil {
             if (typeParametersMap == null) {
               typeParametersMap = List.of();
             }
-            declaration = typeDecl.resolve();
+            declaration =
+                (ResolvedReferenceTypeDeclaration)
+                    Resolver.resolveGuaranteeNonNull((Resolvable<?>) typeDecl);
           }
 
           exploredTypes.add(declaration);
@@ -3022,12 +2933,14 @@ public class JavaParserUtil {
     List<ClassOrInterfaceType> superTypes = getDirectSuperTypes(from);
 
     for (ClassOrInterfaceType superType : superTypes) {
-      try {
-        ResolvedReferenceType type = superType.resolve().asReferenceType();
-        getTypesInBetweenImpl(type, to, new ArrayList<>(List.of(type)), result);
-      } catch (UnsolvedSymbolException e) {
-        // continue
+      ResolvedType resolvedSuperType = Resolver.resolve(superType);
+
+      if (resolvedSuperType == null) {
+        continue;
       }
+
+      ResolvedReferenceType type = resolvedSuperType.asReferenceType();
+      getTypesInBetweenImpl(type, to, new ArrayList<>(List.of(type)), result);
     }
 
     return result;
@@ -3052,10 +2965,14 @@ public class JavaParserUtil {
       return;
     }
 
-    for (ResolvedReferenceType superType : from.getDirectAncestors()) {
-      List<ResolvedReferenceType> newAccumulator = new ArrayList<>(accumulator);
-      newAccumulator.add(superType);
-      getTypesInBetweenImpl(superType, to, newAccumulator, result);
+    try {
+      for (ResolvedReferenceType superType : from.getDirectAncestors()) {
+        List<ResolvedReferenceType> newAccumulator = new ArrayList<>(accumulator);
+        newAccumulator.add(superType);
+        getTypesInBetweenImpl(superType, to, newAccumulator, result);
+      }
+    } catch (UnsolvedSymbolException ex) {
+      // getDirectAncestors() may throw
     }
   }
 
@@ -3098,6 +3015,9 @@ public class JavaParserUtil {
    *
    * <p>For example, if the method is part of {@code Foo<T>} and the type variables map is {@code T
    * --> String}, then any parameters that match T will be replaced with String in the signature.
+   *
+   * <p>This method may throw an UnsolvedSymbolException because of a call to {@link
+   * ResolvedParameterDeclaration#getType()}.
    *
    * @param method The resolved method declaration in the generic class
    * @param typeVariablesMap The type variables map, which maps type variable declarations to their
@@ -3231,7 +3151,8 @@ public class JavaParserUtil {
               Collectors.toMap(TypeParameter::getNameAsString, TypeParameter::getNameAsString));
     }
 
-    List<ResolvedReferenceType> path = getTypesInBetween(from, to.resolve()).get(0);
+    List<ResolvedReferenceType> path =
+        getTypesInBetween(from, Resolver.resolveGuaranteeNonNull(to)).get(0);
 
     // Foo<A, B> extends Bar<A, B> --> Bar<C, D> extends Baz<C, String> --> Baz<E, F> extends some
     // Unsolved<E, F>
