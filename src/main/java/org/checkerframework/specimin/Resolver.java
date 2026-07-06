@@ -34,6 +34,10 @@ public class Resolver {
     throw new UnsupportedOperationException("This class cannot be instantiated.");
   }
 
+  /**
+   * A map of fully qualified names to compilation units. Must be set before any resolution is
+   * attempted.
+   */
   private static @MonotonicNonNull Map<String, CompilationUnit> fqnToCompilationUnits;
 
   /**
