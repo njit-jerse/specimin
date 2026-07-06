@@ -13,9 +13,12 @@ class Simple extends Foo {
                 break;
         }
         int z = switch (m) {
-            case CONSTANT3 -> CONSTANT6;
-            case CONSTANT4 -> 6;
-            default -> 0;
+            case CONSTANT3 ->
+                    CONSTANT6;
+            case CONSTANT4 ->
+                    6;
+            default ->
+                    0;
         };
     }
 }
