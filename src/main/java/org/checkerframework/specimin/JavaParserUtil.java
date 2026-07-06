@@ -1724,11 +1724,9 @@ public class JavaParserUtil {
             continue;
           }
 
-          if (resolvedParameterType.isReferenceType() && typeInCall.isReferenceType()) {
-            if (!resolvedParameterType.isAssignableBy(typeInCall)) {
-              isAMatch = false;
-              break;
-            }
+          if (!resolvedParameterType.isAssignableBy(typeInCall)) {
+            isAMatch = false;
+            break;
           }
         }
 

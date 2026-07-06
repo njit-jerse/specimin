@@ -24,6 +24,13 @@ dependencies {
 test {
     useJUnitPlatform()
 
+    // If this isn't here, debugging ./gradlew test --tests "..." will not work in IntelliJ IDEA.
+    onlyIf {
+        !gradle.startParameter.taskNames.any {
+            it == "test" || it == ":test"
+        }
+    }
+
     // https://errorprone.info/docs/installation
     jvmArgs([
         '--add-exports', 'jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
