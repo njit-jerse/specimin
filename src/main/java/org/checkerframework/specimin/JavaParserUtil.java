@@ -2280,10 +2280,8 @@ public class JavaParserUtil {
             resolvedTypeToPotentialASTTypes.add(
                 new Pair<>(method.getReturnType(), resolved.getType()));
           }
-        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-          // IllegalStateException when trying to resolve an expression whose scope is
-          // a lambda parameter that has the type of an unbounded wildcard
-          // continue
+        } catch (UnsolvedSymbolException ex) {
+          // getType() may throw
         }
       } else if (methodCallParent.getParentNode().orElse(null) instanceof MethodCallExpr methodCall
           && methodCall.getArguments().contains(methodCallParent)) {
@@ -2867,7 +2865,10 @@ public class JavaParserUtil {
         allSolvableAncestors.addAll(getAllJDKAncestors(typeDecl));
         allSolvableAncestors.addAll(
             getAllSolvableAncestors(typeDecl, fqnToCompilationUnits).stream()
-                .map(TypeDeclaration::resolve)
+                .map(
+                    decl ->
+                        (ResolvedReferenceTypeDeclaration)
+                            Resolver.resolveGuaranteeNonNull((Resolvable<?>) decl))
                 .toList());
         allSolvableAncestors.removeAll(exploredTypes);
         allSolvableAncestors.remove(resolvedMethodDecl.declaringType());

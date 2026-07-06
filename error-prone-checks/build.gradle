@@ -7,7 +7,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.2")
+    testImplementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.2")
 
     compileOnly "com.google.errorprone:error_prone_check_api:2.42.0"
     compileOnly "com.google.errorprone:error_prone_annotation:2.42.0"

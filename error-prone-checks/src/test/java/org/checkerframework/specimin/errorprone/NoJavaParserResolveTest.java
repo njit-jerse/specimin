@@ -23,6 +23,8 @@ public class NoJavaParserResolveTest {
                         "  void foo(ClassOrInterfaceType type) {",
                         "    // BUG: Diagnostic contains: NoJavaParserResolve",
                         "    type.resolve();",
+                        "    // BUG: Diagnostic contains: NoJavaParserResolve",
+                        "    java.util.function.Supplier<?> f = type::resolve;",
                         "  }",
                         "}")
                 .doTest();

@@ -5,9 +5,11 @@ import com.google.errorprone.BugPattern;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.bugpatterns.BugChecker;
 import com.google.errorprone.bugpatterns.BugChecker.MethodInvocationTreeMatcher;
+import com.google.errorprone.bugpatterns.BugChecker.MemberReferenceTreeMatcher;
 import com.google.errorprone.matchers.Description;
 import com.google.errorprone.matchers.Matcher;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MethodInvocationTree;
 
 import static com.google.errorprone.matchers.Matchers.instanceMethod;
@@ -22,7 +24,7 @@ import static com.google.errorprone.matchers.Matchers.instanceMethod;
         linkType = BugPattern.LinkType.NONE
 )
 public final class NoJavaParserResolve extends BugChecker
-        implements MethodInvocationTreeMatcher {
+        implements MethodInvocationTreeMatcher, MemberReferenceTreeMatcher {
 
     private static final Matcher<ExpressionTree> RESOLVE_MATCHER =
             instanceMethod()
@@ -32,6 +34,15 @@ public final class NoJavaParserResolve extends BugChecker
 
     @Override
     public Description matchMethodInvocation(MethodInvocationTree tree, VisitorState state) {
+        return match(tree, state);
+    }
+
+    @Override
+    public Description matchMemberReference(MemberReferenceTree tree, VisitorState state) {
+        return match(tree, state);
+    }
+
+    private Description match(ExpressionTree tree, VisitorState state) {
         if (!RESOLVE_MATCHER.matches(tree, state)) {
             return Description.NO_MATCH;
         }

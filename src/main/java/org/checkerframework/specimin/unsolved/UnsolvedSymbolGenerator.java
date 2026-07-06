@@ -2586,7 +2586,7 @@ public class UnsolvedSymbolGenerator {
             getMemberTypesAndExpectNonNullFromFQNSets(
                 fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
 
-        getResolvedTypeOfLHS = lhs::resolve;
+        getResolvedTypeOfLHS = () -> Resolver.resolve(lhs);
       } else if (node instanceof ReturnStmt returnStmt) {
         Node methodOrLambda = JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt);
 
@@ -2599,7 +2599,7 @@ public class UnsolvedSymbolGenerator {
           rhsType =
               getMemberTypesAndExpectNonNullFromFQNSets(
                   fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
-          getResolvedTypeOfLHS = lhs::resolve;
+          getResolvedTypeOfLHS = () -> Resolver.resolve(lhs);
         } else {
           // Do not handle here: handle when we encounter the ancestor LambdaExpr node
           return UnsolvedGenerationResult.EMPTY;
@@ -2679,15 +2679,7 @@ public class UnsolvedSymbolGenerator {
 
       boolean handledAsFinalClass = false;
       if (methodWithPotentiallyUnconstrainedReturnType != null) {
-        ResolvedType resolvedLHSType;
-
-        try {
-          resolvedLHSType = getResolvedTypeOfLHS.get();
-        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-          // IllegalStateException when trying to resolve an expression whose scope is
-          // a lambda parameter that has the type of an unbounded wildcard
-          resolvedLHSType = null;
-        }
+        ResolvedType resolvedLHSType = getResolvedTypeOfLHS.get();
 
         if (resolvedLHSType != null
             && resolvedLHSType.isReferenceType()
@@ -2772,7 +2764,7 @@ public class UnsolvedSymbolGenerator {
                   fullyQualifiedNameGenerator.getFQNsForExpressionType(
                       nodeWithArgs.getArgument(i)));
 
-          Supplier<ResolvedType> getResolvedTypeOfLHS;
+          Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS;
 
           try {
             ResolvedParameterDeclaration param;
@@ -2787,7 +2779,14 @@ public class UnsolvedSymbolGenerator {
             lhsType =
                 getMemberTypeFromFQNs(
                     fullyQualifiedNameGenerator.getFQNsForResolvedType(param.getType()), false);
-            getResolvedTypeOfLHS = param::getType;
+            getResolvedTypeOfLHS =
+                () -> {
+                  try {
+                    return param.getType();
+                  } catch (UnsolvedSymbolException ex) {
+                    return null;
+                  }
+                };
           } catch (UnsolvedSymbolException ex) {
             if (asAst == null) {
               // asAst cannot be null here: if the parameter type is unresolvable, then it must be
@@ -2799,7 +2798,7 @@ public class UnsolvedSymbolGenerator {
 
             lhsType =
                 getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(type), false);
-            getResolvedTypeOfLHS = type::resolve;
+            getResolvedTypeOfLHS = () -> Resolver.resolve(type);
           }
 
           if (rhsType.isEmpty()) {
@@ -2887,10 +2886,7 @@ public class UnsolvedSymbolGenerator {
                         nodeWithArgs.getArgument(i)));
 
             // If the method is a synthetic definition, there is no resolved type of the LHS
-            Supplier<ResolvedType> getResolvedTypeOfLHS =
-                () -> {
-                  throw new UnsolvedSymbolException("");
-                };
+            Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS = () -> null;
 
             if (rhsType.isEmpty()) {
               throw new RuntimeException(
@@ -3523,14 +3519,7 @@ public class UnsolvedSymbolGenerator {
       Set<MemberType> rhsTypes,
       Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS) {
 
-    @Nullable ResolvedType resolved;
-    try {
-      resolved = getResolvedTypeOfLHS.get();
-    } catch (UnsolvedSymbolException | IllegalStateException ex) {
-      // IllegalStateException when trying to resolve an expression whose scope is
-      // a lambda parameter that has the type of an unbounded wildcard
-      resolved = null;
-    }
+    @Nullable ResolvedType resolved = getResolvedTypeOfLHS.get();
 
     // Make sure all erasures of the RHS types are handled with the LHS types
     for (MemberType rhsType : rhsTypes) {
@@ -3704,19 +3693,9 @@ public class UnsolvedSymbolGenerator {
 
           // ? extends with ? extends; there is no ? extends with ? super
           if (isUpperBound) {
-            handleLHSAndRHSRelationship(
-                Set.of(bound),
-                rhsTypeParameters,
-                () -> {
-                  throw new UnsolvedSymbolException("");
-                });
+            handleLHSAndRHSRelationship(Set.of(bound), rhsTypeParameters, () -> null);
           } else {
-            handleLHSAndRHSRelationship(
-                rhsTypeParameters,
-                rhsTypes,
-                () -> {
-                  throw new UnsolvedSymbolException("");
-                });
+            handleLHSAndRHSRelationship(rhsTypeParameters, rhsTypes, () -> null);
           }
         } else {
           for (MemberType rhsType : rhsTypes) {

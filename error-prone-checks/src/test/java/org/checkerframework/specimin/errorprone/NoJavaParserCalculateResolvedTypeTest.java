@@ -14,7 +14,7 @@ public class NoJavaParserCalculateResolvedTypeTest {
     }
 
     @Test
-    public void flagsDirectResolveCall() {
+    public void flagsDirectCalculateResolvedTypeCall() {
         compilationHelper
                 .addSourceLines(
                         "Test.java",
@@ -23,6 +23,8 @@ public class NoJavaParserCalculateResolvedTypeTest {
                         "  void foo(Expression expr) {",
                         "    // BUG: Diagnostic contains: NoJavaParserCalculateResolvedType",
                         "    expr.calculateResolvedType();",
+                        "    // BUG: Diagnostic contains: NoJavaParserCalculateResolvedType",
+                        "    java.util.function.Supplier<?> f = expr::calculateResolvedType;",
                         "  }",
                         "}")
                 .doTest();
