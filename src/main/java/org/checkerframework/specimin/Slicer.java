@@ -9,13 +9,16 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
-import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.ArrayDeque;
@@ -304,7 +307,8 @@ public class Slicer {
           && fieldDeclarator.getInitializer().isEmpty()
           && fieldDeclarator.getParentNode().get() instanceof FieldDeclaration fieldDecl
           && fieldDecl.isFinal()) {
-        ResolvedFieldDeclaration resolved = (ResolvedFieldDeclaration) fieldDeclarator.resolve();
+        ResolvedFieldDeclaration resolved =
+            (ResolvedFieldDeclaration) Resolver.resolveGuaranteeNonNull(fieldDeclarator);
 
         boolean isSet =
             slice.stream()
@@ -312,45 +316,20 @@ public class Slicer {
                 .map(n -> (AssignExpr) n)
                 .anyMatch(
                     assignExpr -> {
+                      ResolvedValueDeclaration target = null;
                       if (assignExpr.getTarget().isFieldAccessExpr()) {
-                        try {
-                          ResolvedValueDeclaration target =
-                              assignExpr.getTarget().asFieldAccessExpr().resolve();
-
-                          if (target.isField()) {
-                            return target
-                                    .asField()
-                                    .declaringType()
-                                    .getQualifiedName()
-                                    .equals(resolved.declaringType().getQualifiedName())
-                                && target.getName().equals(resolved.getName());
-                          }
-                        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-                          // IllegalStateException when trying to resolve an expression whose scope
-                          // is
-                          // a lambda parameter that has the type of an unbounded wildcard
-                          return false;
-                        }
+                        target = Resolver.resolve(assignExpr.getTarget().asFieldAccessExpr());
                       } else if (assignExpr.getTarget().isNameExpr()) {
-                        try {
-                          ResolvedValueDeclaration target =
-                              assignExpr.getTarget().asNameExpr().resolve();
+                        target = Resolver.resolve(assignExpr.getTarget().asNameExpr());
+                      }
 
-                          if (target.isField()) {
-                            return target
-                                    .asField()
-                                    .declaringType()
-                                    .getQualifiedName()
-                                    .equals(resolved.declaringType().getQualifiedName())
-                                && target.getName().equals(resolved.getName());
-                          }
-                          return target.equals(resolved);
-                        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-                          // IllegalStateException when trying to resolve an expression whose scope
-                          // is
-                          // a lambda parameter that has the type of an unbounded wildcard
-                          return false;
-                        }
+                      if (target != null && target.isField()) {
+                        return target
+                                .asField()
+                                .declaringType()
+                                .getQualifiedName()
+                                .equals(resolved.declaringType().getQualifiedName())
+                            && target.getName().equals(resolved.getName());
                       }
 
                       return false;

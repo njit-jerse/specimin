@@ -24,6 +24,9 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * Contains wrappers for {@link Resolvable#resolve()} and {@link Expression#calculateResolvedType()}
  * that handle known JavaParser bugs and return the correct result when possible.
  */
+// This class must use Resolvable#resolve() and Expression#calculateResolvedType() because it is the
+// wrapper.
+@SuppressWarnings({"NoJavaParserResolve", "NoJavaParserCalculateResolvedType"})
 public class Resolver {
   /**
    * Private constructor to prevent instantiation.
@@ -95,34 +98,7 @@ public class Resolver {
     try {
       return toResolve.resolve();
     } catch (UnsolvedSymbolException ex) {
-      if (toResolve instanceof Expression expr) {
-        // Workaround for resolving methods/fields with a qualifier that is resolvable, but returns
-        // a lambda constraint type with a type parameter instead of a type
-        Object result =
-            JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
-
-        if (result != null) {
-          return (T) result;
-        }
-
-        result = JavaParserUtil.tryResolveNodeIfInAnonymousClass(expr);
-
-        if (result != null) {
-          return (T) result;
-        }
-      }
-
-      // Handle cases where a method/constructor call cannot be resolved because of unresolvable
-      // arguments, but its definition exists
-      CallableDeclaration<?> potentiallyResolvableCallable =
-          toResolve instanceof NodeWithArguments<?> withArgs
-              ? JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                  withArgs, fqnToCompilationUnits)
-              : null;
-      if (potentiallyResolvableCallable != null) {
-        return (T) ((Resolvable<?>) potentiallyResolvableCallable).resolve();
-      }
-      return null;
+      return (T) tryAlternativeResolutionForUnsolvableNode((Node) toResolve);
     } catch (IllegalStateException ex) {
       return (T) Resolver.handleIllegalStateException(ex, (Node) toResolve);
     } catch (MethodAmbiguityException ex) {
@@ -184,32 +160,47 @@ public class Resolver {
   }
 
   /**
-   * Returns true if this expression is resolvable to a definition.
+   * Tries alternative resolution strategies for a node that cannot be resolved through JavaParser's
+   * symbol solver.
    *
-   * @param expr The expression to resolve
-   * @return True if this expression is of type {@code Resolvable<?>} and also has a resolvable
-   *     definition
+   * @param unsolvable The unsolvable node
+   * @return The resolved version of the node, or null if not resolvable.
    */
-  public static boolean isExprDefinitionResolvable(Expression expr) {
+  private static @Nullable Object tryAlternativeResolutionForUnsolvableNode(Node unsolvable) {
     if (fqnToCompilationUnits == null) {
       throw new UnsupportedOperationException(
-          "fqnToCompilationUnits must be set before calling isExprDefinitionResolvable");
+          "fqnToCompilationUnits must be set before calling"
+              + " tryAlternativeResolutionForUnsolvableNode");
     }
 
-    if (!(expr instanceof Resolvable<?> resolvable)) {
-      return false;
+    if (unsolvable instanceof Expression expr) {
+      // Workaround for resolving methods/fields with a qualifier that is resolvable, but returns
+      // a lambda constraint type with a type parameter instead of a type
+      Object result =
+          JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
+
+      if (result != null) {
+        return result;
+      }
+
+      result = JavaParserUtil.tryResolveNodeIfInAnonymousClass(expr);
+
+      if (result != null) {
+        return result;
+      }
     }
 
-    Object resolved = resolve(resolvable);
-
-    if (resolved == null) {
-      return expr.isMethodCallExpr()
-          && JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                  expr.asMethodCallExpr(), fqnToCompilationUnits)
-              != null;
+    // Handle cases where a method/constructor call cannot be resolved because of unresolvable
+    // arguments, but its definition exists
+    CallableDeclaration<?> potentiallyResolvableCallable =
+        unsolvable instanceof NodeWithArguments<?> withArgs
+            ? JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                withArgs, fqnToCompilationUnits)
+            : null;
+    if (potentiallyResolvableCallable != null) {
+      return ((Resolvable<?>) potentiallyResolvableCallable).resolve();
     }
-
-    return true;
+    return null;
   }
 
   /**
@@ -223,11 +214,13 @@ public class Resolver {
    */
   private static @Nullable Object handleIllegalStateException(IllegalStateException ex, Node node)
       throws IllegalStateException {
-    if (!(node instanceof Expression expr)) {
+    if (!(node instanceof Expression)) {
       throw ex;
     }
 
-    return JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
+    // IllegalStateExceptions are otherwise equivalent to UnsolvedSymbolExceptions, so we can try
+    // the same alternative resolution strategies
+    return tryAlternativeResolutionForUnsolvableNode(node);
   }
 
   /**

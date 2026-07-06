@@ -46,7 +46,13 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
-import com.github.javaparser.resolution.declarations.*;
+import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.utils.Pair;
@@ -850,7 +856,7 @@ public class UnsolvedSymbolGenerator {
             .allMatch(
                 arg ->
                     Resolver.calculateResolvedType(arg) != null
-                        || Resolver.isExprDefinitionResolvable(arg))) {
+                        || (arg instanceof Resolvable<?> r && Resolver.resolve(r) != null))) {
       // Special case: method declaration is findable, arguments are all solvable, but a parameter
       // type is not. In this case, the type of the parameters are unsolved, and should be preserved
       // if the parameter type ever ends up becoming used (which it will, after addInformation is
