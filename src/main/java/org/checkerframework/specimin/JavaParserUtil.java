@@ -1725,6 +1725,14 @@ public class JavaParserUtil {
           }
 
           if (!resolvedParameterType.isAssignableBy(typeInCall)) {
+            // If either is a type variable and the other is a reference type, it is likely valid
+            // Note that isAssignableBy will return false in those cases
+            if (typeInCall.isTypeVariable() && resolvedParameterType.isReference()) {
+              continue;
+            }
+            if (resolvedParameterType.isTypeVariable() && typeInCall.isReference()) {
+              continue;
+            }
             isAMatch = false;
             break;
           }
