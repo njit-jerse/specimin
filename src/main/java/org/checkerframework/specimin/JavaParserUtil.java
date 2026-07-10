@@ -1733,6 +1733,11 @@ public class JavaParserUtil {
             if (resolvedParameterType.isTypeVariable() && typeInCall.isReference()) {
               continue;
             }
+            // JavaParser can't handle constraint types well. This isn't perfect (i.e., doesn't
+            // properly match bounds), but it should work for most cases.
+            if (typeInCall.isConstraint() && resolvedParameterType.isReference()) {
+              continue;
+            }
             isAMatch = false;
             break;
           }
