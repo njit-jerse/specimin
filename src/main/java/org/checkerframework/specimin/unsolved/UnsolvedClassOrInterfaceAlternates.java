@@ -212,7 +212,9 @@ public class UnsolvedClassOrInterfaceAlternates
       }
     }
 
-    superTypeRelationships.remove(toRemove);
+    for (Set<MemberType> removeSet : toRemove) {
+      superTypeRelationships.remove(removeSet);
+    }
 
     forceSuperClass(superClass);
     superClassAlreadyLocked = true;
@@ -370,7 +372,8 @@ public class UnsolvedClassOrInterfaceAlternates
     if (allUnsealedness) {
       for (UnsolvedClassOrInterface alternate : getAlternates()) {
         if (sealedness == Sealedness.FINAL
-            && alternate.getType() != UnsolvedClassOrInterfaceType.CLASS) {
+            && alternate.getType() != UnsolvedClassOrInterfaceType.CLASS
+            && alternate.getType() != UnsolvedClassOrInterfaceType.UNKNOWN) {
           continue;
         }
 
@@ -380,7 +383,8 @@ public class UnsolvedClassOrInterfaceAlternates
       List<UnsolvedClassOrInterface> alternates = new ArrayList<>();
       for (UnsolvedClassOrInterface alternate : getAlternates()) {
         if (sealedness == Sealedness.FINAL
-            && alternate.getType() != UnsolvedClassOrInterfaceType.CLASS) {
+            && alternate.getType() != UnsolvedClassOrInterfaceType.CLASS
+            && alternate.getType() != UnsolvedClassOrInterfaceType.UNKNOWN) {
           continue;
         }
 
