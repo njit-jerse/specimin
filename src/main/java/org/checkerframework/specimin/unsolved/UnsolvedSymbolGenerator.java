@@ -2347,8 +2347,12 @@ public class UnsolvedSymbolGenerator {
         if (syntheticType != null) {
           if (!decl.isInterface()) {
             syntheticType.setType(UnsolvedClassOrInterfaceType.CLASS);
+            syntheticType.ensureSuperClass(
+                new SolvedMemberType(decl.getFullyQualifiedName().get()));
+          } else {
+            syntheticType.forceSuperInterface(
+                new SolvedMemberType(decl.getFullyQualifiedName().get()));
           }
-          syntheticType.ensureSuperType(new SolvedMemberType(decl.getFullyQualifiedName().get()));
 
           // Sealedness best effort should be final unless we have evidence against it
           syntheticType.addSealedness(Sealedness.FINAL);
@@ -2363,6 +2367,7 @@ public class UnsolvedSymbolGenerator {
 
         if (syntheticType != null) {
           syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
+          syntheticType.removeAndBlockSealedness(Sealedness.FINAL);
         }
       }
     } else if (node instanceof MethodDeclaration methodDecl) {
