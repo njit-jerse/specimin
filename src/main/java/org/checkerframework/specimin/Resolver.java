@@ -125,6 +125,14 @@ public class Resolver {
 
     try {
       result = toResolve.resolve();
+    } catch (UnsolvedSymbolException ex) {
+      Object resolved = Resolver.tryAlternativeResolutionForUnsolvableNode((Node) toResolve);
+
+      if (resolved == null) {
+        throw ex;
+      }
+
+      result = (T) resolved;
     } catch (IllegalStateException ex) {
       Object resolved = Resolver.handleIllegalStateException(ex, (Node) toResolve);
 

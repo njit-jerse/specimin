@@ -1547,8 +1547,7 @@ public class FullyQualifiedNameGenerator {
   /**
    * Given an expression that can be resolved (but calculateResolvedType() fails), return the best
    * shot at its type based on a resolved declaration. May return null if a type cannot be found
-   * from the resolved declaration. This method will also throw an UnsolvedSymbolException if
-   * .resolve() fails.
+   * from the resolved declaration.
    *
    * @param expr A resolvable expression
    * @return A set of FQNs, or null if unfound

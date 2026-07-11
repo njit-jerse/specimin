@@ -593,7 +593,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         }
       }
 
-      if (resolved != null && signature != null) {
+      if (resolved != null
+          && signature != null
+          && signatureOfDeclarationWithTypeParamsAdjusted != null) {
         if (signature.equals(signatureOfDeclarationWithTypeParamsAdjusted)) {
           result.add(method);
         }

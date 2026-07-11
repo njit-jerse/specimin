@@ -385,7 +385,7 @@ public class JavaParserUtil {
         return null;
       }
 
-      ResolvedType scopeType = Resolver.calculateResolvedType(expr);
+      ResolvedType scopeType = Resolver.calculateResolvedType(scope);
       if (scopeType != null
           && getSimpleNameFromQualifiedName(scopeType.describe()).endsWith(scope.toString())) {
         return scopeType.describe() + "." + nameOfExpr;
