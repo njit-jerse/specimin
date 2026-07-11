@@ -1,6 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,6 +49,12 @@ public class UnsolvedClassOrInterfaceAlternates
    * once.
    */
   private boolean alreadyHandledAllSuperRelationships = false;
+
+  /** A flag to block the addition of super types after a super type MUST be the only super type. */
+  private boolean superTypeAlreadyLocked = false;
+
+  /** A set to know what sealedness this type CANNOT be. */
+  private Set<Sealedness> forbiddenSealednesses = new HashSet<>();
 
   /** A map of super types to their relationships to the type represented by this object. */
   private final Map<Set<MemberType>, SuperTypeRelationship> superTypeRelationships =
@@ -185,12 +192,32 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
+   * Ensures that the given super type is and will be the only super type for this class.
+   *
+   * @param superType The super type to ensure
+   */
+  public void ensureSuperType(MemberType superType) {
+    if (superTypeAlreadyLocked) {
+      return;
+    }
+
+    superTypeRelationships.clear();
+
+    addSuperType(Set.of(superType));
+    superTypeAlreadyLocked = true;
+  }
+
+  /**
    * Adds a set of mutually exclusive super type to this class, with an unknown relationship
    * (superclass/superinterface).
    *
    * @param superTypes The mutually exclusive super types
    */
   public void addSuperType(Set<MemberType> superTypes) {
+    if (superTypeAlreadyLocked) {
+      return;
+    }
+
     if (getType() == UnsolvedClassOrInterfaceType.INTERFACE) {
       // If we encounter a super type but we're an interface, make it an interface as well
       for (MemberType superType : superTypes) {
@@ -219,10 +246,14 @@ public class UnsolvedClassOrInterfaceAlternates
 
     Set<MemberType> sanitizedSuperTypes = new LinkedHashSet<>();
     for (MemberType superType : superTypes) {
-      if (superType instanceof UnsolvedMemberType unsolvedMemberType
-          && unsolvedMemberType.getUnsolvedType().equals(this)) {
-        // If the super type is this type, we don't need to add it
-        continue;
+      if (superType instanceof UnsolvedMemberType unsolvedMemberType) {
+        // If we're extending a type, that type cannot be final
+        unsolvedMemberType.getUnsolvedType().removeAndBlockSealedness(Sealedness.FINAL);
+
+        if (unsolvedMemberType.getUnsolvedType().equals(this)) {
+          // If the super type is this type, we don't need to add it
+          continue;
+        }
       }
       if (superType.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
         // If the super type is java.lang.Object, we don't need to add it
@@ -251,6 +282,10 @@ public class UnsolvedClassOrInterfaceAlternates
    * @param superClass The super class to force
    */
   public void forceSuperClass(MemberType superClass) {
+    if (superTypeAlreadyLocked) {
+      return;
+    }
+
     if ((superClass instanceof UnsolvedMemberType unsolved
             && unsolved.getUnsolvedType().equals(this))
         || superClass.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
@@ -263,6 +298,10 @@ public class UnsolvedClassOrInterfaceAlternates
 
     if (getType() == UnsolvedClassOrInterfaceType.UNKNOWN) {
       setType(UnsolvedClassOrInterfaceType.CLASS);
+    }
+
+    if (superClass instanceof UnsolvedMemberType unsolvedMemberType) {
+      unsolvedMemberType.getUnsolvedType().removeAndBlockSealedness(Sealedness.FINAL);
     }
 
     superTypeRelationships.put(
@@ -287,9 +326,17 @@ public class UnsolvedClassOrInterfaceAlternates
    * @param superInterface The super interface to force
    */
   public void forceSuperInterface(MemberType superInterface) {
+    if (superTypeAlreadyLocked) {
+      return;
+    }
+
     if (superInterface instanceof UnsolvedMemberType unsolved
         && unsolved.getUnsolvedType().equals(this)) {
       return;
+    }
+
+    if (superInterface instanceof UnsolvedMemberType unsolvedMemberType) {
+      unsolvedMemberType.getUnsolvedType().removeAndBlockSealedness(Sealedness.FINAL);
     }
 
     if (superInterface.toString().equals("java.lang.annotation.Annotation")) {
@@ -301,6 +348,60 @@ public class UnsolvedClassOrInterfaceAlternates
     superTypeRelationships.put(
         new LinkedHashSet<>(removeAllWildcardsAndReturnPotentialTypes(superInterface)),
         SuperTypeRelationship.IMPLEMENTS);
+  }
+
+  /**
+   * Adds a sealedness to all alternates. If any alternate already has a sealedness, then new
+   * alternates are generated.
+   *
+   * @param sealedness The sealedness
+   */
+  public void addSealedness(Sealedness sealedness) {
+    if (forbiddenSealednesses.contains(sealedness)) {
+      return;
+    }
+
+    boolean allUnsealedness =
+        doAllAlternatesReturnTrueFor((alt) -> alt.getSealedness() == Sealedness.NONE);
+
+    if (allUnsealedness) {
+      applyToAllAlternates(a -> a.setSealedness(sealedness));
+    } else {
+      List<UnsolvedClassOrInterface> alternates = new ArrayList<>();
+      for (UnsolvedClassOrInterface alternate : getAlternates()) {
+        if (alternate.getSealedness() == sealedness) {
+          alternates.clear();
+          break;
+        }
+
+        UnsolvedClassOrInterface copy = alternate.copy();
+        copy.setSealedness(sealedness);
+
+        alternates.add(copy);
+      }
+
+      for (UnsolvedClassOrInterface alternate : alternates) {
+        addAlternate(alternate);
+      }
+    }
+  }
+
+  /**
+   * Removes alternates with a certain sealedness, and blocks it from being added back in the
+   * future.
+   *
+   * @param sealedness The sealedness
+   */
+  public void removeAndBlockSealedness(Sealedness sealedness) {
+    forbiddenSealednesses.add(sealedness);
+    boolean allMatchSealedness =
+        doAllAlternatesReturnTrueFor((alt) -> alt.getSealedness() == sealedness);
+
+    if (allMatchSealedness) {
+      applyToAllAlternates(a -> a.setSealedness(Sealedness.NONE));
+    } else {
+      getAlternates().removeIf(a -> a.getSealedness() == sealedness);
+    }
   }
 
   /**
