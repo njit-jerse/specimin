@@ -278,7 +278,7 @@ public class UnsolvedClassOrInterfaceAlternates
 
     if (commonType == UnsolvedClassOrInterfaceType.CLASS && !superClassAlreadyLocked) {
       superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.EXTENDS);
-    } else if (commonType == UnsolvedClassOrInterfaceType.INTERFACE) {
+    } else if (commonType == UnsolvedClassOrInterfaceType.INTERFACE || superClassAlreadyLocked) {
       superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.IMPLEMENTS);
     } else if (superTypeRelationships.get(superTypes) == null) {
       superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.UNKNOWN);

@@ -252,10 +252,10 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
     }
 
     if (sealedness == Sealedness.FINAL) {
-      // final interface is not a thing
-      if (typeOfType != UnsolvedClassOrInterfaceType.INTERFACE) {
-        sb.append("final ");
+      if (typeOfType == UnsolvedClassOrInterfaceType.INTERFACE) {
+        throw new RuntimeException("Cannot create a final interface.");
       }
+      sb.append("final ");
     } else if (sealedness == Sealedness.NON_SEALED) {
       sb.append("non-sealed ");
     } else if (sealedness == Sealedness.SEALED) {
