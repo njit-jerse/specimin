@@ -356,23 +356,7 @@ public class SpeciminRunner {
       Set<Path> createdDirectories,
       Formatter formatter)
       throws IOException {
-    Set<String> usedPackages = new HashSet<>();
-    for (CompilationUnit cu : sliceResult.solvedSlice()) {
-      if (cu.getPackageDeclaration().isEmpty()) {
-        usedPackages.add("");
-        continue;
-      }
-      usedPackages.add(cu.getPackageDeclaration().get().getNameAsString());
-    }
-
-    for (String className : enumeratorResult.classNamesToFileContent().keySet()) {
-      int lastDot = className.lastIndexOf('.');
-      if (lastDot < 0) {
-        usedPackages.add("");
-      } else {
-        usedPackages.add(className.substring(0, lastDot));
-      }
-    }
+    Set<String> usedPackagesAndClasses = getUsedPackagesAndClasses(sliceResult, enumeratorResult);
 
     for (CompilationUnit original : sliceResult.solvedSlice()) {
       if (isEmptyCompilationUnit(original)) {
@@ -436,7 +420,7 @@ public class SpeciminRunner {
         writer.print(
             formatter.formatSourceAndFixImports(
                 getCompilationUnitWithUnusedWildcardImportsRemoved(
-                        getCompilationUnitWithCommentsTrimmed(cu), usedPackages)
+                        getCompilationUnitWithCommentsTrimmed(cu), usedPackagesAndClasses)
                     .toString()));
       } catch (IOException | FormatterException e) {
         System.out.println("failed to write output file " + targetOutputPath);
@@ -470,6 +454,39 @@ public class SpeciminRunner {
         System.out.println("with error: " + e);
       }
     }
+  }
+
+  private static Set<String> getUsedPackagesAndClasses(
+      SliceResult sliceResult, UnsolvedSymbolEnumeratorResult enumeratorResult) {
+    Set<String> usedPackagesAndClasses = new HashSet<>();
+    for (CompilationUnit cu : sliceResult.solvedSlice()) {
+      if (cu.getPackageDeclaration().isEmpty()) {
+        usedPackagesAndClasses.add("");
+        continue;
+      }
+      usedPackagesAndClasses.add(cu.getPackageDeclaration().get().getNameAsString());
+
+      for (TypeDeclaration<?> typeDecl : cu.findAll(TypeDeclaration.class)) {
+        String fqn = typeDecl.getFullyQualifiedName().orElse(null);
+
+        if (fqn == null) {
+          continue;
+        }
+
+        usedPackagesAndClasses.add(fqn);
+      }
+    }
+
+    for (String className : enumeratorResult.classNamesToFileContent().keySet()) {
+      int lastDot = className.lastIndexOf('.');
+      if (lastDot < 0) {
+        usedPackagesAndClasses.add("");
+      } else {
+        usedPackagesAndClasses.add(className.substring(0, lastDot));
+        usedPackagesAndClasses.add(className);
+      }
+    }
+    return usedPackagesAndClasses;
   }
 
   /**
@@ -576,22 +593,22 @@ public class SpeciminRunner {
    * Removes all wildcard imports that are not used in the given set of package names.
    *
    * @param cu The CompilationUnit to process.
-   * @param usedPackages A set of package names that are used in the code.
+   * @param usedPackagesAndClasses A set of package and class names that are used in the code.
    * @return The modified CompilationUnit with unused wildcard imports removed.
    */
   private static CompilationUnit getCompilationUnitWithUnusedWildcardImportsRemoved(
-      CompilationUnit cu, Set<String> usedPackages) {
+      CompilationUnit cu, Set<String> usedPackagesAndClasses) {
     for (ImportDeclaration decl : List.copyOf(cu.getImports())) {
       if (!decl.isAsterisk()) {
         continue;
       }
-      String packageName = decl.getNameAsString();
+      String qualifier = decl.getNameAsString();
 
-      if (JavaLangUtils.inJdkPackage(packageName)) {
+      if (JavaLangUtils.inJdkPackage(qualifier)) {
         continue;
       }
 
-      if (!usedPackages.contains(packageName)) {
+      if (!usedPackagesAndClasses.contains(qualifier)) {
         decl.remove();
       }
     }
