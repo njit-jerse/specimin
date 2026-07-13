@@ -269,6 +269,8 @@ public class SpeciminRunner {
       }
     }
 
+    Resolver.setFqnToCompilationUnitMap(fqnToCompilationUnits);
+
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
 
     Deque<Node> worklist = new ArrayDeque<>();
@@ -301,8 +303,7 @@ public class SpeciminRunner {
         Slicer.slice(
             new StandardTypeRuleDependencyMap(fqnToCompilationUnits),
             worklist,
-            unsolvedSymbolGenerator,
-            fqnToCompilationUnits);
+            unsolvedSymbolGenerator);
 
     // cache to avoid called Files.createDirectories repeatedly with the same
     // arguments

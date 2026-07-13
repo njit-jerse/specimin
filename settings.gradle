@@ -8,3 +8,5 @@
  */
 
 rootProject.name = "specimin"
+
+include 'error-prone-checks'
