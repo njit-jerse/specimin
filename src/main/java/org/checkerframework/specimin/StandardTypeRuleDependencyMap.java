@@ -140,6 +140,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     if (node instanceof NodeWithExtends<?> withExtends) {
       elements.addAll(withExtends.getExtendedTypes());
     }
+    if (node instanceof ClassOrInterfaceDeclaration decl) {
+      elements.addAll(decl.getPermittedTypes());
+    }
     if (node instanceof TypeDeclaration<?> typeDeclaration) {
       List<MethodDeclaration> mustImplement =
           JavaParserUtil.getDeclarationsForAllMustImplementMethods(

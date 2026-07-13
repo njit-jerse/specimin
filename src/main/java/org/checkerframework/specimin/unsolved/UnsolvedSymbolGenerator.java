@@ -2323,6 +2323,7 @@ public class UnsolvedSymbolGenerator {
 
         if (syntheticType != null) {
           syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
+          syntheticType.removeAndBlockSealedness(Sealedness.FINAL);
         }
       }
       for (ClassOrInterfaceType extended : decl.getExtendedTypes()) {
@@ -2335,6 +2336,27 @@ public class UnsolvedSymbolGenerator {
               decl.isInterface()
                   ? UnsolvedClassOrInterfaceType.INTERFACE
                   : UnsolvedClassOrInterfaceType.CLASS);
+          syntheticType.removeAndBlockSealedness(Sealedness.FINAL);
+        }
+      }
+      for (ClassOrInterfaceType permitted : decl.getPermittedTypes()) {
+        UnsolvedClassOrInterfaceAlternates syntheticType =
+            (UnsolvedClassOrInterfaceAlternates)
+                findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(permitted));
+
+        if (syntheticType != null) {
+          if (!decl.isInterface()) {
+            syntheticType.setType(UnsolvedClassOrInterfaceType.CLASS);
+            syntheticType.ensureSuperClass(
+                new SolvedMemberType(decl.getFullyQualifiedName().get()));
+          } else {
+            syntheticType.forceSuperInterface(
+                new SolvedMemberType(decl.getFullyQualifiedName().get()));
+          }
+
+          // Sealedness best effort should be final unless we have evidence against it
+          syntheticType.addSealedness(Sealedness.FINAL);
+          syntheticType.addSealedness(Sealedness.NON_SEALED);
         }
       }
     } else if (node instanceof EnumDeclaration decl) {
@@ -2345,6 +2367,7 @@ public class UnsolvedSymbolGenerator {
 
         if (syntheticType != null) {
           syntheticType.setType(UnsolvedClassOrInterfaceType.INTERFACE);
+          syntheticType.removeAndBlockSealedness(Sealedness.FINAL);
         }
       }
     } else if (node instanceof MethodDeclaration methodDecl) {
