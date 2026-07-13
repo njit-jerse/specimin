@@ -35,7 +35,7 @@ dependencies {
     // Error Prone 2.42.0 and Google Java Format 1.28.0 are the maximum versions available to Java 17.
     errorprone("com.google.errorprone:error_prone_core:2.42.0")
 
-    implementation("com.google.googlejavaformat:google-java-format:1.28.0")
+    implementation("com.google.googlejavaformat:google-java-format:1.35.0")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
