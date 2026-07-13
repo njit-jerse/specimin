@@ -30,7 +30,7 @@ dependencies {
 
     implementation("commons-io:commons-io:2.22.0")
 
-    testImplementation("org.junit.jupiter:junit-jupiter:6.1.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
 
     // Error Prone 2.42.0 and Google Java Format 1.28.0 are the maximum versions available to Java 17.
     errorprone("com.google.errorprone:error_prone_core:2.42.0")
