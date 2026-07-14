@@ -400,7 +400,7 @@ public class Slicer {
                   constructorNode.getParameters().stream()
                       .map(p -> p.getType().toString())
                       .toList();
-            } else {
+            } else if (attached != null) {
               parameterTypes =
                   constructor.formalParameterTypes().stream().map(ResolvedType::describe).toList();
             }
