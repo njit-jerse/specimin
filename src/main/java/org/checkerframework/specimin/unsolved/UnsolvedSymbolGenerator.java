@@ -6,6 +6,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -66,6 +67,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -2307,11 +2309,12 @@ public class UnsolvedSymbolGenerator {
    * this method AFTER all unsolved symbols are generated.
    *
    * @param node The node to gather more information from
+   * @param slice The slice, for reference.
    * @return An object of type {@link UnsolvedGenerationResult}, usually empty, but the close()
    *     method(s) if first time confirmation of an AutoCloseable, or if the return type is updated
    *     in a method call expression.
    */
-  public UnsolvedGenerationResult addInformation(Node node) {
+  public UnsolvedGenerationResult addInformation(Node node, Set<Node> slice) {
     List<UnsolvedSymbolAlternates<?>> toAdd = new ArrayList<>();
     List<UnsolvedSymbolAlternates<?>> toRemove = new ArrayList<>();
 
@@ -2357,6 +2360,53 @@ public class UnsolvedSymbolGenerator {
           // Sealedness best effort should be final unless we have evidence against it
           syntheticType.addSealedness(Sealedness.FINAL);
           syntheticType.addSealedness(Sealedness.NON_SEALED);
+
+          List<String> parameterTypes = null;
+          for (ConstructorDeclaration constructor : decl.getConstructors()) {
+            if (!slice.contains(constructor)) {
+              continue;
+            }
+
+            if (parameterTypes != null
+                && parameterTypes.size() <= constructor.getParameters().size()) {
+              continue;
+            }
+
+            parameterTypes =
+                constructor.getParameters().stream().map(p -> p.getType().toString()).toList();
+          }
+
+          if (parameterTypes != null && !parameterTypes.isEmpty()) {
+            String superCall = JavaParserUtil.getDefaultSuperConstructorCall(parameterTypes);
+
+            boolean foundConstructor = false;
+
+            for (UnsolvedSymbolAlternates<?> alternate : generatedSymbols.values()) {
+              if (!(alternate instanceof UnsolvedMethodAlternates method)
+                  || !alternate.getAlternateDeclaringTypes().contains(syntheticType)) {
+                continue;
+              }
+
+              if (!Objects.equals(method.getName(), syntheticType.getClassName())) {
+                continue;
+              }
+
+              foundConstructor = true;
+              method.setContent(superCall);
+            }
+
+            if (!foundConstructor) {
+              UnsolvedMethodAlternates constructor =
+                  UnsolvedMethodAlternates.create(
+                      syntheticType.getClassName(),
+                      Set.of(new SolvedMemberType("")),
+                      List.of(syntheticType),
+                      List.of());
+
+              constructor.setContent(superCall);
+              toAdd.add(constructor);
+            }
+          }
         }
       }
     } else if (node instanceof EnumDeclaration decl) {
@@ -3825,8 +3875,8 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Once {@link #addInformation(Node)} is done, call this method to make sure all generated symbols
-   * are consistent with their super type relationships.
+   * Once {@link #addInformation} is done, call this method to make sure all generated symbols are
+   * consistent with their super type relationships.
    */
   public void generateAllAlternatesBasedOnSuperTypeRelationships() {
     // This method is called after all unsolved symbols are generated and all information is added
@@ -3957,12 +4007,12 @@ public class UnsolvedSymbolGenerator {
 
   /**
    * Returns whether a node needs to undergo post-processing or not; i.e., if {@link
-   * #addInformation(Node)} needs to be called on it. This is used in the initial worklist when some
+   * #addInformation} needs to be called on it. This is used in the initial worklist when some
    * unsolved symbols may not be generated yet to defer additional information processing to a time
    * when all unsolved symbols are generated.
    *
    * @param node The node to query about
-   * @return Whether {@link #addInformation(Node)} accepts this node
+   * @return Whether {@link #addInformation} accepts this node
    */
   public boolean needToPostProcess(Node node) {
     return node instanceof ClassOrInterfaceDeclaration

@@ -10,9 +10,7 @@ import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.utils.SourceRoot;
 import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
@@ -232,7 +230,8 @@ public class SpeciminRunner {
       validateRoot(root, targetMethodNames, targetFieldNames);
     }
 
-    ParserConfiguration config = updateStaticSolver(root, jarPaths);
+    SpeciminTypeSolvers typeSolver = initializeSolvers(root, jarPaths);
+    ParserConfiguration config = updateStaticSolver(typeSolver);
     decompileJarFiles(root, jarPaths, createdClass);
 
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
@@ -303,7 +302,9 @@ public class SpeciminRunner {
         Slicer.slice(
             new StandardTypeRuleDependencyMap(fqnToCompilationUnits),
             worklist,
-            unsolvedSymbolGenerator);
+            unsolvedSymbolGenerator,
+            fqnToCompilationUnits,
+            typeSolver);
 
     // cache to avoid called Files.createDirectories repeatedly with the same
     // arguments
@@ -674,27 +675,29 @@ public class SpeciminRunner {
   }
 
   /**
-   * Update the static solver for JavaParser.
+   * Sets up the type solvers for this run of Specimin, and returns it once initialized.
    *
    * @param root the root directory of the files to parse.
    * @param jarPaths the list of jar files to be used as input.
+   * @return The type solvers
    * @throws IOException if something went wrong.
    */
-  private static ParserConfiguration updateStaticSolver(String root, List<String> jarPaths)
+  private static SpeciminTypeSolvers initializeSolvers(String root, List<String> jarPaths)
       throws IOException {
-    MemoryTypeSolver mem = new MemoryTypeSolver();
+    SpeciminTypeSolvers typeSolver = new SpeciminTypeSolvers(root, jarPaths);
 
-    // Set up the parser's symbol solver, so that we can resolve definitions.
-    CombinedTypeSolver typeSolver =
-        new CombinedTypeSolver(new JdkTypeSolver(), new JavaParserTypeSolver(new File(root)), mem);
+    JavaParserUtil.setTypeSolvers(typeSolver);
 
-    for (String path : jarPaths) {
-      typeSolver.add(new JarTypeSolver(path));
-    }
+    return typeSolver;
+  }
 
-    JavaParserUtil.setTypeSolvers(typeSolver, mem);
-
-    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
+  /**
+   * Update the static solver for JavaParser.
+   *
+   * @param typeSolver the type solver
+   */
+  private static ParserConfiguration updateStaticSolver(SpeciminTypeSolvers typeSolver) {
+    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver.getTypeSolver());
 
     ParserConfiguration config =
         new ParserConfiguration()

@@ -2,9 +2,12 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -19,8 +22,11 @@ import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,6 +35,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.unsolved.UnsolvedGenerationResult;
@@ -37,8 +44,8 @@ import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 
 /**
  * Slices a program, given an initial worklist and a type rule dependency map. This class cannot be
- * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque, UnsolvedSymbolGenerator)}
- * to use this class.
+ * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque, UnsolvedSymbolGenerator,
+ * Map, SpeciminTypeSolvers)} to use this class.
  */
 public class Slicer {
   /**
@@ -75,20 +82,32 @@ public class Slicer {
   /** The type rule dependency map. */
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
+  /** A map of FQNs to compilation units. */
+  private final Map<String, CompilationUnit> fqnToCompilationUnits;
+
+  /** The collection of type solvers used by Specimin. */
+  private final SpeciminTypeSolvers typeSolvers;
+
   /**
    * Creates a new instance of {@link Slicer}.
    *
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
    * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
+   * @param fqnToCompilationUnits The map of FQNs to compilation units.
+   * @param typeSolvers The collection of type solvers to use.
    */
   private Slicer(
       TypeRuleDependencyMap typeRuleDependencyMap,
       Deque<Node> worklist,
-      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
+      UnsolvedSymbolGenerator unsolvedSymbolGenerator,
+      Map<String, CompilationUnit> fqnToCompilationUnits,
+      SpeciminTypeSolvers typeSolvers) {
     this.typeRuleDependencyMap = typeRuleDependencyMap;
     this.worklist = worklist;
     this.unsolvedSymbolGenerator = unsolvedSymbolGenerator;
+    this.fqnToCompilationUnits = fqnToCompilationUnits;
+    this.typeSolvers = typeSolvers;
   }
 
   /**
@@ -99,13 +118,23 @@ public class Slicer {
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
    * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
+   * @param fqnToCompilationUnits The map of FQNs to compilation units.
+   * @param typeSolvers The collection of type solvers to use.
    * @return A {@link SliceResult} representing the output of the slice.
    */
   public static SliceResult slice(
       TypeRuleDependencyMap typeRuleDependencyMap,
       Deque<Node> worklist,
-      UnsolvedSymbolGenerator unsolvedSymbolGenerator) {
-    Slicer slicer = new Slicer(typeRuleDependencyMap, worklist, unsolvedSymbolGenerator);
+      UnsolvedSymbolGenerator unsolvedSymbolGenerator,
+      Map<String, CompilationUnit> fqnToCompilationUnits,
+      SpeciminTypeSolvers typeSolvers) {
+    Slicer slicer =
+        new Slicer(
+            typeRuleDependencyMap,
+            worklist,
+            unsolvedSymbolGenerator,
+            fqnToCompilationUnits,
+            typeSolvers);
 
     slicer.buildSlice();
 
@@ -150,7 +179,7 @@ public class Slicer {
     if (!generatedSymbolSlice.isEmpty()) {
       // Step 2: Add more information to generated symbols based on context
       for (Node element : postProcessingWorklist) {
-        UnsolvedGenerationResult result = unsolvedSymbolGenerator.addInformation(element);
+        UnsolvedGenerationResult result = unsolvedSymbolGenerator.addInformation(element, slice);
         generatedSymbolSlice.addAll(result.toAdd());
         result.toRemove().forEach(generatedSymbolSlice::remove);
       }
@@ -338,6 +367,76 @@ public class Slicer {
         if (!isSet) {
           fieldDeclarator.setInitializer(
               JavaParserUtil.getInitializerRHS(fieldDeclarator.getType().toString()));
+        }
+      }
+
+      // If we find a class whose superclass whose constructors all have parameters, we need to
+      // 1) either generate a constructor that calls super(...) OR
+      // 2) replace a constructor in the slice with a body that calls super(...)
+
+      else if (node instanceof ClassOrInterfaceDeclaration classOrInterfaceDecl
+          && !classOrInterfaceDecl.isInterface()
+          && classOrInterfaceDecl.getExtendedTypes().size() == 1) {
+        ResolvedType superClass = Resolver.resolve(classOrInterfaceDecl.getExtendedTypes(0));
+
+        if (superClass instanceof ResolvedReferenceType superClassResolved
+            && superClassResolved.getTypeDeclaration().isPresent()) {
+          List<String> parameterTypes = null;
+
+          for (ResolvedConstructorDeclaration constructor :
+              superClassResolved.getTypeDeclaration().get().getConstructors()) {
+            if (parameterTypes != null
+                && parameterTypes.size() <= constructor.getNumberOfParams()) {
+              continue;
+            }
+
+            Node attached = JavaParserUtil.tryFindAttachedNode(constructor, fqnToCompilationUnits);
+
+            if (attached instanceof ConstructorDeclaration constructorNode) {
+              if (!slice.contains(constructorNode)) {
+                continue;
+              }
+              parameterTypes =
+                  constructorNode.getParameters().stream()
+                      .map(p -> p.getType().toString())
+                      .toList();
+            } else {
+              parameterTypes =
+                  constructor.formalParameterTypes().stream().map(ResolvedType::describe).toList();
+            }
+          }
+
+          if (parameterTypes == null || parameterTypes.isEmpty()) {
+            return;
+          }
+
+          String superCall = JavaParserUtil.getDefaultSuperConstructorCall(parameterTypes);
+
+          boolean foundConstructor = false;
+          for (ConstructorDeclaration constructorDeclaration :
+              classOrInterfaceDecl.getConstructors()) {
+            if (!slice.contains(constructorDeclaration)) {
+              continue;
+            }
+
+            foundConstructor = true;
+            if (slice.contains(constructorDeclaration.getBody())) {
+              continue;
+            }
+
+            constructorDeclaration.setBody(
+                new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(superCall))));
+            // No need to add body to slice because all children have already been handled
+          }
+
+          if (!foundConstructor) {
+            ConstructorDeclaration decl =
+                classOrInterfaceDecl.addConstructor(Modifier.Keyword.PUBLIC);
+            decl.setBody(new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(superCall))));
+            if (classOrInterfaceDecl.getFullyQualifiedName().isPresent()) {
+              typeSolvers.clearCache(classOrInterfaceDecl.getFullyQualifiedName().get());
+            }
+          }
         }
       }
     }
