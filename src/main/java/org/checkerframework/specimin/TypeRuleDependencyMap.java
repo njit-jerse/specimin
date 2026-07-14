@@ -22,7 +22,8 @@ public interface TypeRuleDependencyMap {
    * would return the method declaration and its declaring type, both as attached nodes.
    *
    * @param resolved The resolved object
+   * @param node The node that was resolved
    * @return All relevant nodes to the input resolved object.
    */
-  List<Node> getRelevantElements(Object resolved);
+  List<Node> getRelevantElements(Object resolved, Node node);
 }

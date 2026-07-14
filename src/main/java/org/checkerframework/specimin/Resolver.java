@@ -1,20 +1,29 @@
 package org.checkerframework.specimin;
 
+import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedAnnotationMemberDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -196,11 +205,19 @@ public class Resolver {
       if (result != null) {
         return result;
       }
+
+      if (expr.isMethodCallExpr()) {
+        result = handleUnresolvableRecordMember(expr.asMethodCallExpr());
+
+        if (result != null) {
+          return result;
+        }
+      }
     }
 
     // Handle cases where a method/constructor call cannot be resolved because of unresolvable
     // arguments, but its definition exists
-    CallableDeclaration<?> potentiallyResolvableCallable =
+    NodeWithParameters<?> potentiallyResolvableCallable =
         unsolvable instanceof NodeWithArguments<?> withArgs
             ? JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
                 withArgs, fqnToCompilationUnits)
@@ -249,17 +266,83 @@ public class Resolver {
           "fqnToCompilationUnits must be set before calling handleMethodAmbiguityException");
     }
     if (!ex.toString().contains("ReflectionMethodDeclaration")) {
-      if (node instanceof MethodCallExpr methodCallExpr) {
-        CallableDeclaration<?> potentialMethod =
-            JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                methodCallExpr, fqnToCompilationUnits);
-
-        if (potentialMethod != null) {
-          return potentialMethod.asMethodDeclaration().resolve();
-        }
+      if (node instanceof MethodCallExpr methodCallExpr
+          && JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
+                  methodCallExpr, fqnToCompilationUnits)
+              instanceof MethodDeclaration methodDecl) {
+        return methodDecl.resolve();
       }
 
       throw ex;
+    }
+
+    return null;
+  }
+
+  /**
+   * Resolves record members because JavaParser can't.
+   *
+   * @param methodCallExpr The method call expression
+   * @return The parameter representing the record member, or null if not found
+   */
+  private static @Nullable ResolvedMethodDeclaration handleUnresolvableRecordMember(
+      MethodCallExpr methodCallExpr) {
+    if (fqnToCompilationUnits == null) {
+      throw new UnsupportedOperationException(
+          "fqnToCompilationUnits must be set before calling handleUnsupportedOperationException");
+    }
+
+    if (methodCallExpr.getArguments().isNonEmpty()) {
+      return null;
+    }
+
+    // JavaParser bug: cannot resolve MethodCallExpr if it represents a record member
+
+    // We have to use our own implementation, ResolvedRecordMemberDeclaration, since JavaParser
+    // throws an IllegalStateException anytime we try to resolve the original parameter.
+    if (methodCallExpr.getArguments().isEmpty()) {
+      if (methodCallExpr.hasScope()) {
+        ResolvedType scopeType = calculateResolvedType(methodCallExpr.getScope().get());
+
+        if (scopeType == null
+            || !scopeType.isReferenceType()
+            || scopeType.asReferenceType().getTypeDeclaration().isEmpty()
+            || !scopeType.asReferenceType().getTypeDeclaration().get().isRecord()) {
+          return null;
+        }
+
+        TypeDeclaration<?> typeDecl =
+            JavaParserUtil.getTypeFromQualifiedName(scopeType.describe(), fqnToCompilationUnits);
+
+        if (typeDecl != null) {
+          for (Parameter param : typeDecl.asRecordDeclaration().getParameters()) {
+            if (param.getNameAsString().equals(methodCallExpr.getNameAsString())) {
+              return new ResolvedRecordMemberDeclaration(param);
+            }
+          }
+        }
+      } else {
+        TypeDeclaration<?> encapsulating =
+            JavaParserUtil.getEnclosingClassLikeOptional(methodCallExpr);
+
+        while (encapsulating != null) {
+          if (encapsulating.isRecordDeclaration()) {
+            for (Parameter param : encapsulating.asRecordDeclaration().getParameters()) {
+              if (param.getNameAsString().equals(methodCallExpr.getNameAsString())) {
+                return new ResolvedRecordMemberDeclaration(param);
+              }
+            }
+          }
+
+          if (encapsulating.getParentNode().isEmpty()) {
+            return null;
+          }
+
+          // Check all outer classes
+          encapsulating =
+              JavaParserUtil.getEnclosingClassLikeOptional(encapsulating.getParentNode().get());
+        }
+      }
     }
 
     return null;
@@ -311,5 +394,86 @@ public class Resolver {
       }
     }
     throw ex;
+  }
+
+  /**
+   * Custom class to hold a record member declaration, since JavaParser cannot handle this case.
+   *
+   * @param parameter The wrapped parameter.
+   */
+  private record ResolvedRecordMemberDeclaration(Parameter parameter)
+      implements ResolvedMethodDeclaration {
+    @Override
+    public ResolvedType getReturnType() {
+      return Resolver.resolveGuaranteeNonNull(parameter.getType());
+    }
+
+    @Override
+    public boolean isAbstract() {
+      return false;
+    }
+
+    @Override
+    public boolean isDefaultMethod() {
+      return false;
+    }
+
+    @Override
+    public boolean isStatic() {
+      return false;
+    }
+
+    @Override
+    public String toDescriptor() {
+      return "";
+    }
+
+    @Override
+    public ResolvedReferenceTypeDeclaration declaringType() {
+      return (ResolvedReferenceTypeDeclaration)
+          resolveGuaranteeNonNull((Resolvable<?>) JavaParserUtil.getEnclosingClassLike(parameter));
+    }
+
+    @Override
+    public int getNumberOfParams() {
+      return 0;
+    }
+
+    @Override
+    public ResolvedParameterDeclaration getParam(int i) {
+      throw new IndexOutOfBoundsException(
+          "There are no parameters in a record member declaration.");
+    }
+
+    @Override
+    public int getNumberOfSpecifiedExceptions() {
+      return 0;
+    }
+
+    @Override
+    public ResolvedType getSpecifiedException(int index) {
+      throw new IndexOutOfBoundsException(
+          "There are no exceptions in a record member declaration.");
+    }
+
+    @Override
+    public AccessSpecifier accessSpecifier() {
+      return AccessSpecifier.PUBLIC;
+    }
+
+    @Override
+    public String getName() {
+      return parameter.getNameAsString();
+    }
+
+    @Override
+    public List<ResolvedTypeParameterDeclaration> getTypeParameters() {
+      return List.of();
+    }
+
+    @Override
+    public Optional<Node> toAst() {
+      return Optional.of(parameter);
+    }
   }
 }

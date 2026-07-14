@@ -39,6 +39,7 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclar
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserRecordDeclaration;
 import com.github.javaparser.utils.Pair;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -358,7 +359,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
   }
 
   @Override
-  public List<Node> getRelevantElements(Object resolved) {
+  public List<Node> getRelevantElements(Object resolved, Node node) {
     List<Node> elements = new ArrayList<>();
 
     if (resolved instanceof ResolvedType resolvedType) {
@@ -367,7 +368,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       }
       if (resolvedType.isReferenceType()
           && resolvedType.asReferenceType().getTypeDeclaration().isPresent()) {
-        return getRelevantElements(resolvedType.asReferenceType().getTypeDeclaration().get());
+        return getRelevantElements(resolvedType.asReferenceType().getTypeDeclaration().get(), node);
       }
     }
 
@@ -402,6 +403,19 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
                                 n -> n.getNameAsString().equals(member.getName()))
                             .get())
                 .toList());
+      }
+
+      // By default, #getRelevantElements(Node) does not include a record's canonical constructor's
+      // parameters. This is because we do not want to preserve record fields that are unused.
+      // However, if we encounter a call to this canonical constructor, then we must preserve all
+      // those fields. We know that the following refers to the canonical constructor because only
+      // the canonical constructor resolved results in a resolved type declaration (others are all
+      // ResolvedConstructorDeclaration).
+
+      // Another case where resolve() yields the canonical constructor is handled in the next if
+      // block.
+      if (type.isRecordDeclaration() && node instanceof ObjectCreationExpr) {
+        elements.addAll(type.asRecordDeclaration().getParameters());
       }
 
       elements.add(type);
@@ -462,11 +476,15 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       if (!(resolved instanceof DefaultConstructorDeclaration)
           && !isAnonymousClass
           && resolvedMethodLikeDeclaration.toAst().isPresent()) {
-        Node unattached = resolvedMethodLikeDeclaration.toAst().get();
-        CallableDeclaration<?> methodLike =
-            type.findFirst(CallableDeclaration.class, n -> n.equals(unattached)).get();
+        elements.add(
+            JavaParserUtil.findAttachedNode(resolvedMethodLikeDeclaration, fqnToCompilationUnits));
+      }
 
-        elements.add(methodLike);
+      // By default, #getRelevantElements(Node) does not include a record's canonical constructor's
+      // parameters. See reasoning for this in the last big if block; this is another variant of the
+      // same case.
+      if (resolved instanceof JavaParserRecordDeclaration.CanonicalRecordConstructor) {
+        elements.addAll(type.asRecordDeclaration().getParameters());
       }
 
       elements.add(type);
@@ -516,10 +534,10 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       // Most of the time, this method will return one constructor. However, there may be cases
       // where we include multiple constructors, but this is because we simply don't know which
       // one to use.
-      List<? extends CallableDeclaration<?>> constructors =
+      List<? extends NodeWithParameters<?>> constructors =
           JavaParserUtil.tryResolveNodeWithUnresolvableArguments(
               enumConstant, fqnToCompilationUnits);
-      elements.addAll(constructors);
+      elements.addAll(constructors.stream().map(c -> (Node) c).toList());
     }
 
     return elements;

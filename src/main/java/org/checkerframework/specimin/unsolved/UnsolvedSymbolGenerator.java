@@ -4,7 +4,6 @@ import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -34,6 +33,7 @@ import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.TypeExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -631,8 +631,8 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    Map<MemberType, CallableDeclaration<?>> typeToMustPreserveNode =
-        getTypeToCallableDeclarationFromArgument(field);
+    Map<MemberType, NodeWithParameters<?>> typeToMustPreserveNode =
+        getTypeToNodeWithParametersFromArgument(field);
 
     UnsolvedSymbolAlternates<?> alreadyGenerated = findExistingAndUpdateFQNs(potentialFQNs);
 
@@ -763,8 +763,8 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    Map<MemberType, CallableDeclaration<?>> typeToMustPreserveNode =
-        getTypeToCallableDeclarationFromArgument(nameExpr);
+    Map<MemberType, NodeWithParameters<?>> typeToMustPreserveNode =
+        getTypeToNodeWithParametersFromArgument(nameExpr);
 
     UnsolvedSymbolAlternates<?> generatedField = findExistingAndUpdateFQNs(fieldFQNs);
 
@@ -825,17 +825,6 @@ public class UnsolvedSymbolGenerator {
   private void handleMethodCallExpr(
       MethodCallExpr methodCall, List<UnsolvedSymbolAlternates<?>> result) {
     ResolvedMethodDeclaration resolvedMethodDeclaration = Resolver.resolve(methodCall);
-    if (resolvedMethodDeclaration != null) {
-      if (JavaParserUtil.tryResolveNodeIfInAnonymousClass(methodCall) != null) {
-        return;
-      }
-
-      if (JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-              methodCall, fqnsToCompilationUnits)
-          != null) {
-        return;
-      }
-    }
 
     if (resolvedMethodDeclaration != null) {
       Node node =
@@ -850,7 +839,7 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
-    List<? extends CallableDeclaration<?>> definitions =
+    List<? extends NodeWithParameters<?>> definitions =
         JavaParserUtil.tryResolveNodeWithUnresolvableArguments(methodCall, fqnsToCompilationUnits);
 
     if (!definitions.isEmpty()
@@ -863,7 +852,7 @@ public class UnsolvedSymbolGenerator {
       // type is not. In this case, the type of the parameters are unsolved, and should be preserved
       // if the parameter type ever ends up becoming used (which it will, after addInformation is
       // done).
-      for (CallableDeclaration<?> callable : definitions) {
+      for (NodeWithParameters<?> callable : definitions) {
         for (Parameter param : callable.getParameters()) {
           List<UnsolvedSymbolAlternates<?>> generated = inferContext(param.getType());
           // Find the generated param type, if any
@@ -871,7 +860,7 @@ public class UnsolvedSymbolGenerator {
             if (symbol instanceof UnsolvedClassOrInterfaceAlternates type) {
               if (type.getClassName().equals(JavaParserUtil.erase(param.getTypeAsString()))) {
                 for (UnsolvedClassOrInterface alt : type.getAlternates()) {
-                  alt.addMustPreserveNode(callable);
+                  alt.addMustPreserveNode((Node) callable);
                 }
                 break;
               }
@@ -1001,8 +990,8 @@ public class UnsolvedSymbolGenerator {
     UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
 
     // TODO: see if this is an issue if two different methods have the same parameter type
-    Map<MemberType, CallableDeclaration<?>> returnTypeToMustPreserveNode =
-        getTypeToCallableDeclarationFromArgument(methodCall);
+    Map<MemberType, NodeWithParameters<?>> returnTypeToMustPreserveNode =
+        getTypeToNodeWithParametersFromArgument(methodCall);
 
     List<Map<MemberType, @Nullable Node>> parametersToMustPreserve =
         generateParameterToMustPreserveMap(
@@ -1578,8 +1567,8 @@ public class UnsolvedSymbolGenerator {
             JavaParserUtil.getMethodDeclarationsFromMethodRef(argument.asMethodReferenceExpr());
 
         for (ResolvedMethodLikeDeclaration method : resolved) {
-          CallableDeclaration<?> ast =
-              (CallableDeclaration<?>)
+          NodeWithParameters<?> ast =
+              (NodeWithParameters<?>)
                   JavaParserUtil.tryFindAttachedNode(method, fqnsToCompilationUnits);
 
           if (ast == null) {
@@ -1596,7 +1585,7 @@ public class UnsolvedSymbolGenerator {
             potentialParameterType = modifiedFQNs.get(potentialParameterType);
           }
 
-          potentialParameterToMustPreserveNode.put(potentialParameterType, ast);
+          potentialParameterToMustPreserveNode.put(potentialParameterType, (Node) ast);
         }
       }
 
@@ -2230,24 +2219,24 @@ public class UnsolvedSymbolGenerator {
 
   /**
    * Given a potential argument expression, this method returns a map of MemberType to
-   * CallableDeclaration. For example, if the argument is a method call expression, foo(), as an
+   * NodeWithParameters. For example, if the argument is a method call expression, foo(), as an
    * argument of another method call, bar(foo()), this method will return a map of potential return
-   * types of foo() (based on the definitions of bar with an arity of 1) to the CallableDeclaration
+   * types of foo() (based on the definitions of bar with an arity of 1) to the NodeWithParameters
    * of bar. This method also works if {@code argument} is a field expression, or if the parent node
    * is a constructor/explicit constructor invocation.
    *
    * @param argument The argument expression to analyze
-   * @return A map of potential return types to their corresponding CallableDeclaration. Returns an
+   * @return A map of potential return types to their corresponding NodeWithParameters. Returns an
    *     empty map if no potential return types are found, or if the argument is not part of a
    *     solvable method/constructor call.
    */
-  private Map<MemberType, CallableDeclaration<?>> getTypeToCallableDeclarationFromArgument(
+  private Map<MemberType, NodeWithParameters<?>> getTypeToNodeWithParametersFromArgument(
       Expression argument) {
     // If this expression is an argument of a solvable method call, we have multiple potential field
     // types to choose from, based on each definition
     Node parent = argument.getParentNode().get();
     int paramNum = -1;
-    Map<MemberType, CallableDeclaration<?>> returnTypeToMustPreserveNode = new LinkedHashMap<>();
+    Map<MemberType, NodeWithParameters<?>> returnTypeToMustPreserveNode = new LinkedHashMap<>();
 
     if (!(parent instanceof NodeWithArguments<?> withArgs)) {
       return returnTypeToMustPreserveNode;
@@ -2266,10 +2255,10 @@ public class UnsolvedSymbolGenerator {
       return returnTypeToMustPreserveNode;
     }
 
-    List<? extends CallableDeclaration<?>> parentCallableDeclarations =
+    List<? extends NodeWithParameters<?>> parentNodeWithParams =
         JavaParserUtil.tryResolveNodeWithUnresolvableArguments(withArgs, fqnsToCompilationUnits);
 
-    for (CallableDeclaration<?> callable : parentCallableDeclarations) {
+    for (NodeWithParameters<?> callable : parentNodeWithParams) {
       Parameter param = callable.getParameter(paramNum);
 
       MemberType memberType =
@@ -2377,7 +2366,7 @@ public class UnsolvedSymbolGenerator {
           }
 
           if (parameterTypes != null && !parameterTypes.isEmpty()) {
-            String superCall = JavaParserUtil.getDefaultSuperConstructorCall(parameterTypes);
+            String superCall = JavaParserUtil.getDefaultConstructorCall(parameterTypes, false);
 
             boolean foundConstructor = false;
 
@@ -2826,8 +2815,8 @@ public class UnsolvedSymbolGenerator {
       }
 
       if (resolved != null) {
-        CallableDeclaration<?> asAst =
-            (CallableDeclaration<?>)
+        NodeWithParameters<?> asAst =
+            (NodeWithParameters<?>)
                 JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
 
         for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
@@ -2887,7 +2876,7 @@ public class UnsolvedSymbolGenerator {
           handleLHSAndRHSRelationship(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
         }
       } else {
-        List<? extends CallableDeclaration<?>> withUnresolvableArgs =
+        List<? extends NodeWithParameters<?>> withUnresolvableArgs =
             JavaParserUtil.tryResolveNodeWithUnresolvableArguments(
                 nodeWithArgs, fqnsToCompilationUnits);
 
@@ -3200,24 +3189,8 @@ public class UnsolvedSymbolGenerator {
     MethodDeclaration ast = null;
 
     if (resolvedMethod == null) {
-      ast =
-          (MethodDeclaration)
-              JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                  methodCall, fqnsToCompilationUnits);
-
-      if (ast == null) {
-        resolvedMethod =
-            (ResolvedMethodDeclaration)
-                JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
-                    methodCall);
-
-        if (resolvedMethod == null) {
-          potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
-        }
-      }
-    }
-
-    if (resolvedMethod != null) {
+      potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
+    } else {
       // Potential scope is all unsolvable ancestors
       ast =
           (MethodDeclaration)
