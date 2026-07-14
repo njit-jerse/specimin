@@ -525,6 +525,11 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   }
 
   @Override
+  public void setContent(String content) {
+    applyToAllAlternates(UnsolvedMethod::setContent, content);
+  }
+
+  @Override
   public boolean isStatic() {
     return getAlternates().get(0).isStatic();
   }

@@ -39,7 +39,6 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.Resolvable;
-import com.github.javaparser.resolution.TypeSolver;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
@@ -96,19 +95,12 @@ public class JavaParserUtil {
   }
 
   /**
-   * Set this TypeSolver instance to be used by the JavaParserFacade, so we don't have to find it
-   * through reflection in JavaParserSymbolSolver. This field is initialized once in SpeciminRunner.
-   * Note that by the time you evaluate the value of this field, it should already be non-null.
-   */
-  private static @MonotonicNonNull TypeSolver typeSolver = null;
-
-  /**
-   * Set this MemoryTypeSolver instance to be used by {@link #getResolvablePlaceholderType}, since
-   * {@code TypeSolver} does not expose child type solvers. This field is initialized once in
+   * Set this SpeciminTypeSolvers instance to be used by this class, so we don't have to find type
+   * solvers through reflection in JavaParserSymbolSolver. This field is initialized once in
    * SpeciminRunner. Note that by the time you evaluate the value of this field, it should already
    * be non-null.
    */
-  private static @MonotonicNonNull MemoryTypeSolver memoryTypeSolver = null;
+  private static @MonotonicNonNull SpeciminTypeSolvers typeSolvers = null;
 
   /**
    * Keeps track of the placeholder types that have been generated and registered with the type
@@ -117,16 +109,13 @@ public class JavaParserUtil {
   private static final Set<String> generatedResolvedPlaceholderTypes = new HashSet<>();
 
   /**
-   * Set the TypeSolver instances to be used.
+   * Set the SpeciminTypeSolvers instance to be used.
    *
-   * @param typeSolver the TypeSolver instance to set
-   * @param memoryTypeSolver the MemoryTypeSolver instance to set
+   * @param typeSolvers The SpeciminTypeSolvers instance holding all type solvers.
    */
-  @EnsuresNonNull("JavaParserUtil.typeSolver")
-  @EnsuresNonNull("JavaParserUtil.memoryTypeSolver")
-  public static void setTypeSolvers(TypeSolver typeSolver, MemoryTypeSolver memoryTypeSolver) {
-    JavaParserUtil.typeSolver = typeSolver;
-    JavaParserUtil.memoryTypeSolver = memoryTypeSolver;
+  @EnsuresNonNull("JavaParserUtil.typeSolvers")
+  public static void setTypeSolvers(SpeciminTypeSolvers typeSolvers) {
+    JavaParserUtil.typeSolvers = typeSolvers;
 
     // If we reset memoryTypeSolver, we should clear our cache since these old types
     // are not registered with the new MemoryTypeSolver. This is mainly an issue with
@@ -140,25 +129,12 @@ public class JavaParserUtil {
    *
    * @return The type solver
    */
-  public static TypeSolver getTypeSolver() {
-    if (typeSolver == null) {
+  public static SpeciminTypeSolvers getTypeSolvers() {
+    if (typeSolvers == null) {
       throw new RuntimeException(
-          "TypeSolver is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
+          "typeSolvers is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
     }
-    return typeSolver;
-  }
-
-  /**
-   * Gets the memory type solver, and ensures it is non-null.
-   *
-   * @return The type solver
-   */
-  public static MemoryTypeSolver getMemoryTypeSolver() {
-    if (memoryTypeSolver == null) {
-      throw new RuntimeException(
-          "MemoryTypeSolver is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
-    }
-    return memoryTypeSolver;
+    return typeSolvers;
   }
 
   /**
@@ -1040,7 +1016,7 @@ public class JavaParserUtil {
     // Add to java.lang so we don't need to worry about imports; this is a bit hacky but it works
     CompilationUnit dummy =
         StaticJavaParser.parse("package java.lang; public class " + typeName + " {}");
-    getMemoryTypeSolver().addType("java.lang." + typeName, dummy);
+    getTypeSolvers().getMemoryTypeSolver().addType("java.lang." + typeName, dummy);
 
     generatedResolvedPlaceholderTypes.add(typeName);
     return StaticJavaParser.parseClassOrInterfaceType(typeName);
@@ -1995,7 +1971,7 @@ public class JavaParserUtil {
     }
 
     Class<? extends Node> nodeClass = detachedNode.getClass();
-    return attached.findFirst(nodeClass, n -> n.equals(detachedNode)).get();
+    return attached.findFirst(nodeClass, n -> n.equals(detachedNode)).orElse(null);
   }
 
   /**
@@ -2016,6 +1992,30 @@ public class JavaParserUtil {
       case "boolean" -> "false";
       default -> "null";
     };
+  }
+
+  /**
+   * Given a list of parameter types, return a super(...) call with the default values of those
+   * types.
+   *
+   * @param paramTypes The parameter types
+   * @return The super(...) call; i.e., super(0, null);
+   */
+  public static String getDefaultSuperConstructorCall(List<String> paramTypes) {
+    StringBuilder sb = new StringBuilder();
+
+    sb.append("super(");
+
+    for (String paramType : paramTypes) {
+      sb.append(getInitializerRHS(paramType));
+      sb.append(", ");
+    }
+
+    // remove the trailing ", "
+    sb.delete(sb.length() - 2, sb.length());
+
+    sb.append(");");
+    return sb.toString();
   }
 
   /**
@@ -2216,7 +2216,7 @@ public class JavaParserUtil {
       try {
         // Must use JavaParserFacade instead of .resolve() here, since we need to get the
         // type parameters map: https://github.com/javaparser/javaparser/issues/2135
-        JavaParserFacade parserFacade = JavaParserFacade.get(getTypeSolver());
+        JavaParserFacade parserFacade = JavaParserFacade.get(getTypeSolvers().getTypeSolver());
         methodUsage = parserFacade.solveMethodAsUsage(methodCallParent);
         method = methodUsage.getDeclaration();
 
@@ -2595,7 +2595,7 @@ public class JavaParserUtil {
       }
 
       try {
-        combined.add(getTypeSolver().solveType(fqn));
+        combined.add(getTypeSolvers().getTypeSolver().solveType(fqn));
       } catch (UnsolvedSymbolException e) {
         // Type param, likely
       }
