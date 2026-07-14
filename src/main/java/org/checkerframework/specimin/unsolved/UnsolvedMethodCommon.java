@@ -66,4 +66,11 @@ public interface UnsolvedMethodCommon {
    * @param accessModifier The access modifier
    */
   void setAccessModifier(String accessModifier);
+
+  /**
+   * Sets the content of the method (default: {@code throw new java.lang.Error();})
+   *
+   * @param content The content to set to
+   */
+  void setContent(String content);
 }
