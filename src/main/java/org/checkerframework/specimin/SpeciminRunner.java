@@ -455,7 +455,13 @@ public class SpeciminRunner {
       }
     }
   }
-
+  /**
+   * Gets the packages and classes used in the given slice and unsolved symbol enumeration.
+   *
+   * @param sliceResult The slice
+   * @param enumeratorResult The unsolved enumeration
+   * @return The used packages and classes
+   */
   private static Set<String> getUsedPackagesAndClasses(
       SliceResult sliceResult, UnsolvedSymbolEnumeratorResult enumeratorResult) {
     Set<String> usedPackagesAndClasses = new HashSet<>();
