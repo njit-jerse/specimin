@@ -1,7 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -186,7 +186,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    */
   public static UnsolvedMethodAlternates createWithPreservation(
       String name,
-      Map<MemberType, CallableDeclaration<?>> returnTypesToMustPreserveNodes,
+      Map<MemberType, NodeWithParameters<?>> returnTypesToMustPreserveNodes,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       List<Map<MemberType, @Nullable Node>> parameters,
       List<MemberType> exceptions) {
@@ -198,7 +198,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
 
     for (List<Map.Entry<MemberType, @Nullable Node>> parameterList :
         JavaParserUtil.generateAllCombinationsForListOfMaps(parameters)) {
-      for (Map.Entry<MemberType, CallableDeclaration<?>> returnType :
+      for (Map.Entry<MemberType, NodeWithParameters<?>> returnType :
           returnTypesToMustPreserveNodes.entrySet()) {
         List<MemberType> params = parameterList.stream().map(Map.Entry::getKey).toList();
         Set<Node> toPreserve = new HashSet<>();
@@ -209,7 +209,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
           }
         }
 
-        Node returnTypePreserve = returnType.getValue();
+        Node returnTypePreserve = (Node) returnType.getValue();
 
         if (returnTypePreserve != null) {
           toPreserve.add(returnTypePreserve);
@@ -231,7 +231,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
    * @param returnsToPreserveNodes A map of return types to nodes that must be preserved
    */
   public void updateReturnTypesAndMustPreserveNodes(
-      Map<MemberType, CallableDeclaration<?>> returnsToPreserveNodes) {
+      Map<MemberType, NodeWithParameters<?>> returnsToPreserveNodes) {
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
     UnsolvedMethod old = getAlternates().get(0);
@@ -245,8 +245,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
         .removeIf(alternate -> !returnsToPreserveNodes.containsKey(alternate.getReturnType()));
 
     if (getAlternates().isEmpty()) {
-      for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
-          returnsToPreserveNodes.entrySet()) {
+      for (Map.Entry<MemberType, NodeWithParameters<?>> entry : returnsToPreserveNodes.entrySet()) {
         for (List<MemberType> parameterList : parameterLists) {
           UnsolvedMethod method =
               new UnsolvedMethod(
@@ -254,7 +253,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
                   entry.getKey(),
                   parameterList,
                   old.getThrownExceptions(),
-                  Set.of(entry.getValue()));
+                  Set.of((Node) entry.getValue()));
           addAlternate(method);
         }
       }

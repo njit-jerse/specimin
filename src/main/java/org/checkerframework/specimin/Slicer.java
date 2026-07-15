@@ -10,6 +10,10 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
@@ -285,7 +289,7 @@ public class Slicer {
       throw new RuntimeException("Unexpected null value in resolve() call");
     }
 
-    List<Node> toAddToWorklist = typeRuleDependencyMap.getRelevantElements(resolved);
+    List<Node> toAddToWorklist = typeRuleDependencyMap.getRelevantElements(resolved, unresolved);
     worklist.addAll(toAddToWorklist);
 
     // Since resolved declarations may reference another file, we need to add that compilation
@@ -376,6 +380,20 @@ public class Slicer {
         if (!isSet) {
           fieldDeclarator.setInitializer(
               JavaParserUtil.getInitializerRHS(fieldDeclarator.getType().toString()));
+        }
+      } else if (node instanceof RecordDeclaration recordDecl) {
+        String thisInvocationStmt =
+                JavaParserUtil.getDefaultConstructorCall(
+                        recordDecl.getParameters().stream().map(Parameter::getTypeAsString).toList(), true);
+
+        for (ConstructorDeclaration decl : recordDecl.getConstructors()) {
+          if (!slice.contains(decl)) {
+            continue;
+          }
+
+          // Record non-canonical constructors must call the canonical
+          decl.setBody(
+                  new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(thisInvocationStmt))));
         }
       }
 
