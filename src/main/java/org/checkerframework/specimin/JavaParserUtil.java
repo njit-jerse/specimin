@@ -28,6 +28,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
+import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -1978,10 +1979,23 @@ public class JavaParserUtil {
     }
 
     Class<? extends Node> nodeClass = detachedNode.getClass();
+    Node detachedParent = detachedNode.getParentNode().get();
+    NodeWithName<?> detachedParentWithName =
+        detachedParent instanceof NodeWithName<?> ? (NodeWithName<?>) detachedParent : null;
+
     return attached
         .findFirst(
             nodeClass,
-            n -> n.equals(detachedNode) && n.getParentNode().equals(detachedNode.getParentNode()))
+            // These simple heuristics don't guarantee that a similar but incorrect node is not
+            // selected, but they make it very rare.
+            n ->
+                n.getParentNode().isPresent()
+                    && n.getParentNode().get().getClass() == detachedParent.getClass()
+                    && (detachedParentWithName == null
+                        || detachedParentWithName
+                            .getNameAsString()
+                            .equals(((NodeWithName<?>) n.getParentNode().get()).getNameAsString()))
+                    && n.equals(detachedNode))
         .orElse(null);
   }
 
