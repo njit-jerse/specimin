@@ -383,6 +383,8 @@ public class Slicer {
       // 1) either generate a constructor that calls super(...) OR
       // 2) replace a constructor in the slice with a body that calls super(...)
 
+      // TODO: match throws clauses
+
       else if (node instanceof ClassOrInterfaceDeclaration classOrInterfaceDecl
           && !classOrInterfaceDecl.isInterface()
           && classOrInterfaceDecl.getExtendedTypes().size() == 1) {

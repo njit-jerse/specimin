@@ -28,7 +28,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
-import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -1973,8 +1973,10 @@ public class JavaParserUtil {
 
     Class<? extends Node> nodeClass = detachedNode.getClass();
     Node detachedParent = detachedNode.getParentNode().get();
-    NodeWithName<?> detachedParentWithName =
-        detachedParent instanceof NodeWithName<?> ? (NodeWithName<?>) detachedParent : null;
+    NodeWithSimpleName<?> detachedParentWithName =
+        detachedParent instanceof NodeWithSimpleName<?>
+            ? (NodeWithSimpleName<?>) detachedParent
+            : null;
 
     return attached
         .findFirst(
@@ -1987,7 +1989,9 @@ public class JavaParserUtil {
                     && (detachedParentWithName == null
                         || detachedParentWithName
                             .getNameAsString()
-                            .equals(((NodeWithName<?>) n.getParentNode().get()).getNameAsString()))
+                            .equals(
+                                ((NodeWithSimpleName<?>) n.getParentNode().get())
+                                    .getNameAsString()))
                     && n.equals(detachedNode))
         .orElse(null);
   }
@@ -2030,7 +2034,9 @@ public class JavaParserUtil {
     }
 
     // remove the trailing ", "
-    sb.delete(sb.length() - 2, sb.length());
+    if (!paramTypes.isEmpty()) {
+      sb.delete(sb.length() - 2, sb.length());
+    }
 
     sb.append(");");
     return sb.toString();
