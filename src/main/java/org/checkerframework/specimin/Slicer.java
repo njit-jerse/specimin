@@ -26,7 +26,6 @@ import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
-import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -318,14 +317,7 @@ public class Slicer {
     List<TypeDeclaration<?>> typesCopy = new ArrayList<>(cu.getTypes());
     for (TypeDeclaration<?> typeDecl : typesCopy) {
       removeNonSliceNodes(typeDecl);
-
-      if (typeDecl.getFullyQualifiedName().isPresent()) {
-        Object resolved = Resolver.resolveGuaranteeNonNull((Resolvable<?>) typeDecl);
-
-        if (resolved instanceof ResolvedReferenceTypeDeclaration resolvedDecl) {
-          typeSolvers.overrideCache(typeDecl.getFullyQualifiedName().get(), resolvedDecl);
-        }
-      }
+      typeSolvers.overrideCache(typeDecl);
     }
   }
 
