@@ -7,7 +7,6 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -28,6 +27,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithCondition;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.nodeTypes.NodeWithType;
@@ -1426,7 +1426,7 @@ public class FullyQualifiedNameGenerator {
 
     Node attached = JavaParserUtil.tryFindAttachedNode(resolved, fqnToCompilationUnits);
     if (attached != null) {
-      CallableDeclaration<?> callableDecl = (CallableDeclaration<?>) attached;
+      NodeWithParameters<?> callableDecl = (NodeWithParameters<?>) attached;
 
       for (Parameter param : callableDecl.getParameters()) {
         FullyQualifiedNameSet nonWildcard = getFQNsFromType(param.getType());
@@ -1561,12 +1561,6 @@ public class FullyQualifiedNameGenerator {
     Object resolved = Resolver.resolve((Resolvable<?>) expr);
 
     if (resolved == null) {
-      if (expr instanceof NodeWithArguments<?> withArguments) {
-        resolved =
-            JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                withArguments, fqnToCompilationUnits);
-      }
-
       @Nullable FullyQualifiedNameSet findableDeclarationTypeFQNs =
           getFQNsForExpressionInAnonymousClass(expr);
       if (findableDeclarationTypeFQNs != null) {
@@ -1724,7 +1718,13 @@ public class FullyQualifiedNameGenerator {
 
               return Set.of(getFQNsForResolvedType(paramType));
             } catch (UnsolvedSymbolException ex) {
-              // getType() may throw an UnsolvedSymbolException
+              NodeWithParameters<?> withParams =
+                  (NodeWithParameters<?>)
+                      JavaParserUtil.tryFindAttachedNode(resolvedMethodLike, fqnToCompilationUnits);
+
+              if (withParams != null) {
+                return Set.of(getFQNsFromType(withParams.getParameter(param).getType()));
+              }
             }
           }
 
@@ -1776,19 +1776,12 @@ public class FullyQualifiedNameGenerator {
             }
           }
 
-          CallableDeclaration<?> singleCallable =
-              JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                  withArguments, fqnToCompilationUnits);
-          if (singleCallable != null) {
-            return Set.of(getFQNsFromType(singleCallable.getParameter(param).getType()));
-          }
-
-          List<? extends CallableDeclaration<?>> allPotentialCallables =
+          List<? extends NodeWithParameters<?>> allPotentialCallables =
               JavaParserUtil.tryResolveNodeWithUnresolvableArguments(
                   withArguments, fqnToCompilationUnits);
           Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
 
-          for (CallableDeclaration<?> callable : allPotentialCallables) {
+          for (NodeWithParameters<?> callable : allPotentialCallables) {
             result.add(getFQNsFromType(callable.getParameter(param).getType()));
           }
 

@@ -28,7 +28,10 @@ import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
 import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
+import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
+import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
@@ -39,7 +42,6 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.Resolvable;
-import com.github.javaparser.resolution.TypeSolver;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
@@ -96,19 +98,12 @@ public class JavaParserUtil {
   }
 
   /**
-   * Set this TypeSolver instance to be used by the JavaParserFacade, so we don't have to find it
-   * through reflection in JavaParserSymbolSolver. This field is initialized once in SpeciminRunner.
-   * Note that by the time you evaluate the value of this field, it should already be non-null.
-   */
-  private static @MonotonicNonNull TypeSolver typeSolver = null;
-
-  /**
-   * Set this MemoryTypeSolver instance to be used by {@link #getResolvablePlaceholderType}, since
-   * {@code TypeSolver} does not expose child type solvers. This field is initialized once in
+   * Set this SpeciminTypeSolvers instance to be used by this class, so we don't have to find type
+   * solvers through reflection in JavaParserSymbolSolver. This field is initialized once in
    * SpeciminRunner. Note that by the time you evaluate the value of this field, it should already
    * be non-null.
    */
-  private static @MonotonicNonNull MemoryTypeSolver memoryTypeSolver = null;
+  private static @MonotonicNonNull SpeciminTypeSolvers typeSolvers = null;
 
   /**
    * Keeps track of the placeholder types that have been generated and registered with the type
@@ -117,16 +112,13 @@ public class JavaParserUtil {
   private static final Set<String> generatedResolvedPlaceholderTypes = new HashSet<>();
 
   /**
-   * Set the TypeSolver instances to be used.
+   * Set the SpeciminTypeSolvers instance to be used.
    *
-   * @param typeSolver the TypeSolver instance to set
-   * @param memoryTypeSolver the MemoryTypeSolver instance to set
+   * @param typeSolvers The SpeciminTypeSolvers instance holding all type solvers.
    */
-  @EnsuresNonNull("JavaParserUtil.typeSolver")
-  @EnsuresNonNull("JavaParserUtil.memoryTypeSolver")
-  public static void setTypeSolvers(TypeSolver typeSolver, MemoryTypeSolver memoryTypeSolver) {
-    JavaParserUtil.typeSolver = typeSolver;
-    JavaParserUtil.memoryTypeSolver = memoryTypeSolver;
+  @EnsuresNonNull("JavaParserUtil.typeSolvers")
+  public static void setTypeSolvers(SpeciminTypeSolvers typeSolvers) {
+    JavaParserUtil.typeSolvers = typeSolvers;
 
     // If we reset memoryTypeSolver, we should clear our cache since these old types
     // are not registered with the new MemoryTypeSolver. This is mainly an issue with
@@ -140,25 +132,12 @@ public class JavaParserUtil {
    *
    * @return The type solver
    */
-  public static TypeSolver getTypeSolver() {
-    if (typeSolver == null) {
+  public static SpeciminTypeSolvers getTypeSolvers() {
+    if (typeSolvers == null) {
       throw new RuntimeException(
-          "TypeSolver is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
+          "typeSolvers is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
     }
-    return typeSolver;
-  }
-
-  /**
-   * Gets the memory type solver, and ensures it is non-null.
-   *
-   * @return The type solver
-   */
-  public static MemoryTypeSolver getMemoryTypeSolver() {
-    if (memoryTypeSolver == null) {
-      throw new RuntimeException(
-          "MemoryTypeSolver is not set. Make sure to call setTypeSolvers() in SpeciminRunner.");
-    }
-    return memoryTypeSolver;
+    return typeSolvers;
   }
 
   /**
@@ -488,7 +467,7 @@ public class JavaParserUtil {
       return getTypeFromResolvedValueDeclaration(valueDecl, fqnToCompilationUnits);
     } else if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDecl) {
       if (resolvedMethodDecl.toAst().isPresent()) {
-        MethodDeclaration methodDecl = (MethodDeclaration) resolvedMethodDecl.toAst().get();
+        NodeWithType<?, ?> methodDecl = (NodeWithType<?, ?>) resolvedMethodDecl.toAst().get();
         return methodDecl.getType();
       }
     }
@@ -1040,7 +1019,7 @@ public class JavaParserUtil {
     // Add to java.lang so we don't need to worry about imports; this is a bit hacky but it works
     CompilationUnit dummy =
         StaticJavaParser.parse("package java.lang; public class " + typeName + " {}");
-    getMemoryTypeSolver().addType("java.lang." + typeName, dummy);
+    getTypeSolvers().getMemoryTypeSolver().addType("java.lang." + typeName, dummy);
 
     generatedResolvedPlaceholderTypes.add(typeName);
     return StaticJavaParser.parseClassOrInterfaceType(typeName);
@@ -1224,10 +1203,10 @@ public class JavaParserUtil {
    * @param withArgs The node representing a method call, constructor call, or enum constant
    *     declaration with arguments
    * @param fqnsToCompilationUnits The map of fully qualified names to their compilation units
-   * @return A list of matching {@link CallableDeclaration} instances, or an empty list if none are
+   * @return A list of matching {@link NodeWithParameters} instances, or an empty list if none are
    *     found
    */
-  public static List<? extends CallableDeclaration<?>> tryResolveNodeWithUnresolvableArguments(
+  public static List<? extends NodeWithParameters<?>> tryResolveNodeWithUnresolvableArguments(
       NodeWithArguments<?> withArgs, Map<String, CompilationUnit> fqnsToCompilationUnits) {
     if (withArgs instanceof MethodCallExpr parentMethodCall) {
       return tryResolveMethodCallWithUnresolvableArguments(
@@ -1256,10 +1235,10 @@ public class JavaParserUtil {
    * @param fqnsToCompilationUnits The map of fully qualified names to their compilation units
    * @return A resolvable callable if it can be found, null otherwise
    */
-  public static @Nullable CallableDeclaration<?>
+  public static @Nullable NodeWithParameters<?>
       tryFindSingleCallableForNodeWithUnresolvableArguments(
           NodeWithArguments<?> node, Map<String, CompilationUnit> fqnsToCompilationUnits) {
-    List<? extends CallableDeclaration<?>> callables =
+    List<? extends NodeWithParameters<?>> callables =
         tryResolveNodeWithUnresolvableArguments(node, fqnsToCompilationUnits);
     if (callables.isEmpty()) {
       return null;
@@ -1281,12 +1260,12 @@ public class JavaParserUtil {
 
     // If there is only one callable where the rest of the parameters match and a few others that
     // are null, return this maybe best match
-    CallableDeclaration<?> maybeBestMatch = null;
+    NodeWithParameters<?> maybeBestMatch = null;
     // If there are multiple callables, find the best match, i.e., FQNs = FQNs and simple names =
     // simple names
     // If there is one that matches exactly, return it; others that match it directly are simply
     // overrides
-    for (CallableDeclaration<?> callable : callables) {
+    for (NodeWithParameters<?> callable : callables) {
       boolean isAMatch = true;
       int nulls = 0;
       for (int i = 0; i < callable.getParameters().size(); i++) {
@@ -1333,13 +1312,15 @@ public class JavaParserUtil {
   /**
    * Given a constructor call, returns all possible constructors that match the arity and known
    * types of the arguments. This returns an empty list if no matching constructors were found or if
-   * the declaring type could not be solved.
+   * the declaring type could not be solved. Most list elements will be of type
+   * ConstructorDeclaration, but may be a RecordDeclaration if the constructor call is a potential
+   * match for a record's canonical constructor.
    *
    * @param constructorCall The constructor call expression
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units
    * @return All possible constructor declarations
    */
-  private static List<ConstructorDeclaration> tryResolveConstructorCallWithUnresolvableArguments(
+  private static List<NodeWithParameters<?>> tryResolveConstructorCallWithUnresolvableArguments(
       ObjectCreationExpr constructorCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
     List<@Nullable ResolvedType> parameterTypes =
         getArgumentTypesAsResolved(constructorCall.getArguments());
@@ -1358,10 +1339,19 @@ public class JavaParserUtil {
       return List.of();
     }
 
-    List<ConstructorDeclaration> candidates = new ArrayList<>();
+    List<NodeWithParameters<?>> candidates = new ArrayList<>();
+    if (enclosingClass.isRecordDeclaration()) {
+      if (isNodeWithParametersACandidate(enclosingClass.asRecordDeclaration(), parameterTypes)) {
+        candidates.add(enclosingClass.asRecordDeclaration());
+      }
+    }
+
+    List<ConstructorDeclaration> constructors = new ArrayList<>();
 
     addAllMatchingCallablesToList(
-        enclosingClass, parameterTypes, candidates, null, ConstructorDeclaration.class);
+        enclosingClass, parameterTypes, constructors, null, ConstructorDeclaration.class);
+
+    candidates.addAll(constructors);
 
     return candidates;
   }
@@ -1518,15 +1508,19 @@ public class JavaParserUtil {
     }
 
     if (enclosingAnonymousClass != null) {
-      addAllMatchingCallablesToListImpl(
+      for (MethodDeclaration method :
           enclosingAnonymousClass.getAnonymousClassBody().get().stream()
-              .filter(BodyDeclaration::isCallableDeclaration)
-              .map(c -> (CallableDeclaration<?>) c)
-              .toList(),
-          parameterTypes,
-          candidates,
-          methodCall.getNameAsString(),
-          MethodDeclaration.class);
+              .filter(BodyDeclaration::isMethodDeclaration)
+              .map(BodyDeclaration::asMethodDeclaration)
+              .toList()) {
+        if (!method.getNameAsString().equals(methodCall.getNameAsString())) {
+          continue;
+        }
+
+        if (isNodeWithParametersACandidate(method, parameterTypes)) {
+          candidates.add(method);
+        }
+      }
     }
 
     return candidates;
@@ -1664,95 +1658,86 @@ public class JavaParserUtil {
       List<T> result,
       @Nullable String methodName,
       Class<T> callableType) {
-    List<? extends CallableDeclaration<?>> callables;
+    List<? extends NodeWithParameters<?>> callables;
     if (callableType == ConstructorDeclaration.class) {
       callables = typeDecl.getConstructors();
     } else if (callableType == MethodDeclaration.class) {
-      callables = typeDecl.getMethods();
+      callables =
+          typeDecl.getMethods().stream()
+              .filter(m -> m.getNameAsString().equals(methodName))
+              .collect(Collectors.toList());
     } else {
       // Impossible: see
       // https://www.javadoc.io/doc/com.github.javaparser/javaparser-core/latest/com/github/javaparser/ast/body/CallableDeclaration.html
       throw new IllegalArgumentException("Impossible CallableDeclaration type.");
     }
 
-    addAllMatchingCallablesToListImpl(callables, parameterTypes, result, methodName, callableType);
+    for (NodeWithParameters<?> nodeWithParameters : callables) {
+      if (isNodeWithParametersACandidate(nodeWithParameters, parameterTypes)) {
+        result.add(callableType.cast(nodeWithParameters));
+      }
+    }
   }
 
   /**
-   * Actual logic for {@link #addAllMatchingCallablesToList}.
+   * Helper function for {@link #addAllMatchingCallablesToList(TypeDeclaration, List, List, String,
+   * Class)}. Determines whether a given NodeWithParameters is a potential candidate for a given set
+   * of parameter types. That list of parameter types should either contain ResolvedTypes or nulls,
+   * depending on whether that type was originally resolvable or not.
    *
-   * @param callables The list of callables to check against
-   * @param parameterTypes The resolved parameter types. Fully qualified names if resolvable, simple
-   *     names if not, and null if no type could be found at all.
-   * @param result The list to append to
-   * @param methodName The method name, if the callable is a method (it is ignored otherwise)
-   * @param callableType The type of callable (i.e., ConstructorDeclaration or MethodDeclaration)
+   * @param candidate The potential candidate to check
+   * @param requiredParamTypes The required parameter types
+   * @return True if it is a candidate, false otherwise
    */
-  private static <T extends CallableDeclaration<?>> void addAllMatchingCallablesToListImpl(
-      List<? extends CallableDeclaration<?>> callables,
-      List<@Nullable ResolvedType> parameterTypes,
-      List<T> result,
-      @Nullable String methodName,
-      Class<T> callableType) {
-    for (CallableDeclaration<?> callable : callables) {
-      if (callable.getParameters().size() != parameterTypes.size()) {
-        continue;
-      }
-      if (callableType == MethodDeclaration.class
-          && !callable.getNameAsString().equals(methodName)) {
-        continue;
-      }
+  private static boolean isNodeWithParametersACandidate(
+      NodeWithParameters<?> candidate, List<@Nullable ResolvedType> requiredParamTypes) {
+    if (candidate.getParameters().size() != requiredParamTypes.size()) {
+      return false;
+    }
 
-      boolean isAMatch = true;
+    for (int i = 0; i < candidate.getParameters().size(); i++) {
+      ResolvedType typeInCall = requiredParamTypes.get(i);
 
-      for (int i = 0; i < callable.getParameters().size(); i++) {
-        ResolvedType typeInCall = parameterTypes.get(i);
+      ResolvedParameterDeclaration resolvedParam = Resolver.resolve(candidate.getParameter(i));
+      boolean isParamTypeUnsolved = resolvedParam == null;
 
-        ResolvedParameterDeclaration resolvedParam = Resolver.resolve(callable.getParameter(i));
-        boolean isParamTypeUnsolved = resolvedParam == null;
+      if (resolvedParam != null) {
+        ResolvedType resolvedParameterType = null;
+        try {
+          resolvedParameterType = resolvedParam.getType();
+        } catch (UnsolvedSymbolException ex) {
+          isParamTypeUnsolved = true;
+          // getType() may throw an UnsolvedSymbolException
+        }
 
-        if (resolvedParam != null) {
-          ResolvedType resolvedParameterType = null;
-          try {
-            resolvedParameterType = resolvedParam.getType();
-          } catch (UnsolvedSymbolException ex) {
-            isParamTypeUnsolved = true;
-            // getType() may throw an UnsolvedSymbolException
-          }
+        if (typeInCall == null || isParamTypeUnsolved || resolvedParameterType == null) {
+          continue;
+        }
 
-          if (typeInCall == null || isParamTypeUnsolved || resolvedParameterType == null) {
+        if (!resolvedParameterType.isAssignableBy(typeInCall)) {
+          // If either is a type variable and the other is a reference type, it is likely valid
+          // Note that isAssignableBy will return false in those cases
+          if (typeInCall.isTypeVariable() && resolvedParameterType.isReference()) {
             continue;
           }
-
-          if (!resolvedParameterType.isAssignableBy(typeInCall)) {
-            // If either is a type variable and the other is a reference type, it is likely valid
-            // Note that isAssignableBy will return false in those cases
-            if (typeInCall.isTypeVariable() && resolvedParameterType.isReference()) {
-              continue;
-            }
-            if (resolvedParameterType.isTypeVariable() && typeInCall.isReference()) {
-              continue;
-            }
-            // JavaParser can't handle constraint types well. This isn't perfect (i.e., doesn't
-            // properly match bounds), but it should work for most cases.
-            if (typeInCall.isConstraint() && resolvedParameterType.isReference()) {
-              continue;
-            }
-            isAMatch = false;
-            break;
+          if (resolvedParameterType.isTypeVariable() && typeInCall.isReference()) {
+            continue;
           }
-        }
-
-        if (isParamTypeUnsolved && typeInCall != null) {
-          isAMatch = false;
-          break;
+          // JavaParser can't handle constraint types well. This isn't perfect (i.e., doesn't
+          // properly match bounds), but it should work for most cases.
+          if (typeInCall.isConstraint() && resolvedParameterType.isReference()) {
+            continue;
+          }
+          return false;
         }
       }
 
-      if (isAMatch) {
-        result.add(callableType.cast(callable));
+      if (isParamTypeUnsolved && typeInCall != null) {
+        return false;
       }
     }
+
+    return true;
   }
 
   /**
@@ -1995,7 +1980,37 @@ public class JavaParserUtil {
     }
 
     Class<? extends Node> nodeClass = detachedNode.getClass();
-    return attached.findFirst(nodeClass, n -> n.equals(detachedNode)).get();
+    Node detachedParent = detachedNode.getParentNode().get();
+    NodeWithSimpleName<?> detachedParentWithName =
+        detachedParent instanceof NodeWithSimpleName<?>
+            ? (NodeWithSimpleName<?>) detachedParent
+            : null;
+
+    return attached
+        .findFirst(
+            nodeClass,
+            // These simple heuristics don't guarantee that a similar but incorrect node is not
+            // selected, but they make it very rare.
+
+            // For example, two identical variable declarators in the same class in different
+            // blocks, i.e.:
+            // if (...) { int x; } ... if (...) { int x; }
+            // Trying to get the node for the second `int x` may result in the node for the first
+            // `int x`.
+
+            // This is mainly an issue for small nodes; for larger nodes, like methods or types,
+            // these heuristics should always work.
+            n ->
+                n.getParentNode().isPresent()
+                    && n.getParentNode().get().getClass() == detachedParent.getClass()
+                    && (detachedParentWithName == null
+                        || detachedParentWithName
+                            .getNameAsString()
+                            .equals(
+                                ((NodeWithSimpleName<?>) n.getParentNode().get())
+                                    .getNameAsString()))
+                    && n.equals(detachedNode))
+        .orElse(null);
   }
 
   /**
@@ -2016,6 +2031,34 @@ public class JavaParserUtil {
       case "boolean" -> "false";
       default -> "null";
     };
+  }
+
+  /**
+   * Given a list of parameter types, return a super/this(...) call with the default values of those
+   * types.
+   *
+   * @param paramTypes The parameter types*
+   * @param isThis If true, then {@code this}; else, {@code super}
+   * @return The super/this(...) call; i.e., super(0, null); or this(0, null);
+   */
+  public static String getDefaultConstructorCall(List<String> paramTypes, boolean isThis) {
+    StringBuilder sb = new StringBuilder();
+
+    sb.append(isThis ? "this" : "super");
+    sb.append("(");
+
+    for (String paramType : paramTypes) {
+      sb.append(getInitializerRHS(paramType));
+      sb.append(", ");
+    }
+
+    // remove the trailing ", "
+    if (!paramTypes.isEmpty()) {
+      sb.delete(sb.length() - 2, sb.length());
+    }
+
+    sb.append(");");
+    return sb.toString();
   }
 
   /**
@@ -2216,7 +2259,7 @@ public class JavaParserUtil {
       try {
         // Must use JavaParserFacade instead of .resolve() here, since we need to get the
         // type parameters map: https://github.com/javaparser/javaparser/issues/2135
-        JavaParserFacade parserFacade = JavaParserFacade.get(getTypeSolver());
+        JavaParserFacade parserFacade = JavaParserFacade.get(getTypeSolvers().getTypeSolver());
         methodUsage = parserFacade.solveMethodAsUsage(methodCallParent);
         method = methodUsage.getDeclaration();
 
@@ -2595,7 +2638,7 @@ public class JavaParserUtil {
       }
 
       try {
-        combined.add(getTypeSolver().solveType(fqn));
+        combined.add(getTypeSolvers().getTypeSolver().solveType(fqn));
       } catch (UnsolvedSymbolException e) {
         // Type param, likely
       }

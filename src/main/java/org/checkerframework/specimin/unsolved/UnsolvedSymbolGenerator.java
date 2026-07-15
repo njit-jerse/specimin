@@ -4,8 +4,8 @@ import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -33,7 +33,9 @@ import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.TypeExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -66,6 +68,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -629,8 +632,8 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    Map<MemberType, CallableDeclaration<?>> typeToMustPreserveNode =
-        getTypeToCallableDeclarationFromArgument(field);
+    Map<MemberType, NodeWithParameters<?>> typeToMustPreserveNode =
+        getTypeToNodeWithParametersFromArgument(field);
 
     UnsolvedSymbolAlternates<?> alreadyGenerated = findExistingAndUpdateFQNs(potentialFQNs);
 
@@ -761,8 +764,8 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    Map<MemberType, CallableDeclaration<?>> typeToMustPreserveNode =
-        getTypeToCallableDeclarationFromArgument(nameExpr);
+    Map<MemberType, NodeWithParameters<?>> typeToMustPreserveNode =
+        getTypeToNodeWithParametersFromArgument(nameExpr);
 
     UnsolvedSymbolAlternates<?> generatedField = findExistingAndUpdateFQNs(fieldFQNs);
 
@@ -823,24 +826,13 @@ public class UnsolvedSymbolGenerator {
   private void handleMethodCallExpr(
       MethodCallExpr methodCall, List<UnsolvedSymbolAlternates<?>> result) {
     ResolvedMethodDeclaration resolvedMethodDeclaration = Resolver.resolve(methodCall);
-    if (resolvedMethodDeclaration != null) {
-      if (JavaParserUtil.tryResolveNodeIfInAnonymousClass(methodCall) != null) {
-        return;
-      }
-
-      if (JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-              methodCall, fqnsToCompilationUnits)
-          != null) {
-        return;
-      }
-    }
 
     if (resolvedMethodDeclaration != null) {
       Node node =
           JavaParserUtil.tryFindAttachedNode(resolvedMethodDeclaration, fqnsToCompilationUnits);
 
       if (node != null) {
-        MethodDeclaration toAst = (MethodDeclaration) node;
+        NodeWithType<?, ?> toAst = (NodeWithType<?, ?>) node;
 
         inferContextImpl(toAst.getType(), result);
       }
@@ -848,7 +840,7 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
-    List<? extends CallableDeclaration<?>> definitions =
+    List<? extends NodeWithParameters<?>> definitions =
         JavaParserUtil.tryResolveNodeWithUnresolvableArguments(methodCall, fqnsToCompilationUnits);
 
     if (!definitions.isEmpty()
@@ -861,7 +853,7 @@ public class UnsolvedSymbolGenerator {
       // type is not. In this case, the type of the parameters are unsolved, and should be preserved
       // if the parameter type ever ends up becoming used (which it will, after addInformation is
       // done).
-      for (CallableDeclaration<?> callable : definitions) {
+      for (NodeWithParameters<?> callable : definitions) {
         for (Parameter param : callable.getParameters()) {
           List<UnsolvedSymbolAlternates<?>> generated = inferContext(param.getType());
           // Find the generated param type, if any
@@ -869,7 +861,7 @@ public class UnsolvedSymbolGenerator {
             if (symbol instanceof UnsolvedClassOrInterfaceAlternates type) {
               if (type.getClassName().equals(JavaParserUtil.erase(param.getTypeAsString()))) {
                 for (UnsolvedClassOrInterface alt : type.getAlternates()) {
-                  alt.addMustPreserveNode(callable);
+                  alt.addMustPreserveNode((Node) callable);
                 }
                 break;
               }
@@ -999,8 +991,8 @@ public class UnsolvedSymbolGenerator {
     UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
 
     // TODO: see if this is an issue if two different methods have the same parameter type
-    Map<MemberType, CallableDeclaration<?>> returnTypeToMustPreserveNode =
-        getTypeToCallableDeclarationFromArgument(methodCall);
+    Map<MemberType, NodeWithParameters<?>> returnTypeToMustPreserveNode =
+        getTypeToNodeWithParametersFromArgument(methodCall);
 
     List<Map<MemberType, @Nullable Node>> parametersToMustPreserve =
         generateParameterToMustPreserveMap(
@@ -1576,8 +1568,8 @@ public class UnsolvedSymbolGenerator {
             JavaParserUtil.getMethodDeclarationsFromMethodRef(argument.asMethodReferenceExpr());
 
         for (ResolvedMethodLikeDeclaration method : resolved) {
-          CallableDeclaration<?> ast =
-              (CallableDeclaration<?>)
+          NodeWithParameters<?> ast =
+              (NodeWithParameters<?>)
                   JavaParserUtil.tryFindAttachedNode(method, fqnsToCompilationUnits);
 
           if (ast == null) {
@@ -1594,7 +1586,7 @@ public class UnsolvedSymbolGenerator {
             potentialParameterType = modifiedFQNs.get(potentialParameterType);
           }
 
-          potentialParameterToMustPreserveNode.put(potentialParameterType, ast);
+          potentialParameterToMustPreserveNode.put(potentialParameterType, (Node) ast);
         }
       }
 
@@ -2228,24 +2220,24 @@ public class UnsolvedSymbolGenerator {
 
   /**
    * Given a potential argument expression, this method returns a map of MemberType to
-   * CallableDeclaration. For example, if the argument is a method call expression, foo(), as an
+   * NodeWithParameters. For example, if the argument is a method call expression, foo(), as an
    * argument of another method call, bar(foo()), this method will return a map of potential return
-   * types of foo() (based on the definitions of bar with an arity of 1) to the CallableDeclaration
+   * types of foo() (based on the definitions of bar with an arity of 1) to the NodeWithParameters
    * of bar. This method also works if {@code argument} is a field expression, or if the parent node
    * is a constructor/explicit constructor invocation.
    *
    * @param argument The argument expression to analyze
-   * @return A map of potential return types to their corresponding CallableDeclaration. Returns an
+   * @return A map of potential return types to their corresponding NodeWithParameters. Returns an
    *     empty map if no potential return types are found, or if the argument is not part of a
    *     solvable method/constructor call.
    */
-  private Map<MemberType, CallableDeclaration<?>> getTypeToCallableDeclarationFromArgument(
+  private Map<MemberType, NodeWithParameters<?>> getTypeToNodeWithParametersFromArgument(
       Expression argument) {
     // If this expression is an argument of a solvable method call, we have multiple potential field
     // types to choose from, based on each definition
     Node parent = argument.getParentNode().get();
     int paramNum = -1;
-    Map<MemberType, CallableDeclaration<?>> returnTypeToMustPreserveNode = new LinkedHashMap<>();
+    Map<MemberType, NodeWithParameters<?>> returnTypeToMustPreserveNode = new LinkedHashMap<>();
 
     if (!(parent instanceof NodeWithArguments<?> withArgs)) {
       return returnTypeToMustPreserveNode;
@@ -2264,10 +2256,10 @@ public class UnsolvedSymbolGenerator {
       return returnTypeToMustPreserveNode;
     }
 
-    List<? extends CallableDeclaration<?>> parentCallableDeclarations =
+    List<? extends NodeWithParameters<?>> parentNodeWithParams =
         JavaParserUtil.tryResolveNodeWithUnresolvableArguments(withArgs, fqnsToCompilationUnits);
 
-    for (CallableDeclaration<?> callable : parentCallableDeclarations) {
+    for (NodeWithParameters<?> callable : parentNodeWithParams) {
       Parameter param = callable.getParameter(paramNum);
 
       MemberType memberType =
@@ -2307,11 +2299,12 @@ public class UnsolvedSymbolGenerator {
    * this method AFTER all unsolved symbols are generated.
    *
    * @param node The node to gather more information from
+   * @param slice The slice, for reference.
    * @return An object of type {@link UnsolvedGenerationResult}, usually empty, but the close()
    *     method(s) if first time confirmation of an AutoCloseable, or if the return type is updated
    *     in a method call expression.
    */
-  public UnsolvedGenerationResult addInformation(Node node) {
+  public UnsolvedGenerationResult addInformation(Node node, Set<Node> slice) {
     List<UnsolvedSymbolAlternates<?>> toAdd = new ArrayList<>();
     List<UnsolvedSymbolAlternates<?>> toRemove = new ArrayList<>();
 
@@ -2357,6 +2350,53 @@ public class UnsolvedSymbolGenerator {
           // Sealedness best effort should be final unless we have evidence against it
           syntheticType.addSealedness(Sealedness.FINAL);
           syntheticType.addSealedness(Sealedness.NON_SEALED);
+
+          List<String> parameterTypes = null;
+          for (ConstructorDeclaration constructor : decl.getConstructors()) {
+            if (!slice.contains(constructor)) {
+              continue;
+            }
+
+            if (parameterTypes != null
+                && parameterTypes.size() <= constructor.getParameters().size()) {
+              continue;
+            }
+
+            parameterTypes =
+                constructor.getParameters().stream().map(p -> p.getType().toString()).toList();
+          }
+
+          if (parameterTypes != null && !parameterTypes.isEmpty()) {
+            String superCall = JavaParserUtil.getDefaultConstructorCall(parameterTypes, false);
+
+            boolean foundConstructor = false;
+
+            for (UnsolvedSymbolAlternates<?> alternate : generatedSymbols.values()) {
+              if (!(alternate instanceof UnsolvedMethodAlternates method)
+                  || !alternate.getAlternateDeclaringTypes().contains(syntheticType)) {
+                continue;
+              }
+
+              if (!Objects.equals(method.getName(), syntheticType.getClassName())) {
+                continue;
+              }
+
+              foundConstructor = true;
+              method.setContent(superCall);
+            }
+
+            if (!foundConstructor) {
+              UnsolvedMethodAlternates constructor =
+                  UnsolvedMethodAlternates.create(
+                      syntheticType.getClassName(),
+                      Set.of(new SolvedMemberType("")),
+                      List.of(syntheticType),
+                      List.of());
+
+              constructor.setContent(superCall);
+              toAdd.add(constructor);
+            }
+          }
         }
       }
     } else if (node instanceof EnumDeclaration decl) {
@@ -2776,8 +2816,8 @@ public class UnsolvedSymbolGenerator {
       }
 
       if (resolved != null) {
-        CallableDeclaration<?> asAst =
-            (CallableDeclaration<?>)
+        NodeWithParameters<?> asAst =
+            (NodeWithParameters<?>)
                 JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
 
         for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
@@ -2837,7 +2877,7 @@ public class UnsolvedSymbolGenerator {
           handleLHSAndRHSRelationship(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
         }
       } else {
-        List<? extends CallableDeclaration<?>> withUnresolvableArgs =
+        List<? extends NodeWithParameters<?>> withUnresolvableArgs =
             JavaParserUtil.tryResolveNodeWithUnresolvableArguments(
                 nodeWithArgs, fqnsToCompilationUnits);
 
@@ -3147,30 +3187,14 @@ public class UnsolvedSymbolGenerator {
   private void matchMethodReturnTypesToKnownChildClasses(MethodCallExpr methodCall) {
     Collection<Set<String>> potentialScopeFQNs = null;
     ResolvedMethodDeclaration resolvedMethod = Resolver.resolve(methodCall);
-    MethodDeclaration ast = null;
+    NodeWithType<?, ?> ast = null;
 
     if (resolvedMethod == null) {
-      ast =
-          (MethodDeclaration)
-              JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                  methodCall, fqnsToCompilationUnits);
-
-      if (ast == null) {
-        resolvedMethod =
-            (ResolvedMethodDeclaration)
-                JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
-                    methodCall);
-
-        if (resolvedMethod == null) {
-          potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
-        }
-      }
-    }
-
-    if (resolvedMethod != null) {
+      potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
+    } else {
       // Potential scope is all unsolvable ancestors
       ast =
-          (MethodDeclaration)
+          (NodeWithType<?, ?>)
               JavaParserUtil.tryFindAttachedNode(resolvedMethod, fqnsToCompilationUnits);
       if (ast == null) {
         return;
@@ -3180,7 +3204,7 @@ public class UnsolvedSymbolGenerator {
     if (ast != null) {
       List<ClassOrInterfaceType> unsolvableAncestors =
           JavaParserUtil.getAllUnsolvableAncestors(
-              JavaParserUtil.getEnclosingClassLike(ast), fqnsToCompilationUnits);
+              JavaParserUtil.getEnclosingClassLike((Node) ast), fqnsToCompilationUnits);
 
       if (unsolvableAncestors.isEmpty()) {
         return;
@@ -3825,8 +3849,8 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Once {@link #addInformation(Node)} is done, call this method to make sure all generated symbols
-   * are consistent with their super type relationships.
+   * Once {@link #addInformation} is done, call this method to make sure all generated symbols are
+   * consistent with their super type relationships.
    */
   public void generateAllAlternatesBasedOnSuperTypeRelationships() {
     // This method is called after all unsolved symbols are generated and all information is added
@@ -3957,12 +3981,12 @@ public class UnsolvedSymbolGenerator {
 
   /**
    * Returns whether a node needs to undergo post-processing or not; i.e., if {@link
-   * #addInformation(Node)} needs to be called on it. This is used in the initial worklist when some
+   * #addInformation} needs to be called on it. This is used in the initial worklist when some
    * unsolved symbols may not be generated yet to defer additional information processing to a time
    * when all unsolved symbols are generated.
    *
    * @param node The node to query about
-   * @return Whether {@link #addInformation(Node)} accepts this node
+   * @return Whether {@link #addInformation} accepts this node
    */
   public boolean needToPostProcess(Node node) {
     return node instanceof ClassOrInterfaceDeclaration
