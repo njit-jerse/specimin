@@ -1971,6 +1971,24 @@ public class JavaParserUtil {
     }
 
     Class<? extends Node> nodeClass = detachedNode.getClass();
+    Node detachedParent = detachedNode.getParentNode().get();
+    NodeWithName<?> detachedParentWithName =
+        detachedParent instanceof NodeWithName<?> ? (NodeWithName<?>) detachedParent : null;
+
+    return attached
+        .findFirst(
+            nodeClass,
+            // These simple heuristics don't guarantee that a similar but incorrect node is not
+            // selected, but they make it very rare.
+            n ->
+                n.getParentNode().isPresent()
+                    && n.getParentNode().get().getClass() == detachedParent.getClass()
+                    && (detachedParentWithName == null
+                        || detachedParentWithName
+                            .getNameAsString()
+                            .equals(((NodeWithName<?>) n.getParentNode().get()).getNameAsString()))
+                    && n.equals(detachedNode))
+        .orElse(null);
     return attached.findFirst(nodeClass, n -> n.equals(detachedNode)).orElse(null);
   }
 
