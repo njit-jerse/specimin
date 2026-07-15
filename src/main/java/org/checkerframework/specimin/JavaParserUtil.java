@@ -1983,6 +1983,15 @@ public class JavaParserUtil {
             nodeClass,
             // These simple heuristics don't guarantee that a similar but incorrect node is not
             // selected, but they make it very rare.
+
+            // For example, two identical variable declarators in the same class in different
+            // blocks, i.e.:
+            // if (...) { int x; } ... if (...) { int x; }
+            // Trying to get the node for the second `int x` may result in the node for the first
+            // `int x`.
+
+            // This is mainly an issue for small nodes; for larger nodes, like methods or types,
+            // these heuristics should always work.
             n ->
                 n.getParentNode().isPresent()
                     && n.getParentNode().get().getClass() == detachedParent.getClass()

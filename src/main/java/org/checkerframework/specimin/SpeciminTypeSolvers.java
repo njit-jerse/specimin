@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.cache.Cache;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.model.SymbolReference;
@@ -72,28 +73,27 @@ public class SpeciminTypeSolvers {
    * it simply reparses the original source file, which does not contain any AST changes made during
    * Specimin's run.
    *
-   * @param fqn The type to clear from the cache
-   * @param resolvedReferenceTypeDeclaration The declaration to override in the cache. MUST BE THE
-   *     OBJECT RETURNED FROM {@link TypeDeclaration#resolve()}; OTHERWISE, NOTHING WILL BE CHANGED.
+   * @param updatedDecl The declaration to override in the cache
    */
-  public void overrideCache(
-      String fqn, ResolvedReferenceTypeDeclaration resolvedReferenceTypeDeclaration) {
-    overrideInCombinedTypeSolverCache(fqn, resolvedReferenceTypeDeclaration);
-    overrideInJavaParserTypeSolverCache(fqn, resolvedReferenceTypeDeclaration);
+  public void overrideCache(TypeDeclaration<?> updatedDecl) {
+    Object resolved = Resolver.resolve((Resolvable<?>) updatedDecl);
+
+    if (resolved instanceof ResolvedReferenceTypeDeclaration resolvedDecl) {
+      overrideInCombinedTypeSolverCache(resolvedDecl);
+      overrideInJavaParserTypeSolverCache(resolvedDecl);
+    }
   }
 
   /**
    * Overrides the cache in {@link SpeciminTypeSolvers#typeSolver} for the given type.
    *
-   * @param fqn The FQN of the type to override in the cache
    * @param resolvedReferenceTypeDeclaration The declaration to override in the cache
    */
   private void overrideInCombinedTypeSolverCache(
-      String fqn, ResolvedReferenceTypeDeclaration resolvedReferenceTypeDeclaration) {
+      ResolvedReferenceTypeDeclaration resolvedReferenceTypeDeclaration) {
     try {
       overrideInJavaParserCacheImpl(
           CombinedTypeSolver.class.getDeclaredField("typeCache"),
-          fqn,
           typeSolver,
           resolvedReferenceTypeDeclaration);
     } catch (NoSuchFieldException e) {
@@ -104,15 +104,13 @@ public class SpeciminTypeSolvers {
   /**
    * Overrides the cache in {@link SpeciminTypeSolvers#javaParserTypeSolver} for the given type.
    *
-   * @param fqn The FQN of the type to override in the cache
    * @param resolvedReferenceTypeDeclaration The declaration to override in the cache
    */
   private void overrideInJavaParserTypeSolverCache(
-      String fqn, ResolvedReferenceTypeDeclaration resolvedReferenceTypeDeclaration) {
+      ResolvedReferenceTypeDeclaration resolvedReferenceTypeDeclaration) {
     try {
       overrideInJavaParserCacheImpl(
           JavaParserTypeSolver.class.getDeclaredField("foundTypes"),
-          fqn,
           javaParserTypeSolver,
           resolvedReferenceTypeDeclaration);
     } catch (NoSuchFieldException e) {
@@ -124,13 +122,11 @@ public class SpeciminTypeSolvers {
    * Gets the cache from the given field and overrides the given type.
    *
    * @param field The field containing the cache
-   * @param fqn The type to clear
    * @param solver The solver containing the field
    * @param resolvedReferenceTypeDeclaration The declaration to override in the cache
    */
   private void overrideInJavaParserCacheImpl(
       Field field,
-      String fqn,
       Object solver,
       ResolvedReferenceTypeDeclaration resolvedReferenceTypeDeclaration) {
     try {
@@ -145,7 +141,9 @@ public class SpeciminTypeSolvers {
         throw new RuntimeException("Could not access JavaParser's symbol resolution cache.");
       }
 
-      value.put(fqn, SymbolReference.solved(resolvedReferenceTypeDeclaration));
+      value.put(
+          resolvedReferenceTypeDeclaration.getQualifiedName(),
+          SymbolReference.solved(resolvedReferenceTypeDeclaration));
     } catch (IllegalAccessException e) {
       throw new RuntimeException(e);
     }
