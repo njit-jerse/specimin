@@ -35,6 +35,7 @@ import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -831,7 +832,7 @@ public class UnsolvedSymbolGenerator {
           JavaParserUtil.tryFindAttachedNode(resolvedMethodDeclaration, fqnsToCompilationUnits);
 
       if (node != null) {
-        MethodDeclaration toAst = (MethodDeclaration) node;
+        NodeWithType<?, ?> toAst = (NodeWithType<?, ?>) node;
 
         inferContextImpl(toAst.getType(), result);
       }
@@ -3186,14 +3187,14 @@ public class UnsolvedSymbolGenerator {
   private void matchMethodReturnTypesToKnownChildClasses(MethodCallExpr methodCall) {
     Collection<Set<String>> potentialScopeFQNs = null;
     ResolvedMethodDeclaration resolvedMethod = Resolver.resolve(methodCall);
-    MethodDeclaration ast = null;
+    NodeWithType<?, ?> ast = null;
 
     if (resolvedMethod == null) {
       potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
     } else {
       // Potential scope is all unsolvable ancestors
       ast =
-          (MethodDeclaration)
+          (NodeWithType<?, ?>)
               JavaParserUtil.tryFindAttachedNode(resolvedMethod, fqnsToCompilationUnits);
       if (ast == null) {
         return;
@@ -3203,7 +3204,7 @@ public class UnsolvedSymbolGenerator {
     if (ast != null) {
       List<ClassOrInterfaceType> unsolvableAncestors =
           JavaParserUtil.getAllUnsolvableAncestors(
-              JavaParserUtil.getEnclosingClassLike(ast), fqnsToCompilationUnits);
+              JavaParserUtil.getEnclosingClassLike((Node) ast), fqnsToCompilationUnits);
 
       if (unsolvableAncestors.isEmpty()) {
         return;

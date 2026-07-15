@@ -31,6 +31,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithImplements;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
+import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
@@ -466,7 +467,7 @@ public class JavaParserUtil {
       return getTypeFromResolvedValueDeclaration(valueDecl, fqnToCompilationUnits);
     } else if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDecl) {
       if (resolvedMethodDecl.toAst().isPresent()) {
-        MethodDeclaration methodDecl = (MethodDeclaration) resolvedMethodDecl.toAst().get();
+        NodeWithType<?, ?> methodDecl = (NodeWithType<?, ?>) resolvedMethodDecl.toAst().get();
         return methodDecl.getType();
       }
     }
