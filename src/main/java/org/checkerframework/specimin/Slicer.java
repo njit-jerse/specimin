@@ -8,10 +8,9 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -383,8 +382,8 @@ public class Slicer {
         }
       } else if (node instanceof RecordDeclaration recordDecl) {
         String thisInvocationStmt =
-                JavaParserUtil.getDefaultConstructorCall(
-                        recordDecl.getParameters().stream().map(Parameter::getTypeAsString).toList(), true);
+            JavaParserUtil.getDefaultConstructorCall(
+                recordDecl.getParameters().stream().map(Parameter::getTypeAsString).toList(), true);
 
         for (ConstructorDeclaration decl : recordDecl.getConstructors()) {
           if (!slice.contains(decl)) {
@@ -393,7 +392,7 @@ public class Slicer {
 
           // Record non-canonical constructors must call the canonical
           decl.setBody(
-                  new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(thisInvocationStmt))));
+              new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(thisInvocationStmt))));
         }
       }
 

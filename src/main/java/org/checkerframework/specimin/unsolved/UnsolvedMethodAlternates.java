@@ -1,7 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
 
@@ -245,7 +247,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
         .removeIf(alternate -> !returnsToPreserveNodes.containsKey(alternate.getReturnType()));
 
     if (getAlternates().isEmpty()) {
-      for (Map.Entry<MemberType, NodeWithParameters<?>> entry : returnsToPreserveNodes.entrySet()) {
+      for (Map.Entry<MemberType, NodeWithParameters<?>> entry :
+          returnsToPreserveNodes.entrySet()) {
         for (List<MemberType> parameterList : parameterLists) {
           UnsolvedMethod method =
               new UnsolvedMethod(
