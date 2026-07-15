@@ -39,6 +39,7 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclar
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserRecordDeclaration;
 import com.github.javaparser.utils.Pair;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,6 +72,12 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    * concrete implementation is seen after the abstract super method.
    */
   private final Set<ResolvedMethodDeclaration> nonJDKMustImplementMethods = new HashSet<>();
+
+  /**
+   * A set of seen type declarations so we can rediscover must implement methods if we already
+   * processed a declaration but later discover a must implement method.
+   */
+  private final Set<TypeDeclaration<?>> seenTypeDeclarations = new HashSet<>();
 
   /**
    * Creates a new StandardTypeRuleDependencyMap to be passed into Slicer.
@@ -134,16 +141,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     // Type declarations
-    if (node instanceof NodeWithImplements<?> withImplements) {
-      elements.addAll(withImplements.getImplementedTypes());
-    }
-    if (node instanceof NodeWithExtends<?> withExtends) {
-      elements.addAll(withExtends.getExtendedTypes());
-    }
-    if (node instanceof ClassOrInterfaceDeclaration decl) {
-      elements.addAll(decl.getPermittedTypes());
-    }
     if (node instanceof TypeDeclaration<?> typeDeclaration) {
+      seenTypeDeclarations.add(typeDeclaration);
+
       List<MethodDeclaration> mustImplement =
           JavaParserUtil.getDeclarationsForAllMustImplementMethods(
               typeDeclaration, nonJDKMustImplementMethods, fqnToCompilationUnits);
@@ -177,6 +177,15 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           // Methods like getAllAncestors() can throw an UnsolvedSymbolException
         }
       }
+    }
+    if (node instanceof NodeWithImplements<?> withImplements) {
+      elements.addAll(withImplements.getImplementedTypes());
+    }
+    if (node instanceof NodeWithExtends<?> withExtends) {
+      elements.addAll(withExtends.getExtendedTypes());
+    }
+    if (node instanceof ClassOrInterfaceDeclaration decl) {
+      elements.addAll(decl.getPermittedTypes());
     }
 
     // If the node is a type declaration, exit now, so we don't unintentionally
@@ -350,7 +359,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
   }
 
   @Override
-  public List<Node> getRelevantElements(Object resolved) {
+  public List<Node> getRelevantElements(Object resolved, Node node) {
     List<Node> elements = new ArrayList<>();
 
     if (resolved instanceof ResolvedType resolvedType) {
@@ -359,7 +368,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       }
       if (resolvedType.isReferenceType()
           && resolvedType.asReferenceType().getTypeDeclaration().isPresent()) {
-        return getRelevantElements(resolvedType.asReferenceType().getTypeDeclaration().get());
+        return getRelevantElements(resolvedType.asReferenceType().getTypeDeclaration().get(), node);
       }
     }
 
@@ -394,6 +403,19 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
                                 n -> n.getNameAsString().equals(member.getName()))
                             .get())
                 .toList());
+      }
+
+      // By default, #getRelevantElements(Node) does not include a record's canonical constructor's
+      // parameters. This is because we do not want to preserve record fields that are unused.
+      // However, if we encounter a call to this canonical constructor, then we must preserve all
+      // those fields. We know that the following refers to the canonical constructor because only
+      // the canonical constructor resolved results in a resolved type declaration (others are all
+      // ResolvedConstructorDeclaration).
+
+      // Another case where resolve() yields the canonical constructor is handled in the next if
+      // block.
+      if (type.isRecordDeclaration() && node instanceof ObjectCreationExpr) {
+        elements.addAll(type.asRecordDeclaration().getParameters());
       }
 
       elements.add(type);
@@ -432,15 +454,21 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       }
 
       if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
+        int before = nonJDKMustImplementMethods.size();
+
         if (isAnonymousClass && typeParametersMapForAnonClass != null) {
           // The current type is already a parent class, so we need to add those too
-          List<MethodDeclaration> methods = new ArrayList<>();
-          addOverriddenMethodsToList(
-              type, resolvedMethodDeclaration, typeParametersMapForAnonClass, methods);
-          elements.addAll(methods);
+          elements.addAll(
+              getOverriddenMethodsInDeclaration(
+                  type, resolvedMethodDeclaration, typeParametersMapForAnonClass));
         }
 
         elements.addAll(getAllOverriddenMethods(resolvedMethodDeclaration, type));
+
+        if (nonJDKMustImplementMethods.size() > before) {
+          elements.addAll(
+              seenTypeDeclarations.stream().flatMap(d -> getRelevantElements(d).stream()).toList());
+        }
       }
 
       // Case: new Foo() but Foo does not contain a constructor
@@ -448,11 +476,15 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       if (!(resolved instanceof DefaultConstructorDeclaration)
           && !isAnonymousClass
           && resolvedMethodLikeDeclaration.toAst().isPresent()) {
-        Node unattached = resolvedMethodLikeDeclaration.toAst().get();
-        CallableDeclaration<?> methodLike =
-            type.findFirst(CallableDeclaration.class, n -> n.equals(unattached)).get();
+        elements.add(
+            JavaParserUtil.findAttachedNode(resolvedMethodLikeDeclaration, fqnToCompilationUnits));
+      }
 
-        elements.add(methodLike);
+      // By default, #getRelevantElements(Node) does not include a record's canonical constructor's
+      // parameters. See reasoning for this in the last big if block; this is another variant of the
+      // same case.
+      if (resolved instanceof JavaParserRecordDeclaration.CanonicalRecordConstructor) {
+        elements.addAll(type.asRecordDeclaration().getParameters());
       }
 
       elements.add(type);
@@ -502,10 +534,10 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       // Most of the time, this method will return one constructor. However, there may be cases
       // where we include multiple constructors, but this is because we simply don't know which
       // one to use.
-      List<? extends CallableDeclaration<?>> constructors =
+      List<? extends NodeWithParameters<?>> constructors =
           JavaParserUtil.tryResolveNodeWithUnresolvableArguments(
               enumConstant, fqnToCompilationUnits);
-      elements.addAll(constructors);
+      elements.addAll(constructors.stream().map(c -> (Node) c).toList());
     }
 
     return elements;
@@ -559,57 +591,64 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         continue;
       }
 
-      addOverriddenMethodsToList(
-          typeDecl, original, parentType.asReferenceType().getTypeParametersMap(), result);
+      result.addAll(
+          getOverriddenMethodsInDeclaration(
+              typeDecl, original, parentType.asReferenceType().getTypeParametersMap()));
 
       getAllOverriddenMethodsImpl(original, typeDecl, result);
     }
   }
 
   /**
-   * Helper method to add methods of matching signature to {@code original} from {@code typeDecl} to
-   * {@code result}.
+   * Helper method to find methods of matching signature to {@code original} from {@code typeDecl}.
    *
    * @param typeDecl The type declaration to search for overridden methods in
    * @param original The original method declaration to find overridden methods for
    * @param typeParametersMap The type parameters map
-   * @param result A list to collect all overridden methods found
+   * @return the list of overridden methods
    */
-  private void addOverriddenMethodsToList(
+  private List<MethodDeclaration> getOverriddenMethodsInDeclaration(
       TypeDeclaration<?> typeDecl,
       ResolvedMethodDeclaration original,
-      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap,
-      List<MethodDeclaration> result) {
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap) {
+    List<MethodDeclaration> result = new ArrayList<>();
+
     for (MethodDeclaration method : typeDecl.getMethods()) {
-      ResolvedMethodDeclaration resolved = Resolver.resolve(method);
+      ResolvedMethodDeclaration resolved = Resolver.resolveGuaranteeNonNull(method);
 
       String signature = null;
       String signatureOfDeclarationWithTypeParamsAdjusted = null;
-      if (resolved != null) {
-        try {
-          signature = original.getSignature();
-          signatureOfDeclarationWithTypeParamsAdjusted =
-              JavaParserUtil.getSignatureFromResolvedMethodWithTypeVariablesMap(
-                  resolved, typeParametersMap);
-        } catch (UnsolvedSymbolException ex) {
-          // getSignature() and getSignature...Map() both could throw
-        }
+      try {
+        signature = original.getSignature();
+        signatureOfDeclarationWithTypeParamsAdjusted =
+            JavaParserUtil.getSignatureFromResolvedMethodWithTypeVariablesMap(
+                resolved, typeParametersMap);
+      } catch (UnsolvedSymbolException ex) {
+        // getSignature() and getSignature...Map() both could throw
       }
 
-      if (resolved != null
-          && signature != null
-          && signatureOfDeclarationWithTypeParamsAdjusted != null) {
+      if (signature != null && signatureOfDeclarationWithTypeParamsAdjusted != null) {
         if (signature.equals(signatureOfDeclarationWithTypeParamsAdjusted)) {
           result.add(method);
+
+          if (method.isAbstract()) {
+            nonJDKMustImplementMethods.add(resolved);
+          }
         }
       } else {
         // At least one parameter type may not be solvable. In this case, try comparing
         // simple names.
         if (areAstAndResolvedMethodLikelyEqual(original, method)) {
           result.add(method);
+
+          if (method.isAbstract()) {
+            nonJDKMustImplementMethods.add(resolved);
+          }
         }
       }
     }
+
+    return result;
   }
 
   /**

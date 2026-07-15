@@ -1,6 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
-import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +49,7 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
    */
   public static UnsolvedFieldAlternates create(
       String name,
-      Map<MemberType, CallableDeclaration<?>> typesToMustPreserveNodes,
+      Map<MemberType, NodeWithParameters<?>> typesToMustPreserveNodes,
       List<UnsolvedClassOrInterfaceAlternates> alternateDeclaringTypes,
       boolean isStatic,
       boolean isFinal) {
@@ -58,10 +59,10 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
 
     UnsolvedFieldAlternates result = new UnsolvedFieldAlternates(alternateDeclaringTypes);
 
-    for (Map.Entry<MemberType, CallableDeclaration<?>> entry :
-        typesToMustPreserveNodes.entrySet()) {
+    for (Map.Entry<MemberType, NodeWithParameters<?>> entry : typesToMustPreserveNodes.entrySet()) {
       UnsolvedField field =
-          new UnsolvedField(name, entry.getKey(), isStatic, isFinal, Set.of(entry.getValue()));
+          new UnsolvedField(
+              name, entry.getKey(), isStatic, isFinal, Set.of((Node) entry.getValue()));
       result.addAlternate(field);
     }
 
@@ -130,7 +131,7 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
    * @param typesToPreserveNodes A map of field types to nodes that must be preserved
    */
   public void updateFieldTypesAndMustPreserveNodes(
-      Map<MemberType, CallableDeclaration<?>> typesToPreserveNodes) {
+      Map<MemberType, NodeWithParameters<?>> typesToPreserveNodes) {
     // Update in-place; intersection = removing all elements in the original set
     // that isn't found in the updated set
     UnsolvedField old = getAlternates().get(0);
@@ -140,14 +141,14 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
     if (getAlternates().isEmpty() && oldFieldTypes.size() == 1) {
       // If it's now empty and old field types was of size 1, it was probably a synthetic field
       // type
-      for (Map.Entry<MemberType, CallableDeclaration<?>> entry : typesToPreserveNodes.entrySet()) {
+      for (Map.Entry<MemberType, NodeWithParameters<?>> entry : typesToPreserveNodes.entrySet()) {
         UnsolvedField field =
             new UnsolvedField(
                 old.getName(),
                 entry.getKey(),
                 old.isStatic(),
                 old.isFinal(),
-                Set.of(entry.getValue()));
+                Set.of((Node) entry.getValue()));
         addAlternate(field);
       }
     }
