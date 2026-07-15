@@ -317,7 +317,11 @@ public class Slicer {
     List<TypeDeclaration<?>> typesCopy = new ArrayList<>(cu.getTypes());
     for (TypeDeclaration<?> typeDecl : typesCopy) {
       removeNonSliceNodes(typeDecl);
-      typeSolvers.overrideCache(typeDecl);
+
+      if (slice.contains(typeDecl)) {
+        // If it's not in the slice, resolving will cause an error
+        typeSolvers.overrideCache(typeDecl);
+      }
     }
   }
 
