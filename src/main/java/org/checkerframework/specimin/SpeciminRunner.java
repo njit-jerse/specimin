@@ -496,39 +496,6 @@ public class SpeciminRunner {
     return usedPackagesAndClasses;
   }
 
-  private static Set<String> getUsedPackagesAndClasses(
-      SliceResult sliceResult, UnsolvedSymbolEnumeratorResult enumeratorResult) {
-    Set<String> usedPackagesAndClasses = new HashSet<>();
-    for (CompilationUnit cu : sliceResult.solvedSlice()) {
-      if (cu.getPackageDeclaration().isEmpty()) {
-        usedPackagesAndClasses.add("");
-        continue;
-      }
-      usedPackagesAndClasses.add(cu.getPackageDeclaration().get().getNameAsString());
-
-      for (TypeDeclaration<?> typeDecl : cu.findAll(TypeDeclaration.class)) {
-        String fqn = typeDecl.getFullyQualifiedName().orElse(null);
-
-        if (fqn == null) {
-          continue;
-        }
-
-        usedPackagesAndClasses.add(fqn);
-      }
-    }
-
-    for (String className : enumeratorResult.classNamesToFileContent().keySet()) {
-      int lastDot = className.lastIndexOf('.');
-      if (lastDot < 0) {
-        usedPackagesAndClasses.add("");
-      } else {
-        usedPackagesAndClasses.add(className.substring(0, lastDot));
-        usedPackagesAndClasses.add(className);
-      }
-    }
-    return usedPackagesAndClasses;
-  }
-
   /**
    * Checks that the root directory is specified correctly, by checking that the files for the
    * target methods/fields can be found.
