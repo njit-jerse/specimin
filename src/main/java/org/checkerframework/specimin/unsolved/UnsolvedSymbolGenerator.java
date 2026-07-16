@@ -855,6 +855,17 @@ public class UnsolvedSymbolGenerator {
       // resolved above, so this only guards against unexpected inputs.)
       return false;
     }
+
+    // Check to make sure we don't add a duplicate enum constant.
+    Set<String> fieldFQNs =
+        enumFQNs.stream()
+            .map(fqn -> fqn + "#" + nameExpr.getNameAsString())
+            .collect(Collectors.toSet());
+    UnsolvedSymbolAlternates<?> existing = findExistingAndUpdateFQNs(fieldFQNs);
+    if (existing instanceof UnsolvedFieldAlternates) {
+      return true;
+    }
+
     // Find or create the synthetic enum, mark it as an enum, and add this constant to it.
     UnsolvedClassOrInterfaceAlternates enumType =
         findExistingAndUpdateFQNsOrCreateNewType(enumFQNs);
