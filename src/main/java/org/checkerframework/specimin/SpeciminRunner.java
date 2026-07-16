@@ -10,9 +10,7 @@ import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.utils.SourceRoot;
 import com.google.googlejavaformat.java.Formatter;
 import com.google.googlejavaformat.java.FormatterException;
@@ -232,7 +230,8 @@ public class SpeciminRunner {
       validateRoot(root, targetMethodNames, targetFieldNames);
     }
 
-    ParserConfiguration config = updateStaticSolver(root, jarPaths);
+    SpeciminTypeSolvers typeSolver = initializeSolvers(root, jarPaths);
+    ParserConfiguration config = updateStaticSolver(typeSolver);
     decompileJarFiles(root, jarPaths, createdClass);
 
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
@@ -269,6 +268,8 @@ public class SpeciminRunner {
       }
     }
 
+    Resolver.setFqnToCompilationUnitMap(fqnToCompilationUnits);
+
     createdClass.addAll(getPathsFromJarPaths(root, jarPaths));
 
     Deque<Node> worklist = new ArrayDeque<>();
@@ -302,7 +303,8 @@ public class SpeciminRunner {
             new StandardTypeRuleDependencyMap(fqnToCompilationUnits),
             worklist,
             unsolvedSymbolGenerator,
-            fqnToCompilationUnits);
+            fqnToCompilationUnits,
+            typeSolver);
 
     // cache to avoid called Files.createDirectories repeatedly with the same
     // arguments
@@ -355,23 +357,7 @@ public class SpeciminRunner {
       Set<Path> createdDirectories,
       Formatter formatter)
       throws IOException {
-    Set<String> usedPackages = new HashSet<>();
-    for (CompilationUnit cu : sliceResult.solvedSlice()) {
-      if (cu.getPackageDeclaration().isEmpty()) {
-        usedPackages.add("");
-        continue;
-      }
-      usedPackages.add(cu.getPackageDeclaration().get().getNameAsString());
-    }
-
-    for (String className : enumeratorResult.classNamesToFileContent().keySet()) {
-      int lastDot = className.lastIndexOf('.');
-      if (lastDot < 0) {
-        usedPackages.add("");
-      } else {
-        usedPackages.add(className.substring(0, lastDot));
-      }
-    }
+    Set<String> usedPackagesAndClasses = getUsedPackagesAndClasses(sliceResult, enumeratorResult);
 
     for (CompilationUnit original : sliceResult.solvedSlice()) {
       if (isEmptyCompilationUnit(original)) {
@@ -435,7 +421,7 @@ public class SpeciminRunner {
         writer.print(
             formatter.formatSourceAndFixImports(
                 getCompilationUnitWithUnusedWildcardImportsRemoved(
-                        getCompilationUnitWithCommentsTrimmed(cu), usedPackages)
+                        getCompilationUnitWithCommentsTrimmed(cu), usedPackagesAndClasses)
                     .toString()));
       } catch (IOException | FormatterException e) {
         System.out.println("failed to write output file " + targetOutputPath);
@@ -469,6 +455,46 @@ public class SpeciminRunner {
         System.out.println("with error: " + e);
       }
     }
+  }
+
+  /**
+   * Gets the packages and classes used in the given slice and unsolved symbol enumeration.
+   *
+   * @param sliceResult The slice
+   * @param enumeratorResult The unsolved enumeration
+   * @return The used packages and classes
+   */
+  private static Set<String> getUsedPackagesAndClasses(
+      SliceResult sliceResult, UnsolvedSymbolEnumeratorResult enumeratorResult) {
+    Set<String> usedPackagesAndClasses = new HashSet<>();
+    for (CompilationUnit cu : sliceResult.solvedSlice()) {
+      if (cu.getPackageDeclaration().isEmpty()) {
+        usedPackagesAndClasses.add("");
+        continue;
+      }
+      usedPackagesAndClasses.add(cu.getPackageDeclaration().get().getNameAsString());
+
+      for (TypeDeclaration<?> typeDecl : cu.findAll(TypeDeclaration.class)) {
+        String fqn = typeDecl.getFullyQualifiedName().orElse(null);
+
+        if (fqn == null) {
+          continue;
+        }
+
+        usedPackagesAndClasses.add(fqn);
+      }
+    }
+
+    for (String className : enumeratorResult.classNamesToFileContent().keySet()) {
+      int lastDot = className.lastIndexOf('.');
+      if (lastDot < 0) {
+        usedPackagesAndClasses.add("");
+      } else {
+        usedPackagesAndClasses.add(className.substring(0, lastDot));
+        usedPackagesAndClasses.add(className);
+      }
+    }
+    return usedPackagesAndClasses;
   }
 
   /**
@@ -575,22 +601,22 @@ public class SpeciminRunner {
    * Removes all wildcard imports that are not used in the given set of package names.
    *
    * @param cu The CompilationUnit to process.
-   * @param usedPackages A set of package names that are used in the code.
+   * @param usedPackagesAndClasses A set of package and class names that are used in the code.
    * @return The modified CompilationUnit with unused wildcard imports removed.
    */
   private static CompilationUnit getCompilationUnitWithUnusedWildcardImportsRemoved(
-      CompilationUnit cu, Set<String> usedPackages) {
+      CompilationUnit cu, Set<String> usedPackagesAndClasses) {
     for (ImportDeclaration decl : List.copyOf(cu.getImports())) {
       if (!decl.isAsterisk()) {
         continue;
       }
-      String packageName = decl.getNameAsString();
+      String qualifier = decl.getNameAsString();
 
-      if (JavaLangUtils.inJdkPackage(packageName)) {
+      if (JavaLangUtils.inJdkPackage(qualifier)) {
         continue;
       }
 
-      if (!usedPackages.contains(packageName)) {
+      if (!usedPackagesAndClasses.contains(qualifier)) {
         decl.remove();
       }
     }
@@ -656,27 +682,29 @@ public class SpeciminRunner {
   }
 
   /**
-   * Update the static solver for JavaParser.
+   * Sets up the type solvers for this run of Specimin, and returns it once initialized.
    *
    * @param root the root directory of the files to parse.
    * @param jarPaths the list of jar files to be used as input.
+   * @return The type solvers
    * @throws IOException if something went wrong.
    */
-  private static ParserConfiguration updateStaticSolver(String root, List<String> jarPaths)
+  private static SpeciminTypeSolvers initializeSolvers(String root, List<String> jarPaths)
       throws IOException {
-    MemoryTypeSolver mem = new MemoryTypeSolver();
+    SpeciminTypeSolvers typeSolver = new SpeciminTypeSolvers(root, jarPaths);
 
-    // Set up the parser's symbol solver, so that we can resolve definitions.
-    CombinedTypeSolver typeSolver =
-        new CombinedTypeSolver(new JdkTypeSolver(), new JavaParserTypeSolver(new File(root)), mem);
+    JavaParserUtil.setTypeSolvers(typeSolver);
 
-    for (String path : jarPaths) {
-      typeSolver.add(new JarTypeSolver(path));
-    }
+    return typeSolver;
+  }
 
-    JavaParserUtil.setTypeSolvers(typeSolver, mem);
-
-    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver);
+  /**
+   * Update the static solver for JavaParser.
+   *
+   * @param typeSolver the type solver
+   */
+  private static ParserConfiguration updateStaticSolver(SpeciminTypeSolvers typeSolver) {
+    JavaSymbolSolver symbolSolver = new JavaSymbolSolver(typeSolver.getTypeSolver());
 
     ParserConfiguration config =
         new ParserConfiguration()

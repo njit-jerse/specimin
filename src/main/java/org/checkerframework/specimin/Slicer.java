@@ -2,11 +2,16 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
@@ -14,16 +19,16 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.ast.type.UnknownType;
-import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.Resolvable;
-import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.types.ResolvedReferenceType;
+import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,7 +47,7 @@ import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
 /**
  * Slices a program, given an initial worklist and a type rule dependency map. This class cannot be
  * instantiated; instead, use {@link #slice(TypeRuleDependencyMap, Deque, UnsolvedSymbolGenerator,
- * Map)} to use this class.
+ * Map, SpeciminTypeSolvers)} to use this class.
  */
 public class Slicer {
   /**
@@ -79,8 +84,11 @@ public class Slicer {
   /** The type rule dependency map. */
   private final TypeRuleDependencyMap typeRuleDependencyMap;
 
-  /** The map of fully-qualified names to their compilation units. */
+  /** A map of FQNs to compilation units. */
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
+
+  /** The collection of type solvers used by Specimin. */
+  private final SpeciminTypeSolvers typeSolvers;
 
   /**
    * Creates a new instance of {@link Slicer}.
@@ -88,17 +96,20 @@ public class Slicer {
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
    * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
-   * @param fqnToCompilationUnits The fully qualified name to compilation units map.
+   * @param fqnToCompilationUnits The map of FQNs to compilation units.
+   * @param typeSolvers The collection of type solvers to use.
    */
   private Slicer(
       TypeRuleDependencyMap typeRuleDependencyMap,
       Deque<Node> worklist,
       UnsolvedSymbolGenerator unsolvedSymbolGenerator,
-      Map<String, CompilationUnit> fqnToCompilationUnits) {
+      Map<String, CompilationUnit> fqnToCompilationUnits,
+      SpeciminTypeSolvers typeSolvers) {
     this.typeRuleDependencyMap = typeRuleDependencyMap;
     this.worklist = worklist;
     this.unsolvedSymbolGenerator = unsolvedSymbolGenerator;
     this.fqnToCompilationUnits = fqnToCompilationUnits;
+    this.typeSolvers = typeSolvers;
   }
 
   /**
@@ -109,16 +120,23 @@ public class Slicer {
    * @param typeRuleDependencyMap The type rule dependency map to use in the slice.
    * @param worklist The worklist to use, already populated with target members and their bodies.
    * @param unsolvedSymbolGenerator The unsolved symbol generator to use.
-   * @param fqnToCompilationUnits The map of type FQNs to their compilation units.
+   * @param fqnToCompilationUnits The map of FQNs to compilation units.
+   * @param typeSolvers The collection of type solvers to use.
    * @return A {@link SliceResult} representing the output of the slice.
    */
   public static SliceResult slice(
       TypeRuleDependencyMap typeRuleDependencyMap,
       Deque<Node> worklist,
       UnsolvedSymbolGenerator unsolvedSymbolGenerator,
-      Map<String, CompilationUnit> fqnToCompilationUnits) {
+      Map<String, CompilationUnit> fqnToCompilationUnits,
+      SpeciminTypeSolvers typeSolvers) {
     Slicer slicer =
-        new Slicer(typeRuleDependencyMap, worklist, unsolvedSymbolGenerator, fqnToCompilationUnits);
+        new Slicer(
+            typeRuleDependencyMap,
+            worklist,
+            unsolvedSymbolGenerator,
+            fqnToCompilationUnits,
+            typeSolvers);
 
     slicer.buildSlice();
 
@@ -163,7 +181,7 @@ public class Slicer {
     if (!generatedSymbolSlice.isEmpty()) {
       // Step 2: Add more information to generated symbols based on context
       for (Node element : postProcessingWorklist) {
-        UnsolvedGenerationResult result = unsolvedSymbolGenerator.addInformation(element);
+        UnsolvedGenerationResult result = unsolvedSymbolGenerator.addInformation(element, slice);
         generatedSymbolSlice.addAll(result.toAdd());
         result.toRemove().forEach(generatedSymbolSlice::remove);
       }
@@ -206,56 +224,19 @@ public class Slicer {
 
       boolean generateUnsolvedSymbol = false;
       Object resolved = null;
-      try {
-        // Do not call resolve on a FieldDeclaration, since it will throw an
-        // UnsupportedOperationException
-        // if the field has multiple declarators. We will resolve the declarators instead.
-        if (!(node instanceof FieldDeclaration)) {
-          // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
-          // if there are unresolvable argument types
-          resolved = asResolvable.resolve();
-        }
-      } catch (MethodAmbiguityException ex) {
-        // JavaParser bug: check ArrayTypeTest. JavaParser cannot resolve Arrays.sort(int[])
-        // and has other candidates instead. If we see ReflectionMethodDeclaration in the
-        // error message, that means that the method is in the JDK and we don't need to include
-        // it in the slice or generate a symbol for it.
 
-        if (!ex.toString().contains("ReflectionMethodDeclaration")) {
-          throw ex;
-        }
-      } catch (UnsolvedSymbolException | IllegalStateException ex) {
-        // Workaround for resolving methods/fields with a qualifier that is resolvable, but returns
-        // a lambda constraint type with a type parameter instead of a type
-        if (node instanceof Expression expr) {
-          resolved =
-              JavaParserUtil.tryFindCorrespondingDeclarationForConstraintQualifiedExpression(expr);
-        }
+      if (!(node instanceof FieldDeclaration)) {
+        // Resolve isn't perfect: methods/constructors, even if in the same file, will not resolve
+        // if there are unresolvable argument types
+        resolved = Resolver.resolve(asResolvable);
+      }
 
-        // IllegalStateException when trying to resolve an expression whose scope is
-        // a lambda parameter that has the type of an unbounded wildcard
-        boolean shouldTryToResolve = resolved == null;
+      if (resolved == null) {
+        boolean shouldTryToResolve = true;
         if (node instanceof ClassOrInterfaceType type && JavaParserUtil.isProbablyAPackage(type)) {
           // We may encounter this if the user includes a FQN in their input, since the type rule
           // dependency map returns the scope of the type, even if it's a package.
           shouldTryToResolve = false;
-        }
-
-        // Handle cases where a method/constructor call cannot be resolved because of unresolvable
-        // arguments, but its definition exists
-        CallableDeclaration<?> potentiallyResolvableCallable =
-            node instanceof NodeWithArguments<?> withArgs
-                ? JavaParserUtil.tryFindSingleCallableForNodeWithUnresolvableArguments(
-                    withArgs, fqnToCompilationUnits)
-                : null;
-
-        if (potentiallyResolvableCallable != null && shouldTryToResolve) {
-          try {
-            resolved = ((Resolvable<?>) potentiallyResolvableCallable).resolve();
-            shouldTryToResolve = false;
-          } catch (UnsolvedSymbolException e) {
-            // This should never happen
-          }
         }
 
         if (shouldTryToResolve) {
@@ -263,7 +244,7 @@ public class Slicer {
           // an UnsolvedSymbolException, even if the type is resolvable
           if (node instanceof FieldAccessExpr || node instanceof NameExpr) {
             if (!JavaParserUtil.isProbablyAPackage((Expression) node)) {
-              resolved = JavaParserUtil.calculateResolvedType((Expression) node);
+              resolved = Resolver.calculateResolvedType((Expression) node);
 
               if (resolved == null) {
                 generateUnsolvedSymbol = true;
@@ -271,14 +252,6 @@ public class Slicer {
             }
           } else {
             generateUnsolvedSymbol = true;
-          }
-        }
-
-        if (generateUnsolvedSymbol && node instanceof Expression expr) {
-          Object result = JavaParserUtil.tryResolveNodeIfInAnonymousClass(expr);
-          if (result != null) {
-            resolved = result;
-            generateUnsolvedSymbol = false;
           }
         }
       }
@@ -313,7 +286,7 @@ public class Slicer {
       throw new RuntimeException("Unexpected null value in resolve() call");
     }
 
-    List<Node> toAddToWorklist = typeRuleDependencyMap.getRelevantElements(resolved);
+    List<Node> toAddToWorklist = typeRuleDependencyMap.getRelevantElements(resolved, unresolved);
     worklist.addAll(toAddToWorklist);
 
     // Since resolved declarations may reference another file, we need to add that compilation
@@ -344,6 +317,11 @@ public class Slicer {
     List<TypeDeclaration<?>> typesCopy = new ArrayList<>(cu.getTypes());
     for (TypeDeclaration<?> typeDecl : typesCopy) {
       removeNonSliceNodes(typeDecl);
+
+      if (slice.contains(typeDecl)) {
+        // If it's not in the slice, resolving will cause an error
+        typeSolvers.overrideCache(typeDecl);
+      }
     }
   }
 
@@ -365,7 +343,8 @@ public class Slicer {
           && fieldDeclarator.getInitializer().isEmpty()
           && fieldDeclarator.getParentNode().get() instanceof FieldDeclaration fieldDecl
           && fieldDecl.isFinal()) {
-        ResolvedFieldDeclaration resolved = (ResolvedFieldDeclaration) fieldDeclarator.resolve();
+        ResolvedFieldDeclaration resolved =
+            (ResolvedFieldDeclaration) Resolver.resolveGuaranteeNonNull(fieldDeclarator);
 
         boolean isSet =
             slice.stream()
@@ -373,45 +352,20 @@ public class Slicer {
                 .map(n -> (AssignExpr) n)
                 .anyMatch(
                     assignExpr -> {
+                      ResolvedValueDeclaration target = null;
                       if (assignExpr.getTarget().isFieldAccessExpr()) {
-                        try {
-                          ResolvedValueDeclaration target =
-                              assignExpr.getTarget().asFieldAccessExpr().resolve();
-
-                          if (target.isField()) {
-                            return target
-                                    .asField()
-                                    .declaringType()
-                                    .getQualifiedName()
-                                    .equals(resolved.declaringType().getQualifiedName())
-                                && target.getName().equals(resolved.getName());
-                          }
-                        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-                          // IllegalStateException when trying to resolve an expression whose scope
-                          // is
-                          // a lambda parameter that has the type of an unbounded wildcard
-                          return false;
-                        }
+                        target = Resolver.resolve(assignExpr.getTarget().asFieldAccessExpr());
                       } else if (assignExpr.getTarget().isNameExpr()) {
-                        try {
-                          ResolvedValueDeclaration target =
-                              assignExpr.getTarget().asNameExpr().resolve();
+                        target = Resolver.resolve(assignExpr.getTarget().asNameExpr());
+                      }
 
-                          if (target.isField()) {
-                            return target
-                                    .asField()
-                                    .declaringType()
-                                    .getQualifiedName()
-                                    .equals(resolved.declaringType().getQualifiedName())
-                                && target.getName().equals(resolved.getName());
-                          }
-                          return target.equals(resolved);
-                        } catch (UnsolvedSymbolException | IllegalStateException ex) {
-                          // IllegalStateException when trying to resolve an expression whose scope
-                          // is
-                          // a lambda parameter that has the type of an unbounded wildcard
-                          return false;
-                        }
+                      if (target != null && target.isField()) {
+                        return target
+                                .asField()
+                                .declaringType()
+                                .getQualifiedName()
+                                .equals(resolved.declaringType().getQualifiedName())
+                            && target.getName().equals(resolved.getName());
                       }
 
                       return false;
@@ -420,6 +374,89 @@ public class Slicer {
         if (!isSet) {
           fieldDeclarator.setInitializer(
               JavaParserUtil.getInitializerRHS(fieldDeclarator.getType().toString()));
+        }
+      } else if (node instanceof RecordDeclaration recordDecl) {
+        String thisInvocationStmt =
+            JavaParserUtil.getDefaultConstructorCall(
+                recordDecl.getParameters().stream().map(Parameter::getTypeAsString).toList(), true);
+
+        for (ConstructorDeclaration decl : recordDecl.getConstructors()) {
+          if (!slice.contains(decl)) {
+            continue;
+          }
+
+          // Record non-canonical constructors must call the canonical
+          decl.setBody(
+              new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(thisInvocationStmt))));
+        }
+      }
+
+      // If we find a class whose superclass whose constructors all have parameters, we need to
+      // 1) either generate a constructor that calls super(...) OR
+      // 2) replace a constructor in the slice with a body that calls super(...)
+
+      // TODO: match throws clauses
+
+      else if (node instanceof ClassOrInterfaceDeclaration classOrInterfaceDecl
+          && !classOrInterfaceDecl.isInterface()
+          && classOrInterfaceDecl.getExtendedTypes().size() == 1) {
+        ResolvedType superClass = Resolver.resolve(classOrInterfaceDecl.getExtendedTypes(0));
+
+        if (superClass instanceof ResolvedReferenceType superClassResolved
+            && superClassResolved.getTypeDeclaration().isPresent()) {
+          List<String> parameterTypes = null;
+
+          for (ResolvedConstructorDeclaration constructor :
+              superClassResolved.getTypeDeclaration().get().getConstructors()) {
+            if (parameterTypes != null
+                && parameterTypes.size() <= constructor.getNumberOfParams()) {
+              continue;
+            }
+
+            Node attached = JavaParserUtil.tryFindAttachedNode(constructor, fqnToCompilationUnits);
+
+            if (attached instanceof ConstructorDeclaration constructorNode) {
+              if (!slice.contains(constructorNode)) {
+                continue;
+              }
+              parameterTypes =
+                  constructorNode.getParameters().stream()
+                      .map(p -> p.getType().toString())
+                      .toList();
+            } else if (attached != null) {
+              parameterTypes =
+                  constructor.formalParameterTypes().stream().map(ResolvedType::describe).toList();
+            }
+          }
+
+          if (parameterTypes == null || parameterTypes.isEmpty()) {
+            return;
+          }
+
+          String superCall = JavaParserUtil.getDefaultConstructorCall(parameterTypes, false);
+
+          boolean foundConstructor = false;
+          for (ConstructorDeclaration constructorDeclaration :
+              classOrInterfaceDecl.getConstructors()) {
+            if (!slice.contains(constructorDeclaration)) {
+              continue;
+            }
+
+            foundConstructor = true;
+            if (slice.contains(constructorDeclaration.getBody())) {
+              continue;
+            }
+
+            constructorDeclaration.setBody(
+                new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(superCall))));
+            // No need to add body to slice because all children have already been handled
+          }
+
+          if (!foundConstructor) {
+            ConstructorDeclaration decl =
+                classOrInterfaceDecl.addConstructor(Modifier.Keyword.PUBLIC);
+            decl.setBody(new BlockStmt(new NodeList<>(StaticJavaParser.parseStatement(superCall))));
+          }
         }
       }
     }

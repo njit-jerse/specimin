@@ -1,6 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,6 +49,14 @@ public class UnsolvedClassOrInterfaceAlternates
    * once.
    */
   private boolean alreadyHandledAllSuperRelationships = false;
+
+  /**
+   * A flag to block the addition of super classes after a super class MUST be the only super class.
+   */
+  private boolean superClassAlreadyLocked = false;
+
+  /** A set to know what sealedness this type CANNOT be. */
+  private final Set<Sealedness> forbiddenSealednesses = new HashSet<>();
 
   /** A map of super types to their relationships to the type represented by this object. */
   private final Map<Set<MemberType>, SuperTypeRelationship> superTypeRelationships =
@@ -185,6 +194,33 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
+   * Ensures that the given super class is and will be the only super class for this class.
+   *
+   * @param superClass The super class to ensure
+   */
+  public void ensureSuperClass(MemberType superClass) {
+    if (superClassAlreadyLocked) {
+      return;
+    }
+
+    Set<Set<MemberType>> toRemove = new HashSet<>();
+
+    for (Map.Entry<Set<MemberType>, SuperTypeRelationship> entry :
+        superTypeRelationships.entrySet()) {
+      if (entry.getValue() == SuperTypeRelationship.EXTENDS) {
+        toRemove.add(entry.getKey());
+      }
+    }
+
+    for (Set<MemberType> removeSet : toRemove) {
+      superTypeRelationships.remove(removeSet);
+    }
+
+    forceSuperClass(superClass);
+    superClassAlreadyLocked = true;
+  }
+
+  /**
    * Adds a set of mutually exclusive super type to this class, with an unknown relationship
    * (superclass/superinterface).
    *
@@ -219,10 +255,14 @@ public class UnsolvedClassOrInterfaceAlternates
 
     Set<MemberType> sanitizedSuperTypes = new LinkedHashSet<>();
     for (MemberType superType : superTypes) {
-      if (superType instanceof UnsolvedMemberType unsolvedMemberType
-          && unsolvedMemberType.getUnsolvedType().equals(this)) {
-        // If the super type is this type, we don't need to add it
-        continue;
+      if (superType instanceof UnsolvedMemberType unsolvedMemberType) {
+        // If we're extending a type, that type cannot be final
+        unsolvedMemberType.getUnsolvedType().removeAndBlockSealedness(Sealedness.FINAL);
+
+        if (unsolvedMemberType.getUnsolvedType().equals(this)) {
+          // If the super type is this type, we don't need to add it
+          continue;
+        }
       }
       if (superType.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
         // If the super type is java.lang.Object, we don't need to add it
@@ -236,9 +276,9 @@ public class UnsolvedClassOrInterfaceAlternates
       return;
     }
 
-    if (commonType == UnsolvedClassOrInterfaceType.CLASS) {
+    if (commonType == UnsolvedClassOrInterfaceType.CLASS && !superClassAlreadyLocked) {
       superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.EXTENDS);
-    } else if (commonType == UnsolvedClassOrInterfaceType.INTERFACE) {
+    } else if (commonType == UnsolvedClassOrInterfaceType.INTERFACE || superClassAlreadyLocked) {
       superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.IMPLEMENTS);
     } else if (superTypeRelationships.get(superTypes) == null) {
       superTypeRelationships.put(sanitizedSuperTypes, SuperTypeRelationship.UNKNOWN);
@@ -251,6 +291,10 @@ public class UnsolvedClassOrInterfaceAlternates
    * @param superClass The super class to force
    */
   public void forceSuperClass(MemberType superClass) {
+    if (superClassAlreadyLocked) {
+      return;
+    }
+
     if ((superClass instanceof UnsolvedMemberType unsolved
             && unsolved.getUnsolvedType().equals(this))
         || superClass.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
@@ -263,6 +307,10 @@ public class UnsolvedClassOrInterfaceAlternates
 
     if (getType() == UnsolvedClassOrInterfaceType.UNKNOWN) {
       setType(UnsolvedClassOrInterfaceType.CLASS);
+    }
+
+    if (superClass instanceof UnsolvedMemberType unsolvedMemberType) {
+      unsolvedMemberType.getUnsolvedType().removeAndBlockSealedness(Sealedness.FINAL);
     }
 
     superTypeRelationships.put(
@@ -292,6 +340,10 @@ public class UnsolvedClassOrInterfaceAlternates
       return;
     }
 
+    if (superInterface instanceof UnsolvedMemberType unsolvedMemberType) {
+      unsolvedMemberType.getUnsolvedType().removeAndBlockSealedness(Sealedness.FINAL);
+    }
+
     if (superInterface.toString().equals("java.lang.annotation.Annotation")) {
       superTypeRelationships.clear();
       setType(UnsolvedClassOrInterfaceType.ANNOTATION);
@@ -301,6 +353,74 @@ public class UnsolvedClassOrInterfaceAlternates
     superTypeRelationships.put(
         new LinkedHashSet<>(removeAllWildcardsAndReturnPotentialTypes(superInterface)),
         SuperTypeRelationship.IMPLEMENTS);
+  }
+
+  /**
+   * Adds a sealedness to all alternates. If any alternate already has a sealedness, then new
+   * alternates are generated.
+   *
+   * @param sealedness The sealedness
+   */
+  public void addSealedness(Sealedness sealedness) {
+    if (forbiddenSealednesses.contains(sealedness)) {
+      return;
+    }
+
+    boolean allUnsealedness =
+        doAllAlternatesReturnTrueFor((alt) -> alt.getSealedness() == Sealedness.NONE);
+
+    if (allUnsealedness) {
+      for (UnsolvedClassOrInterface alternate : getAlternates()) {
+        if (sealedness == Sealedness.FINAL
+            && alternate.getType() != UnsolvedClassOrInterfaceType.CLASS
+            && alternate.getType() != UnsolvedClassOrInterfaceType.UNKNOWN) {
+          continue;
+        }
+
+        alternate.setSealedness(sealedness);
+      }
+    } else {
+      List<UnsolvedClassOrInterface> alternates = new ArrayList<>();
+      for (UnsolvedClassOrInterface alternate : getAlternates()) {
+        if (sealedness == Sealedness.FINAL
+            && alternate.getType() != UnsolvedClassOrInterfaceType.CLASS
+            && alternate.getType() != UnsolvedClassOrInterfaceType.UNKNOWN) {
+          continue;
+        }
+
+        if (alternate.getSealedness() == sealedness) {
+          alternates.clear();
+          break;
+        }
+
+        UnsolvedClassOrInterface copy = alternate.copy();
+        copy.setSealedness(sealedness);
+
+        alternates.add(copy);
+      }
+
+      for (UnsolvedClassOrInterface alternate : alternates) {
+        addAlternate(alternate);
+      }
+    }
+  }
+
+  /**
+   * Removes alternates with a certain sealedness, and blocks it from being added back in the
+   * future.
+   *
+   * @param sealedness The sealedness
+   */
+  public void removeAndBlockSealedness(Sealedness sealedness) {
+    forbiddenSealednesses.add(sealedness);
+    boolean allMatchSealedness =
+        doAllAlternatesReturnTrueFor((alt) -> alt.getSealedness() == sealedness);
+
+    if (allMatchSealedness) {
+      applyToAllAlternates(a -> a.setSealedness(Sealedness.NONE));
+    } else {
+      getAlternates().removeIf(a -> a.getSealedness() == sealedness);
+    }
   }
 
   /**

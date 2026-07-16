@@ -43,6 +43,9 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   /** The access modifier of the method. */
   private String accessModifier;
 
+  /** The content of the method. */
+  private String content = "throw new java.lang.Error();";
+
   /**
    * Create an instance of UnsolvedMethod.
    *
@@ -267,7 +270,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
         || type == UnsolvedClassOrInterfaceType.INTERFACE) {
       return "\n    " + signature + ";\n";
     } else {
-      return "\n    " + signature + " {\n        throw new java.lang.Error();\n    }\n";
+      return "\n    " + signature + " {\n        " + content + "\n    }\n";
     }
   }
 
@@ -361,6 +364,11 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   @Override
   public void setAccessModifier(String accessModifier) {
     this.accessModifier = accessModifier;
+  }
+
+  @Override
+  public void setContent(String content) {
+    this.content = content;
   }
 
   @Override

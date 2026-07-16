@@ -42,6 +42,9 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   /** The type of this type; i.e., is it a class, interface, annotation, enum? */
   private UnsolvedClassOrInterfaceType typeOfType = UnsolvedClassOrInterfaceType.UNKNOWN;
 
+  /** The sealedness of this type; i.e., final, sealed, non-sealed, or none of these. */
+  private Sealedness sealedness = Sealedness.NONE;
+
   /**
    * This constructor correctly splits apart the class name and any generics attached to it.
    *
@@ -142,6 +145,24 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   }
 
   /**
+   * Sets the sealedness of this class.
+   *
+   * @param sealedness The sealedness
+   */
+  public void setSealedness(Sealedness sealedness) {
+    this.sealedness = sealedness;
+  }
+
+  /**
+   * Gets the sealedness of this class.
+   *
+   * @return The sealedness
+   */
+  public Sealedness getSealedness() {
+    return sealedness;
+  }
+
+  /**
    * Adds an annotation to this class.
    *
    * @param annotation a fully-qualified annotation to apply
@@ -181,6 +202,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
     copy.typeOfType = this.typeOfType;
     copy.typeVariables = new ArrayList<>(this.typeVariables);
     copy.annotations = new HashSet<>(this.annotations);
+    copy.sealedness = this.sealedness;
 
     return copy;
   }
@@ -228,6 +250,22 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       // a discussion of the difference.
       sb.append("static ");
     }
+
+    if (sealedness == Sealedness.FINAL) {
+      if (typeOfType == UnsolvedClassOrInterfaceType.INTERFACE) {
+        throw new RuntimeException("Cannot create a final interface.");
+      }
+      sb.append("final ");
+    } else if (sealedness == Sealedness.NON_SEALED) {
+      sb.append("non-sealed ");
+    } else if (sealedness == Sealedness.SEALED) {
+      // Not supported yet because we would need to figure out which classes extend this type
+      // and add those to a permits clause, and we would also need to apply some sealedness
+      // to those classes
+      throw new UnsupportedOperationException(
+          "Specimin does not support synthetic sealed classes right now.");
+    }
+
     if (typeOfType == UnsolvedClassOrInterfaceType.INTERFACE) {
       sb.append("interface ");
     } else if (typeOfType == UnsolvedClassOrInterfaceType.ANNOTATION) {
