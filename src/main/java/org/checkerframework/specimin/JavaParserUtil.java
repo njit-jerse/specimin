@@ -2588,9 +2588,9 @@ public class JavaParserUtil {
     for (Expression label : entry.getLabels()) {
       // Reference equality is intentional: we need to know whether this exact name node is a label,
       // not whether some structurally-equal name is (the same constant may also appear in the
-      // body).
+      // body). No interning is okay because this is a pointer-equality check.
       // Extracted into a local variable to minimize suppression scope.
-      @SuppressWarnings("ReferenceEquality")
+      @SuppressWarnings({"ReferenceEquality", "not.interned"})
       boolean equals = label == nameExpr;
       if (equals || label.isAncestorOf(nameExpr)) {
         inLabel = true;
