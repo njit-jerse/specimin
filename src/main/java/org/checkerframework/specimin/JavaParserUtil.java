@@ -39,6 +39,7 @@ import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
@@ -2563,32 +2564,49 @@ public class JavaParserUtil {
   }
 
   /**
-   * Finds an enclosing switch selector expression, if one exists. Returns null if a selector
-   * expression cannot be found.
+   * If the given name expression is used as (or within) a case label of an enclosing switch
+   * statement or switch expression, returns the selector expression of that switch. Otherwise
+   * (including when the name appears in the body/statements of a switch entry, or outside of any
+   * switch), returns null.
    *
-   * @param nameExpr a possible enum constant
-   * @return the selector's resolved type, if one exists
+   * <p>This implements Java's special scoping rule for switches over enums: an unqualified enum
+   * constant that is a member of the selector's type may be used as a case label without an
+   * explicit import. The special scoping does <em>not</em> extend to the bodies of the switch
+   * entries, so only names appearing in the labels are treated specially.
+   *
+   * @param nameExpr a possible unqualified enum constant
+   * @return the enclosing switch's selector expression if nameExpr is a case label, or null
    */
-  public static @Nullable ResolvedType tryFindEnclosingSwitchEnumSelector(NameExpr nameExpr) {
-    Node ancestor =
-        nameExpr
-            .findAncestor(n -> n instanceof SwitchStmt || n instanceof SwitchExpr, Node.class)
-            .orElse(null);
-    if (ancestor == null) {
+  public static @Nullable Expression getEnclosingSwitchSelectorIfCaseLabel(NameExpr nameExpr) {
+    SwitchEntry entry = nameExpr.findAncestor(SwitchEntry.class).orElse(null);
+    if (entry == null) {
       return null;
     }
-    ResolvedType resolvedSelector = null;
-    try {
-      if (ancestor instanceof SwitchExpr) {
-        resolvedSelector = Resolver.calculateResolvedType(((SwitchExpr) ancestor).getSelector());
-      } else if (ancestor instanceof SwitchStmt) {
-        resolvedSelector = Resolver.calculateResolvedType(((SwitchStmt) ancestor).getSelector());
+    // The name must appear within one of the entry's labels (i.e., the "case X" part), not within
+    // its statements/body, where unqualified enum constants are not in scope.
+    boolean inLabel = false;
+    for (Expression label : entry.getLabels()) {
+      // Reference equality is intentional: we need to know whether this exact name node is a label,
+      // not whether some structurally-equal name is (the same constant may also appear in the
+      // body).
+      // Extracted into a local variable to minimize suppression scope.
+      @SuppressWarnings("ReferenceEquality")
+      boolean equals = label == nameExpr;
+      if (equals || label.isAncestorOf(nameExpr)) {
+        inLabel = true;
+        break;
       }
-    } catch (UnsolvedSymbolException e) {
-      return null; // ok to fail
     }
-    System.out.println("resolved selector was " + resolvedSelector);
-    return resolvedSelector;
+    if (!inLabel) {
+      return null;
+    }
+    Node switchNode = entry.getParentNode().orElse(null);
+    if (switchNode instanceof SwitchStmt switchStmt) {
+      return switchStmt.getSelector();
+    } else if (switchNode instanceof SwitchExpr switchExpr) {
+      return switchExpr.getSelector();
+    }
+    return null;
   }
 
   /**

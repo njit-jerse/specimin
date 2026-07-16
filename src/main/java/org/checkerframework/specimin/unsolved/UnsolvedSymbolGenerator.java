@@ -742,15 +742,10 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
-    // If we are inside a switch statement, this could be an enum constant.
-    // Heuristic: if the name isn't in ALL_CAPS, don't bother to check if
-    // it's an enum constant.
-    if (JavaParserUtil.isProbablyAConstant(nameExpr.getNameAsString())) {
-      ResolvedType enumSwitchSelector = JavaParserUtil.tryFindEnclosingSwitchEnumSelector(nameExpr);
-      if (enumSwitchSelector != null) {
-        System.out.println("made it in here: " + nameExpr);
-        System.out.println("enumSwitchSelector: " + enumSwitchSelector);
-      }
+    // An unqualified enum constant used as a switch case label is a member of the selector's enum
+    // type, not a field of the enclosing class, and requires no import. Handle that special case.
+    if (tryHandleSwitchEnumConstant(nameExpr, result)) {
+      return;
     }
 
     // class name
@@ -825,6 +820,83 @@ public class UnsolvedSymbolGenerator {
       ((UnsolvedFieldAlternates) generatedField)
           .updateFieldTypesAndMustPreserveNodes(typeToMustPreserveNode);
     }
+  }
+
+  /**
+   * Handles the special case of an unqualified enum constant used as a switch case label. Java
+   * permits an unqualified enum constant that is a member of the switch selector's type to be used
+   * as a case label without an explicit import. Such a name is therefore a member of the (possibly
+   * synthetic) enum used as the selector, not a field of the enclosing class.
+   *
+   * @param nameExpr the unsolved name expression
+   * @param result the list of generated/found symbols to add to
+   * @return true if nameExpr was handled as an enum constant (so no further handling is needed)
+   */
+  private boolean tryHandleSwitchEnumConstant(
+      NameExpr nameExpr, List<UnsolvedSymbolAlternates<?>> result) {
+    // Heuristic: enum constants follow the ALL_CAPS convention for constants. This avoids treating,
+    // e.g., a call to a locally-scoped variable in a case label as an enum constant.
+    if (!JavaParserUtil.isProbablyAConstant(nameExpr.getNameAsString())) {
+      return false;
+    }
+    Expression selector = JavaParserUtil.getEnclosingSwitchSelectorIfCaseLabel(nameExpr);
+    if (selector == null) {
+      return false;
+    }
+    // Determine the (possibly synthetic) type of the switch selector.
+    Set<String> enumFQNs = getSwitchSelectorTypeFQNs(selector);
+    if (enumFQNs == null || enumFQNs.isEmpty() || doesOverlapWithKnownType(enumFQNs)) {
+      // If the selector's type is a known type, it is not a synthetic enum that we control, so fall
+      // back to the normal handling. (In practice, the constants of a known enum would already have
+      // resolved above, so this only guards against unexpected inputs.)
+      return false;
+    }
+    // Find or create the synthetic enum, mark it as an enum, and add this constant to it.
+    UnsolvedClassOrInterfaceAlternates enumType =
+        findExistingAndUpdateFQNsOrCreateNewType(enumFQNs);
+    enumType.setType(UnsolvedClassOrInterfaceType.ENUM);
+
+    // Enum constants are represented as (static, final) fields of the enum; only the name is used
+    // when the declaring type is an enum, so the field's type is unimportant.
+    UnsolvedFieldAlternates constant =
+        UnsolvedFieldAlternates.create(
+            nameExpr.getNameAsString(),
+            getOrCreateMemberTypeFromFQNs(new FullyQualifiedNameSet(enumFQNs)),
+            List.of(enumType),
+            true,
+            true);
+    addNewSymbolToGeneratedSymbolsMap(constant);
+    result.add(constant);
+    return true;
+  }
+
+  /**
+   * Returns the set of fully-qualified names of the declared type of the given switch selector
+   * expression, or null if it cannot be determined. Unlike resolving the selector's type directly,
+   * this works even when that type is a synthetic (as-yet-unsolved) enum, because it computes the
+   * FQNs from the selector's declaration rather than from a resolved type.
+   *
+   * @param selector a switch selector expression
+   * @return the FQNs of the selector's declared type, or null if it cannot be determined
+   */
+  private @Nullable Set<String> getSwitchSelectorTypeFQNs(Expression selector) {
+    ResolvedValueDeclaration resolved;
+    if (selector instanceof NameExpr nameSelector) {
+      resolved = Resolver.resolve(nameSelector);
+    } else if (selector instanceof FieldAccessExpr fieldSelector) {
+      resolved = Resolver.resolve(fieldSelector);
+    } else {
+      return null;
+    }
+    if (resolved == null) {
+      return null;
+    }
+    Type type =
+        JavaParserUtil.getTypeFromResolvedValueDeclaration(resolved, fqnsToCompilationUnits);
+    if (type == null) {
+      return null;
+    }
+    return fullyQualifiedNameGenerator.getFQNsFromType(type).erasedFqns();
   }
 
   /**

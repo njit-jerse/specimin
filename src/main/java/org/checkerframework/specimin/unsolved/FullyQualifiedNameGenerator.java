@@ -23,6 +23,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithCondition;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
@@ -32,8 +33,11 @@ import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.nodeTypes.NodeWithVariables;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.YieldStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.ast.type.Type;
@@ -1907,6 +1911,23 @@ public class FullyQualifiedNameGenerator {
           result.add(fqn + "[]");
         }
         return Set.of(new FullyQualifiedNameSet(result, notArray.typeArguments()));
+      }
+    } else if (parentNode instanceof ExpressionStmt exprStmt
+        && exprStmt.getParentNode().orElse(null) instanceof SwitchEntry arrowEntry
+        && arrowEntry.getParentNode().orElse(null) instanceof SwitchExpr arrowSwitchExpr
+        && isExpressionNotInProgress(arrowSwitchExpr)) {
+      // The value of an arrow-rule switch-expression arm (`case X -> value;`, stored as an
+      // ExpressionStmt directly under the entry) has the type of the enclosing switch expression,
+      // which is itself inferred from its surrounding context (e.g. `int z = switch (m) { ... }`).
+      return getFQNsForExpressionType(arrowSwitchExpr);
+    } else if (parentNode instanceof YieldStmt) {
+      // A `yield value;` yields the value of the enclosing switch expression, so the yielded
+      // expression has that switch expression's type.
+      SwitchEntry entry = parentNode.findAncestor(SwitchEntry.class).orElse(null);
+      if (entry != null
+          && entry.getParentNode().orElse(null) instanceof SwitchExpr switchExpr
+          && isExpressionNotInProgress(switchExpr)) {
+        return getFQNsForExpressionType(switchExpr);
       }
     }
     return null;
