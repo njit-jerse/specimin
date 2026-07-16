@@ -22,7 +22,9 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
@@ -37,6 +39,7 @@ import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
@@ -1051,6 +1054,20 @@ public class JavaParserUtil {
     }
 
     return count;
+  }
+
+  /**
+   * Checks if the given name is in ALL_CAPS, as is the standard convention for constants. Heuristic
+   * for detecting likely enum constants.
+   */
+  public static boolean isProbablyAConstant(String simpleName) {
+    for (int i = 0; i < simpleName.length(); i++) {
+      char character = simpleName.charAt(i);
+      if (!Character.isUpperCase(character) && character != '_' && !Character.isDigit(character)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -2543,6 +2560,35 @@ public class JavaParserUtil {
                 n -> n instanceof MethodDeclaration || n instanceof LambdaExpr, Node.class)
             .get();
     return ancestor;
+  }
+
+  /**
+   * Finds an enclosing switch selector expression, if one exists. Returns null if a selector
+   * expression cannot be found.
+   *
+   * @param nameExpr a possible enum constant
+   * @return the selector's resolved type, if one exists
+   */
+  public static @Nullable ResolvedType tryFindEnclosingSwitchEnumSelector(NameExpr nameExpr) {
+    Node ancestor =
+        nameExpr
+            .findAncestor(n -> n instanceof SwitchStmt || n instanceof SwitchExpr, Node.class)
+            .orElse(null);
+    if (ancestor == null) {
+      return null;
+    }
+    ResolvedType resolvedSelector = null;
+    try {
+      if (ancestor instanceof SwitchExpr) {
+        resolvedSelector = Resolver.calculateResolvedType(((SwitchExpr) ancestor).getSelector());
+      } else if (ancestor instanceof SwitchStmt) {
+        resolvedSelector = Resolver.calculateResolvedType(((SwitchStmt) ancestor).getSelector());
+      }
+    } catch (UnsolvedSymbolException e) {
+      return null; // ok to fail
+    }
+    System.out.println("resolved selector was " + resolvedSelector);
+    return resolvedSelector;
   }
 
   /**

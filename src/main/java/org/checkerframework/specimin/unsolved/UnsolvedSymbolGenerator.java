@@ -742,6 +742,17 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
+    // If we are inside a switch statement, this could be an enum constant.
+    // Heuristic: if the name isn't in ALL_CAPS, don't bother to check if
+    // it's an enum constant.
+    if (JavaParserUtil.isProbablyAConstant(nameExpr.getNameAsString())) {
+      ResolvedType enumSwitchSelector = JavaParserUtil.tryFindEnclosingSwitchEnumSelector(nameExpr);
+      if (enumSwitchSelector != null) {
+        System.out.println("made it in here: " + nameExpr);
+        System.out.println("enumSwitchSelector: " + enumSwitchSelector);
+      }
+    }
+
     // class name
     if (JavaParserUtil.isAClassName(nameExpr.getNameAsString())) {
       for (FullyQualifiedNameSet potentialFQNs :
