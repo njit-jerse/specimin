@@ -184,24 +184,6 @@ public class JavaParserUtil {
   }
 
   /**
-   * Returns true if a simple name looks like a constant; i.e., all its characters are either
-   * capital or _. This is a heuristic.
-   *
-   * @param simpleName The simple name to check, should contain no dots
-   * @return If it looks like a constant
-   */
-  public static boolean looksLikeAConstant(String simpleName) {
-    for (int i = 0; i < simpleName.length(); i++) {
-      char character = simpleName.charAt(i);
-      if (!Character.isUpperCase(character) && character != '_') {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
    * Utility method to check if the given declaration is a local class declaration.
    *
    * @param decl a class, interface, or enum declaration

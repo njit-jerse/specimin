@@ -499,7 +499,7 @@ public class UnsolvedSymbolGenerator {
                   .next();
         }
       } else if (toLookUpTypeFor instanceof FieldAccessExpr fieldAccess
-          && JavaParserUtil.looksLikeAConstant(fieldAccess.getNameAsString())) {
+          && JavaParserUtil.isProbablyAConstant(fieldAccess.getNameAsString())) {
         // If it looks like an enum, it probably is
         rawFqns =
             fullyQualifiedNameGenerator
@@ -844,7 +844,11 @@ public class UnsolvedSymbolGenerator {
       return false;
     }
     // Determine the (possibly synthetic) type of the switch selector.
-    Set<String> enumFQNs = getSwitchSelectorTypeFQNs(selector);
+    Set<FullyQualifiedNameSet> fqns =
+        fullyQualifiedNameGenerator.getFQNsForExpressionType(selector);
+    // TODO: should we take the possibility of multiple members of fqns here into account? I think
+    // this will almost always return a set of size 0 or 1.
+    Set<String> enumFQNs = fqns.isEmpty() ? null : fqns.iterator().next().erasedFqns();
     if (enumFQNs == null || enumFQNs.isEmpty() || doesOverlapWithKnownType(enumFQNs)) {
       // If the selector's type is a known type, it is not a synthetic enum that we control, so fall
       // back to the normal handling. (In practice, the constants of a known enum would already have
@@ -868,35 +872,6 @@ public class UnsolvedSymbolGenerator {
     addNewSymbolToGeneratedSymbolsMap(constant);
     result.add(constant);
     return true;
-  }
-
-  /**
-   * Returns the set of fully-qualified names of the declared type of the given switch selector
-   * expression, or null if it cannot be determined. Unlike resolving the selector's type directly,
-   * this works even when that type is a synthetic (as-yet-unsolved) enum, because it computes the
-   * FQNs from the selector's declaration rather than from a resolved type.
-   *
-   * @param selector a switch selector expression
-   * @return the FQNs of the selector's declared type, or null if it cannot be determined
-   */
-  private @Nullable Set<String> getSwitchSelectorTypeFQNs(Expression selector) {
-    ResolvedValueDeclaration resolved;
-    if (selector instanceof NameExpr nameSelector) {
-      resolved = Resolver.resolve(nameSelector);
-    } else if (selector instanceof FieldAccessExpr fieldSelector) {
-      resolved = Resolver.resolve(fieldSelector);
-    } else {
-      return null;
-    }
-    if (resolved == null) {
-      return null;
-    }
-    Type type =
-        JavaParserUtil.getTypeFromResolvedValueDeclaration(resolved, fqnsToCompilationUnits);
-    if (type == null) {
-      return null;
-    }
-    return fullyQualifiedNameGenerator.getFQNsFromType(type).erasedFqns();
   }
 
   /**
