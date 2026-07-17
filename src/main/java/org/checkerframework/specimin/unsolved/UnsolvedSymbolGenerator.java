@@ -499,7 +499,7 @@ public class UnsolvedSymbolGenerator {
                   .next();
         }
       } else if (toLookUpTypeFor instanceof FieldAccessExpr fieldAccess
-          && JavaParserUtil.looksLikeAConstant(fieldAccess.getNameAsString())) {
+          && JavaParserUtil.isProbablyAConstant(fieldAccess.getNameAsString())) {
         // If it looks like an enum, it probably is
         rawFqns =
             fullyQualifiedNameGenerator
@@ -742,6 +742,12 @@ public class UnsolvedSymbolGenerator {
       return;
     }
 
+    // An unqualified enum constant used as a switch case label is a member of the selector's enum
+    // type, not a field of the enclosing class, and requires no import. Handle that special case.
+    if (tryHandleSwitchEnumConstant(nameExpr, result)) {
+      return;
+    }
+
     // class name
     if (JavaParserUtil.isAClassName(nameExpr.getNameAsString())) {
       for (FullyQualifiedNameSet potentialFQNs :
@@ -814,6 +820,69 @@ public class UnsolvedSymbolGenerator {
       ((UnsolvedFieldAlternates) generatedField)
           .updateFieldTypesAndMustPreserveNodes(typeToMustPreserveNode);
     }
+  }
+
+  /**
+   * Handles the special case of an unqualified enum constant used as a switch case label. Java
+   * permits an unqualified enum constant that is a member of the switch selector's type to be used
+   * as a case label without an explicit import. Such a name is therefore a member of the (possibly
+   * synthetic) enum used as the selector, not a field of the enclosing class.
+   *
+   * @param nameExpr the unsolved name expression
+   * @param result the list of generated/found symbols to add to
+   * @return true if nameExpr was handled as an enum constant (so no further handling is needed)
+   */
+  private boolean tryHandleSwitchEnumConstant(
+      NameExpr nameExpr, List<UnsolvedSymbolAlternates<?>> result) {
+    // Heuristic: enum constants follow the ALL_CAPS convention for constants. This avoids treating,
+    // e.g., a call to a locally-scoped variable in a case label as an enum constant.
+    if (!JavaParserUtil.isProbablyAConstant(nameExpr.getNameAsString())) {
+      return false;
+    }
+    Expression selector = JavaParserUtil.getEnclosingSwitchSelectorIfCaseLabel(nameExpr);
+    if (selector == null) {
+      return false;
+    }
+    // Determine the (possibly synthetic) type of the switch selector.
+    Set<FullyQualifiedNameSet> fqns =
+        fullyQualifiedNameGenerator.getFQNsForExpressionType(selector);
+    // TODO: should we take the possibility of multiple members of fqns here into account? I think
+    // this will almost always return a set of size 0 or 1.
+    Set<String> enumFQNs = fqns.isEmpty() ? null : fqns.iterator().next().erasedFqns();
+    if (enumFQNs == null || enumFQNs.isEmpty() || doesOverlapWithKnownType(enumFQNs)) {
+      // If the selector's type is a known type, it is not a synthetic enum that we control, so fall
+      // back to the normal handling. (In practice, the constants of a known enum would already have
+      // resolved above, so this only guards against unexpected inputs.)
+      return false;
+    }
+
+    // Check to make sure we don't add a duplicate enum constant.
+    Set<String> fieldFQNs =
+        enumFQNs.stream()
+            .map(fqn -> fqn + "#" + nameExpr.getNameAsString())
+            .collect(Collectors.toSet());
+    UnsolvedSymbolAlternates<?> existing = findExistingAndUpdateFQNs(fieldFQNs);
+    if (existing instanceof UnsolvedFieldAlternates) {
+      return true;
+    }
+
+    // Find or create the synthetic enum, mark it as an enum, and add this constant to it.
+    UnsolvedClassOrInterfaceAlternates enumType =
+        findExistingAndUpdateFQNsOrCreateNewType(enumFQNs);
+    enumType.setType(UnsolvedClassOrInterfaceType.ENUM);
+
+    // Enum constants are represented as (static, final) fields of the enum; only the name is used
+    // when the declaring type is an enum, so the field's type is unimportant.
+    UnsolvedFieldAlternates constant =
+        UnsolvedFieldAlternates.create(
+            nameExpr.getNameAsString(),
+            getOrCreateMemberTypeFromFQNs(new FullyQualifiedNameSet(enumFQNs)),
+            List.of(enumType),
+            true,
+            true);
+    addNewSymbolToGeneratedSymbolsMap(constant);
+    result.add(constant);
+    return true;
   }
 
   /**

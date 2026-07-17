@@ -22,7 +22,9 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
@@ -37,6 +39,8 @@ import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
@@ -177,24 +181,6 @@ public class JavaParserUtil {
 
     // A name like "A": assume it's a class
     return Character.isUpperCase(first);
-  }
-
-  /**
-   * Returns true if a simple name looks like a constant; i.e., all its characters are either
-   * capital or _. This is a heuristic.
-   *
-   * @param simpleName The simple name to check, should contain no dots
-   * @return If it looks like a constant
-   */
-  public static boolean looksLikeAConstant(String simpleName) {
-    for (int i = 0; i < simpleName.length(); i++) {
-      char character = simpleName.charAt(i);
-      if (!Character.isUpperCase(character) && character != '_') {
-        return false;
-      }
-    }
-
-    return true;
   }
 
   /**
@@ -1051,6 +1037,20 @@ public class JavaParserUtil {
     }
 
     return count;
+  }
+
+  /**
+   * Checks if the given name is in ALL_CAPS, as is the standard convention for constants. Heuristic
+   * for detecting likely enum constants.
+   */
+  public static boolean isProbablyAConstant(String simpleName) {
+    for (int i = 0; i < simpleName.length(); i++) {
+      char character = simpleName.charAt(i);
+      if (!Character.isUpperCase(character) && character != '_' && !Character.isDigit(character)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -2543,6 +2543,52 @@ public class JavaParserUtil {
                 n -> n instanceof MethodDeclaration || n instanceof LambdaExpr, Node.class)
             .get();
     return ancestor;
+  }
+
+  /**
+   * If the given name expression is used as (or within) a case label of an enclosing switch
+   * statement or switch expression, returns the selector expression of that switch. Otherwise
+   * (including when the name appears in the body/statements of a switch entry, or outside of any
+   * switch), returns null.
+   *
+   * <p>This implements Java's special scoping rule for switches over enums: an unqualified enum
+   * constant that is a member of the selector's type may be used as a case label without an
+   * explicit import. The special scoping does <em>not</em> extend to the bodies of the switch
+   * entries, so only names appearing in the labels are treated specially.
+   *
+   * @param nameExpr a possible unqualified enum constant
+   * @return the enclosing switch's selector expression if nameExpr is a case label, or null
+   */
+  public static @Nullable Expression getEnclosingSwitchSelectorIfCaseLabel(NameExpr nameExpr) {
+    SwitchEntry entry = nameExpr.findAncestor(SwitchEntry.class).orElse(null);
+    if (entry == null) {
+      return null;
+    }
+    // The name must appear within one of the entry's labels (i.e., the "case X" part), not within
+    // its statements/body, where unqualified enum constants are not in scope.
+    boolean inLabel = false;
+    for (Expression label : entry.getLabels()) {
+      // Reference equality is intentional: we need to know whether this exact name node is a label,
+      // not whether some structurally-equal name is (the same constant may also appear in the
+      // body). No interning is okay because this is a pointer-equality check.
+      // Extracted into a local variable to minimize suppression scope.
+      @SuppressWarnings({"ReferenceEquality", "not.interned"})
+      boolean equals = label == nameExpr;
+      if (equals || label.isAncestorOf(nameExpr)) {
+        inLabel = true;
+        break;
+      }
+    }
+    if (!inLabel) {
+      return null;
+    }
+    Node switchNode = entry.getParentNode().orElse(null);
+    if (switchNode instanceof SwitchStmt switchStmt) {
+      return switchStmt.getSelector();
+    } else if (switchNode instanceof SwitchExpr switchExpr) {
+      return switchExpr.getSelector();
+    }
+    return null;
   }
 
   /**
