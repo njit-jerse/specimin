@@ -3886,6 +3886,15 @@ public class UnsolvedSymbolGenerator {
     return false;
   }
 
+    /**
+     * Given an unsolvable constuctor invocation (i.e., to a constructor in a
+     * synthetic class), this method returns a list of fully-qualified names for
+     * the constructor invocation's argument types.
+     *
+     * @param node a constructor invocation: either an ExplicitConstructorInvocationStmt
+     *             or an ObjectCreationExpr
+     * @return a list of fully-qualified names for the constructor invocation's argument types
+     */
   private Set<String> getFQNsForUnsolvableConstructor(Node node) {
     UnsolvedClassOrInterfaceAlternates scope;
     String constructorName;
