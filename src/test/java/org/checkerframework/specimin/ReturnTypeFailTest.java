@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks that a simple Java file with no dependencies and a single target method with one
@@ -11,7 +11,7 @@ public class ReturnTypeFailTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "returnTypeFail",
+        "returntypefail",
         new String[] {"com/example/MapperConfigBase.java"},
         new String[] {"com.example.MapperConfigBase#getDefaultPropertyInclusion(Class<?>)"});
   }
