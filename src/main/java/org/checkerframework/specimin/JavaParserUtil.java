@@ -1042,6 +1042,9 @@ public class JavaParserUtil {
   /**
    * Checks if the given name is in ALL_CAPS, as is the standard convention for constants. Heuristic
    * for detecting likely enum constants.
+   *
+   * @param simpleName the name to check
+   * @return true if the name matches the standard Java convention for constants, false otherwise
    */
   public static boolean isProbablyAConstant(String simpleName) {
     for (int i = 0; i < simpleName.length(); i++) {

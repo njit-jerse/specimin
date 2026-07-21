@@ -2997,9 +2997,31 @@ public class UnsolvedSymbolGenerator {
               return UnsolvedGenerationResult.EMPTY;
             }
           } else {
+            // We reach this branch when no matching constructor declaration could be found for a
+            // constructor call whose arguments are not all resolvable. If the constructor's
+            // declaring type is nevertheless a fully-known class (e.g. a JDK type such as
+            // IllegalStateException, or a source type without a matching-arity constructor), then
+            // there is no synthetic constructor to generate: the declaring type is not one of the
+            // synthetic symbols, so getFQNsForUnsolvableConstructor would find a null scope and
+            // crash. Since the declaring type's constructor parameters are already known, there are
+            // no synthetic parameter types to constrain from this call, so there is nothing to do.
+            if (isKnownConstructorDeclaringType(node)) {
+              return UnsolvedGenerationResult.EMPTY;
+            }
             genMethod =
                 (UnsolvedMethodAlternates)
                     findExistingAndUpdateFQNs(getFQNsForUnsolvableConstructor(node));
+
+            // The synthetic constructor's parameter types are computed from the current (best
+            // known) types of the arguments. If those argument types have since been refined (for
+            // example, a synthetic placeholder type was later unified with a more specific type),
+            // the recomputed constructor signature can no longer match the one originally
+            // generated, so no alternates are found. This is only a best-effort step to constrain
+            // argument types against the constructor's parameters, so if the constructor cannot be
+            // located there is nothing further to constrain here.
+            if (genMethod == null) {
+              return UnsolvedGenerationResult.EMPTY;
+            }
           }
 
           if (genMethod == null) {
@@ -3838,11 +3860,32 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Returns the FQNs for an unsolvable constructor call.
+   * Determines whether the declaring type of an unresolvable constructor call is nevertheless a
+   * fully-known class (i.e. one that the symbol solver can resolve, such as a JDK type). Such types
+   * are not among the synthetic symbols, so no synthetic constructor should be generated for them.
    *
-   * @param node The node representing the constructor call; either an ObjectCreationExpr or
+   * @param node the node representing the constructor call; either an ObjectCreationExpr or
    *     ExplicitConstructorInvocationStmt
-   * @return A set of FQNs representing the constructor
+   * @return true if the constructor's declaring type is resolvable and therefore known
+   */
+  private boolean isKnownConstructorDeclaringType(Node node) {
+    if (node instanceof ObjectCreationExpr constructor) {
+      return Resolver.resolve(constructor.getType()) != null;
+    } else if (node instanceof ExplicitConstructorInvocationStmt constructor
+        && !constructor.isThis()) {
+      ClassOrInterfaceType superClass = JavaParserUtil.getSuperClass(node);
+      return superClass != null && Resolver.resolve(superClass) != null;
+    }
+    return false;
+  }
+
+  /**
+   * Given an unsolvable constuctor invocation (i.e., to a constructor in a synthetic class), this
+   * method returns a list of fully-qualified names for the constructor invocation's argument types.
+   *
+   * @param node a constructor invocation: either an ExplicitConstructorInvocationStmt or an
+   *     ObjectCreationExpr
+   * @return a list of fully-qualified names for the constructor invocation's argument types
    */
   private Set<String> getFQNsForUnsolvableConstructor(Node node) {
     UnsolvedClassOrInterfaceAlternates scope;
