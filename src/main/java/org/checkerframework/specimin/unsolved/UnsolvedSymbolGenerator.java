@@ -3860,13 +3860,6 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Returns the FQNs for an unsolvable constructor call.
-   *
-   * @param node The node representing the constructor call; either an ObjectCreationExpr or
-   *     ExplicitConstructorInvocationStmt
-   * @return A set of FQNs representing the constructor
-   */
-  /**
    * Determines whether the declaring type of an unresolvable constructor call is nevertheless a
    * fully-known class (i.e. one that the symbol solver can resolve, such as a JDK type). Such types
    * are not among the synthetic symbols, so no synthetic constructor should be generated for them.
@@ -3886,15 +3879,14 @@ public class UnsolvedSymbolGenerator {
     return false;
   }
 
-    /**
-     * Given an unsolvable constuctor invocation (i.e., to a constructor in a
-     * synthetic class), this method returns a list of fully-qualified names for
-     * the constructor invocation's argument types.
-     *
-     * @param node a constructor invocation: either an ExplicitConstructorInvocationStmt
-     *             or an ObjectCreationExpr
-     * @return a list of fully-qualified names for the constructor invocation's argument types
-     */
+  /**
+   * Given an unsolvable constuctor invocation (i.e., to a constructor in a synthetic class), this
+   * method returns a list of fully-qualified names for the constructor invocation's argument types.
+   *
+   * @param node a constructor invocation: either an ExplicitConstructorInvocationStmt or an
+   *     ObjectCreationExpr
+   * @return a list of fully-qualified names for the constructor invocation's argument types
+   */
   private Set<String> getFQNsForUnsolvableConstructor(Node node) {
     UnsolvedClassOrInterfaceAlternates scope;
     String constructorName;
