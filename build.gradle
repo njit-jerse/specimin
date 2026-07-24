@@ -141,9 +141,16 @@ checkerFramework {
     extraJavacArgs = [
             "-Astubs=${projectDir}/JavaParser.astub",
             "-AslowTypecheckingSeconds=180", // UnsolvedSymbolGenerator takes a long time to typecheck, which is fine.
-            "-J-Xmx4g" // The CF requires significantly more memory than the typical Java compiler.
     ]
     version = "4.2.0"
+}
+
+tasks.withType(JavaCompile) {
+    // The CF requires significantly more memory than the typical Java compiler.
+    if (!checkerFramework.skipCheckerFramework) {
+        options.fork = true
+        options.forkOptions.memoryMaximumSize = "4g"
+    }
 }
 
 spotless {
