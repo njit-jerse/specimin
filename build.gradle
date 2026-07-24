@@ -126,8 +126,10 @@ tasks.compileTestJava {
 }
 
 checkerFramework {
-    // uncomment for testing
-    // skipCheckerFramework = true
+    // The CF is disabled on dev machine builds by default because it is pretty slow.
+    // These checkers will run in CI, though. To run them locally, run gradle with
+    // `-PskipCheckerFramework=false`.
+    skipCheckerFramework = true
     checkers = [
             "org.checkerframework.checker.nullness.NullnessChecker",
             "org.checkerframework.checker.resourceleak.ResourceLeakChecker",
