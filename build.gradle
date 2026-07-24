@@ -140,7 +140,8 @@ checkerFramework {
 
     extraJavacArgs = [
             "-Astubs=${projectDir}/JavaParser.astub",
-            "-AslowTypecheckingSeconds=180" // UnsolvedSymbolGenerator takes a long time to typecheck, which is fine.
+            "-AslowTypecheckingSeconds=180", // UnsolvedSymbolGenerator takes a long time to typecheck, which is fine.
+            "-J-Xmx4g" // The CF requires significantly more memory than the typical Java compiler.
     ]
     version = "4.2.0"
 }
