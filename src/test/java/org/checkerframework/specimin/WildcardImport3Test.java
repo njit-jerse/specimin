@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks the case where there are two wildcard imports, but the used class that one of

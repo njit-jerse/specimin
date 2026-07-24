@@ -1,7 +1,7 @@
 package org.example;
 
 public class LambdaUser {
-    public UseReturnType use(SyntheticFunction3<?, ?, ?, ?> parameter0) {
+    public org.example.UseReturnType use(com.example.SyntheticFunction3<?, ?, ?, ?> parameter0) {
         throw new java.lang.Error();
     }
 }

@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks that Specimin can properly ignore annotations in the parameters of a target
@@ -15,6 +15,7 @@ public class ParameterWithAnnotationsTest {
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar(byte[], UnsolvedType)"},
         "cf",
-        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
+        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"},
+        "best-effort");
   }
 }

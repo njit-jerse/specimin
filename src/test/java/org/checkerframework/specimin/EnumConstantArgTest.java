@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks if Specimin correctly preserves things that are used as arguments to enum

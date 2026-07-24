@@ -2,11 +2,11 @@ package org.example;
 
 public class Foo {
 
-    public Foo() {
+    public static org.example.OrgExampleFooSetThisReturnType setThis(org.example.Bar parameter0) {
         throw new java.lang.Error();
     }
 
-    public static OrgExampleFooSetThisReturnType setThis(org.example.Bar parameter0) {
+    public Foo() {
         throw new java.lang.Error();
     }
 }

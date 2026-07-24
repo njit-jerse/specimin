@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks that different parameter and argument types (e.g., ArrayList as the argument and

@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests that when a private inner class is the only actual argument used for a method that _should_

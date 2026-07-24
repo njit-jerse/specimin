@@ -1,7 +1,5 @@
 package com.example;
 
-public interface Baz<E> {
-    public default boolean containsAll(com.example.Baz<?> parameter0) {
-        throw new java.lang.Error();
-    }
+public interface Baz<T> {
+    public boolean containsAll(com.example.Baz<?> parameter0);
 }

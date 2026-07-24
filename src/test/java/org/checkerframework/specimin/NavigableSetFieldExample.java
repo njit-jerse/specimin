@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /** This test checks for a crash when targeting a field in the cf-691 example from the JDK. */
 public class NavigableSetFieldExample {

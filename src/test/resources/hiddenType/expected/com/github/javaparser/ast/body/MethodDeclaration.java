@@ -1,7 +1,7 @@
 package com.github.javaparser.ast.body;
 public class MethodDeclaration {
 
-    public GetTypeReturnType getType() {
+    public com.github.javaparser.ast.body.GetTypeReturnType getType() {
         throw new java.lang.Error();
     }
 }

@@ -89,6 +89,7 @@ jobs:
         run: |
           set -ex
           chmod +x ashe_scripts/*.py
+          chmod +x ashe_scripts/*.sh
 
       - name: Run the script
         run: |
@@ -108,37 +109,36 @@ jobs:
       - name: Show only failed minimizations
         run: |
           grep 'failed_minimization' ASHE/logs/specimin_run_results.txt | sort
+          grep 'failed_minimization' ASHE/logs/specimin_run_results.txt | sort > run_failed_minimizations.txt
       - name: Show only failed compilations
         run: |
           grep 'failed_compilation' ASHE/logs/specimin_run_results.txt | sort
-      - name: Parse accuracy percentage
-        id: parse_accuracy_percentage
+          grep 'failed_compilation' ASHE/logs/specimin_run_results.txt | sort > run_failed_compilations.txt
+      - name: Check failure diff
+        id: check_failure_diff
         run: |
-          current_run_accuracy=$(grep 'Fully successful from minimization to compilation' "$(pwd)/ASHE/logs/specimin_statistics.txt" | awk '{print $NF}' | tr -d '()%')
-          echo "Current run accuracy: $current_run_accuracy"
-          echo "current_run_accuracy=$current_run_accuracy" >> "$GITHUB_OUTPUT"
+          echo "Minimization Diff:"
+          diff CI_failed_minimizations.txt run_failed_minimizations.txt || echo "difference in minimizations!"
 
-      - name: Read latest run percentage from file
-        id: constant_saved_run_percentage
-        run: |
-          if [ -f "$(pwd)/CI_constant_saved_run_percentage.txt" ]; then
-            constant_saved_run_percentage=$(cat "$(pwd)/CI_constant_saved_run_percentage.txt" | tr -d '()%')
-            echo "Constant saved run accuracy: $constant_saved_run_percentage"
-            echo "constant_saved_run_percentage=$constant_saved_run_percentage" >> "$GITHUB_OUTPUT"
-          else
-            echo "File CI_constant_saved_run_percentage.txt does not exist"
-            exit 1
-          fi
-
+          echo "Compilation Diff:"
+          diff CI_failed_compilations.txt run_failed_compilations.txt || echo "difference in compilations!"
+          
       - name: Validate accuracy
         id: validate_accuracy
         run: |
-          current_run_accuracy="${{ steps.parse_accuracy_percentage.outputs.current_run_accuracy }}"
-          constant_saved_run_percentage="${{ steps.constant_saved_run_percentage.outputs.constant_saved_run_percentage }}"
-          
-          if [ "$current_run_accuracy" != "$constant_saved_run_percentage" ]; then
-            echo "Current accuracy ($current_run_accuracy) does not match latest run accuracy ($constant_saved_run_percentage)."
+          ashe_scripts/comparelogs.sh CI_failed_minimizations.txt run_failed_minimizations.txt
+          if [ $? ];
+            then
+            echo "Regression in minimizations"
             exit 1
-          else
-            echo "Accuracy validation passed."
           fi
+
+          ashe_scripts/comparelogs.sh CI_failed_compilations.txt run_failed_compilations.txt
+          if [ $? ];
+            then
+            echo "Regression in compilations"
+            exit 1
+          fi
+
+          echo "no regressions detected from this run's results, update the saved failed minimizations/compilations list"
+          

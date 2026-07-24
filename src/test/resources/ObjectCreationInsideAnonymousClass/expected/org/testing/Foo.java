@@ -2,11 +2,11 @@ package org.testing;
 
 public class Foo {
 
-    public Foo(java.lang.String parameter0) {
+    public org.testing.RemoveReturnType remove() {
         throw new java.lang.Error();
     }
 
-    public RemoveReturnType remove() {
+    public Foo(java.lang.String parameter0) {
         throw new java.lang.Error();
     }
 }

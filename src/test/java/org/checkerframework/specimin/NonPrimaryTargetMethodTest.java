@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /** This test checks if Specimin can handle target methods in non-primary classes. */
 public class NonPrimaryTargetMethodTest {
@@ -10,6 +10,7 @@ public class NonPrimaryTargetMethodTest {
     SpeciminTestExecutor.runTestWithoutJarPaths(
         "nonprimarytargetmethod",
         new String[] {"com/example/Baz.java"},
-        new String[] {"com.example.NonPrimary#printMessage()"});
+        new String[] {"com.example.NonPrimary#printMessage()"},
+        "--disable-root-validation");
   }
 }
