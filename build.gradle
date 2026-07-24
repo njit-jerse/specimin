@@ -147,10 +147,8 @@ checkerFramework {
 
 tasks.withType(JavaCompile) {
     // The CF requires significantly more memory than the typical Java compiler.
-    if (!checkerFramework.skipCheckerFramework) {
-        options.fork = true
-        options.forkOptions.memoryMaximumSize = "4g"
-    }
+    options.fork = true
+    options.forkOptions.memoryMaximumSize = "4g"
 }
 
 spotless {
