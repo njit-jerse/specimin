@@ -139,7 +139,8 @@ checkerFramework {
     excludeTests = true
 
     extraJavacArgs = [
-            "-Astubs=${projectDir}/JavaParser.astub"
+            "-Astubs=${projectDir}/JavaParser.astub",
+            "-AslowTypecheckingSeconds=180" // UnsolvedSymbolGenerator takes a long time to typecheck, which is fine.
     ]
     version = "4.2.0"
 }
