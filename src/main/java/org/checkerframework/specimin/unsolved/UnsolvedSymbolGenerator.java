@@ -4132,13 +4132,24 @@ public class UnsolvedSymbolGenerator {
    * treated as handling the exception. This also matches Specimin's existing convention that an
    * exception is treated as checked only when its exact type appears in a throws or catch clause.
    *
+   * <p>The match must also cover every possibility. Both the catch/throws type and the exception
+   * are represented as sets of <em>possible</em> fully-qualified names (a type reference may be
+   * ambiguous, e.g., because of a wildcard import). We require the two sets to be exactly equal, so
+   * that every possible FQN of the exception is also a possible FQN of the catch/throws type and
+   * vice versa. A merely non-empty intersection is not enough: if the two sets only partially
+   * overlap (e.g., {@code {A, B}} versus {@code {A, C}}), then the clause might refer to a
+   * different type than the exception, so we cannot be certain it is handled and we conservatively
+   * report "not handled" and let the exception become unchecked. (Two identical ambiguous sets,
+   * such as the same wildcard-imported exception named in both a throws clause and a call it
+   * guards, do compare equal and are treated as handled.)
+   *
    * @param type the catch or throws clause type
    * @param exceptionFqns the possible fully-qualified names of the exception type
-   * @return true if the type is (exactly) the exception type
+   * @return true if the type names exactly the exception type
    */
   private boolean typeHandlesException(Type type, Set<String> exceptionFqns) {
     Set<String> typeFqns = fullyQualifiedNameGenerator.getFQNsFromType(type).erasedFqns();
-    return !Collections.disjoint(typeFqns, exceptionFqns);
+    return typeFqns.equals(exceptionFqns);
   }
 
   /**
