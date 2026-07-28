@@ -420,6 +420,13 @@ public class Slicer {
           List<String> parameterTypes = null;
 
           for (ResolvedConstructorDeclaration constructor : superClassDecl.getConstructors()) {
+            // A private constructor can't be the target of a super() call, so it can't rescue
+            // this class' compilability. Check this before the arity comparison below, so that
+            // an inaccessible constructor can never displace an accessible one.
+            if (constructor.accessSpecifier() == AccessSpecifier.PRIVATE) {
+              continue;
+            }
+
             if (parameterTypes != null
                 && parameterTypes.size() <= constructor.getNumberOfParams()) {
               continue;
@@ -436,11 +443,6 @@ public class Slicer {
                       .map(p -> p.getType().toString())
                       .toList();
             } else if (attached != null || !superClassIsModifiable) {
-              // A private constructor can't be the target of a super() call, so it can't
-              // rescue this class' compilability.
-              if (constructor.accessSpecifier() == AccessSpecifier.PRIVATE) {
-                continue;
-              }
               parameterTypes =
                   constructor.formalParameterTypes().stream().map(ResolvedType::describe).toList();
             }
