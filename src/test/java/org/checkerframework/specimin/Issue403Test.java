@@ -1,13 +1,17 @@
 package org.checkerframework.specimin;
 
-import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-public class stringindexoob {
+import java.io.IOException;
+
+/**
+ * Regression test case for <a href="https://github.com/njit-jerse/specimin/issues/403">issue 403</a>.
+ */
+public class Issue403Test {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "stringindexoob",
+        "issue403",
         new String[] {"com/example/BasicDeserializerFactory.java"},
         new String[] {
           "com.example.BasicDeserializerFactory#createArrayDeserializer(DeserializationContext,"
