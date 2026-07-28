@@ -392,6 +392,55 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     return getAlternates().get(0).getThrownExceptions();
   }
 
+  @Override
+  public void addThrownException(MemberType exception) {
+    applyToAllAlternates(UnsolvedMethod::addThrownException, exception);
+  }
+
+  /**
+   * Records that this method might declare the given exception in its throws clause, by adding a
+   * copy of each existing alternate with the exception added. Use this instead of {@link
+   * #addThrownException} when it is not certain that this method is the one that throws the
+   * exception.
+   *
+   * <p>Note that {@link UnsolvedMethod#equals} ignores the throws clause, so a later call to {@link
+   * #removeDuplicateAlternates()} collapses the alternates added here back into whichever of the
+   * two possibilities comes first.
+   *
+   * @param exception the exception that this method might throw
+   * @param preferred whether the alternates that declare the exception should be preferred; if
+   *     true, they are placed before the alternates that do not declare it
+   */
+  public void addAlternatesWithThrownException(MemberType exception, boolean preferred) {
+    List<UnsolvedMethod> throwing = new ArrayList<>();
+
+    for (UnsolvedMethod alternate : getAlternates()) {
+      if (alternate.getThrownExceptions().contains(exception)) {
+        // This method is already known to throw the exception; there is no alternative to record.
+        return;
+      }
+
+      UnsolvedMethod copy =
+          new UnsolvedMethod(
+              alternate.getName(),
+              alternate.getReturnType(),
+              alternate.getParameterList(),
+              alternate.getThrownExceptions(),
+              alternate.getMustPreserveNodes(),
+              alternate.getAccessModifier(),
+              alternate.isStatic(),
+              alternate.getNumberOfTypeVariables());
+      copy.addThrownException(exception);
+      throwing.add(copy);
+    }
+
+    if (preferred) {
+      getAlternates().addAll(0, throwing);
+    } else {
+      getAlternates().addAll(throwing);
+    }
+  }
+
   /**
    * Use with caution: this method sets all alternates' return types to the same type.
    *

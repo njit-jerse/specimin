@@ -108,9 +108,11 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     super(mustPreserve);
     this.name = name;
     this.returnType = returnType;
-    // Parameter list should be mutable, so convert it to be safe
+
+    // Parameter and throws lists should be mutable, so copy them to be safe
     this.parameterList = new ArrayList<>(parameterList);
-    this.throwsList = throwsList;
+    this.throwsList = new ArrayList<>(throwsList);
+
     this.accessModifier = accessModifier;
     this.isStatic = isStatic;
     this.numberOfTypeVariables = numberOfTypeVariables;
@@ -166,6 +168,13 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   @Override
   public List<MemberType> getThrownExceptions() {
     return Collections.unmodifiableList(throwsList);
+  }
+
+  @Override
+  public void addThrownException(MemberType exception) {
+    if (!throwsList.contains(exception)) {
+      throwsList.add(exception);
+    }
   }
 
   /** Set isStatic to true */
