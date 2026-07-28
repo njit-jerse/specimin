@@ -2,11 +2,11 @@ package org.example;
 
 public class Foo {
 
-    public Foo() {
-        throw new Error();
+    public org.example.FooMethodReturnType fooMethod() {
+        throw new java.lang.Error();
     }
 
-    public FooMethodReturnType fooMethod() {
-        throw new Error();
+    public Foo() {
+        throw new java.lang.Error();
     }
 }

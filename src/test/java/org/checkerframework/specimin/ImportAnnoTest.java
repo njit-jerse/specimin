@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks that an imported declaration annotation is retained. Based on a bug I discovered
@@ -15,6 +15,7 @@ public class ImportAnnoTest {
         new String[] {"com/example/Simple.java"},
         new String[] {"com.example.Simple#bar()"},
         "cf",
-        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"});
+        new String[] {"src/test/resources/shared/checker-qual-3.42.0.jar"},
+        "best-effort");
   }
 }

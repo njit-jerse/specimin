@@ -1,11 +1,12 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks that if Specimin will work properly where there is a super variables call while
- * the parent class file is not in the root directory physically and the field is not declared in the current class
+ * the parent class file is not in the root directory physically and the field is not declared in
+ * the current class
  */
 public class SyntheticSuperUndeclaredVariables {
   @Test

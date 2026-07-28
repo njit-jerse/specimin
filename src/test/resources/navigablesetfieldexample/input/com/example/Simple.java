@@ -7,6 +7,7 @@ import java.io.Serializable;
 
 public class Simple {
 
+    // TODO: only preserve EmptyNavigableSet#EmptyNavigableSet() and none of the superclass constructors.
     static class UnmodifiableCollection<E> {
         UnmodifiableCollection(Collection<? extends E> c) {
         }

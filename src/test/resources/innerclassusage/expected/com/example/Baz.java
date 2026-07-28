@@ -7,7 +7,7 @@ public class Baz {
         public static class NestedInnerBaz {
 
             public void test() {
-                throw new Error();
+                throw new java.lang.Error();
             }
         }
     }

@@ -5,7 +5,7 @@ public class Baz {
     public static class BazFirstChild {
 
         public static void test() {
-            throw new Error();
+            throw new java.lang.Error();
         }
     }
 }

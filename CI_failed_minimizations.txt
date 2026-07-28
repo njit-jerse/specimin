@@ -1,0 +1,4 @@
+'failed_minimization'	org/plumelib/util/Intern.java org.plumelib.util.Intern#intern(double[])
+'failed_minimization'	org/plumelib/util/Intern.java org.plumelib.util.Intern#intern(int[])
+'failed_minimization'	org/plumelib/util/Intern.java org.plumelib.util.Intern#intern(long[])
+'failed_minimization'	org/plumelib/util/UniqueIdMap.java org.plumelib.util.UniqueIdMap#get(E)

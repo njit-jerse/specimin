@@ -6,6 +6,6 @@ import org.testing.UnsolvedType;
 class Simple {
 
     void bar(byte @Nullable [] first, @Nullable UnsolvedType second) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

@@ -1,9 +1,9 @@
 package com.example;
 
 public class Simple {
-    private enum MyEnum {
-
-        A, B
+    private enum MyEnum implements Foo {
+        A,
+        B
     }
 
     void bar() {

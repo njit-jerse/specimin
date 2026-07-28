@@ -8,7 +8,7 @@ import java.util.Collection;
 class WrappedSet<K, V> implements Set<V> {
 
     WrappedSet(K key, Set<V> delegate) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     @Override

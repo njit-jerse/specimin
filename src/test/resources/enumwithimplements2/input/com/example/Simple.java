@@ -3,7 +3,7 @@ package com.example;
 import com.example.Function;
 
 public class Simple {
-    private enum MyEnum implements Function<?, ?> {
+    private enum MyEnum implements Foo {
         A, B
     }
 

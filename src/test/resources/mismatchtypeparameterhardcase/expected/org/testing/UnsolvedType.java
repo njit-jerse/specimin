@@ -2,11 +2,11 @@ package org.testing;
 
 public class UnsolvedType {
 
-    public java.util.List<String> getList() {
-        throw new Error();
+    public java.util.List<java.lang.String> getList() {
+        throw new java.lang.Error();
     }
 
     public int getInt() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

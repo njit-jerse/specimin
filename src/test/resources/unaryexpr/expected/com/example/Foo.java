@@ -2,15 +2,15 @@ package com.example;
 
 public class Foo {
 
-    public int bar;
-
     public long qux;
 
-    public int baz() {
-        throw new Error();
-    }
+    public int bar;
 
     public double razz() {
-        throw new Error();
+        throw new java.lang.Error();
+    }
+
+    public int baz() {
+        throw new java.lang.Error();
     }
 }

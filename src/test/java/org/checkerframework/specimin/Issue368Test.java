@@ -1,12 +1,12 @@
 package org.checkerframework.specimin;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test is the test described in <a

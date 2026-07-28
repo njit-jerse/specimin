@@ -1,8 +1,7 @@
 package com.example;
 
 public class MethodSignature {
-
     public String toString() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

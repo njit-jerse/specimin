@@ -8,6 +8,6 @@ class Simple {
     }
 
     private Simple(Type[] types) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

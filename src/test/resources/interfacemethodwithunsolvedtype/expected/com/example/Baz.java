@@ -4,7 +4,5 @@ import org.testing.UnsolvedType;
 
 public interface Baz<T> {
 
-    default UnsolvedType doSomething(T value) {
-        throw new Error();
-    }
+    UnsolvedType doSomething(T value);
 }

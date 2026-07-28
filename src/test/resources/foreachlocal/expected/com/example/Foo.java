@@ -2,7 +2,7 @@ package com.example;
 
 public class Foo {
 
-    public DoSomethingReturnType doSomething() {
-        throw new Error();
+    public com.example.DoSomethingReturnType doSomething() {
+        throw new java.lang.Error();
     }
 }

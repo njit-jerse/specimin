@@ -8,7 +8,7 @@ import java.util.Map.Entry;
 abstract class AbstractMapEntry<K, V> implements Entry<K, V> {
 
     public V setValue(V value) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public K getKey() {
@@ -16,10 +16,10 @@ abstract class AbstractMapEntry<K, V> implements Entry<K, V> {
     }
 
     public boolean equals(Object object) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 
     public int hashCode() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

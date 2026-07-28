@@ -9,7 +9,7 @@ class Foo {
         int bitRep;
 
         Status(int x) {
-            throw new Error();
+            throw new java.lang.Error();
         }
     }
 

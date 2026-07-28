@@ -9,6 +9,6 @@ class Simple {
     }
 
     private Simple(List<? extends Type> types) {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

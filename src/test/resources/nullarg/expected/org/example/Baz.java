@@ -2,7 +2,7 @@ package org.example;
 
 public class Baz {
 
-    public QuxReturnType qux(java.lang.Object parameter0) {
-        throw new Error();
+    public org.example.QuxReturnType qux(java.lang.Object parameter0) {
+        throw new java.lang.Error();
     }
 }

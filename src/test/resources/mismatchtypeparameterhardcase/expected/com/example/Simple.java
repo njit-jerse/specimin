@@ -1,7 +1,7 @@
 package com.example;
 
-import org.testing.UnsolvedType;
 import java.util.List;
+import org.testing.UnsolvedType;
 
 class Simple {
 

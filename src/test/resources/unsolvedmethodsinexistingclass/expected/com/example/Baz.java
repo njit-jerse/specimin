@@ -5,6 +5,6 @@ import org.testing.Unsolved;
 public class Baz {
 
     public Unsolved foo() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }
