@@ -3,7 +3,7 @@ package org.checkerframework.specimin;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
-/** TODO. */
+/** Test case for <a href="https://github.com/njit-jerse/specimin/issues/404">issue 404</a>. */
 public class WrappedNodeTest {
   @Test
   public void runTest() throws IOException {
