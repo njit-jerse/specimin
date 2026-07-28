@@ -321,11 +321,16 @@ public class UnsolvedClassOrInterfaceAlternates
   /**
    * Removes the set containing only superClass from superTypeRelationships. Right now, this method
    * serves no purpose other than placing Exception before Error to generate a checked exception as
-   * a best-effort result.
+   * a best-effort result. If the super class has already been locked (e.g., because we have
+   * determined that an exception type must be unchecked), this method does nothing, so that the
+   * locked super class is not accidentally removed.
    *
    * @param superClass The super class to remove
    */
   public void removeSuperClass(MemberType superClass) {
+    if (superClassAlreadyLocked) {
+      return;
+    }
     superTypeRelationships.remove(Set.of(superClass));
   }
 
