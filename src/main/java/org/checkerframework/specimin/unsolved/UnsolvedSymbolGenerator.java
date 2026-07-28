@@ -4,6 +4,7 @@ import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -2479,8 +2480,9 @@ public class UnsolvedSymbolGenerator {
           syntheticType.removeAndBlockSealedness(Sealedness.FINAL);
         }
       }
-    } else if (node instanceof MethodDeclaration methodDecl) {
-      for (ReferenceType thrownException : methodDecl.getThrownExceptions()) {
+    } else if (node instanceof CallableDeclaration<?> callableDecl) {
+      // Both MethodDeclaration and ConstructorDeclaration can have throws clauses.
+      for (ReferenceType thrownException : callableDecl.getThrownExceptions()) {
         if (!thrownException.isClassOrInterfaceType()) {
           continue;
         }
@@ -4104,6 +4106,7 @@ public class UnsolvedSymbolGenerator {
     return node instanceof ClassOrInterfaceDeclaration
         || node instanceof EnumDeclaration
         || node instanceof MethodDeclaration
+        || node instanceof ConstructorDeclaration
         || node instanceof TryStmt
         || node instanceof ThrowStmt
         || node instanceof InstanceOfExpr
