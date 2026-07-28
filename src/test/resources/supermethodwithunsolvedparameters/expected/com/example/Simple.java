@@ -1,7 +1,7 @@
 package com.example;
 
-import org.simple.SuperSimple;
 import org.example.Unsolved;
+import org.simple.SuperSimple;
 
 class Simple extends SuperSimple {
 
@@ -10,6 +10,6 @@ class Simple extends SuperSimple {
     }
 
     public Unsolved baz() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

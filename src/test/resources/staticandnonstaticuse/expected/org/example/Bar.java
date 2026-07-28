@@ -3,6 +3,6 @@ package org.example;
 public class Bar {
 
     public Bar() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

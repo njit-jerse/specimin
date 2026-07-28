@@ -1,7 +1,7 @@
 package org.checkerframework.specimin;
 
 import java.io.IOException;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks that Specimin includes the fully qualified class name in generics when
@@ -15,9 +15,7 @@ public class MethodReturnGenericTest {
         "methodreturngeneric",
         new String[] {"com/example/Simple.java"},
         new String[] {
-          "com.example.Simple#foo()",
-          "com.example.Simple#bar()",
-          "com.example.Simple#baz()"
+          "com.example.Simple#foo()", "com.example.Simple#bar()", "com.example.Simple#baz()"
         });
   }
 }

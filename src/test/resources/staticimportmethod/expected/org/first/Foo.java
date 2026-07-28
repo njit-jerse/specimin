@@ -3,6 +3,6 @@ package org.first;
 public class Foo {
 
     public static int count() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

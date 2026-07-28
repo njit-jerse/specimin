@@ -2,6 +2,6 @@ package org.second;
 
 public class Calculator {
     public Calculator() {
-        throw new Error();
+        throw new java.lang.Error();
     }
 }

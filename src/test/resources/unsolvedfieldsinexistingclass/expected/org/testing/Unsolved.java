@@ -2,7 +2,7 @@ package org.testing;
 
 public class Unsolved {
 
-    public GetValueReturnType getValue() {
-        throw new Error();
+    public org.testing.GetValueReturnType getValue() {
+        throw new java.lang.Error();
     }
 }

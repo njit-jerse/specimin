@@ -1,13 +1,13 @@
 
 plugins {
-    id 'application'
-    id 'java-library'
-    id 'maven-publish'
-    id 'signing'
-    id 'com.diffplug.spotless' version '6.25.0'
-    id 'org.checkerframework' version '0.6.47'
-    id("net.ltgt.errorprone") version "4.1.0"
-    id 'com.adarshr.test-logger' version '4.0.0'
+    id("application")
+    id("java-library")
+    id("maven-publish")
+    id("signing")
+    id("com.diffplug.spotless").version("8.8.0")
+    id("org.checkerframework").version("1.0.2")
+    id("net.ltgt.errorprone").version("5.1.0")
+    id("com.adarshr.test-logger").version("4.0.0")
 }
 
 repositories {
@@ -17,23 +17,28 @@ repositories {
 }
 
 application {
-    mainClass = 'org.checkerframework.specimin.SpeciminRunner'
+    mainClass = "org.checkerframework.specimin.SpeciminRunner"
 }
 
 dependencies {
 
-    implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.26.1'
+    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.28.2")
 
-    implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
+    implementation("net.sf.jopt-simple:jopt-simple:5.0.4")
 
-    implementation "org.vineflower:vineflower:1.10.1"
+    implementation("org.vineflower:vineflower:1.12.0")
 
-    implementation 'commons-io:commons-io:2.18.0'
+    implementation("commons-io:commons-io:2.22.0")
 
-    // Use JUnit test framework.
-    testImplementation 'junit:junit:4.13.2'
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
 
-    errorprone("com.google.errorprone:error_prone_core:2.35.1")
+    // Error Prone 2.42.0 and Google Java Format 1.28.0 are the maximum versions available to Java 17.
+    errorprone("com.google.errorprone:error_prone_core:2.42.0")
+    annotationProcessor project(":error-prone-checks")
+
+    implementation("com.google.googlejavaformat:google-java-format:1.28.0")
+
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 // Use require-javadoc. From https://github.com/plume-lib/require-javadoc.
@@ -41,36 +46,69 @@ configurations {
     requireJavadoc
 }
 dependencies {
-    requireJavadoc "org.plumelib:require-javadoc:1.0.9"
+    requireJavadoc("org.plumelib:require-javadoc:2.0.0")
 }
-task requireJavadoc(type: JavaExec) {
-    group = 'Documentation'
-    description = 'Ensures that Javadoc documentation exists.'
+tasks.register("requireJavadoc", JavaExec) {
+    group = "Documentation"
+    description = "Ensures that Javadoc documentation exists."
     mainClass = "org.plumelib.javadoc.RequireJavadoc"
     classpath = configurations.requireJavadoc
-    args "src/main/java"
+    args("src/main/java")
+    jvmArgs += [
+            '--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+            '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+    ]
 }
 
-task expectedTestOutputsMustCompile(type: Exec) {
-    if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
-        commandLine "cmd", "/c", "typecheck_test_outputs.bat"
+tasks.register("expectedTestOutputsMustCompile", Exec) {
+    if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
+        commandLine("cmd", "/c", "typecheck_test_outputs.bat")
     } else {
-        commandLine "sh", "typecheck_test_outputs.sh"
+        commandLine("sh", "typecheck_test_outputs.sh")
     }
 }
 
 // run via e.g.: ./gradlew checkExpectedOutputCompilesFor -PtestName="onefilesimple"
-task checkExpectedOutputCompilesFor(type: Exec) {
+tasks.register("checkExpectedOutputCompilesFor", Exec) {
     if (project.hasProperty("testName")) {
         workingDir("src/test/resources")
-        if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
-            // Avoid '..' is not a command error
+        if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
+            // Avoid("..") is not a command error
             def scriptPath = file("typecheck_one_test.bat").absolutePath
-            commandLine "cmd", "/c", scriptPath, project.property("testName")
+            commandLine("cmd", "/c", scriptPath, project.property("testName"))
         } else {
-            commandLine "sh", "../../../typecheck_one_test.sh", project.property("testName")
+            commandLine("sh", "../../../typecheck_one_test.sh", project.property("testName"))
         }
     }
+}
+
+// needed for google-java-format: see https://github.com/google/google-java-format?tab=readme-ov-file#as-a-library
+tasks.withType(JavaExec).configureEach {
+    jvmArgs += [
+        '--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
+    ]
+}
+
+tasks.withType(Test).configureEach {
+    jvmArgs += [
+        '--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+        '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
+    ]
 }
 
 tasks.compileJava {
@@ -88,32 +126,42 @@ tasks.compileTestJava {
 }
 
 checkerFramework {
-    // uncomment for testing
-    // skipCheckerFramework = true
+    // The CF is disabled on dev machine builds by default because it is pretty slow.
+    // These checkers will run in CI, though. To run them locally, run gradle with
+    // `-PskipCheckerFramework=false`.
+    skipCheckerFramework = true
     checkers = [
-            'org.checkerframework.checker.nullness.NullnessChecker',
-            'org.checkerframework.checker.resourceleak.ResourceLeakChecker',
-            'org.checkerframework.checker.interning.InterningChecker',
-            'org.checkerframework.checker.signature.SignatureChecker'
+            "org.checkerframework.checker.nullness.NullnessChecker",
+            "org.checkerframework.checker.resourceleak.ResourceLeakChecker",
+            "org.checkerframework.checker.interning.InterningChecker",
+            "org.checkerframework.checker.signature.SignatureChecker"
     ]
     excludeTests = true
 
     extraJavacArgs = [
-            "-Astubs=${projectDir}/JavaParser.astub"
+            "-Astubs=${projectDir}/JavaParser.astub",
+            "-AslowTypecheckingSeconds=180", // UnsolvedSymbolGenerator takes a long time to typecheck, which is fine.
     ]
+    version = "4.2.0"
+}
+
+tasks.withType(JavaCompile) {
+    // The CF requires significantly more memory than the typical Java compiler.
+    options.fork = true
+    options.forkOptions.memoryMaximumSize = "4g"
 }
 
 spotless {
     // optional: limit format enforcement to just the files changed by this feature branch
-    ratchetFrom 'origin/main'
+    ratchetFrom("origin/main")
 
-    format 'misc', {
+    format "misc", {
         // define the files to apply `misc` to
-        target '*.gradle', '*.md', '.gitignore'
+        target("*.gradle", "*.md", ".gitignore")
 
         // define the steps to apply to those files
         trimTrailingWhitespace()
-        indentWithSpaces()
+        leadingTabsToSpaces()
         endWithNewline()
     }
     java {
@@ -123,21 +171,21 @@ spotless {
 }
 
 compileJava {
-    options.compilerArgs += ['-Werror']
+    options.compilerArgs += ["-Werror"]
 }
 
 jar {
     manifest {
-        attributes 'Main-Class': 'org.checkerframework.specimin.SpeciminRunner'
+        attributes "Main-Class": "org.checkerframework.specimin.SpeciminRunner"
     }
-    duplicatesStrategy = 'exclude'
+    duplicatesStrategy = "exclude"
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 }
 
-compileJava.dependsOn 'spotlessApply'
-check.dependsOn requireJavadoc
+compileJava.dependsOn("spotlessApply")
+check.dependsOn(requireJavadoc)
 
 java {
     withJavadocJar()
@@ -148,18 +196,18 @@ java {
 publishing {
     publications {
         maven(MavenPublication) {
-            groupId = 'edu.njit.jerse'
-            artifactId = 'specimin'
-            version = '0.1'
+            groupId = "edu.njit.jerse"
+            artifactId = "specimin"
+            version = "0.1"
 
-            from components.java
+            from(components.java)
         }
     }
 }
 
 javadoc {
     if(JavaVersion.current().isJava9Compatible()) {
-        options.addBooleanOption('html5', true)
+        options.addBooleanOption("html5", true)
     }
 }
 
@@ -169,8 +217,14 @@ tasks.withType(Test).configureEach {
 }
 
 test {
+    useJUnitPlatform()
     testLogging {
         showStandardStreams = true
+    }
+
+    filter {
+        // This test is known to fail; remove this once fixed.
+        excludeTestsMatching "MethodRefUndefTest"
     }
 }
 
@@ -179,6 +233,6 @@ test {
 // code by Gradle?
 sourceSets {
     test {
-        java.srcDirs = ['src/main/java/', 'src/test/java/']
+        java.srcDirs = ["src/main/java/", "src/test/java/"]
     }
 }

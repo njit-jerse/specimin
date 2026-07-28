@@ -26,7 +26,7 @@ def run(ashe_path: str, csv_path: str, clone_path: str, props_file_path: str):
         props_file_path: absolute path to the directory containing the config.properties files for ASHE
     """
 
-    ashe_url: str = "https://github.com/jonathan-m-phillips/ASHE_Automated-Software-Hardening-for-Entrypoints"
+    ashe_url: str = "https://github.com/njit-jerse/ASHE_Automated-Software-Hardening-for-Entrypoints"
     # clone or update repository
     __git_clone_or_update(ashe_url, ashe_path)
 
@@ -40,6 +40,7 @@ def run(ashe_path: str, csv_path: str, clone_path: str, props_file_path: str):
     main_project_dir = os.path.abspath(os.path.join(current_dir, '..', '..'))
     stats_script = os.path.join(current_dir, 'specimin_statistics.py')
     rank_script = os.path.join(current_dir, 'specimin_exception_rank.py')
+    deinterleave_script = os.path.join(current_dir, 'de-interleave-ashe-log.py')
     print(f"Current directory path after normalising: {current_dir}")
     print(f"main project path: {main_project_dir}")
     print(f"Statistics script path: {stats_script}")
@@ -53,12 +54,17 @@ def run(ashe_path: str, csv_path: str, clone_path: str, props_file_path: str):
     main_project_dir = os.path.abspath(os.path.join(current_dir, '..', '..'))
     stats_script = os.path.join(current_dir, 'specimin_statistics.py')
     rank_script = os.path.join(current_dir, 'specimin_exception_rank.py')
+    deinterleave_script = os.path.join(current_dir, 'de-interleave-ashe-log.py')
     print(f"Current directory path after normalising: {current_dir}")
     print(f"main project path: {main_project_dir}")
     print(f"Statistics script path: {stats_script}")
     print(f"Exception rank script path: {rank_script}")
+    print(f"De Interleave script path: {deinterleave_script}")
     # run Specimin scripts
     log_path: str = os.path.join(ashe_path, "logs", "app.log")
+    print("Deinterleaving multithreaded script")
+    __run_command(f"python3 {deinterleave_script} {log_path}")
+    log_path = os.path.join(ashe_path, "logs", "deinterleaved-log.txt")
     print("Running statistics script...")
     __run_command(f"python3 {stats_script} {log_path}")
 

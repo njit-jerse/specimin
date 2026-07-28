@@ -8,6 +8,6 @@ import java.lang.annotation.Target;
 
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ ElementType.ANNOTATION_TYPE })
+@Target(ElementType.ANNOTATION_TYPE)
 public @interface InvisibleQualifier {
 }

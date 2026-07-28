@@ -1,8 +1,9 @@
 package org.checkerframework.specimin;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.io.IOException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * This test checks that TargetMethodFinderVisitor can correctly find the target method when there
@@ -19,12 +20,12 @@ public class AnnoInGenericTargetTest {
 
   @Test
   public void unitTestRemoveMethodReturnTypeAndAnnotations() {
-    Assert.assertEquals(
-        "TargetMethodFinderVisitor#removeMethodReturnTypeAndAnnotations is failing to properly"
-            + " remove some annotations",
+    assertEquals(
         "unmodifiableCollection(Collection<? extends T>)",
         JavaParserUtil.removeMethodReturnTypeAndAnnotationsImpl(
             "Collection<T> unmodifiableCollection(Collection<@Initialized @KeyForBottom"
-                + " @NonNull ? extends T>)"));
+                + " @NonNull ? extends T>)"),
+        "TargetMethodFinderVisitor#removeMethodReturnTypeAndAnnotations is failing to properly"
+            + " remove some annotations");
   }
 }
