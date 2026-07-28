@@ -2,5 +2,5 @@ package org.first;
 
 public class Foo {
 
-    public static OrgFirstFooCOUNTSyntheticType COUNT;
+    public static org.first.OrgFirstFooCOUNTSyntheticType COUNT;
 }
