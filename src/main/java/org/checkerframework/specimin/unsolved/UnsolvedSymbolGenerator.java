@@ -2908,6 +2908,13 @@ public class UnsolvedSymbolGenerator {
             (NodeWithParameters<?>)
                 JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
 
+        // If this call invokes a callable whose throws clause names a synthetic exception, and
+        // that exception is not caught or declared in the enclosing context, then the exception
+        // must be unchecked for the slice to compile.
+        if (asAst instanceof CallableDeclaration<?> callee) {
+          toRemove.addAll(handleUnhandledCheckedExceptions((Node) nodeWithArgs, callee));
+        }
+
         for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
           MemberType lhsType;
           Set<MemberType> rhsType =
@@ -4279,6 +4286,175 @@ public class UnsolvedSymbolGenerator {
         type.createAlternatesBasedOnSuperTypeRelationships();
       }
     }
+  }
+
+  /**
+   * Handles the exceptions declared in the throws clause of a callable that is invoked at the given
+   * call site. If such an exception is a synthetic type that is not caught or declared in the
+   * enclosing context, then the exception must be unchecked (i.e., extend {@code java.lang.Error})
+   * for the slice to compile, so this method forces it to be unchecked. This is what allows
+   * Specimin to notice that, e.g., a validation exception thrown by a constructor but never handled
+   * by its caller must be an unchecked exception.
+   *
+   * @param callSite the method or constructor call expression
+   * @param callee the AST of the callable being invoked
+   * @return symbols that need to be removed (from making a type extend Throwable)
+   */
+  private List<UnsolvedSymbolAlternates<?>> handleUnhandledCheckedExceptions(
+      Node callSite, CallableDeclaration<?> callee) {
+    List<UnsolvedSymbolAlternates<?>> toRemove = new ArrayList<>();
+
+    for (ReferenceType thrownException : callee.getThrownExceptions()) {
+      if (!thrownException.isClassOrInterfaceType()) {
+        continue;
+      }
+
+      FullyQualifiedNameSet fqns =
+          fullyQualifiedNameGenerator.getFQNsFromType(thrownException.asClassOrInterfaceType());
+
+      if (!(findExistingAndUpdateFQNs(fqns)
+          instanceof UnsolvedClassOrInterfaceAlternates syntheticException)) {
+        // Either the exception is not synthetic (e.g., a JDK exception whose checked-ness is
+        // already known), or it has not been generated. Either way, we cannot (and need not)
+        // change its checked-ness here.
+        continue;
+      }
+
+      if (isCheckedExceptionHandled(callSite, fqns.erasedFqns())) {
+        continue;
+      }
+
+      // The exception escapes the enclosing method or constructor unhandled, so it cannot be a
+      // checked exception. Force it to be unchecked, overriding any earlier decision (e.g., from
+      // the callee's throws clause) that it should be checked.
+      syntheticException.ensureSuperClass(SolvedMemberType.JAVA_LANG_ERROR);
+      toRemove.addAll(handleExtendThrowable(syntheticException));
+    }
+
+    return toRemove;
+  }
+
+  /**
+   * Determines whether a checked exception potentially thrown at the given call site is handled
+   * before it would escape the enclosing method or constructor, i.e., whether it is caught by an
+   * enclosing try-catch or declared in the enclosing throws clause. If it is not handled, then a
+   * synthetic exception type must be unchecked for the slice to compile.
+   *
+   * @param callSite the node where the exception could be thrown
+   * @param exceptionFqns the possible fully-qualified names of the exception type
+   * @return true if the exception is caught or declared before it escapes a method boundary
+   */
+  private boolean isCheckedExceptionHandled(Node callSite, Set<String> exceptionFqns) {
+    Node current = callSite;
+    Optional<Node> parent = current.getParentNode();
+
+    while (parent.isPresent()) {
+      Node parentNode = parent.get();
+
+      if (parentNode instanceof TryStmt tryStmt) {
+        // Only nodes within the try block are guarded by its catch clauses (nodes in a catch or
+        // finally block are not).
+        if (tryStmt.getTryBlock().isAncestorOf(callSite)) {
+          for (CatchClause clause : tryStmt.getCatchClauses()) {
+            if (catchClauseHandles(clause, exceptionFqns)) {
+              return true;
+            }
+          }
+        }
+      } else if (parentNode instanceof CallableDeclaration<?> callable) {
+        // We have reached the enclosing method or constructor without the exception being caught,
+        // so it is handled only if it is declared in the throws clause.
+        return throwsClauseHandles(callable.getThrownExceptions(), exceptionFqns);
+      } else if (parentNode instanceof LambdaExpr) {
+        // A checked exception cannot escape a lambda body to the enclosing method, so if we reach a
+        // lambda boundary without the exception being caught, it must be unchecked.
+        return false;
+      }
+
+      current = parentNode;
+      parent = current.getParentNode();
+    }
+
+    return false;
+  }
+
+  /**
+   * Returns whether the given catch clause catches the given exception, based on an exact type
+   * match (see {@link #typeHandlesException}).
+   *
+   * @param clause the catch clause
+   * @param exceptionFqns the possible fully-qualified names of the exception type
+   * @return true if the catch clause handles the exception
+   */
+  private boolean catchClauseHandles(CatchClause clause, Set<String> exceptionFqns) {
+    Type caught = clause.getParameter().getType();
+
+    if (caught.isUnionType()) {
+      for (ReferenceType element : caught.asUnionType().getElements()) {
+        if (typeHandlesException(element, exceptionFqns)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    return typeHandlesException(caught, exceptionFqns);
+  }
+
+  /**
+   * Returns whether the given throws clause declares the given exception, based on an exact type
+   * match (see {@link #typeHandlesException}).
+   *
+   * @param thrownExceptions the throws clause
+   * @param exceptionFqns the possible fully-qualified names of the exception type
+   * @return true if the throws clause declares the exception
+   */
+  private boolean throwsClauseHandles(
+      NodeList<ReferenceType> thrownExceptions, Set<String> exceptionFqns) {
+    for (ReferenceType thrownException : thrownExceptions) {
+      if (typeHandlesException(thrownException, exceptionFqns)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns whether the given type (from a catch or throws clause) handles an exception with the
+   * given possible fully-qualified names. A type handles the exception only if it names the exact
+   * exception type.
+   *
+   * <p>We deliberately require an exact match rather than a subtyping check. We are working with an
+   * AST and do not have access to the full type hierarchy here, so we cannot decide in general
+   * whether the catch/throws type is a supertype of the exception (e.g., whether a synthetic
+   * exception is a subclass of {@code java.lang.IOException} that a {@code catch (IOException)}
+   * would handle). To keep the tool's behavior predictable, this approximation is deliberately
+   * one-sided: it only ever concludes "handled" when it is certain, and otherwise concludes "not
+   * handled", which causes the exception to be made unchecked. Making an exception unchecked is
+   * always safe, because an unchecked exception never needs to be caught or declared. As a
+   * consequence, a broad handler ({@code catch (Exception)} / {@code catch (Throwable)}) is treated
+   * exactly like any other non-matching supertype ({@code catch (IOException)}): none of them are
+   * treated as handling the exception. This also matches Specimin's existing convention that an
+   * exception is treated as checked only when its exact type appears in a throws or catch clause.
+   *
+   * <p>The match must also cover every possibility. Both the catch/throws type and the exception
+   * are represented as sets of <em>possible</em> fully-qualified names (a type reference may be
+   * ambiguous, e.g., because of a wildcard import). We require the two sets to be exactly equal, so
+   * that every possible FQN of the exception is also a possible FQN of the catch/throws type and
+   * vice versa. A merely non-empty intersection is not enough: if the two sets only partially
+   * overlap (e.g., {@code {A, B}} versus {@code {A, C}}), then the clause might refer to a
+   * different type than the exception, so we cannot be certain it is handled and we conservatively
+   * report "not handled" and let the exception become unchecked. (Two identical ambiguous sets,
+   * such as the same wildcard-imported exception named in both a throws clause and a call it
+   * guards, do compare equal and are treated as handled.)
+   *
+   * @param type the catch or throws clause type
+   * @param exceptionFqns the possible fully-qualified names of the exception type
+   * @return true if the type names exactly the exception type
+   */
+  private boolean typeHandlesException(Type type, Set<String> exceptionFqns) {
+    Set<String> typeFqns = fullyQualifiedNameGenerator.getFQNsFromType(type).erasedFqns();
+    return typeFqns.equals(exceptionFqns);
   }
 
   /**
