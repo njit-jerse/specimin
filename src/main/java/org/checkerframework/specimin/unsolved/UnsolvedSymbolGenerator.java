@@ -3689,7 +3689,9 @@ public class UnsolvedSymbolGenerator {
         // to handle the exception too.
         UnsolvedMethodAlternates preferred = choosePreferredThrower(candidates, tryStmt, slice);
         for (UnsolvedMethodAlternates candidate : candidates) {
-          candidate.addAlternatesWithThrownException(caughtMemberType, candidate == preferred);
+          @SuppressWarnings("not.interned") // Pointer comparison is intended here.
+          boolean isPreferred = candidate == preferred;
+          candidate.addAlternatesWithThrownException(caughtMemberType, isPreferred);
         }
 
         thrownSupertypes.add(caughtSupertypes);
@@ -3739,7 +3741,8 @@ public class UnsolvedSymbolGenerator {
         continue;
       }
 
-      if (Resolver.resolve(call) == null && findGeneratedMethodFromMethodCall(call) == method) {
+      if (Resolver.resolve(call) == null
+          && method.equals(findGeneratedMethodFromMethodCall(call))) {
         return true;
       }
     }
@@ -3854,6 +3857,8 @@ public class UnsolvedSymbolGenerator {
     while (!worklist.isEmpty()) {
       String fqn = worklist.poll();
 
+      @SuppressWarnings(
+          "nullness:argument") // If fqn is null here, it's okay that jdkSuperclass will be too.
       String jdkSuperclass = JDK_THROWABLE_SUPERCLASSES.get(fqn);
       if (jdkSuperclass != null) {
         if (result.add(jdkSuperclass)) {
