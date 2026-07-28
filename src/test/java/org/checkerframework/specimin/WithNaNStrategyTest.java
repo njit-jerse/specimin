@@ -8,7 +8,7 @@ public class WithNaNStrategyTest {
   @Test
   public void runTest() throws IOException {
     SpeciminTestExecutor.runTestWithoutJarPaths(
-        "withNaNStrategy",
+        "withnanstrategy",
         new String[] {"com/example/Median.java"},
         new String[] {"com.example.Median#withNaNStrategy(NaNStrategy)"});
   }
