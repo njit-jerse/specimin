@@ -3849,12 +3849,13 @@ public class UnsolvedSymbolGenerator {
     if (resolved != null && resolved.isReferenceType()) {
       ResolvedReferenceType referenceType = resolved.asReferenceType();
       result.add(referenceType.getQualifiedName());
-      try {
-        for (ResolvedReferenceType ancestor : referenceType.getAllAncestors()) {
+      ResolvedReferenceTypeDeclaration declaration =
+          referenceType.getTypeDeclaration().orElse(null);
+      if (declaration != null) {
+        for (ResolvedReferenceTypeDeclaration ancestor :
+            JavaParserUtil.getAllJDKAncestors(declaration)) {
           result.add(ancestor.getQualifiedName());
         }
-      } catch (RuntimeException e) {
-        // getAllAncestors throws if any ancestor is unsolvable; what we have is good enough.
       }
       return result;
     }

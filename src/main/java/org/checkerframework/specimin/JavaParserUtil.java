@@ -1819,16 +1819,28 @@ public class JavaParserUtil {
    * @return A set of resolved type declarations representing all solvable ancestors
    */
   public static Set<ResolvedReferenceTypeDeclaration> getAllJDKAncestors(TypeDeclaration<?> start) {
-    Set<ResolvedReferenceTypeDeclaration> result = new HashSet<>();
-
     // TypeDeclaration<?> doesn't implement Resolvable<ResolvedReferenceTypeDeclaration>, but
     // contains
     // an abstract method resolve() returning type ResolvedReferenceTypeDeclaration
     ResolvedReferenceTypeDeclaration resolved =
         (ResolvedReferenceTypeDeclaration) Resolver.resolve((Resolvable<?>) start);
-    if (resolved != null) {
-      getAllJDKAncestorsImpl(resolved, result);
-    }
+
+    return resolved == null ? new HashSet<>() : getAllJDKAncestors(resolved);
+  }
+
+  /**
+   * Finds all solvable ancestors (in JDK and user-defined types), given a resolved type declaration
+   * to start. Use this overload rather than {@link #getAllJDKAncestors(TypeDeclaration)} when the
+   * starting type has no AST, such as when it comes from the JDK or from a jar.
+   *
+   * @param start The resolved type declaration
+   * @return A set of resolved type declarations representing all solvable ancestors
+   */
+  public static Set<ResolvedReferenceTypeDeclaration> getAllJDKAncestors(
+      ResolvedReferenceTypeDeclaration start) {
+    Set<ResolvedReferenceTypeDeclaration> result = new HashSet<>();
+
+    getAllJDKAncestorsImpl(start, result);
 
     return result;
   }
