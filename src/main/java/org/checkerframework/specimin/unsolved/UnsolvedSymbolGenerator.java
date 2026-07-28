@@ -60,11 +60,9 @@ import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.utils.Pair;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -136,18 +134,6 @@ public class UnsolvedSymbolGenerator {
    * java.lang.Object.
    */
   private final Set<UnsolvedMethodAlternates> methodsWithNullInSignature = new HashSet<>();
-
-  /**
-   * The superclass of each JDK Throwable type that a synthetic type can be inferred to extend. Used
-   * to walk the supertypes of a synthetic exception type, whose extends clause always bottoms out
-   * in one of these.
-   */
-  private static final Map<String, String> JDK_THROWABLE_SUPERCLASSES =
-      Map.of(
-          "java.lang.Error", "java.lang.Throwable",
-          "java.lang.Exception", "java.lang.Throwable",
-          "java.lang.RuntimeException", "java.lang.Exception",
-          "java.lang.Throwable", "java.lang.Object");
 
   /**
    * Given an unresolvable Node, generate a corresponding synthetic definition. In cases where
@@ -3658,7 +3644,8 @@ public class UnsolvedSymbolGenerator {
       for (Type caught : caughtTypes) {
         Set<String> caughtFqns = fullyQualifiedNameGenerator.getFQNsFromType(caught).erasedFqns();
         Set<String> caughtSupertypes =
-            getSelfAndSupertypeFqns(Resolver.resolve(caught), caughtFqns);
+            FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
+                Resolver.resolve(caught), caughtFqns);
 
         // Unchecked exceptions may always be caught.
         if (caughtSupertypes.contains("java.lang.RuntimeException")
@@ -3772,7 +3759,7 @@ public class UnsolvedSymbolGenerator {
       for (FullyQualifiedNameSet fqnSet :
           fullyQualifiedNameGenerator.getFQNsForExpressionType(throwStmt.getExpression())) {
         result.add(
-            getSelfAndSupertypeFqns(
+            FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
                 Resolver.calculateResolvedType(throwStmt.getExpression()), fqnSet.erasedFqns()));
       }
     }
@@ -3788,7 +3775,9 @@ public class UnsolvedSymbolGenerator {
       UnsolvedMethodAlternates generated = findGeneratedMethodFromMethodCall(call);
       if (generated != null) {
         for (MemberType exception : generated.getThrownExceptions()) {
-          result.add(getSelfAndSupertypeFqns(null, exception.getFullyQualifiedNames()));
+          result.add(
+              FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
+                  null, exception.getFullyQualifiedNames()));
         }
       }
     }
@@ -3829,69 +3818,9 @@ public class UnsolvedSymbolGenerator {
       }
 
       result.add(
-          getSelfAndSupertypeFqns(
+          FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
               exception, Set.of(exception.asReferenceType().getQualifiedName())));
     }
-  }
-
-  /**
-   * Computes the fully-qualified names of a type together with those of all of its supertypes, on a
-   * best-effort basis. Either the resolved type or the set of potential fully-qualified names may
-   * be used, depending on whether the type is solvable.
-   *
-   * @param resolved the resolved type, or null if the type is not solvable
-   * @param fqns the potential fully-qualified names of the type
-   * @return the fully-qualified names of the type and of its supertypes
-   */
-  private Set<String> getSelfAndSupertypeFqns(@Nullable ResolvedType resolved, Set<String> fqns) {
-    Set<String> result = new LinkedHashSet<>(fqns);
-
-    if (resolved != null && resolved.isReferenceType()) {
-      ResolvedReferenceType referenceType = resolved.asReferenceType();
-      result.add(referenceType.getQualifiedName());
-      ResolvedReferenceTypeDeclaration declaration =
-          referenceType.getTypeDeclaration().orElse(null);
-      if (declaration != null) {
-        for (ResolvedReferenceTypeDeclaration ancestor :
-            JavaParserUtil.getAllJDKAncestors(declaration)) {
-          result.add(ancestor.getQualifiedName());
-        }
-      }
-      return result;
-    }
-
-    // The type is (or may be) synthetic: walk the extends clauses that Specimin has inferred.
-    Deque<String> worklist = new ArrayDeque<>(result);
-    while (!worklist.isEmpty()) {
-      String fqn = worklist.poll();
-
-      @SuppressWarnings(
-          "nullness:argument") // If fqn is null here, it's okay that jdkSuperclass will be too.
-      String jdkSuperclass = JDK_THROWABLE_SUPERCLASSES.get(fqn);
-      if (jdkSuperclass != null) {
-        if (result.add(jdkSuperclass)) {
-          worklist.add(jdkSuperclass);
-        }
-        continue;
-      }
-
-      if (!(generatedSymbols.get(fqn) instanceof UnsolvedClassOrInterfaceAlternates type)) {
-        continue;
-      }
-
-      MemberType extended = type.getAlternates().get(0).getExtendedType();
-      if (extended == null) {
-        continue;
-      }
-
-      for (String superFqn : extended.getFullyQualifiedNames()) {
-        if (result.add(superFqn)) {
-          worklist.add(superFqn);
-        }
-      }
-    }
-
-    return result;
   }
 
   /**
