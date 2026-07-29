@@ -2369,9 +2369,9 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
-   * Computes the fully-qualified names of a type together with those of all of its supertypes, on a
-   * best-effort basis. Either the resolved type or the set of potential fully-qualified names may
-   * be used, depending on whether the type is solvable.
+   * Computes the fully-qualified names of a type together with those of all of its supertypes
+   * (including those in the JDK), on a best-effort basis. Either the resolved type or the set of
+   * potential fully-qualified names may be used, depending on whether the type is solvable.
    *
    * @param resolved the resolved type, or null if the type is not solvable
    * @param fqns the potential fully-qualified names of the type
