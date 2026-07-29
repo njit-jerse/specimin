@@ -23,6 +23,13 @@ public interface UnsolvedMethodCommon {
   List<MemberType> getThrownExceptions();
 
   /**
+   * Adds an exception to the throws clause of this method, if it is not already present.
+   *
+   * @param exception the exception to add
+   */
+  void addThrownException(MemberType exception);
+
+  /**
    * Gets the access modifier (i.e., public, private)
    *
    * @return the access modifier
