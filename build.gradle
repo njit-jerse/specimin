@@ -36,7 +36,7 @@ dependencies {
     errorprone("com.google.errorprone:error_prone_core:2.42.0")
     annotationProcessor project(":error-prone-checks")
 
-    implementation("com.google.googlejavaformat:google-java-format:1.28.0")
+    implementation("com.google.googlejavaformat:google-java-format:1.36.1")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
