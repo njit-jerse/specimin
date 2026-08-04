@@ -5,9 +5,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * A lower-bounded wildcard {@code Baz<? super String>} constrains Baz's type <em>argument</em> to
- * be a supertype of String; it says nothing about Baz itself. Treating the bound as a supertype of
- * Baz is not just imprecise, it is uncompilable whenever the bound cannot be extended -- here
- * String is final, so {@code class Baz<T> extends String} does not compile.
+ * be a supertype of String; it says nothing about Baz itself. An earlier version of Specimin
+ * incorrectly treated such a bound as applying to Baz; this is a regression test for that bug.
  */
 public class SuperWildcardFinalBoundTest {
   @Test
