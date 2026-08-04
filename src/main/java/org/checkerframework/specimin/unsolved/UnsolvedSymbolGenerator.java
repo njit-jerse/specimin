@@ -50,6 +50,7 @@ import com.github.javaparser.ast.type.TypeParameter;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
@@ -2614,6 +2615,8 @@ public class UnsolvedSymbolGenerator {
         addNewSymbolToGeneratedSymbolsMap(unsolvedMethodAlternates);
         toAdd.add(unsolvedMethodAlternates);
       }
+
+      ensureCaughtExceptionsAreThrown(tryStmt, slice);
     } else if (node instanceof InstanceOfExpr instanceOf) {
       // If we have x : X and x instanceof Y, then X must be a supertype
       // of Y if X != Y. The JLS says (15.20.2): "If a cast of the RelationalExpression to the
@@ -3581,6 +3584,243 @@ public class UnsolvedSymbolGenerator {
     }
 
     return false;
+  }
+
+  /**
+   * A catch clause for a checked exception type E is a compile-time error unless the corresponding
+   * try block can throw a checked exception that is a subclass or superclass of E (JLS 11.2.3).
+   * When the try block's only candidate throwers are synthetic methods, nothing in the output
+   * throws E, so this method adds E to the throws clause of one of those synthetic methods.
+   *
+   * <p>This method does nothing when the try block calls no synthetic method, since there is
+   * nothing that Specimin could soundly change in that case: either the original code already
+   * throws the caught exception (and the slice preserves that), or the code did not compile to
+   * begin with.
+   *
+   * @param tryStmt the try statement whose catch clauses should be made legal
+   * @param slice the slice, used to find the other call sites of the candidate methods
+   */
+  private void ensureCaughtExceptionsAreThrown(TryStmt tryStmt, Set<Node> slice) {
+    if (!tryStmt.getResources().isEmpty()) {
+      // A resource's close() method is another source of exceptions. Synthetic resources get a
+      // close() that throws java.lang.Exception, which legalizes any catch clause, so there is
+      // never anything to do here; solved resources are not worth the trouble of enumerating.
+      return;
+    }
+
+    if (tryStmt.getCatchClauses().isEmpty()) {
+      return;
+    }
+
+    // The synthetic methods called in the try block, in source order. These are the only methods
+    // whose throws clauses Specimin is free to change.
+    List<UnsolvedMethodAlternates> candidates = new ArrayList<>();
+    for (MethodCallExpr call : tryStmt.getTryBlock().findAll(MethodCallExpr.class)) {
+      if (Resolver.resolve(call) != null) {
+        continue;
+      }
+
+      UnsolvedMethodAlternates generated = findGeneratedMethodFromMethodCall(call);
+      if (generated != null && !candidates.contains(generated)) {
+        candidates.add(generated);
+      }
+    }
+
+    if (candidates.isEmpty()) {
+      return;
+    }
+
+    // The exception types that the try block can already throw, each expanded to include its
+    // supertypes so that the subclass check below is a set intersection.
+    List<Set<String>> thrownSupertypes = getExceptionsThrowableFromTryBlock(tryStmt);
+
+    for (CatchClause clause : tryStmt.getCatchClauses()) {
+      Type parameterType = clause.getParameter().getType();
+      List<Type> caughtTypes =
+          parameterType.isUnionType()
+              ? new ArrayList<>(parameterType.asUnionType().getElements())
+              : List.of(parameterType);
+
+      for (Type caught : caughtTypes) {
+        Set<String> caughtFqns = fullyQualifiedNameGenerator.getFQNsFromType(caught).erasedFqns();
+        Set<String> caughtSupertypes =
+            FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
+                Resolver.resolve(caught), caughtFqns);
+
+        // Unchecked exceptions may always be caught.
+        if (caughtSupertypes.contains("java.lang.RuntimeException")
+            || caughtSupertypes.contains("java.lang.Error")) {
+          continue;
+        }
+
+        // Catching Exception or Throwable is always legal, no matter what the try block throws.
+        if (caughtFqns.contains("java.lang.Exception")
+            || caughtFqns.contains("java.lang.Throwable")) {
+          continue;
+        }
+
+        boolean alreadyThrown = false;
+        for (Set<String> thrown : thrownSupertypes) {
+          // Legal if the thrown type is a subclass of the caught type, or vice versa.
+          if (!Collections.disjoint(thrown, caughtFqns)
+              || !Collections.disjoint(caughtSupertypes, thrown)) {
+            alreadyThrown = true;
+            break;
+          }
+        }
+
+        if (alreadyThrown) {
+          continue;
+        }
+
+        MemberType caughtMemberType =
+            getOrCreateMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(caught));
+
+        // Any of the candidates could be the method that throws this exception, so record all of
+        // those possibilities as alternates. Only the preferred candidate's throwing alternates
+        // are placed first, so that the best-effort output adds the throws clause to exactly one
+        // method: adding it to a method that is also called elsewhere would force those call sites
+        // to handle the exception too.
+        UnsolvedMethodAlternates preferred = choosePreferredThrower(candidates, tryStmt, slice);
+        for (UnsolvedMethodAlternates candidate : candidates) {
+          @SuppressWarnings("not.interned") // Pointer comparison is intended here.
+          boolean isPreferred = candidate == preferred;
+          candidate.addAlternatesWithThrownException(caughtMemberType, isPreferred);
+        }
+
+        thrownSupertypes.add(caughtSupertypes);
+      }
+    }
+  }
+
+  /**
+   * Chooses which of the given synthetic methods should declare a caught exception. A method that
+   * is called only from within the given try block is preferred, because adding a throws clause to
+   * a method that is called elsewhere forces those other call sites to handle the exception as
+   * well.
+   *
+   * @param candidates the synthetic methods called in the try block, in source order; must not be
+   *     empty
+   * @param tryStmt the try statement
+   * @param slice the slice, used to find the other call sites of the candidates
+   * @return the candidate that should declare the exception
+   */
+  private UnsolvedMethodAlternates choosePreferredThrower(
+      List<UnsolvedMethodAlternates> candidates, TryStmt tryStmt, Set<Node> slice) {
+    for (UnsolvedMethodAlternates candidate : candidates) {
+      if (!isCalledOutsideOf(candidate, tryStmt.getTryBlock(), slice)) {
+        return candidate;
+      }
+    }
+
+    // Every candidate is called elsewhere, so there is no safe choice; the first one in source
+    // order is as good as any.
+    return candidates.get(0);
+  }
+
+  /**
+   * Returns whether the given synthetic method is called from anywhere in the slice other than from
+   * within the given block.
+   *
+   * @param method the synthetic method
+   * @param block the block whose call sites should be ignored
+   * @param slice the slice
+   * @return true if the method has a call site in the slice outside of the given block
+   */
+  private boolean isCalledOutsideOf(UnsolvedMethodAlternates method, Node block, Set<Node> slice) {
+    for (Node node : slice) {
+      if (!(node instanceof MethodCallExpr call)
+          || !call.getNameAsString().equals(method.getName())
+          || block.isAncestorOf(call)) {
+        continue;
+      }
+
+      if (Resolver.resolve(call) == null
+          && method.equals(findGeneratedMethodFromMethodCall(call))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Computes the exception types that the given try statement's block can throw, on a best-effort
+   * basis. Each element of the result is the set of fully-qualified names of one thrown exception
+   * type together with the fully-qualified names of its supertypes.
+   *
+   * @param tryStmt the try statement
+   * @return the supertype-closed fully-qualified names of each exception the try block can throw
+   */
+  private List<Set<String>> getExceptionsThrowableFromTryBlock(TryStmt tryStmt) {
+    List<Set<String>> result = new ArrayList<>();
+
+    for (ThrowStmt throwStmt : tryStmt.getTryBlock().findAll(ThrowStmt.class)) {
+      for (FullyQualifiedNameSet fqnSet :
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(throwStmt.getExpression())) {
+        result.add(
+            FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
+                Resolver.calculateResolvedType(throwStmt.getExpression()), fqnSet.erasedFqns()));
+      }
+    }
+
+    for (MethodCallExpr call : tryStmt.getTryBlock().findAll(MethodCallExpr.class)) {
+      ResolvedMethodDeclaration resolved = Resolver.resolve(call);
+
+      if (resolved != null) {
+        addSpecifiedExceptions(resolved, result);
+        continue;
+      }
+
+      UnsolvedMethodAlternates generated = findGeneratedMethodFromMethodCall(call);
+      if (generated != null) {
+        for (MemberType exception : generated.getThrownExceptions()) {
+          result.add(
+              FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
+                  null, exception.getFullyQualifiedNames()));
+        }
+      }
+    }
+
+    for (ObjectCreationExpr creation : tryStmt.getTryBlock().findAll(ObjectCreationExpr.class)) {
+      ResolvedConstructorDeclaration resolved = Resolver.resolve(creation);
+
+      if (resolved != null) {
+        addSpecifiedExceptions(resolved, result);
+      }
+      // Synthetic constructors are never generated with a throws clause, so there is nothing to
+      // add for them.
+    }
+
+    return result;
+  }
+
+  /**
+   * Adds the supertype-closed fully-qualified names of each exception in the given declaration's
+   * throws clause to the given list.
+   *
+   * @param declaration the resolved method or constructor declaration
+   * @param result the list to add to
+   */
+  private void addSpecifiedExceptions(
+      ResolvedMethodLikeDeclaration declaration, List<Set<String>> result) {
+    List<ResolvedType> specified;
+    try {
+      specified = declaration.getSpecifiedExceptions();
+    } catch (RuntimeException e) {
+      // Some resolved declarations (e.g., those backed by an incomplete type solver) throw here.
+      return;
+    }
+
+    for (ResolvedType exception : specified) {
+      if (!exception.isReferenceType()) {
+        continue;
+      }
+
+      result.add(
+          FullyQualifiedNameGenerator.getFQNsOfSelfAndSupertypes(
+              exception, Set.of(exception.asReferenceType().getQualifiedName())));
+    }
   }
 
   /**

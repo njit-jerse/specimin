@@ -1,6 +1,7 @@
 package org.checkerframework.specimin;
 
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
@@ -26,6 +27,7 @@ import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -404,10 +406,27 @@ public class Slicer {
 
         if (superClass instanceof ResolvedReferenceType superClassResolved
             && superClassResolved.getTypeDeclaration().isPresent()) {
+          ResolvedReferenceTypeDeclaration superClassDecl =
+              superClassResolved.getTypeDeclaration().get();
+
+          // If the superclass isn't one of the input files (e.g., it's a JDK class like
+          // LineNumberReader), then Specimin can't remove its constructors to give it an
+          // implicit zero-argument constructor. In that case, this class must keep a
+          // constructor that calls one of the superclass' constructors, even if the slice
+          // doesn't otherwise require any constructor at all.
+          boolean superClassIsModifiable =
+              fqnToCompilationUnits.containsKey(superClassDecl.getQualifiedName());
+
           List<String> parameterTypes = null;
 
-          for (ResolvedConstructorDeclaration constructor :
-              superClassResolved.getTypeDeclaration().get().getConstructors()) {
+          for (ResolvedConstructorDeclaration constructor : superClassDecl.getConstructors()) {
+            // A private constructor can't be the target of a super() call, so it can't rescue
+            // this class' compilability. Check this before the arity comparison below, so that
+            // an inaccessible constructor can never displace an accessible one.
+            if (constructor.accessSpecifier() == AccessSpecifier.PRIVATE) {
+              continue;
+            }
+
             if (parameterTypes != null
                 && parameterTypes.size() <= constructor.getNumberOfParams()) {
               continue;
@@ -423,7 +442,7 @@ public class Slicer {
                   constructorNode.getParameters().stream()
                       .map(p -> p.getType().toString())
                       .toList();
-            } else if (attached != null) {
+            } else if (attached != null || !superClassIsModifiable) {
               parameterTypes =
                   constructor.formalParameterTypes().stream().map(ResolvedType::describe).toList();
             }
