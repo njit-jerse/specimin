@@ -15,6 +15,7 @@ import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
+import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -1912,6 +1913,21 @@ public class FullyQualifiedNameGenerator {
         }
         return Set.of(new FullyQualifiedNameSet(result, notArray.typeArguments()));
       }
+    } else if (parentNode instanceof CastExpr castExpr
+        && castExpr.getExpression().equals(expr)
+        && !expr.isLambdaExpr()
+        && !expr.isMethodReferenceExpr()) {
+      // A cast does not tell us the operand's type: it only tells us that the operand must be
+      // cast-compatible with the target type. In fact the operand's type is usually *not* the
+      // target type, since a cast is written precisely when the static type is broader than what
+      // is needed. java.lang.Object is the only choice guaranteed to compile in every such
+      // context: it can be cast to any reference type, and to any primitive type via unboxing.
+      // Guessing the target type instead would fail whenever the same expression is also cast to
+      // an unrelated type somewhere else.
+      //
+      // Lambdas and method references are excluded because they are poly expressions with no type
+      // of their own; they are handled by the functional-interface logic instead.
+      return Set.of(new FullyQualifiedNameSet("java.lang.Object"));
     } else if (parentNode instanceof ExpressionStmt exprStmt
         && exprStmt.getParentNode().orElse(null) instanceof SwitchEntry arrowEntry
         && arrowEntry.getParentNode().orElse(null) instanceof SwitchExpr arrowSwitchExpr
