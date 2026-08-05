@@ -3133,8 +3133,15 @@ public class UnsolvedSymbolGenerator {
 
       Set<MemberType> typesToReplace = new LinkedHashSet<>();
 
-      // == and != are inconclusive for types
-      if (operator != BinaryExpr.Operator.EQUALS && operator != BinaryExpr.Operator.NOT_EQUALS) {
+      // == and != are inconclusive for types, and so is a + that is a string concatenation: JLS
+      // 15.18.1 allows the other operand of a concatenation to have any type at all, so unlike
+      // every other operator here it tells us nothing about either side. Constraining an operand
+      // to getTypesForOp("+") anyway would overwrite whatever type its real use sites established
+      // with an arbitrary member of that set, which is how the operand of a "" + x used to come
+      // out as an int.
+      if (operator != BinaryExpr.Operator.EQUALS
+          && operator != BinaryExpr.Operator.NOT_EQUALS
+          && !isDefinitelyStringConcatenation(binaryExpr)) {
         for (String validType : JavaLangUtils.getTypesForOp(operator.asString())) {
           if (JavaParserUtil.isAClassName(validType)) {
             validType = "java.lang." + validType;
@@ -3169,6 +3176,36 @@ public class UnsolvedSymbolGenerator {
     }
 
     return new UnsolvedGenerationResult(toAdd, toRemove);
+  }
+
+  /**
+   * Returns true if the given binary expression is a string concatenation rather than an arithmetic
+   * addition. Per JLS 15.18.1 a {@code +} is a concatenation as soon as either operand is a {@code
+   * String}, and then the other operand may have any type at all.
+   *
+   * <p>An operand whose type Specimin is unsure of is not treated as a String, so an expression
+   * that is really a concatenation between two unsolved operands is still reported as an addition.
+   * That is, this method is conservative: it only returns true if it can prove that one side of the
+   * operation is really java.lang.String.
+   *
+   * @param binaryExpr a binary expression
+   * @return true if the expression is definitely a string concatenation
+   */
+  private boolean isDefinitelyStringConcatenation(BinaryExpr binaryExpr) {
+    if (binaryExpr.getOperator() != BinaryExpr.Operator.PLUS) {
+      return false;
+    }
+
+    for (Expression operand : List.of(binaryExpr.getLeft(), binaryExpr.getRight())) {
+      String soleFqn =
+          FullyQualifiedNameSet.getSoleErasedFqn(
+              fullyQualifiedNameGenerator.getFQNsForExpressionType(operand));
+
+      if (JavaLangUtils.isJavaLangString(soleFqn)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

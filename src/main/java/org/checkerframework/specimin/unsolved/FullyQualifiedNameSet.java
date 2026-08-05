@@ -97,6 +97,26 @@ public record FullyQualifiedNameSet(
     this(Set.of(erasedFqns));
   }
 
+  /**
+   * Returns the one fully-qualified name that the given inferred type unambiguously names, or null
+   * if there is not exactly one.
+   *
+   * <p>An inferred type is a set of FullyQualifiedNameSets, each of which is itself a set of erased
+   * FQNs, because Specimin may be unsure both of which type an expression has and of which package
+   * that type is in. Callers that must know the exact type -- rather than merely constrain it --
+   * can only proceed when both of those sets are singletons, and this method is how they ask.
+   *
+   * @param inferredType an inferred type, as produced by FullyQualifiedNameGenerator
+   * @return the sole erased FQN, or null if the inferred type names zero or several
+   */
+  public static @Nullable String getSoleErasedFqn(Set<FullyQualifiedNameSet> inferredType) {
+    if (inferredType.size() != 1) {
+      return null;
+    }
+    Set<String> erasedFqns = inferredType.iterator().next().erasedFqns();
+    return erasedFqns.size() == 1 ? erasedFqns.iterator().next() : null;
+  }
+
   @Override
   public boolean equals(@Nullable Object other) {
     if (other instanceof FullyQualifiedNameSet otherSet) {
