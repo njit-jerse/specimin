@@ -471,6 +471,8 @@ public class UnsolvedClassOrInterfaceAlternates
         }
 
         if (isWildcard) {
+          boolean addedAlternate = preferredTypeArg != null;
+
           for (String potentialTypeArg : getTypeVariables()) {
             if (potentialTypeArg.equals(preferredTypeArg)) {
               continue;
@@ -478,8 +480,25 @@ public class UnsolvedClassOrInterfaceAlternates
 
             newTypeArgs.set(i, new SolvedMemberType(potentialTypeArg));
             newSanitized.add(halfSanitized.copyWithNewTypeArgs(newTypeArgs));
+            addedAlternate = true;
 
             newTypeArgs = new ArrayList<>(halfSanitized.getTypeArguments());
+          }
+
+          if (!addedAlternate) {
+            // This type declares no type variable that the wildcard could be bound to, which
+            // happens whenever a non-generic type is assigned to something of type Bar<?>.
+            // Without a replacement the alternate list becomes empty and the caller drops the
+            // supertype relationship altogether, leaving this type with no extends/implements
+            // clause at all -- so the assignment that motivated it cannot compile. Substituting a
+            // concrete type argument keeps the relationship instead.
+            for (MemberType concreteTypeArg :
+                concreteTypeArgumentsForWildcard((WildcardMemberType) typeArg)) {
+              newTypeArgs.set(i, concreteTypeArg);
+              newSanitized.add(halfSanitized.copyWithNewTypeArgs(newTypeArgs));
+
+              newTypeArgs = new ArrayList<>(halfSanitized.getTypeArguments());
+            }
           }
         } else {
           for (MemberType potentialTypeArg : removeAllWildcardsAndReturnPotentialTypes(typeArg)) {
@@ -495,6 +514,28 @@ public class UnsolvedClassOrInterfaceAlternates
     }
 
     return sanitized;
+  }
+
+  /**
+   * Returns concrete type arguments that may stand in for the given wildcard in an
+   * extends/implements clause, which cannot itself contain a wildcard. Any type argument satisfies
+   * an unbounded {@code ?}, and the bound itself satisfies both {@code ? extends Bound} and {@code
+   * ? super Bound}, so a type parameterized by one of the returned arguments is always a subtype of
+   * the wildcard-parameterized original.
+   *
+   * @param wildcard The wildcard to replace
+   * @return The concrete type arguments that may replace the wildcard
+   */
+  private List<MemberType> concreteTypeArgumentsForWildcard(WildcardMemberType wildcard) {
+    MemberType bound = wildcard.getBound();
+
+    if (bound == null) {
+      return List.of(SolvedMemberType.JAVA_LANG_OBJECT);
+    }
+
+    // The bound may itself be parameterized by a wildcard (e.g. ? extends List<?>), so it needs
+    // the same treatment.
+    return removeAllWildcardsAndReturnPotentialTypes(bound);
   }
 
   /**
