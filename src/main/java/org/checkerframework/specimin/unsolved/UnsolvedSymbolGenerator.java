@@ -4080,9 +4080,11 @@ public class UnsolvedSymbolGenerator {
 
           // ? extends with ? extends; there is no ? extends with ? super
           if (isUpperBound) {
+            // Foo<? extends Bound> = Foo<A> tells us that A is a subtype of Bound.
             handleLHSAndRHSRelationship(Set.of(bound), rhsTypeParameters, () -> null);
           } else {
-            handleLHSAndRHSRelationship(rhsTypeParameters, rhsTypes, () -> null);
+            // Foo<? super Bound> = Foo<A> tells us that Bound is a subtype of A.
+            handleLHSAndRHSRelationship(rhsTypeParameters, Set.of(bound), () -> null);
           }
         } else {
           for (MemberType rhsType : rhsTypes) {
