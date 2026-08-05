@@ -4,16 +4,13 @@ import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
 /**
- * Checks that a cast to a synthetic type does constrain the type inferred for the cast's operand.
- * This is the counterpart to {@link CastAndContextHarmlessTest} and {@link
- * CastAndContextInterfaceTest}: those cover the two targets that constrain nothing ({@code Object}
- * and an interface), while this covers a target that Specimin cannot resolve at all and so must
- * conservatively treat as constraining. Without that constraint, {@code get()} would be given a
- * freshly generated synthetic return type unrelated to {@code Baz}, and the cast would not compile.
+ * Checks that a cast to a synthetic type constrains the cast's operand in no way, even when the
+ * cast is the operand's only use site. Specimin chooses a synthetic type's supertypes, so it makes
+ * {@code Baz} a subtype of whatever {@code get()} returns rather than forcing {@code get()} to
+ * return something castable to {@code Baz}; the cast is then a legal downcast.
  *
- * <p>{@code Object} is the right answer here because a cast from {@code Object} to any reference
- * type is a legal narrowing conversion, so it satisfies the cast no matter what Specimin later
- * decides {@code Baz} is.
+ * <p>See {@link CastAndContextSyntheticTest} for the case where this matters for compilability --
+ * there a second use site pins the return type, and constraining it would break that use site.
  */
 public class CastToSyntheticTest {
   @Test

@@ -1964,14 +1964,15 @@ public class FullyQualifiedNameGenerator {
    * Returns true if every reference type that Specimin could infer for an expression is castable to
    * the given cast target type, so that a cast to it constrains the operand's type in no way.
    *
-   * <p>Two targets qualify. {@code java.lang.Object} is a supertype of every reference type. An
+   * <p>Three targets qualify. {@code java.lang.Object} is a supertype of every reference type. An
    * interface qualifies because a cast from a non-final class type to an unrelated interface is
    * always legal (JLS 5.5.1), and the synthetic classes Specimin generates are never final unless
-   * some other constraint forces them to be.
+   * some other constraint forces them to be. A type that Specimin will synthesize qualifies because
+   * Specimin chooses that type's supertypes, and so can always make the cast legal.
    *
-   * <p>Any other target -- a class (which may be final, like {@code String}, or simply unrelated),
-   * a primitive, an array, or a type that cannot be resolved -- is treated as constraining, because
-   * a synthetic type unrelated to it would be inconvertible.
+   * <p>Any other target -- a class that already exists (which may be final, like {@code String}, or
+   * simply unrelated), a primitive, or an array -- is treated as constraining, because a synthetic
+   * type unrelated to it would be inconvertible.
    *
    * @param castTargetType the type an expression is being cast to
    * @return true if a cast to this type places no constraint on the operand's type
@@ -1979,10 +1980,20 @@ public class FullyQualifiedNameGenerator {
   private boolean isCastCompatibleWithEveryInferrableType(Type castTargetType) {
     ResolvedType resolvedTarget = Resolver.resolve(castTargetType);
 
-    // A target that does not resolve to a reference type -- a primitive, an array, an intersection
-    // cast, or a type Specimin cannot resolve at all -- is treated as constraining. Failing in this
-    // direction is safe: it falls back to reporting java.lang.Object, which always compiles.
-    if (resolvedTarget == null || !resolvedTarget.isReferenceType()) {
+    if (resolvedTarget == null) {
+      // The target is a type that Specimin itself will synthesize. Specimin controls how that type
+      // is generated, so it can make the cast legal after the fact by giving the synthetic target
+      // the operand's type as a supertype, which turns the cast into a legal downcast; see the
+      // CastExpr case of UnsolvedSymbolGenerator#addInformation. The cast therefore constrains the
+      // operand in no way. Only class and interface types are synthesized like this; an
+      // unresolvable array or intersection cast keeps the conservative answer below.
+      return castTargetType.isClassOrInterfaceType();
+    }
+
+    // A target that resolves to something that is not a reference type -- a primitive or an array
+    // -- is treated as constraining. Failing in this direction is safe: it falls back to reporting
+    // java.lang.Object, which always compiles.
+    if (!resolvedTarget.isReferenceType()) {
       return false;
     }
 

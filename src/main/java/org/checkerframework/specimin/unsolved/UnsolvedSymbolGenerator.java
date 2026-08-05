@@ -18,6 +18,7 @@ import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -2637,26 +2638,30 @@ public class UnsolvedSymbolGenerator {
         return UnsolvedGenerationResult.EMPTY;
       }
 
-      Expression relationalExpr = instanceOf.getExpression();
+      makeSyntheticTypeASubtypeOfExpressionType(type, instanceOf.getExpression(), "instanceof");
+    } else if (node instanceof CastExpr castExpr
+        && !castExpr.getExpression().isLambdaExpr()
+        && !castExpr.getExpression().isMethodReferenceExpr()) {
+      // A cast (T) e compiles only if a cast between e's type and T would be accepted, which is
+      // exactly the condition JLS 15.20.2 (quoted above) imposes on instanceof. A synthetic T is
+      // therefore handled the same way here as it is there.
+      //
+      // Constraining e's type to make the cast legal would be wrong, because it would also degrade
+      // the type inferred for e at its other use sites. Since Specimin chooses what T is, it can
+      // instead make T a subtype of e's type, which turns the cast into a legal downcast and
+      // leaves e's type alone. FullyQualifiedNameGenerator therefore reports a synthetic cast
+      // target as constraining nothing, and this is where that promise is kept.
+      //
+      // Lambdas and method references are excluded for the same reason as there: they are poly
+      // expressions with no type of their own, and the functional-interface logic handles them.
+      Type type = castExpr.getType();
 
-      Set<MemberType> relational =
-          getMemberTypesAndExpectNonNullFromFQNSets(
-              fullyQualifiedNameGenerator.getFQNsForExpressionType(relationalExpr));
-
-      if (relational.isEmpty()) {
-        throw new RuntimeException(
-            "Unsolved relational expression when all unsolved symbols should be generated.");
+      if (Resolver.resolve(type) != null) {
+        // Not synthetic, so Specimin does not get to choose its supertypes.
+        return UnsolvedGenerationResult.EMPTY;
       }
 
-      UnsolvedClassOrInterfaceAlternates referenceType =
-          (UnsolvedClassOrInterfaceAlternates)
-              findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(type));
-
-      if (referenceType == null) {
-        throw new RuntimeException(
-            "Unsolved instanceof type when all unsolved symbols should be generated: " + type);
-      }
-      referenceType.addSuperType(relational);
+      makeSyntheticTypeASubtypeOfExpressionType(type, castExpr.getExpression(), "cast");
     }
 
     // This condition checks to see if the return type of a synthetic method definition
@@ -3164,6 +3169,67 @@ public class UnsolvedSymbolGenerator {
     }
 
     return new UnsolvedGenerationResult(toAdd, toRemove);
+  }
+
+  /**
+   * Records that a synthetic type must be a subtype of the type of the given expression.
+   *
+   * <p>Shared by the {@code instanceof} and cast cases of {@link #addInformation}, which impose the
+   * same requirement for the same reason: JLS 15.20.2 gives {@code x instanceof T} and {@code (T)
+   * x} the same legality condition. When {@code T} is synthetic, Specimin chooses its supertypes,
+   * so it can satisfy that condition without constraining {@code x}'s type.
+   *
+   * @param syntheticType the type named by the instanceof or the cast. Must not be resolvable; the
+   *     caller is responsible for checking that, since a type that already exists has supertypes
+   *     Specimin does not get to choose.
+   * @param operand the operand of the instanceof or the cast
+   * @param kind how to describe the construct in error messages, e.g. "cast"
+   */
+  private void makeSyntheticTypeASubtypeOfExpressionType(
+      Type syntheticType, Expression operand, String kind) {
+    Set<MemberType> operandTypes =
+        getMemberTypesAndExpectNonNullFromFQNSets(
+            fullyQualifiedNameGenerator.getFQNsForExpressionType(operand));
+
+    if (operandTypes.isEmpty()) {
+      throw new RuntimeException(
+          "Unsolved "
+              + kind
+              + " operand when all unsolved symbols should be generated: "
+              + operand);
+    }
+
+    // Nothing can be made a subtype of a final class. Note that these are the types Specimin
+    // inferred for the operand, which may be an over-approximation of its real type, so this is
+    // worth checking even though a cast or instanceof naming a synthetic supertype of a final
+    // class could not appear in a program that compiles. Dropping the supertype leaves the
+    // synthetic type unconstrained, which is no worse than not having tried; adding it would emit
+    // a class that extends a final class, which cannot compile in any context.
+    Set<MemberType> extendableOperandTypes =
+        operandTypes.stream()
+            .filter(
+                operandType ->
+                    !(operandType instanceof SolvedMemberType)
+                        || operandType.getFullyQualifiedNames().stream()
+                            .noneMatch(JavaLangUtils::isFinalJdkClass))
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+    if (extendableOperandTypes.isEmpty()) {
+      return;
+    }
+
+    UnsolvedClassOrInterfaceAlternates unsolvedSyntheticType =
+        (UnsolvedClassOrInterfaceAlternates)
+            findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(syntheticType));
+
+    if (unsolvedSyntheticType == null) {
+      throw new RuntimeException(
+          "Unsolved "
+              + kind
+              + " type when all unsolved symbols should be generated: "
+              + syntheticType);
+    }
+    unsolvedSyntheticType.addSuperType(extendableOperandTypes);
   }
 
   /**
@@ -4526,6 +4592,7 @@ public class UnsolvedSymbolGenerator {
         || node instanceof TryStmt
         || node instanceof ThrowStmt
         || node instanceof InstanceOfExpr
+        || node instanceof CastExpr
         || node instanceof MethodCallExpr
         || node instanceof TypeParameter
         || node instanceof AssignExpr
