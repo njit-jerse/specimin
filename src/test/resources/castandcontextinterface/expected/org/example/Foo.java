@@ -1,7 +1,7 @@
 package org.example;
 public class Foo {
 
-    public org.example.Bar get() {
+    public org.example.GetReturnType get() {
         throw new java.lang.Error();
     }
 }
