@@ -9,11 +9,7 @@ import org.junit.jupiter.api.Test;
  * a value is passed to a function in a synthetic class.
  *
  * <p>The three lambda parameters are used only in a string concatenation, which constrains their
- * types in no way (see {@link ConcatOfUnsolvedTest}), so each gets a placeholder type. This test
- * previously expected {@code ? extends java.lang.String} for all three, which was an instance of
- * the bug that ConcatOfUnsolvedTest covers: a single concatenation is not evidence that an operand
- * is a String. The placeholder types are less minimal but not less compilable, and collapsing
- * unconstrained placeholders is a separate issue -- see {@link CastAndContextHarmlessTest}.
+ * types in no way (see {@link ConcatOfUnsolvedTest}), so each gets a placeholder type.
  */
 public class LambdaTriConsumerTest {
   @Test
