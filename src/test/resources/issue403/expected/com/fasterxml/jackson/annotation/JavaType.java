@@ -13,11 +13,11 @@ public class JavaType {
         throw new java.lang.Error();
     }
 
-    public java.lang.Object getTypeHandler() {
+    public com.fasterxml.jackson.annotation.GetTypeHandlerReturnType getTypeHandler() {
         throw new java.lang.Error();
     }
 
-    public java.lang.Object getValueHandler() {
+    public com.fasterxml.jackson.annotation.GetValueHandlerReturnType getValueHandler() {
         throw new java.lang.Error();
     }
 }

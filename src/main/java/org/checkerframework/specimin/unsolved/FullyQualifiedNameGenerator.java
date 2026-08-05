@@ -1920,13 +1920,24 @@ public class FullyQualifiedNameGenerator {
       // A cast does not tell us the operand's type: it only tells us that the operand must be
       // cast-compatible with the target type. In fact the operand's type is usually *not* the
       // target type, since a cast is written precisely when the static type is broader than what
-      // is needed. java.lang.Object is the only choice guaranteed to compile in every such
-      // context: it can be cast to any reference type, and to any primitive type via unboxing.
-      // Guessing the target type instead would fail whenever the same expression is also cast to
-      // an unrelated type somewhere else.
+      // is needed. Guessing the target type would fail whenever the same expression is also cast
+      // to an unrelated type somewhere else.
       //
       // Lambdas and method references are excluded because they are poly expressions with no type
       // of their own; they are handled by the functional-interface logic instead.
+      if (isCastCompatibleWithEveryInferrableType(castExpr.getType())) {
+        // Every type Specimin could infer for the operand is already castable to this target, so
+        // the cast imposes no constraint at all and we must report no information. Reporting
+        // java.lang.Object instead would be reconciled with the operand's *other* use sites, and
+        // since Object is an upper bound of everything, it would collapse the precise type those
+        // sites established (e.g. a `Bar b = f.get();` elsewhere) down to Object, which no longer
+        // compiles.
+        return null;
+      }
+      // Otherwise the target is a type that a freshly generated synthetic type could not be cast
+      // to -- a final class such as String, an unrelated class, or a primitive. java.lang.Object
+      // is the only choice guaranteed to compile here: it can be cast to any reference type, and
+      // to any primitive type via unboxing.
       return Set.of(new FullyQualifiedNameSet("java.lang.Object"));
     } else if (parentNode instanceof ExpressionStmt exprStmt
         && exprStmt.getParentNode().orElse(null) instanceof SwitchEntry arrowEntry
@@ -1947,6 +1958,56 @@ public class FullyQualifiedNameGenerator {
       }
     }
     return null;
+  }
+
+  /**
+   * Returns true if every reference type that Specimin could infer for an expression is castable to
+   * the given cast target type, so that a cast to it constrains the operand's type in no way.
+   *
+   * <p>Three targets qualify. {@code java.lang.Object} is a supertype of every reference type. An
+   * interface qualifies because a cast from a non-final class type to an unrelated interface is
+   * always legal (JLS 5.5.1), and the synthetic classes Specimin generates are never final unless
+   * some other constraint forces them to be. A type that Specimin will synthesize qualifies because
+   * Specimin chooses that type's supertypes, and so can always make the cast legal.
+   *
+   * <p>Any other target -- a class that already exists (which may be final, like {@code String}, or
+   * simply unrelated), a primitive, or an array -- is treated as constraining, because a synthetic
+   * type unrelated to it would be inconvertible.
+   *
+   * @param castTargetType the type an expression is being cast to
+   * @return true if a cast to this type places no constraint on the operand's type
+   */
+  private boolean isCastCompatibleWithEveryInferrableType(Type castTargetType) {
+    ResolvedType resolvedTarget = Resolver.resolve(castTargetType);
+
+    if (resolvedTarget == null) {
+      // The target is a type that Specimin itself will synthesize. Specimin controls how that type
+      // is generated, so it can make the cast legal after the fact by giving the synthetic target
+      // the operand's type as a supertype, which turns the cast into a legal downcast; see the
+      // CastExpr case of UnsolvedSymbolGenerator#addInformation. The cast therefore constrains the
+      // operand in no way. Only class and interface types are synthesized like this; an
+      // unresolvable array or intersection cast keeps the conservative answer below.
+      return castTargetType.isClassOrInterfaceType();
+    }
+
+    // A target that resolves to something that is not a reference type -- a primitive or an array
+    // -- is treated as constraining. Failing in this direction is safe: it falls back to reporting
+    // java.lang.Object, which always compiles.
+    if (!resolvedTarget.isReferenceType()) {
+      return false;
+    }
+
+    ResolvedReferenceType targetAsReferenceType = resolvedTarget.asReferenceType();
+
+    // java.lang.Object is a class, not an interface, so it cannot be covered by the interface check
+    // below; it needs naming explicitly. This is the top of the type hierarchy, so every reference
+    // type is already a subtype of it and no cast to it can ever fail.
+    if (targetAsReferenceType.getQualifiedName().equals("java.lang.Object")) {
+      return true;
+    }
+
+    return targetAsReferenceType.getTypeDeclaration().isPresent()
+        && targetAsReferenceType.getTypeDeclaration().get().isInterface();
   }
 
   /**
