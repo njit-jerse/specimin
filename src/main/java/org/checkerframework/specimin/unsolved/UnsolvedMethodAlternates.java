@@ -346,6 +346,35 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   }
 
   /**
+   * Returns whether the given type is one of the type variables bound by this method's own
+   * declaration (i.e. a name introduced by this method, such as the {@code T} in {@code <T> T
+   * get()}).
+   *
+   * <p>Such a name is only meaningful inside the declaration that binds it. Callers that are about
+   * to use a type outside of that declaration -- for example, to describe the type of an expression
+   * at a call site -- must not use the name, because it is not in scope there.
+   *
+   * @param type The type to check
+   * @return true if the type is a type variable bound by this method
+   */
+  public boolean isOwnTypeVariable(MemberType type) {
+    Set<String> fqns = type.getFullyQualifiedNames();
+    if (fqns.size() != 1 || !type.getTypeArguments().isEmpty()) {
+      return false;
+    }
+
+    String name = fqns.iterator().next();
+    for (UnsolvedMethod alternate : getAlternates()) {
+      for (int i = 0; i < alternate.getNumberOfTypeVariables(); i++) {
+        if (alternate.getTypeVariableName(i).equals(name)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Gets the return types
    *
    * @return The return types

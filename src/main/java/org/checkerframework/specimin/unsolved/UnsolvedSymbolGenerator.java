@@ -3192,11 +3192,13 @@ public class UnsolvedSymbolGenerator {
             fullyQualifiedNameGenerator.getFQNsForExpressionType(operand));
 
     if (operandTypes.isEmpty()) {
-      throw new RuntimeException(
-          "Unsolved "
-              + kind
-              + " operand when all unsolved symbols should be generated: "
-              + operand);
+      // No information about the operand's type. This happens when the operand's type is
+      // unconstrained -- for example, a call to a synthetic method whose return type is one of its
+      // own type variables, which can be instantiated to anything the context needs. There is
+      // nothing to make the synthetic type a subtype of, and nothing needs to be: the type
+      // variable is instantiated to the synthetic type at this site, which makes the cast or
+      // instanceof legal on its own.
+      return;
     }
 
     // Nothing can be made a subtype of a final class. Note that these are the types Specimin
