@@ -851,10 +851,7 @@ public class FullyQualifiedNameGenerator {
           // If the return type is one of the method's own type variables and nothing above
           // resolved it to a concrete type, then this call site constrains the expression's type
           // not at all: the variable can be instantiated to whatever the surrounding context
-          // needs. Reporting the variable's name here would be actively wrong, because that name
-          // is only in scope inside the method declaration that binds it, and every consumer of
-          // this result is outside that declaration. Saying nothing is the correct answer; see
-          // getFQNsFromSurroundingContextType for the same principle applied to contexts.
+          // needs. So, doing nothing is the right behavior.
           if (unsolvedMethodAlternates.isOwnTypeVariable(returnType)) {
             continue;
           }
