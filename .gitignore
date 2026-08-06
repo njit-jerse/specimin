@@ -35,3 +35,5 @@ build
 
 # VSCode files
 bin/
+
+CLAUDE.md
