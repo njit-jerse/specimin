@@ -2625,7 +2625,7 @@ public class UnsolvedSymbolGenerator {
       // expression likewise produces a compile-time error. In such a situation, the result of the
       // instanceof expression could never be true."
       //
-      // This method uses this fact to add extends clauses to synthetic classes.
+      // This logic uses this fact to add extends clauses to synthetic classes.
       Type type;
       if (instanceOf.getPattern().isPresent()) {
         PatternExpr patternExpr = instanceOf.getPattern().get();
@@ -2685,8 +2685,14 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    // Get super classes: type of LHS is a super type of the type of the RHS
-    if (node instanceof AssignExpr
+    // Get super classes: type of LHS is a super type of the type of the RHS.
+    //
+    // A String += is excluded, because it is not really an assignment of the RHS to the LHS: JLS
+    // 15.26.2 defines it as s = (String) (s + x), so the RHS is an operand of a string
+    // concatenation and is unconstrained, exactly as in the BinaryExpr case below. Making it a
+    // subtype of the LHS would demand that it be a subtype of the final class String, which no
+    // type can be.
+    if ((node instanceof AssignExpr assign && !isDefinitelyStringConcatenation(assign))
         || (node instanceof VariableDeclarator varDecl && varDecl.getInitializer().isPresent())
         || (node instanceof ReturnStmt returnStmt && returnStmt.getExpression().isPresent())
         || node instanceof LambdaExpr) {
@@ -3197,15 +3203,43 @@ public class UnsolvedSymbolGenerator {
     }
 
     for (Expression operand : List.of(binaryExpr.getLeft(), binaryExpr.getRight())) {
-      String soleFqn =
-          FullyQualifiedNameSet.getSoleErasedFqn(
-              fullyQualifiedNameGenerator.getFQNsForExpressionType(operand));
-
-      if (JavaLangUtils.isJavaLangString(soleFqn)) {
+      if (isDefinitelyString(operand)) {
         return true;
       }
     }
     return false;
+  }
+
+  /**
+   * Returns true if the given compound assignment is a string concatenation rather than an
+   * arithmetic addition. Per JLS 15.26.2 a {@code s += x} is exactly {@code s = (String) (s + x)}
+   * when {@code s} is a {@code String}, so {@code x} is a concatenation operand and may have any
+   * type at all.
+   *
+   * <p>Only the target can make the operator a concatenation: {@code s += x} where {@code s} is not
+   * a String and {@code x} is one does not compile, so a String on the value side is no evidence.
+   *
+   * @param assignExpr an assignment expression
+   * @return true if the expression is definitely a string concatenation
+   */
+  private boolean isDefinitelyStringConcatenation(AssignExpr assignExpr) {
+    return assignExpr.getOperator() == AssignExpr.Operator.PLUS
+        && isDefinitelyString(assignExpr.getTarget());
+  }
+
+  /**
+   * Returns true if Specimin can prove that the given expression's type is {@code
+   * java.lang.String}. An expression whose type Specimin is unsure of is not a String by this
+   * definition: the callers use it to decide that a {@code +} is a concatenation, and guessing
+   * wrong there would suppress a real constraint.
+   *
+   * @param expr an expression
+   * @return true if the expression's type is definitely java.lang.String
+   */
+  private boolean isDefinitelyString(Expression expr) {
+    return JavaLangUtils.isJavaLangString(
+        FullyQualifiedNameSet.getSoleErasedFqn(
+            fullyQualifiedNameGenerator.getFQNsForExpressionType(expr)));
   }
 
   /**
