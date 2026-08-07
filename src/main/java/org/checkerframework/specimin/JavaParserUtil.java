@@ -2619,13 +2619,18 @@ public class JavaParserUtil {
    *   <li>anywhere inside an annotation, since annotation arguments must be constants;
    *   <li>inside a {@code case} label (but not the body of the switch entry, where ordinary
    *       expressions are allowed);
-   *   <li>inside the initializer of a {@code static final} field of primitive or {@code String}
-   *       type. Such a field is the only kind that can be a constant variable (JLS 4.12.4), so if
-   *       Specimin is preserving its initializer at all, that initializer is a constant expression
-   *       and everything it names is a constant too. This is the case that makes the property
-   *       transitive: {@code static final String B = A + "x";} used in an annotation forces {@code
-   *       A} to keep its initializer as well.
+   *   <li>inside the initializer of a {@code final} field of primitive or {@code String} type. Such
+   *       a field is the only kind that can be a constant variable (JLS 4.12.4), so if Specimin is
+   *       preserving its initializer at all, that initializer is a constant expression and
+   *       everything it names is a constant too. This is the case that makes the property
+   *       transitive: {@code final String B = A + "x";} used in an annotation forces {@code A} to
+   *       keep its initializer as well.
    * </ul>
+   *
+   * <p>Note that {@code static} is deliberately <em>not</em> required: JLS 4.12.4 says "final
+   * variable", so an instance field is a constant variable too, and {@code @Anno(INSTANCE_FIELD)}
+   * compiles. Fields of an interface need no special case, because JavaParser reports their
+   * implicit {@code public static final} modifiers explicitly.
    *
    * <p>The third case is a syntactic approximation and can be slightly conservative: a {@code
    * static final String} whose initializer is not a constant expression (e.g. {@code = compute()})
@@ -2651,7 +2656,6 @@ public class JavaParserUtil {
       if (parent instanceof VariableDeclarator declarator
           && isInitializerOf(declarator, child)
           && declarator.getParentNode().orElse(null) instanceof FieldDeclaration field
-          && field.isStatic()
           && field.isFinal()
           && isConstantVariableType(declarator.getType())) {
         return true;
