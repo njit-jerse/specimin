@@ -10,6 +10,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
+import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
 
 /**
@@ -264,8 +265,7 @@ public class UnsolvedClassOrInterfaceAlternates
           continue;
         }
       }
-      if (superType.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
-        // If the super type is java.lang.Object, we don't need to add it
+      if (shouldNotBeNamedAsASuperType(superType)) {
         continue;
       }
 
@@ -286,6 +286,41 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
+   * Returns whether the given type should be left out of the {@code extends} or {@code implements}
+   * clause of a generated class, either because naming it could not compile or because naming it
+   * would say nothing.
+   *
+   * <p>Only {@link SolvedMemberType}s are ever rejected, because Specimin controls all {@link
+   * UnsolvedMemberType}s. By constrast, nothing will be generated for a {@link SolvedMemberType},
+   * so this method rejects them if they have any of these three kinds of names:
+   *
+   * <ul>
+   *   <li>An unqualified name, which is probably a type variable belonging to some other
+   *       declaration. A class declaration is not in the scope of any method's type parameters, so
+   *       naming one here cannot compile. This is a heuristic, because it might also reject names
+   *       in the default package.
+   *   <li>A final JDK class, which nothing is permitted to extend.
+   *   <li>{@code java.lang.Object}, which every class already extends implicitly.
+   * </ul>
+   *
+   * <p>Dropping a supertype only leaves the generated class less constrained, which is always safe,
+   * whereas naming either of the former two is never safe. This is intended as a defensive
+   * backstop: callers are expected not to offer such a type in the first place.
+   *
+   * @param superType The candidate super type
+   * @return true if the type should not be named as a super type
+   */
+  private static boolean shouldNotBeNamedAsASuperType(MemberType superType) {
+    if (!(superType instanceof SolvedMemberType)) {
+      return false;
+    }
+
+    return superType.equals(SolvedMemberType.JAVA_LANG_OBJECT)
+        || SpeciminGenerationUtils.isATypeVariable(superType)
+        || superType.getFullyQualifiedNames().stream().anyMatch(JavaLangUtils::isFinalJdkClass);
+  }
+
+  /**
    * Forces a super class relationship for this type.
    *
    * @param superClass The super class to force
@@ -297,7 +332,7 @@ public class UnsolvedClassOrInterfaceAlternates
 
     if ((superClass instanceof UnsolvedMemberType unsolved
             && unsolved.getUnsolvedType().equals(this))
-        || superClass.equals(SolvedMemberType.JAVA_LANG_OBJECT)) {
+        || shouldNotBeNamedAsASuperType(superClass)) {
       return;
     }
 

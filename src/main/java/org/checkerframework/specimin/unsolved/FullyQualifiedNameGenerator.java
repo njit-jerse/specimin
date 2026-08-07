@@ -848,6 +848,14 @@ public class FullyQualifiedNameGenerator {
             continue;
           }
 
+          // If the return type is one of the method's own type variables and nothing above
+          // resolved it to a concrete type, then this call site constrains the expression's type
+          // not at all: the variable can be instantiated to whatever the surrounding context
+          // needs. So, doing nothing is the right behavior.
+          if (unsolvedMethodAlternates.isOwnTypeVariable(returnType)) {
+            continue;
+          }
+
           FullyQualifiedNameSet fullyQualifiedNameSet = convertMemberTypeToFQNSet(returnType);
           result.add(fullyQualifiedNameSet);
         }
