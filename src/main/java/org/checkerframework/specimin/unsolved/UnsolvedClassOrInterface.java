@@ -306,13 +306,25 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       }
     }
     sb.append(" {\n");
+    if (typeOfType == UnsolvedClassOrInterfaceType.ENUM) {
+      // JLS 8.9.1 requires an enum body to begin with its constant list, and requires that list
+      // to be terminated by a semicolon whenever any member declarations follow it. The semicolon
+      // is emitted unconditionally: it is legal even when there are no constants and no members
+      // (i.e., "enum E { ; }"), so there is no need to distinguish the cases.
+      for (UnsolvedField enumConstant : fields) {
+        sb.append("    ").append(enumConstant.toString(typeOfType)).append("\n");
+      }
+      sb.append("    ;\n");
+    }
     if (innerClassDefinitions != null) {
       for (String innerClass : innerClassDefinitions) {
         sb.append(innerClass);
       }
     }
-    for (UnsolvedField variableDeclarations : fields) {
-      sb.append("    ").append(variableDeclarations.toString(typeOfType)).append("\n");
+    if (typeOfType != UnsolvedClassOrInterfaceType.ENUM) {
+      for (UnsolvedField variableDeclarations : fields) {
+        sb.append("    ").append(variableDeclarations.toString(typeOfType)).append("\n");
+      }
     }
     for (UnsolvedMethod method : methods) {
       sb.append(method.toString(typeOfType));
