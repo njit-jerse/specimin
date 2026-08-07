@@ -4300,30 +4300,45 @@ public class UnsolvedSymbolGenerator {
    * declaring type that Specimin did not synthesize is not a decision of ours, so it is not
    * reported here even if it is in fact not an enum.
    *
+   * <p>The scope may have more than one candidate type. This method mirrors the rule used when the
+   * field itself is generated: a single candidate that is definitively not an enum is enough to
+   * decide against enum-ness, since the field's type must then be one that works for that
+   * candidate. Checking only one candidate would let the two decisions disagree, which would emit a
+   * constant of one type and an annotation member of another.
+   *
    * <p>This must be called after the field access has been passed to {@link #inferContextImpl}, so
    * that any synthetic declaring type has already been created and classified.
    *
    * @param fieldAccess the field access to check the declaring type of
-   * @return true if the declaring type is a synthetic type classified as something other than an
-   *     enum; false if it was classified as an enum, or if it is not a synthetic type at all
+   * @return true if any candidate declaring type is a synthetic type classified as something other
+   *     than an enum; false otherwise, including when every candidate was classified as an enum and
+   *     when no candidate is a synthetic type at all
    */
   private boolean declaringTypeIsSyntheticNonEnum(FieldAccessExpr fieldAccess) {
     Set<FullyQualifiedNameSet> scopeFQNs =
         fullyQualifiedNameGenerator.getFQNsForExpressionType(fieldAccess.getScope());
 
-    if (scopeFQNs.isEmpty()) {
-      return false;
+    for (FullyQualifiedNameSet candidateFQNs : scopeFQNs) {
+      UnsolvedSymbolAlternates<?> scope = findExistingAndUpdateFQNs(candidateFQNs);
+
+      if (!(scope instanceof UnsolvedClassOrInterfaceAlternates scopeType)) {
+        // The declaring type is not one Specimin synthesized, so there is no decision of ours to
+        // report.
+        continue;
+      }
+
+      UnsolvedClassOrInterfaceType classification = scopeType.getType();
+
+      // UNKNOWN means either that nothing has been decided yet or that the alternates disagree.
+      // Neither is evidence against enum-ness, so it must not count here: handleFieldAccessExpr
+      // promotes an UNKNOWN declaring type to ENUM, and treating it as a non-enum would undo that.
+      if (classification != UnsolvedClassOrInterfaceType.ENUM
+          && classification != UnsolvedClassOrInterfaceType.UNKNOWN) {
+        return true;
+      }
     }
 
-    UnsolvedSymbolAlternates<?> scope = findExistingAndUpdateFQNs(scopeFQNs.iterator().next());
-
-    if (!(scope instanceof UnsolvedClassOrInterfaceAlternates scopeType)) {
-      // The declaring type is not one Specimin synthesized, so there is no decision of ours to
-      // report.
-      return false;
-    }
-
-    return scopeType.getType() != UnsolvedClassOrInterfaceType.ENUM;
+    return false;
   }
 
   /**
