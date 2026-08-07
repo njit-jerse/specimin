@@ -16,6 +16,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -2604,6 +2605,123 @@ public class JavaParserUtil {
       return switchExpr.getSelector();
     }
     return null;
+  }
+
+  /**
+   * Returns true if the given node appears in a <em>constant context</em>: a position where Java
+   * requires a compile-time constant expression. Specimin normally discards field initializers and
+   * substitutes a default value (see {@link #getInitializerRHS(String)}), but a field read from a
+   * constant context must keep its initializer, or the output will not compile.
+   *
+   * <p>Three positions count as constant contexts:
+   *
+   * <ul>
+   *   <li>anywhere inside an annotation, since annotation arguments must be constants;
+   *   <li>inside a {@code case} label (but not the body of the switch entry, where ordinary
+   *       expressions are allowed);
+   *   <li>inside the initializer of a {@code static final} field of primitive or {@code String}
+   *       type. Such a field is the only kind that can be a constant variable (JLS 4.12.4), so if
+   *       Specimin is preserving its initializer at all, that initializer is a constant expression
+   *       and everything it names is a constant too. This is the case that makes the property
+   *       transitive: {@code static final String B = A + "x";} used in an annotation forces {@code
+   *       A} to keep its initializer as well.
+   * </ul>
+   *
+   * <p>The third case is a syntactic approximation and can be slightly conservative: a {@code
+   * static final String} whose initializer is not a constant expression (e.g. {@code = compute()})
+   * also matches. That only costs minimality, never compilability, and it can only arise when such
+   * an initializer is preserved for some unrelated reason.
+   *
+   * @param node the node to test
+   * @return true if node is in a position requiring a compile-time constant
+   */
+  public static boolean isInConstantContext(Node node) {
+    Node child = node;
+    Node parent = child.getParentNode().orElse(null);
+
+    while (parent != null) {
+      if (parent instanceof AnnotationExpr) {
+        return true;
+      }
+
+      if (parent instanceof SwitchEntry entry && isCaseLabel(entry, child)) {
+        return true;
+      }
+
+      if (parent instanceof VariableDeclarator declarator
+          && isInitializerOf(declarator, child)
+          && declarator.getParentNode().orElse(null) instanceof FieldDeclaration field
+          && field.isStatic()
+          && field.isFinal()
+          && isConstantVariableType(declarator.getType())) {
+        return true;
+      }
+
+      child = parent;
+      parent = child.getParentNode().orElse(null);
+    }
+
+    return false;
+  }
+
+  /**
+   * Returns true if the given expression is one of the switch entry's {@code case} labels, rather
+   * than one of the statements in its body.
+   *
+   * @param entry the switch entry
+   * @param child a direct child node of entry
+   * @return true if child is a label of entry
+   */
+  private static boolean isCaseLabel(SwitchEntry entry, Node child) {
+    for (Expression label : entry.getLabels()) {
+      // Reference equality is intentional: a structurally-equal expression may also appear in the
+      // entry's body, where constants are not required. No interning is okay because this is a
+      // pointer-equality check. Extracted into a local variable to minimize suppression scope.
+      @SuppressWarnings({"ReferenceEquality", "not.interned"})
+      boolean equals = label == child;
+      if (equals) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns true if the given node is the initializer expression of the given variable declarator.
+   *
+   * @param declarator the variable declarator
+   * @param child a direct child node of declarator
+   * @return true if child is declarator's initializer
+   */
+  private static boolean isInitializerOf(VariableDeclarator declarator, Node child) {
+    Expression initializer = declarator.getInitializer().orElse(null);
+    if (initializer == null) {
+      return false;
+    }
+    // Reference equality is intentional: a declarator's type or name could be structurally equal
+    // to its initializer, and we only want the initializer. No interning is okay because this is a
+    // pointer-equality check. Extracted into a local variable to minimize suppression scope.
+    @SuppressWarnings({"ReferenceEquality", "not.interned"})
+    boolean equals = initializer == child;
+    return equals;
+  }
+
+  /**
+   * Returns true if the given type is one that a constant variable may be declared with: a
+   * primitive type or {@code String} (JLS 4.12.4). No other type can be a constant variable, so a
+   * field of any other type is never usable in a constant context.
+   *
+   * @param type the declared type of a field
+   * @return true if a field of this type could be a constant variable
+   */
+  private static boolean isConstantVariableType(Type type) {
+    if (type.isPrimitiveType()) {
+      return true;
+    }
+    // Matches both "String" and "java.lang.String": getNameAsString() returns the last identifier,
+    // with any package qualification held separately as the scope.
+    return type instanceof ClassOrInterfaceType classType
+        && classType.getNameAsString().equals("String");
   }
 
   /**

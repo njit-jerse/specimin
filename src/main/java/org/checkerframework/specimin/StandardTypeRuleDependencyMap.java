@@ -512,6 +512,17 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       elements.add(type);
       elements.add(field);
       elements.add(variableDeclarator);
+
+      // A field read from a constant context (an annotation argument or a case label) must keep
+      // its initializer. Slicer normally drops the initializer and substitutes
+      // JavaParserUtil#getInitializerRHS, which yields "null" for every non-primitive type, and
+      // null is not a constant expression: the result would not compile. Primitives are
+      // unaffected, since their substituted defaults are literals, which are still constants.
+      if (variableDeclarator.getInitializer().isPresent()
+          && !variableDeclarator.getType().isPrimitiveType()
+          && JavaParserUtil.isInConstantContext(node)) {
+        elements.add(variableDeclarator.getInitializer().get());
+      }
     }
 
     if (resolved instanceof ResolvedEnumConstantDeclaration resolvedEnumConstantDeclaration
