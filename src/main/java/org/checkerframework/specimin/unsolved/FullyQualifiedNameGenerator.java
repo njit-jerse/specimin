@@ -1820,7 +1820,19 @@ public class FullyQualifiedNameGenerator {
       } else if (assignment.getValue().equals(expr)
           && !assignment.getTarget().isNullLiteralExpr()
           && isExpressionNotInProgress(assignment.getTarget())) {
-        return getFQNsForExpressionType(assignment.getTarget());
+        Set<FullyQualifiedNameSet> targetType = getFQNsForExpressionType(assignment.getTarget());
+        String soleTargetFqn = FullyQualifiedNameSet.getSoleErasedFqn(targetType);
+
+        if (assignment.getOperator() == AssignExpr.Operator.PLUS
+            && JavaLangUtils.isJavaLangString(soleTargetFqn)) {
+          // s += x on a String s is the string concatenation s = s + x (JLS 15.26.2), so x is
+          // unconstrained for the same reason it is in the BinaryExpr case below. Only the value
+          // side is unconstrained: the *target* of a += whose value is a String must still be a
+          // type that String can be assigned or cast to, so that case is left alone.
+          return null;
+        }
+
+        return targetType;
       }
     }
     // Check if it's the conditional of an if, while, do, ?:; if so, its type is boolean
@@ -1862,6 +1874,21 @@ public class FullyQualifiedNameGenerator {
       } else if (isExpressionNotInProgress(other) && isExpressionNotInProgress(binary)) {
         // Treat all other cases; type on one side is equal to the other
         Set<FullyQualifiedNameSet> otherType = getFQNsForExpressionType(other);
+        String soleOtherFqn = FullyQualifiedNameSet.getSoleErasedFqn(otherType);
+
+        if (operator == Operator.PLUS && JavaLangUtils.isJavaLangString(soleOtherFqn)) {
+          // This is a string concatenation, not an arithmetic addition, so the rule that the two
+          // sides have the same type does not apply: JLS 15.18.1 allows the other operand of a
+          // string concatenation to have *any* type. This context therefore says nothing about
+          // this expression's type, and reporting java.lang.String would be a guess that breaks
+          // every other use site that needs a different type. Returning null lets the caller fall
+          // through to the inference paths used for genuinely unconstraining contexts.
+          //
+          // Note that this must also skip the java.lang.String fallback further down, which
+          // reports the type of the whole binary expression: the concatenation's own type is
+          // java.lang.String no matter what this operand's type is, so it is no more informative.
+          return null;
+        }
 
         // Safe to call isJavaLangOrPrimitiveName since any non-primitive/String type would be
         // a synthetic type here

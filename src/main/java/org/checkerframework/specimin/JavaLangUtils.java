@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.EnsuresNonNullIf;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Utility class for questions related to the java.lang package. */
 public final class JavaLangUtils {
@@ -398,6 +400,21 @@ public final class JavaLangUtils {
    */
   public static boolean isFinalJdkClass(String name) {
     return knownFinalJdkTypes.contains(name);
+  }
+
+  /**
+   * Is the given name java.lang.String? String is worth asking about on its own because it is the
+   * only type that changes what an operator means: a {@code +} with a String operand is a string
+   * concatenation rather than an addition (JLS 15.18.1), and a concatenation places no constraint
+   * on its other operand.
+   *
+   * @param name a fully-qualified name. A simple name is not accepted, since a class named String
+   *     in some other package is not this one. Null input returns false.
+   * @return true if and only if the name is java.lang.String
+   */
+  @EnsuresNonNullIf(result = true, expression = "#1")
+  public static boolean isJavaLangString(@Nullable String name) {
+    return "java.lang.String".equals(name);
   }
 
   /**

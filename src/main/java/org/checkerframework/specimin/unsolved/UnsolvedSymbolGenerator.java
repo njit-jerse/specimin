@@ -2625,7 +2625,7 @@ public class UnsolvedSymbolGenerator {
       // expression likewise produces a compile-time error. In such a situation, the result of the
       // instanceof expression could never be true."
       //
-      // This method uses this fact to add extends clauses to synthetic classes.
+      // This logic uses this fact to add extends clauses to synthetic classes.
       Type type;
       if (instanceOf.getPattern().isPresent()) {
         PatternExpr patternExpr = instanceOf.getPattern().get();
@@ -2685,8 +2685,14 @@ public class UnsolvedSymbolGenerator {
       }
     }
 
-    // Get super classes: type of LHS is a super type of the type of the RHS
-    if (node instanceof AssignExpr
+    // Get super classes: type of LHS is a super type of the type of the RHS.
+    //
+    // A String += is excluded, because it is not really an assignment of the RHS to the LHS: JLS
+    // 15.26.2 defines it as s = (String) (s + x), so the RHS is an operand of a string
+    // concatenation and is unconstrained, exactly as in the BinaryExpr case below. Making it a
+    // subtype of the LHS would demand that it be a subtype of the final class String, which no
+    // type can be.
+    if ((node instanceof AssignExpr assign && !isDefinitelyStringConcatenation(assign))
         || (node instanceof VariableDeclarator varDecl && varDecl.getInitializer().isPresent())
         || (node instanceof ReturnStmt returnStmt && returnStmt.getExpression().isPresent())
         || node instanceof LambdaExpr) {
@@ -3133,8 +3139,15 @@ public class UnsolvedSymbolGenerator {
 
       Set<MemberType> typesToReplace = new LinkedHashSet<>();
 
-      // == and != are inconclusive for types
-      if (operator != BinaryExpr.Operator.EQUALS && operator != BinaryExpr.Operator.NOT_EQUALS) {
+      // == and != are inconclusive for types, and so is a + that is a string concatenation: JLS
+      // 15.18.1 allows the other operand of a concatenation to have any type at all, so unlike
+      // every other operator here it tells us nothing about either side. Constraining an operand
+      // to getTypesForOp("+") anyway would overwrite whatever type its real use sites established
+      // with an arbitrary member of that set, which is how the operand of a "" + x used to come
+      // out as an int.
+      if (operator != BinaryExpr.Operator.EQUALS
+          && operator != BinaryExpr.Operator.NOT_EQUALS
+          && !isDefinitelyStringConcatenation(binaryExpr)) {
         for (String validType : JavaLangUtils.getTypesForOp(operator.asString())) {
           if (JavaParserUtil.isAClassName(validType)) {
             validType = "java.lang." + validType;
@@ -3169,6 +3182,64 @@ public class UnsolvedSymbolGenerator {
     }
 
     return new UnsolvedGenerationResult(toAdd, toRemove);
+  }
+
+  /**
+   * Returns true if the given binary expression is a string concatenation rather than an arithmetic
+   * addition. Per JLS 15.18.1 a {@code +} is a concatenation as soon as either operand is a {@code
+   * String}, and then the other operand may have any type at all.
+   *
+   * <p>An operand whose type Specimin is unsure of is not treated as a String, so an expression
+   * that is really a concatenation between two unsolved operands is still reported as an addition.
+   * That is, this method is conservative: it only returns true if it can prove that one side of the
+   * operation is really java.lang.String.
+   *
+   * @param binaryExpr a binary expression
+   * @return true if the expression is definitely a string concatenation
+   */
+  private boolean isDefinitelyStringConcatenation(BinaryExpr binaryExpr) {
+    if (binaryExpr.getOperator() != BinaryExpr.Operator.PLUS) {
+      return false;
+    }
+
+    for (Expression operand : List.of(binaryExpr.getLeft(), binaryExpr.getRight())) {
+      if (isDefinitelyString(operand)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns true if the given compound assignment is a string concatenation rather than an
+   * arithmetic addition. Per JLS 15.26.2 a {@code s += x} is exactly {@code s = (String) (s + x)}
+   * when {@code s} is a {@code String}, so {@code x} is a concatenation operand and may have any
+   * type at all.
+   *
+   * <p>Only the target can make the operator a concatenation: {@code s += x} where {@code s} is not
+   * a String and {@code x} is one does not compile, so a String on the value side is no evidence.
+   *
+   * @param assignExpr an assignment expression
+   * @return true if the expression is definitely a string concatenation
+   */
+  private boolean isDefinitelyStringConcatenation(AssignExpr assignExpr) {
+    return assignExpr.getOperator() == AssignExpr.Operator.PLUS
+        && isDefinitelyString(assignExpr.getTarget());
+  }
+
+  /**
+   * Returns true if Specimin can prove that the given expression's type is {@code
+   * java.lang.String}. An expression whose type Specimin is unsure of is not a String by this
+   * definition: the callers use it to decide that a {@code +} is a concatenation, and guessing
+   * wrong there would suppress a real constraint.
+   *
+   * @param expr an expression
+   * @return true if the expression's type is definitely java.lang.String
+   */
+  private boolean isDefinitelyString(Expression expr) {
+    return JavaLangUtils.isJavaLangString(
+        FullyQualifiedNameSet.getSoleErasedFqn(
+            fullyQualifiedNameGenerator.getFQNsForExpressionType(expr)));
   }
 
   /**
