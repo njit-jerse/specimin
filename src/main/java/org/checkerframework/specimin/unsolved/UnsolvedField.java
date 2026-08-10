@@ -79,7 +79,9 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
    */
   public String toString(UnsolvedClassOrInterfaceType declaringTypeType) {
     if (declaringTypeType == UnsolvedClassOrInterfaceType.ENUM) {
-      // Still compilable even with an extra comma at the end
+      // A trailing comma after the last constant is permitted by JLS 8.9.1, so every constant can
+      // be printed the same way. It is the caller's responsibility to terminate the constant list
+      // with a semicolon; see UnsolvedClassOrInterface#toString.
       return name + ",";
     }
     return "public "
