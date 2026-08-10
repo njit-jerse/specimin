@@ -20,12 +20,10 @@ application {
     mainClass = "org.checkerframework.specimin.SpeciminRunner"
 }
 
-// Pin the JDK, matching CI. This is not only for reproducible compilation: Specimin asks the JDK it
-// is running under which packages the JDK provides (JavaLangUtils#inJdkPackage), so the JDK version
-// is an input to Specimin's output, and an unpinned one would let expected test outputs differ
-// between a contributor's machine and CI. CI uses Amazon Corretto, but the vendor is deliberately
-// not pinned: the package set is a property of the Java version, and requiring one vendor's build
-// would fail for contributors who have a different build of 17. This applies to every project,
+// Pin the JDK version. This is not only for reproducible compilation: Specimin uses the JDK it
+// is running under to decide which packages are part of the JDK, so the JDK version
+// is an input to Specimin and an unpinned one would let expected test outputs differ
+// between a contributor's machine and CI. This applies to every project,
 // since error-prone-checks produces a plugin that this project's compiler has to load.
 allprojects {
     plugins.withType(JavaPlugin).configureEach {

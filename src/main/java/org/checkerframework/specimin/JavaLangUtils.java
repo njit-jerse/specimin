@@ -379,10 +379,6 @@ public final class JavaLangUtils {
    * Every package in the JDK that Specimin is running under, including packages that their module
    * does not export (such as jdk.internal.misc): Specimin deliberately permits access to compiler
    * internals, so the unexported packages need to be here too.
-   *
-   * <p>This is computed from the JDK's own module descriptors rather than hard-coded, because a
-   * hard-coded table describes a JDK that Specimin may not be running under, and only the running
-   * JDK's classes can actually be read. See {@link #inJdkPackage} for why that distinction matters.
    */
   private static final Set<String> jdkPackages = computeJdkPackages();
 
@@ -413,13 +409,12 @@ public final class JavaLangUtils {
    * (javax.xml.bind, javax.annotation, and friends), which are now supplied by ordinary
    * dependencies and so must be synthesized.
    *
-   * <p>The granularity here is the package, not the class, so a class that does not exist in an
-   * otherwise-real JDK package (say, a javax.swing.NotARealClass arriving from a split package) is
-   * still reported as being in the JDK. If that imprecision ever matters, the fix is to enumerate
-   * classes instead of packages: open each {@code ModuleReference} from {@link
-   * ModuleFinder#ofSystem} and {@code list()} its ".class" entries. That is a one-time cost of tens
-   * of thousands of strings rather than the few hundred package names here, which is why it is not
-   * done unless it is needed.
+   * <p>The check here is by package, not by class, so a class that does not exist in an
+   * otherwise-real JDK package (say, a javax.swing.NotARealClass) wo;; still be reported as being
+   * in the JDK. If that imprecision ever matters, we could enumerate classes instead of packages:
+   * open each {@code ModuleReference} from {@link ModuleFinder#ofSystem} and {@code list()} its
+   * ".class" entries. I chose to implement this with packages to 1) keep this API broad (it accepts
+   * both package and class names as input) and 2) to avoid wasting compute in the common case.
    *
    * @param qualifiedName a package name or fully-qualified name of a class or interface
    * @return true if qualifiedName is from the JDK
