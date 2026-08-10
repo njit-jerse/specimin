@@ -1,5 +1,7 @@
 package org.checkerframework.specimin;
 
+import java.lang.module.ModuleFinder;
+import java.lang.module.ModuleReference;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -374,22 +376,69 @@ public final class JavaLangUtils {
   }
 
   /**
+   * Every package in the JDK that Specimin is running under, including packages that their module
+   * does not export (such as jdk.internal.misc): Specimin deliberately permits access to compiler
+   * internals, so the unexported packages need to be here too.
+   *
+   * <p>This is computed from the JDK's own module descriptors rather than hard-coded, because a
+   * hard-coded table describes a JDK that Specimin may not be running under, and only the running
+   * JDK's classes can actually be read. See {@link #inJdkPackage} for why that distinction matters.
+   */
+  private static final Set<String> jdkPackages = computeJdkPackages();
+
+  /**
+   * Computes the set of package names provided by the JDK that Specimin is running under. This
+   * reads module descriptors only; it neither loads nor initializes any class.
+   *
+   * @return an unmodifiable set of the JDK's package names
+   */
+  private static Set<String> computeJdkPackages() {
+    Set<String> result = new HashSet<>();
+    for (ModuleReference module : ModuleFinder.ofSystem().findAll()) {
+      result.addAll(module.descriptor().packages());
+    }
+    return Collections.unmodifiableSet(result);
+  }
+
+  /**
    * Is the given package name or fully-qualified name in one of the packages provided by the JDK?
+   *
+   * <p>"The JDK" means the JDK that Specimin is currently running under, not any JDK. That is
+   * deliberate: this predicate gates {@link JdkTypeSolver}, which resolves types reflectively
+   * against the running JDK, so answering for some other JDK version would promise a class that
+   * cannot then be read. Getting the answer wrong in either direction is safe, because a false
+   * answer only causes Specimin to synthesize the type, which costs minimality but still compiles;
+   * a false true would claim a type exists that Specimin cannot read a single member from, and the
+   * output would not compile. Compare the packages removed from the JDK in version 11
+   * (javax.xml.bind, javax.annotation, and friends), which are now supplied by ordinary
+   * dependencies and so must be synthesized.
+   *
+   * <p>The granularity here is the package, not the class, so a class that does not exist in an
+   * otherwise-real JDK package (say, a javax.swing.NotARealClass arriving from a split package) is
+   * still reported as being in the JDK. If that imprecision ever matters, the fix is to enumerate
+   * classes instead of packages: open each {@code ModuleReference} from {@link
+   * ModuleFinder#ofSystem} and {@code list()} its ".class" entries. That is a one-time cost of tens
+   * of thousands of strings rather than the few hundred package names here, which is why it is not
+   * done unless it is needed.
    *
    * @param qualifiedName a package name or fully-qualified name of a class or interface
    * @return true if qualifiedName is from the JDK
    */
   public static boolean inJdkPackage(String qualifiedName) {
-    // TODO: can we get a list of such packages from the JDK instead of using this relatively-coarse
-    // heuristic?
-    if (qualifiedName.startsWith("javax.annotation")) {
-      return false;
+    // The input may name a package, a class, or a nested class, so every prefix is a candidate
+    // package name. Checking longest-first means a class in a JDK package matches on the prefix
+    // that drops its own simple name.
+    String candidate = qualifiedName;
+    while (true) {
+      if (jdkPackages.contains(candidate)) {
+        return true;
+      }
+      int lastDot = candidate.lastIndexOf('.');
+      if (lastDot == -1) {
+        return false;
+      }
+      candidate = candidate.substring(0, lastDot);
     }
-
-    return qualifiedName.startsWith("java.")
-        || qualifiedName.startsWith("javax.")
-        || qualifiedName.startsWith("com.sun.")
-        || qualifiedName.startsWith("jdk.");
   }
 
   /**
