@@ -410,7 +410,7 @@ public final class JavaLangUtils {
    * dependencies and so must be synthesized.
    *
    * <p>The check here is by package, not by class, so a class that does not exist in an
-   * otherwise-real JDK package (say, a javax.swing.NotARealClass) wo;; still be reported as being
+   * otherwise-real JDK package (say, a javax.swing.NotARealClass) would still be reported as being
    * in the JDK. If that imprecision ever matters, we could enumerate classes instead of packages:
    * open each {@code ModuleReference} from {@link ModuleFinder#ofSystem} and {@code list()} its
    * ".class" entries. I chose to implement this with packages to 1) keep this API broad (it accepts
