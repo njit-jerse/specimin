@@ -8,6 +8,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.resolution.MethodAmbiguityException;
@@ -16,6 +17,7 @@ import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedAnnotationMemberDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
@@ -350,19 +352,45 @@ public class Resolver {
 
   /**
    * Handles an UnsupportedOperationException thrown by JavaParser when resolving a method call
-   * referring to a known annotation member declaration.
+   * referring to a known annotation member declaration, or a method reference whose target
+   * functional interface JavaParser cannot determine.
    *
    * @param ex The exception
    * @param node The node
-   * @return The resolved annotation member declaration
+   * @return The resolved declaration, or null if the node is a method reference that should be
+   *     handled by synthesizing an unsolved symbol instead
    * @throws UnsupportedOperationException when the UnsupportedOperationException comes from an
    *     issue Specimin does not know how to address
    */
-  private static ResolvedAnnotationMemberDeclaration handleUnsupportedOperationException(
+  private static @Nullable Object handleUnsupportedOperationException(
       UnsupportedOperationException ex, Node node) throws UnsupportedOperationException {
     if (fqnToCompilationUnits == null) {
       throw new UnsupportedOperationException(
           "fqnToCompilationUnits must be set before calling handleUnsupportedOperationException");
+    }
+
+    // JavaParser bug: MethodReferenceExprContext#inferArgumentTypes only knows how to find the
+    // target functional interface of a method reference when the reference's parent node is a
+    // method call, an object creation, a variable declarator, or a return statement. For every
+    // other parent -- a cast, for instance -- it throws a bare UnsupportedOperationException,
+    // and constructor references always throw regardless of the parent. Specimin does not need
+    // the target functional interface to find the referenced method, though: the scope's type
+    // determines it, so resolve it from the scope instead.
+    if (node instanceof MethodReferenceExpr methodRef) {
+      List<? extends ResolvedMethodLikeDeclaration> candidates =
+          JavaParserUtil.getMethodDeclarationsFromMethodRef(methodRef);
+
+      // With more than one candidate the target functional interface would be needed to choose
+      // between the overloads, and that is exactly what is unavailable here. Returning null (as
+      // when the scope's type is unsolvable and there are no candidates at all) leaves the caller
+      // to preserve every candidate; see Slicer#preserveAmbiguousMethodRefCandidates.
+      //
+      // Note that for a constructor reference this returns a ResolvedConstructorDeclaration, even
+      // though MethodReferenceExpr is declared as Resolvable<ResolvedMethodDeclaration>. Every
+      // consumer of a resolved node takes it as an Object and dispatches on its runtime type, so
+      // the wider return type is safe; do not narrow a resolved value to ResolvedMethodDeclaration
+      // without checking it first.
+      return candidates.size() == 1 ? candidates.get(0) : null;
     }
 
     // JavaParser bug: cannot resolve a method if in an annotation declaration

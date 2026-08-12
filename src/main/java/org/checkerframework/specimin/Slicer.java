@@ -18,6 +18,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -27,6 +28,7 @@ import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -260,6 +262,13 @@ public class Slicer {
 
       if (resolved != null) {
         generateUnsolvedSymbol = handleResolvedObject(node, resolved);
+      } else if (node instanceof MethodReferenceExpr methodRef) {
+        // Deliberately leaves generateUnsolvedSymbol set: preserving candidates and generating
+        // are not alternatives here. Generation still has to run to synthesize the reference's
+        // target functional interface when that interface is the unsolved part, and it cannot
+        // duplicate what was just preserved, because it synthesizes the referenced method only
+        // when there are no candidates -- the same emptiness check this branch preserves on.
+        preserveAmbiguousMethodRefCandidates(methodRef);
       }
 
       if (generateUnsolvedSymbol) {
@@ -272,6 +281,26 @@ public class Slicer {
 
     if (unsolvedSymbolGenerator.needToPostProcess(node)) {
       postProcessingWorklist.add(node);
+    }
+  }
+
+  /**
+   * Preserves every declaration that an unresolvable method reference could be referring to.
+   *
+   * <p>A method reference can fail to resolve while its scope's type is perfectly solvable, if the
+   * reference names an overloaded method or a class with several constructors: telling the
+   * overloads apart needs the target functional interface, which is not always available. Those
+   * candidates would otherwise be dropped on both sides at once -- nothing preserves them, because
+   * resolution failed, and nothing synthesizes a replacement either, because a reference with
+   * candidates is not an unsolved symbol -- and the reference in the output would have nothing to
+   * bind to. Preserving all of them is a conservative over-approximation.
+   *
+   * @param methodRef The method reference that could not be resolved
+   */
+  private void preserveAmbiguousMethodRefCandidates(MethodReferenceExpr methodRef) {
+    for (ResolvedMethodLikeDeclaration candidate :
+        JavaParserUtil.getMethodDeclarationsFromMethodRef(methodRef)) {
+      handleResolvedObject(methodRef, candidate);
     }
   }
 

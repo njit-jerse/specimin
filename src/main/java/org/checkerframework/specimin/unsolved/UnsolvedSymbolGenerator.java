@@ -187,7 +187,13 @@ public class UnsolvedSymbolGenerator {
         inferContextImpl(type, result);
       }
     } else if (node instanceof TypeExpr typeExpr) {
-      inferContextImpl(typeExpr.getType(), result);
+      // A method reference scope that names a variable is a TypeExpr too, but its name is the
+      // variable's, not a type's: generating a type from that name would invent a class named
+      // after the variable. Generate the variable's declared type instead.
+      Type scopeVariableType =
+          JavaParserUtil.getTypeIfMethodRefScopeNamesVariable(typeExpr, fqnsToCompilationUnits);
+
+      inferContextImpl(scopeVariableType != null ? scopeVariableType : typeExpr.getType(), result);
     }
     // Fields (although some types are handled as FieldAccessExpr or NameExpr too)
     else if (node instanceof FieldAccessExpr asField) {
@@ -2152,7 +2158,9 @@ public class UnsolvedSymbolGenerator {
 
       boolean isStatic = false;
 
-      if (methodRef.getScope().isTypeExpr()) {
+      // A constructor is never static, and the scope of a constructor reference is never a
+      // receiver: the functional interface's parameters are the constructor's, one for one.
+      if (!isConstructor && JavaParserUtil.methodRefHasTypeScope(methodRef)) {
         if (parameters.isEmpty()) {
           isStatic = true;
         } else {
