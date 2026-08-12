@@ -263,6 +263,11 @@ public class Slicer {
       if (resolved != null) {
         generateUnsolvedSymbol = handleResolvedObject(node, resolved);
       } else if (node instanceof MethodReferenceExpr methodRef) {
+        // Deliberately leaves generateUnsolvedSymbol set: preserving candidates and generating
+        // are not alternatives here. Generation still has to run to synthesize the reference's
+        // target functional interface when that interface is the unsolved part, and it cannot
+        // duplicate what was just preserved, because it synthesizes the referenced method only
+        // when there are no candidates -- the same emptiness check this branch preserves on.
         preserveAmbiguousMethodRefCandidates(methodRef);
       }
 
