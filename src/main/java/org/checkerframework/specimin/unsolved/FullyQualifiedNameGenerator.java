@@ -561,7 +561,13 @@ public class FullyQualifiedNameGenerator {
     }
     // Special wrapper for method reference scopes
     else if (expr.isTypeExpr()) {
-      return Set.of(getFQNsFromType(expr.asTypeExpr().getType()));
+      Type variableType =
+          JavaParserUtil.getTypeIfMethodRefScopeNamesVariable(expr, fqnToCompilationUnits);
+
+      // A TypeExpr that actually names a variable has the variable's type, not the type that
+      // shares the variable's name (which usually does not exist at all).
+      return Set.of(
+          getFQNsFromType(variableType != null ? variableType : expr.asTypeExpr().getType()));
     }
     // cast expression
     else if (expr.isCastExpr()) {
@@ -991,7 +997,7 @@ public class FullyQualifiedNameGenerator {
           for (UnsolvedMethod alternate : method.getAlternates()) {
             List<FullyQualifiedNameSet> parameterTypes = new ArrayList<>();
 
-            if (!method.isStatic() && methodRef.getScope().isTypeExpr()) {
+            if (!method.isStatic() && JavaParserUtil.methodRefHasTypeScope(methodRef)) {
               parameterTypes.add(getFQNsFromType(methodRef.getScope().asTypeExpr().getType()));
             }
 
@@ -1362,7 +1368,7 @@ public class FullyQualifiedNameGenerator {
                 .substring(method.getKey().indexOf('(') + 1, method.getKey().lastIndexOf(')'));
         List<FullyQualifiedNameSet> paramList = new ArrayList<>();
 
-        if (methodRef.getScope().isTypeExpr()) {
+        if (JavaParserUtil.methodRefHasTypeScope(methodRef)) {
           FullyQualifiedNameSet nonWildcard =
               getFQNsFromType(methodRef.getScope().asTypeExpr().getType());
           paramList.add(
@@ -1426,7 +1432,7 @@ public class FullyQualifiedNameGenerator {
       MethodReferenceExpr methodRef, ResolvedMethodLikeDeclaration resolved) {
     List<FullyQualifiedNameSet> parameters = new ArrayList<>();
 
-    if (methodRef.getScope().isTypeExpr()
+    if (JavaParserUtil.methodRefHasTypeScope(methodRef)
         // Yes, resolved.isMethod() and asMethod() exist, but JavaParser never implemented those
         && resolved instanceof ResolvedMethodDeclaration resolvedMethodDecl
         && !resolvedMethodDecl.isStatic()) {

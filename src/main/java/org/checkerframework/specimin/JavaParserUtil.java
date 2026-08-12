@@ -58,11 +58,13 @@ import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclar
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration.Bound;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.model.SymbolReference;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedWildcard;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
+import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFactory;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionFieldDeclaration;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionMethodDeclaration;
 import com.github.javaparser.utils.Pair;
@@ -2888,6 +2890,93 @@ public class JavaParserUtil {
     return methodDeclaringType.asReferenceType().getAllMethods().stream()
         .filter(method -> method.getName().equals(methodName))
         .toList();
+  }
+
+  /**
+   * Returns the variable that the scope of the given method reference names, or null if the scope
+   * does not name a variable.
+   *
+   * <p>JavaParser parses the scope of a method reference whose scope is a bare name -- the {@code
+   * g} in {@code g::mref} -- as a {@link com.github.javaparser.ast.expr.TypeExpr}, because the
+   * grammar cannot tell a type name from an expression name in that position. JLS 15.13 resolves
+   * the ambiguity in favor of a variable whenever one of that name is in scope, and only calls the
+   * name a type when no such variable exists. Code that would otherwise read a {@code TypeExpr}
+   * scope as a type name must therefore consult this method first; see {@link
+   * #methodRefHasTypeScope(MethodReferenceExpr)}.
+   *
+   * @param methodRef The method reference
+   * @return The variable named by the method reference's scope, or null if the scope names a type
+   */
+  public static @Nullable ResolvedValueDeclaration getMethodRefScopeAsVariable(
+      MethodReferenceExpr methodRef) {
+    Expression scope = methodRef.getScope();
+
+    if (!scope.isTypeExpr() || !scope.asTypeExpr().getType().isClassOrInterfaceType()) {
+      // A scope that is not a TypeExpr is already unambiguously a value expression.
+      return null;
+    }
+
+    ClassOrInterfaceType asClassOrInterface = scope.asTypeExpr().getType().asClassOrInterfaceType();
+
+    if (asClassOrInterface.getScope().isPresent()
+        || asClassOrInterface.getTypeArguments().isPresent()) {
+      // A qualified name or an explicitly parameterized name is unambiguously a type.
+      return null;
+    }
+
+    try {
+      SymbolReference<? extends ResolvedValueDeclaration> symbol =
+          JavaParserFactory.getContext(methodRef, getTypeSolvers().getTypeSolver())
+              .solveSymbol(asClassOrInterface.getNameAsString());
+
+      return symbol.isSolved() ? symbol.getCorrespondingDeclaration() : null;
+    } catch (RuntimeException ex) {
+      // The symbol solver throws when some enclosing scope is itself unsolvable. "No variable of
+      // this name is in scope" is the answer that leaves the scope being read as a type, which is
+      // both the JLS's answer when no such variable exists and the behavior Specimin had before
+      // this method existed, so it is the safe result when the lookup cannot be completed.
+      return null;
+    }
+  }
+
+  /**
+   * If the given expression is the scope of a method reference and that scope names a variable
+   * rather than a type, returns the variable's declared type. Returns null otherwise. See {@link
+   * #getMethodRefScopeAsVariable(MethodReferenceExpr)} for why a scope that names a variable can
+   * nonetheless be a {@code TypeExpr}.
+   *
+   * @param expr The expression
+   * @param fqnToCompilationUnits The map of FQNs to compilation units
+   * @return The declared type of the variable the expression names, or null if it names a type
+   */
+  public static @Nullable Type getTypeIfMethodRefScopeNamesVariable(
+      Expression expr, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    if (!(expr.getParentNode().orElse(null) instanceof MethodReferenceExpr methodRef)) {
+      return null;
+    }
+
+    ResolvedValueDeclaration variable = getMethodRefScopeAsVariable(methodRef);
+
+    return variable == null
+        ? null
+        : getTypeFromResolvedValueDeclaration(variable, fqnToCompilationUnits);
+  }
+
+  /**
+   * Returns whether the scope of the given method reference is a type rather than a value, i.e.
+   * whether the reference is an unbound one like {@code Foo::mref} rather than a bound one like
+   * {@code g::mref}. The functional interface of an unbound reference to an instance method takes
+   * the receiver as an extra leading parameter, so the two forms cannot be treated alike.
+   *
+   * <p>This is not the same question as whether the scope is a {@link
+   * com.github.javaparser.ast.expr.TypeExpr}: JavaParser gives a bare-name scope a {@code TypeExpr}
+   * either way. See {@link #getMethodRefScopeAsVariable(MethodReferenceExpr)}.
+   *
+   * @param methodRef The method reference
+   * @return True iff the method reference's scope names a type
+   */
+  public static boolean methodRefHasTypeScope(MethodReferenceExpr methodRef) {
+    return methodRef.getScope().isTypeExpr() && getMethodRefScopeAsVariable(methodRef) == null;
   }
 
   /**
