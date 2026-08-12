@@ -2239,9 +2239,7 @@ public class UnsolvedSymbolGenerator {
               && fqns.iterator().next().erasedFqns().size() == 1
               && fqns.iterator().next().erasedFqns().iterator().next().equals("void");
     } else {
-      isVoid =
-          lambda.getBody().asBlockStmt().getStatements().stream()
-              .noneMatch(stmt -> stmt instanceof ReturnStmt);
+      isVoid = JavaParserUtil.isVoidBlockBodyLambda(lambda);
     }
 
     int arity = lambda.getParameters().size();

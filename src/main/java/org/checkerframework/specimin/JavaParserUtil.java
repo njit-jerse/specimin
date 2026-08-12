@@ -2564,6 +2564,44 @@ public class JavaParserUtil {
   }
 
   /**
+   * Returns true iff the given lambda expression, whose body must be a block, is void: that is, iff
+   * the method of its functional interface returns void.
+   *
+   * <p>Per JLS 15.27.2, a block lambda body is void-compatible iff every return statement in it is
+   * a bare {@code return;}, and value-compatible iff every return statement has an expression. A
+   * body that mixes the two is not legal Java, so any one return statement of the lambda's own
+   * settles the question; a body with no return statement of its own is void.
+   *
+   * <p>Two subtleties. First, a return may be nested arbitrarily deep inside the body (inside an
+   * {@code if}, a loop, a {@code try}, etc.), so the search must be recursive. Second, a return
+   * inside a <em>nested</em> lambda, or inside a method of an anonymous or local class declared in
+   * the body, belongs to that construct rather than to this lambda. Ownership must therefore be
+   * established before a return statement is allowed to decide anything: the first return reached
+   * by the traversal is frequently one of a nested construct's.
+   *
+   * @param lambda a lambda expression whose body is a block statement
+   * @return true iff the lambda's functional interface method returns void
+   */
+  public static boolean isVoidBlockBodyLambda(LambdaExpr lambda) {
+    for (ReturnStmt returnStmt : lambda.getBody().asBlockStmt().findAll(ReturnStmt.class)) {
+      // Reference equality is intentional: we need to know whether this exact return statement
+      // belongs to this lambda, not whether some structurally-equal return statement does (a
+      // nested lambda can easily contain an identical one). No interning is okay because this is
+      // a pointer-equality check.
+      // Extracted into a local variable to minimize suppression scope.
+      @SuppressWarnings({"ReferenceEquality", "not.interned"})
+      boolean belongsToThisLambda = findClosestMethodOrLambdaAncestor(returnStmt) == lambda;
+      if (belongsToThisLambda) {
+        // Every return statement of a legal block body is of the same kind, so the first one
+        // that belongs to this lambda settles it.
+        return returnStmt.getExpression().isEmpty();
+      }
+    }
+    // This lambda has no return statement of its own, so its body cannot return a value.
+    return true;
+  }
+
+  /**
    * If the given name expression is used as (or within) a case label of an enclosing switch
    * statement or switch expression, returns the selector expression of that switch. Otherwise
    * (including when the name appears in the body/statements of a switch entry, or outside of any
