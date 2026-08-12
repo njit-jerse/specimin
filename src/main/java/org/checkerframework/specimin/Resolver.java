@@ -381,9 +381,15 @@ public class Resolver {
           JavaParserUtil.getMethodDeclarationsFromMethodRef(methodRef);
 
       // With more than one candidate the target functional interface would be needed to choose
-      // between the overloads, which is exactly what is unavailable here. Returning null in that
-      // case (and when the scope's type is itself unsolvable, which gives no candidates) makes
-      // the caller synthesize a symbol for the reference instead.
+      // between the overloads, and that is exactly what is unavailable here. Returning null (as
+      // when the scope's type is unsolvable and there are no candidates at all) leaves the caller
+      // to preserve every candidate; see Slicer#preserveAmbiguousMethodRefCandidates.
+      //
+      // Note that for a constructor reference this returns a ResolvedConstructorDeclaration, even
+      // though MethodReferenceExpr is declared as Resolvable<ResolvedMethodDeclaration>. Every
+      // consumer of a resolved node takes it as an Object and dispatches on its runtime type, so
+      // the wider return type is safe; do not narrow a resolved value to ResolvedMethodDeclaration
+      // without checking it first.
       return candidates.size() == 1 ? candidates.get(0) : null;
     }
 
