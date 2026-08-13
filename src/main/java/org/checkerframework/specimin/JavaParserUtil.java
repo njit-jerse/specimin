@@ -3602,16 +3602,27 @@ public class JavaParserUtil {
   }
 
   /**
-   * Returns the names of every type variable whose scope (JLS 6.3) contains the given node: the
-   * type parameters of each enclosing method, constructor, and type declaration.
+   * Returns the names of the type variables that are, approximately, in scope (JLS 6.3) at the
+   * given node: the type parameters of each enclosing method, constructor, and type declaration.
    *
    * <p>These names are meaningful only inside the declarations that bind them. Code that copies a
    * type out of this node and into a declaration somewhere else -- as synthetic member generation
    * does, when it builds a signature out of the types at a call site -- cannot use them there.
    *
-   * <p>The result is ordered innermost-first, so that a caller assigning replacement names in
-   * iteration order spends the lowest-numbered ones on the type variables nearest the node, which
-   * are the ones most likely to actually appear in the copied types.
+   * <p><strong>This is an over-approximation, not the exact scope.</strong> A class's type
+   * parameter is not in scope inside a static member of that class (JLS 8.1.2), but this method
+   * reports it anyway for a node inside a static method. Callers that need the true scope must
+   * exclude those themselves.
+   *
+   * <p>The over-approximation is harmless for asking "which names could a type copied from here
+   * mention", which is what the callers here want: by JLS 8.1.2 no expression inside a static
+   * member can have a type that mentions the class's type parameters, so such a name cannot reach a
+   * copied type in the first place, and {@link
+   * org.checkerframework.specimin.unsolved.UnsolvedMethod} prints only the type variables that a
+   * signature actually uses, so a spurious one is never emitted.
+   *
+   * <p>The result is ordered innermost-first, so that a caller processing it in order reaches the
+   * type variables nearest the node -- the ones most likely to appear in the copied types -- first.
    *
    * @param node the node to compute the in-scope type variables of
    * @return the in-scope type variable names, innermost declaration first
