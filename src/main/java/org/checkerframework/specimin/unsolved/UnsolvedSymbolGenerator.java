@@ -1676,7 +1676,7 @@ public class UnsolvedSymbolGenerator {
   private List<String> typeVariablesToDeclareFromCaller(
       Node callSite, Set<String> substitutedByReceiver) {
     List<String> toDeclare = new ArrayList<>();
-    for (String name : JavaParserUtil.getTypeParameterNamesInScope(callSite)) {
+    for (String name : JavaParserUtil.getReferenceableTypeParameterNames(callSite)) {
       if (!substitutedByReceiver.contains(name)) {
         toDeclare.add(name);
       }

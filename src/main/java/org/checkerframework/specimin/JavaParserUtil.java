@@ -5,15 +5,19 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -36,6 +40,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.nodeTypes.NodeWithType;
 import com.github.javaparser.ast.nodeTypes.NodeWithTypeParameters;
+import com.github.javaparser.ast.nodeTypes.modifiers.NodeWithStaticModifier;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
@@ -3602,43 +3607,118 @@ public class JavaParserUtil {
   }
 
   /**
-   * Returns the names of the type variables that are, approximately, in scope (JLS 6.3) at the
-   * given node: the type parameters of each enclosing method, constructor, and type declaration.
+   * Returns the names of the type variables that may be referred to at the given node: the type
+   * parameters of each enclosing method, constructor, and type declaration, minus those that JLS
+   * 8.1.2 forbids referring to from a static context.
    *
    * <p>These names are meaningful only inside the declarations that bind them. Code that copies a
    * type out of this node and into a declaration somewhere else -- as synthetic member generation
    * does, when it builds a signature out of the types at a call site -- cannot use them there.
    *
-   * <p><strong>This is an over-approximation, not the exact scope.</strong> A class's type
-   * parameter is not in scope inside a static member of that class (JLS 8.1.2), but this method
-   * reports it anyway for a node inside a static method. Callers that need the true scope must
-   * exclude those themselves.
-   *
-   * <p>The over-approximation is harmless for asking "which names could a type copied from here
-   * mention", which is what the callers here want: by JLS 8.1.2 no expression inside a static
-   * member can have a type that mentions the class's type parameters, so such a name cannot reach a
-   * copied type in the first place, and {@link
-   * org.checkerframework.specimin.unsolved.UnsolvedMethod} prints only the type variables that a
-   * signature actually uses, so a spurious one is never emitted.
+   * <p>This is deliberately not the JLS 6.3 scope, which is wider: a generic class's type parameter
+   * is in scope throughout the class body, static members included, and JLS 8.1.2 is a separate
+   * rule making it a compile-time error to refer to it from one. Callers want the names a type at
+   * this node could actually mention, which is the narrower set.
    *
    * <p>The result is ordered innermost-first, so that a caller processing it in order reaches the
    * type variables nearest the node -- the ones most likely to appear in the copied types -- first.
    *
-   * @param node the node to compute the in-scope type variables of
-   * @return the in-scope type variable names, innermost declaration first
+   * @param node the node to compute the referenceable type variables of
+   * @return the referenceable type variable names, innermost declaration first
    */
-  public static List<String> getTypeParameterNamesInScope(Node node) {
+  public static List<String> getReferenceableTypeParameterNames(Node node) {
     List<String> names = new ArrayList<>();
+
+    // Set once the walk outwards leaves a static context. Everything beyond that point is a type
+    // declaration whose type parameters JLS 8.1.2 forbids naming from where this walk started.
+    boolean leftStaticContext = false;
+
     for (Node current = node; current != null; current = current.getParentNode().orElse(null)) {
-      if (current instanceof NodeWithTypeParameters<?> withTypeParams) {
-        for (TypeParameter typeParam : withTypeParams.getTypeParameters()) {
-          String name = typeParam.getNameAsString();
-          if (!names.contains(name)) {
-            names.add(name);
-          }
+      if (current instanceof TypeDeclaration<?> type) {
+        // Enum and annotation declarations cannot have type parameters, so not every type
+        // declaration is a NodeWithTypeParameters.
+        if (!leftStaticContext && type instanceof NodeWithTypeParameters<?> withTypeParams) {
+          addTypeParameterNames(withTypeParams, names);
         }
+        leftStaticContext |= isStaticTypeDeclaration(type);
+      } else if (current instanceof NodeWithTypeParameters<?> withTypeParams) {
+        // A method's or constructor's own type parameters are always referenceable from inside it,
+        // whether or not it is static; only the enclosing class's become unreachable.
+        addTypeParameterNames(withTypeParams, names);
+        leftStaticContext |=
+            current instanceof NodeWithStaticModifier<?> withStatic && withStatic.isStatic();
+      } else if (current instanceof InitializerDeclaration initializer) {
+        leftStaticContext |= initializer.isStatic();
+      } else if (current instanceof FieldDeclaration field) {
+        // A field of an interface is implicitly static (JLS 9.3), so its initializer is a static
+        // context even with no modifier written.
+        leftStaticContext |= field.isStatic() || isInterfaceMember(field);
       }
     }
     return names;
+  }
+
+  /**
+   * Adds the names of a declaration's type parameters to the given list, skipping any already
+   * present.
+   *
+   * @param declaration the declaration whose type parameters to add
+   * @param names the list to add to, modified by side effect
+   */
+  private static void addTypeParameterNames(
+      NodeWithTypeParameters<?> declaration, List<String> names) {
+    for (TypeParameter typeParam : declaration.getTypeParameters()) {
+      String name = typeParam.getNameAsString();
+      if (!names.contains(name)) {
+        names.add(name);
+      }
+    }
+  }
+
+  /**
+   * Returns whether a type declaration is static, counting the cases where the JLS makes it so
+   * without a {@code static} modifier being written: member interfaces, enums, records and
+   * annotations, and any member type of an interface or annotation (JLS 8.5.1, 9.1.1.3, 8.9, 8.10).
+   *
+   * <p>Getting this wrong in the permissive direction is the safer error for the caller in {@link
+   * #getReferenceableTypeParameterNames}: reporting a name that cannot legally be used costs
+   * nothing, because no type at the node can mention it, whereas omitting a usable one loses a type
+   * variable that a generated signature needs.
+   *
+   * @param type the type declaration to check
+   * @return true if the type declaration is static, implicitly or explicitly
+   */
+  private static boolean isStaticTypeDeclaration(TypeDeclaration<?> type) {
+    if (type.isStatic()) {
+      return true;
+    }
+
+    // Local and anonymous classes are never static, and neither is a top-level type in any sense
+    // that matters here, since it has no enclosing type parameters to cut off.
+    if (!type.isNestedType()) {
+      return false;
+    }
+
+    if (type instanceof EnumDeclaration
+        || type instanceof RecordDeclaration
+        || type instanceof AnnotationDeclaration
+        || (type instanceof ClassOrInterfaceDeclaration asClass && asClass.isInterface())) {
+      return true;
+    }
+
+    return isInterfaceMember(type);
+  }
+
+  /**
+   * Returns whether a declaration is a member of an interface or annotation declaration, whose
+   * members are implicitly static.
+   *
+   * @param member the declaration to check
+   * @return true if the declaration's immediately enclosing type is an interface or annotation
+   */
+  private static boolean isInterfaceMember(Node member) {
+    Node parent = member.getParentNode().orElse(null);
+    return parent instanceof AnnotationDeclaration
+        || (parent instanceof ClassOrInterfaceDeclaration asClass && asClass.isInterface());
   }
 }

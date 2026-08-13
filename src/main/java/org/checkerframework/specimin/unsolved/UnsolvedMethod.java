@@ -40,10 +40,10 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   /**
    * The names of this method's type variables, in declaration order.
    *
-   * <p>These names are the state. Most of a method's type
-   * variables are invented by Specimin and named by {@link
-   * JavaParserUtil#getGeneratedTypeParameterName}, but one that {@link #declareTypeVariables} binds
-   * carries a name that is already written into the signature and cannot be renamed.
+   * <p>These names are the state. Most of a method's type variables are invented by Specimin and
+   * named by {@link JavaParserUtil#getGeneratedTypeParameterName}, but one that {@link
+   * #declareTypeVariables} binds carries a name that is already written into the signature and
+   * cannot be renamed.
    */
   private final List<String> typeVariableNames;
 
