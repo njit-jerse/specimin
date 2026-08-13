@@ -2564,6 +2564,52 @@ public class JavaParserUtil {
   }
 
   /**
+   * Returns true iff the given lambda expression, whose body must be a block, is void: that is, iff
+   * the method of its functional interface returns void.
+   *
+   * <p>Per JLS 15.27.2, a block lambda body is void-compatible iff every return statement in it is
+   * a bare {@code return;}, and value-compatible iff every return statement has an expression. A
+   * body that mixes the two is not legal Java.
+   *
+   * @param lambda a lambda expression whose body is a block statement
+   * @return true iff the lambda's functional interface method returns void
+   */
+  public static boolean isVoidBlockBodyLambda(LambdaExpr lambda) {
+    // Every return statement of a legal block body is of the same kind, so the first one that
+    // belongs to this lambda settles it; a body with none of its own cannot return a value.
+    ReturnStmt ownReturn = findOwnReturnStmt(lambda);
+    return ownReturn == null || ownReturn.getExpression().isEmpty();
+  }
+
+  /**
+   * Returns the first return statement in the given lambda's block body that belongs to that
+   * lambda, or null if it has none of its own.
+   *
+   * <p>A return may be nested arbitrarily deep inside the body, so the search is recursive. It is
+   * therefore also frequent for the first return reached to belong to a nested lambda, or to a
+   * method of an anonymous or local class declared in the body; such a return belongs to that
+   * construct rather than to this lambda, and is skipped.
+   *
+   * @param lambda a lambda expression whose body is a block statement
+   * @return the first return statement belonging to {@code lambda}, or null if it has none
+   */
+  public static @Nullable ReturnStmt findOwnReturnStmt(LambdaExpr lambda) {
+    for (ReturnStmt returnStmt : lambda.getBody().asBlockStmt().findAll(ReturnStmt.class)) {
+      // Reference equality is intentional: we need to know whether this exact return statement
+      // belongs to this lambda, not whether some structurally-equal return statement does (a
+      // nested lambda can easily contain an identical one). No interning is okay because this is
+      // a pointer-equality check.
+      // Extracted into a local variable to minimize suppression scope.
+      @SuppressWarnings({"ReferenceEquality", "not.interned"})
+      boolean belongsToThisLambda = findClosestMethodOrLambdaAncestor(returnStmt) == lambda;
+      if (belongsToThisLambda) {
+        return returnStmt;
+      }
+    }
+    return null;
+  }
+
+  /**
    * If the given name expression is used as (or within) a case label of an enclosing switch
    * statement or switch expression, returns the selector expression of that switch. Otherwise
    * (including when the name appears in the body/statements of a switch entry, or outside of any

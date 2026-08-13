@@ -1504,9 +1504,7 @@ public class FullyQualifiedNameGenerator {
       Set<String> fqns = getFQNsForExpressionType(body).iterator().next().erasedFqns();
       isVoid = fqns.size() == 1 && fqns.iterator().next().equals("void");
     } else {
-      isVoid =
-          lambda.getBody().asBlockStmt().getStatements().stream()
-              .noneMatch(stmt -> stmt instanceof ReturnStmt);
+      isVoid = JavaParserUtil.isVoidBlockBodyLambda(lambda);
     }
 
     FullyQualifiedNameSet functionalInterface =
