@@ -2569,20 +2569,31 @@ public class JavaParserUtil {
    *
    * <p>Per JLS 15.27.2, a block lambda body is void-compatible iff every return statement in it is
    * a bare {@code return;}, and value-compatible iff every return statement has an expression. A
-   * body that mixes the two is not legal Java, so any one return statement of the lambda's own
-   * settles the question; a body with no return statement of its own is void.
-   *
-   * <p>Two subtleties. First, a return may be nested arbitrarily deep inside the body (inside an
-   * {@code if}, a loop, a {@code try}, etc.), so the search must be recursive. Second, a return
-   * inside a <em>nested</em> lambda, or inside a method of an anonymous or local class declared in
-   * the body, belongs to that construct rather than to this lambda. Ownership must therefore be
-   * established before a return statement is allowed to decide anything: the first return reached
-   * by the traversal is frequently one of a nested construct's.
+   * body that mixes the two is not legal Java.
    *
    * @param lambda a lambda expression whose body is a block statement
    * @return true iff the lambda's functional interface method returns void
    */
   public static boolean isVoidBlockBodyLambda(LambdaExpr lambda) {
+    // Every return statement of a legal block body is of the same kind, so the first one that
+    // belongs to this lambda settles it; a body with none of its own cannot return a value.
+    ReturnStmt ownReturn = findOwnReturnStmt(lambda);
+    return ownReturn == null || ownReturn.getExpression().isEmpty();
+  }
+
+  /**
+   * Returns the first return statement in the given lambda's block body that belongs to that
+   * lambda, or null if it has none of its own.
+   *
+   * <p>A return may be nested arbitrarily deep inside the body, so the search is recursive. It is
+   * therefore also frequent for the first return reached to belong to a nested lambda, or to a
+   * method of an anonymous or local class declared in the body; such a return belongs to that
+   * construct rather than to this lambda, and is skipped.
+   *
+   * @param lambda a lambda expression whose body is a block statement
+   * @return the first return statement belonging to {@code lambda}, or null if it has none
+   */
+  public static @Nullable ReturnStmt findOwnReturnStmt(LambdaExpr lambda) {
     for (ReturnStmt returnStmt : lambda.getBody().asBlockStmt().findAll(ReturnStmt.class)) {
       // Reference equality is intentional: we need to know whether this exact return statement
       // belongs to this lambda, not whether some structurally-equal return statement does (a
@@ -2592,13 +2603,10 @@ public class JavaParserUtil {
       @SuppressWarnings({"ReferenceEquality", "not.interned"})
       boolean belongsToThisLambda = findClosestMethodOrLambdaAncestor(returnStmt) == lambda;
       if (belongsToThisLambda) {
-        // Every return statement of a legal block body is of the same kind, so the first one
-        // that belongs to this lambda settles it.
-        return returnStmt.getExpression().isEmpty();
+        return returnStmt;
       }
     }
-    // This lambda has no return statement of its own, so its body cannot return a value.
-    return true;
+    return null;
   }
 
   /**

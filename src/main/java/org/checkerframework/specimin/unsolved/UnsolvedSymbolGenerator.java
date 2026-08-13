@@ -2832,12 +2832,7 @@ public class UnsolvedSymbolGenerator {
           rhs = lambdaExpr.getExpressionBody().get();
 
         } else {
-          ReturnStmt returnStmt =
-              (ReturnStmt)
-                  lambdaExpr.getBody().asBlockStmt().stream()
-                      .filter(n -> n instanceof ReturnStmt)
-                      .findFirst()
-                      .orElse(null);
+          ReturnStmt returnStmt = JavaParserUtil.findOwnReturnStmt(lambdaExpr);
 
           if (returnStmt == null || returnStmt.getExpression().isEmpty()) {
             return UnsolvedGenerationResult.EMPTY;
