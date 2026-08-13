@@ -37,8 +37,15 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   /** The list of the types of the exceptions thrown by the method. */
   private final List<MemberType> throwsList;
 
-  /** The number of type variables for this method. */
-  private int numberOfTypeVariables;
+  /**
+   * The names of this method's type variables, in declaration order.
+   *
+   * <p>These names are the state. Most of a method's type variables are invented by Specimin and
+   * named by {@link JavaParserUtil#getGeneratedTypeParameterName}, but one that {@link
+   * #declareTypeVariables} binds carries a name that is already written into the signature and
+   * cannot be renamed.
+   */
+  private final List<String> typeVariableNames;
 
   /** The access modifier of the method. */
   private String accessModifier;
@@ -105,6 +112,40 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       String accessModifier,
       boolean isStatic,
       int numberOfTypeVariables) {
+    this(
+        name,
+        returnType,
+        parameterList,
+        throwsList,
+        mustPreserve,
+        accessModifier,
+        isStatic,
+        generatedTypeVariableNames(numberOfTypeVariables));
+  }
+
+  /**
+   * Create an instance of UnsolvedMethod with the given type variable names. Use this, rather than
+   * the overload taking a count, when copying an existing method: a name that {@link
+   * #declareTypeVariables} bound cannot be reconstructed from a count.
+   *
+   * @param name the name of the method
+   * @param returnType the return type of the method
+   * @param parameterList the list of parameters for this method
+   * @param throwsList the list of exceptions thrown by this method
+   * @param accessModifier the access modifier of this method
+   * @param mustPreserve the set of nodes that must be preserved with this alternate
+   * @param isStatic whether this method is static
+   * @param typeVariableNames the names of this method's type variables, in declaration order
+   */
+  public UnsolvedMethod(
+      String name,
+      MemberType returnType,
+      List<MemberType> parameterList,
+      List<MemberType> throwsList,
+      Set<Node> mustPreserve,
+      String accessModifier,
+      boolean isStatic,
+      List<String> typeVariableNames) {
     super(mustPreserve);
     this.name = name;
     this.returnType = returnType;
@@ -115,7 +156,21 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
 
     this.accessModifier = accessModifier;
     this.isStatic = isStatic;
-    this.numberOfTypeVariables = numberOfTypeVariables;
+    this.typeVariableNames = new ArrayList<>(typeVariableNames);
+  }
+
+  /**
+   * Returns the first {@code count} generated type variable names.
+   *
+   * @param count how many names to generate
+   * @return the generated names, in order
+   */
+  private static List<String> generatedTypeVariableNames(int count) {
+    List<String> names = new ArrayList<>(count);
+    for (int i = 0; i < count; i++) {
+      names.add(JavaParserUtil.getGeneratedTypeParameterName(i));
+    }
+    return names;
   }
 
   /**
@@ -190,7 +245,14 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    */
   @Override
   public void setNumberOfTypeVariables(int numberOfTypeVariables) {
-    this.numberOfTypeVariables = numberOfTypeVariables;
+    // Resize rather than replace, so that a name bound by declareTypeVariables at an index below
+    // the new size survives.
+    while (typeVariableNames.size() > numberOfTypeVariables) {
+      typeVariableNames.remove(typeVariableNames.size() - 1);
+    }
+    while (typeVariableNames.size() < numberOfTypeVariables) {
+      typeVariableNames.add(JavaParserUtil.getGeneratedTypeParameterName(typeVariableNames.size()));
+    }
   }
 
   @Override
@@ -290,7 +352,17 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    */
   @Override
   public int getNumberOfTypeVariables() {
-    return numberOfTypeVariables;
+    return typeVariableNames.size();
+  }
+
+  /**
+   * Returns the names of this method's type variables, in declaration order. Pass this to {@link
+   * #UnsolvedMethod(String, MemberType, List, List, Set, String, boolean, List)} when copying.
+   *
+   * @return the type variable names; the list is read-only
+   */
+  public List<String> getTypeVariableNames() {
+    return Collections.unmodifiableList(typeVariableNames);
   }
 
   /**
@@ -299,11 +371,19 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    * @return the synthetic representation for type variables
    */
   private String getTypeVariablesAsString() {
-    if (numberOfTypeVariables == 0) {
+    if (typeVariableNames.isEmpty()) {
       return "";
     }
 
-    return "<" + String.join(", ", getTypeVariablesImpl()) + ">";
+    List<String> used = getTypeVariablesImpl();
+
+    // A type variable may be allocated for this method but end up used by no alternate's
+    // signature, in which case there is no type parameter section to print at all.
+    if (used.isEmpty()) {
+      return "";
+    }
+
+    return "<" + String.join(", ", used) + ">";
   }
 
   /** Gets a list of the type variable names that are used in this method. */
@@ -327,7 +407,8 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       usedTypes.add(parsedType.asClassOrInterfaceType());
     }
 
-    if (returnType != null) {
+    // A constructor's return type is the empty string, which is not parseable as a type.
+    if (returnType != null && !returnType.toString().isEmpty()) {
       Type parsedType = StaticJavaParser.parseType(returnType.toString());
 
       if (parsedType.isClassOrInterfaceType()) {
@@ -335,19 +416,17 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       }
     }
 
-    List<String> typeVariableNames = new ArrayList<>();
-    for (int i = 0; i < numberOfTypeVariables; i++) {
-      String typeVariableName = getTypeVariableName(i);
-
+    List<String> usedTypeVariableNames = new ArrayList<>();
+    for (String typeVariableName : typeVariableNames) {
       for (ClassOrInterfaceType usedType : usedTypes) {
         if (usedType.findAll(ClassOrInterfaceType.class).stream()
             .anyMatch(t -> t.getNameAsString().equals(typeVariableName))) {
-          typeVariableNames.add(typeVariableName);
+          usedTypeVariableNames.add(typeVariableName);
           break;
         }
       }
     }
-    return typeVariableNames;
+    return usedTypeVariableNames;
   }
 
   /**
@@ -357,12 +436,22 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    * @return the name of the type variable with the given index
    * @throws IllegalArgumentException if the index is out of bounds
    */
+  @Override
   public String getTypeVariableName(int index) {
-    if (index < 0 || index >= numberOfTypeVariables) {
+    if (index < 0 || index >= typeVariableNames.size()) {
       throw new IllegalArgumentException(
-          "Index out of bounds. There are only " + numberOfTypeVariables + " type variables.");
+          "Index out of bounds. There are only " + typeVariableNames.size() + " type variables.");
     }
-    return JavaParserUtil.getGeneratedTypeParameterName(index);
+    return typeVariableNames.get(index);
+  }
+
+  @Override
+  public void declareTypeVariables(List<String> names) {
+    for (String name : names) {
+      if (!typeVariableNames.contains(name)) {
+        typeVariableNames.add(name);
+      }
+    }
   }
 
   @Override

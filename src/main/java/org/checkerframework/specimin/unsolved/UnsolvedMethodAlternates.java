@@ -253,7 +253,10 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
                   entry.getKey(),
                   parameterList,
                   old.getThrownExceptions(),
-                  Set.of((Node) entry.getValue()));
+                  Set.of((Node) entry.getValue()),
+                  old.getAccessModifier(),
+                  old.isStatic(),
+                  old.getTypeVariableNames());
           addAlternate(method);
         }
       }
@@ -343,6 +346,16 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   @Override
   public void setNumberOfTypeVariables(int number) {
     applyToAllAlternates(UnsolvedMethod::setNumberOfTypeVariables, number);
+  }
+
+  @Override
+  public String getTypeVariableName(int index) {
+    return getAlternates().get(0).getTypeVariableName(index);
+  }
+
+  @Override
+  public void declareTypeVariables(List<String> names) {
+    applyToAllAlternates(UnsolvedMethod::declareTypeVariables, names);
   }
 
   /**
@@ -458,7 +471,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
               alternate.getMustPreserveNodes(),
               alternate.getAccessModifier(),
               alternate.isStatic(),
-              alternate.getNumberOfTypeVariables());
+              alternate.getTypeVariableNames());
       copy.addThrownException(exception);
       throwing.add(copy);
     }
@@ -541,7 +554,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
                 alternate.getMustPreserveNodes(),
                 alternate.getAccessModifier(),
                 alternate.isStatic(),
-                alternate.getNumberOfTypeVariables());
+                alternate.getTypeVariableNames());
         addAlternate(newAlternate);
       }
 
@@ -583,7 +596,7 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
                   alternate.getMustPreserveNodes(),
                   alternate.getAccessModifier(),
                   alternate.isStatic(),
-                  alternate.getNumberOfTypeVariables());
+                  alternate.getTypeVariableNames());
 
           addAlternate(newAlternate);
         }

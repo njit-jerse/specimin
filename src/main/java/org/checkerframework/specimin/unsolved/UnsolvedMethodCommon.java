@@ -61,6 +61,29 @@ public interface UnsolvedMethodCommon {
   void setNumberOfTypeVariables(int number);
 
   /**
+   * Given the index of a type variable, return the name of that type variable.
+   *
+   * @param index The index
+   * @return the name of the type variable with the given index
+   */
+  String getTypeVariableName(int index);
+
+  /**
+   * Declares additional type variables on this method under the given names, appending them after
+   * the type variables it already has. Names that this method already declares are skipped.
+   *
+   * <p>Use this when a name is already written into the signature and merely needs to be bound --
+   * notably a type variable of the calling context, which a synthetic member's parameter and return
+   * types can mention but which is not in scope where that member is declared. Binding the name
+   * that is already there, rather than rewriting the signature to use a generated name, keeps the
+   * method's fully-qualified names (which are built from its parameter types' erased simple names)
+   * stable.
+   *
+   * @param names the type variable names to declare
+   */
+  void declareTypeVariables(List<String> names);
+
+  /**
    * Sets the return type.
    *
    * @param memberType The return type
