@@ -345,6 +345,16 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     applyToAllAlternates(UnsolvedMethod::setNumberOfTypeVariables, number);
   }
 
+  @Override
+  public String getTypeVariableName(int index) {
+    return getAlternates().get(0).getTypeVariableName(index);
+  }
+
+  @Override
+  public void declareTypeVariables(List<String> names) {
+    applyToAllAlternates(UnsolvedMethod::declareTypeVariables, names);
+  }
+
   /**
    * Returns whether the given type is one of the type variables bound by this method's own
    * declaration (i.e. a name introduced by this method, such as the {@code T} in {@code <T> T

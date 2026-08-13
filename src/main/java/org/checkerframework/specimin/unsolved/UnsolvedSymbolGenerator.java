@@ -210,6 +210,9 @@ public class UnsolvedSymbolGenerator {
       String constructorName;
       List<Expression> arguments;
       int numberOfTypeParams = 0;
+      // The type being instantiated plays the role a receiver's type plays for a method call: it
+      // is what supplies the declaring type's type arguments at this call site.
+      FullyQualifiedNameSet instantiatedType;
 
       if (node instanceof ObjectCreationExpr constructor) {
         if (Resolver.calculateResolvedType(constructor) != null) {
@@ -219,11 +222,9 @@ public class UnsolvedSymbolGenerator {
         }
 
         inferContextImpl(constructor.getType(), result);
+        instantiatedType = fullyQualifiedNameGenerator.getFQNsFromType(constructor.getType());
         // Do not generate here; that should be taken care of in the inferContextImpl call above.
-        scope =
-            (UnsolvedClassOrInterfaceAlternates)
-                findExistingAndUpdateFQNs(
-                    fullyQualifiedNameGenerator.getFQNsFromType(constructor.getType()));
+        scope = (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(instantiatedType);
 
         constructorName = constructor.getTypeAsString();
         arguments = constructor.getArguments();
@@ -248,11 +249,9 @@ public class UnsolvedSymbolGenerator {
           }
 
           inferContextImpl(superClass, result);
+          instantiatedType = fullyQualifiedNameGenerator.getFQNsFromType(superClass);
           // Do not generate here; that should be taken care of in the inferContextImpl call above.
-          scope =
-              (UnsolvedClassOrInterfaceAlternates)
-                  findExistingAndUpdateFQNs(
-                      fullyQualifiedNameGenerator.getFQNsFromType(superClass));
+          scope = (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(instantiatedType);
 
           constructorName = superClass.getNameAsString();
           arguments = constructor.getArguments();
@@ -273,7 +272,13 @@ public class UnsolvedSymbolGenerator {
       scope.setType(UnsolvedClassOrInterfaceType.CLASS);
 
       handleConstructorCall(
-          scope, JavaParserUtil.erase(constructorName), arguments, numberOfTypeParams, result);
+          scope,
+          JavaParserUtil.erase(constructorName),
+          arguments,
+          numberOfTypeParams,
+          node,
+          instantiatedType,
+          result);
     } else if (node instanceof MethodDeclaration methodDecl) {
       handleMethodDeclarationWithOverride(methodDecl, result);
     }
@@ -1044,6 +1049,13 @@ public class UnsolvedSymbolGenerator {
             argumentToParameterPotentialFQNs,
             argumentToParameterPotentialFQNsWithMethodRefsHandled);
 
+    // Type variables of the calling context can reach this signature through the argument and
+    // return types, but are not in scope in the synthetic declaration, so the method has to declare
+    // them itself.
+    List<String> callerTypeVariablesToDeclare =
+        typeVariablesToDeclareFromCaller(
+            methodCall, typeVariableNamesSubstitutedAtCallSite(methodCall, potentialScopeFQNs));
+
     boolean hasNullInSignature =
         argumentToParameterPotentialFQNs.keySet().stream().anyMatch(Expression::isNullLiteralExpr);
 
@@ -1209,8 +1221,7 @@ public class UnsolvedSymbolGenerator {
           }
 
           originalToReplacement.put(
-              memberTypeForTypeArg,
-              new SolvedMemberType(JavaParserUtil.getGeneratedTypeParameterName(i)));
+              memberTypeForTypeArg, new SolvedMemberType(generatedMethod.getTypeVariableName(i)));
         }
       } else {
         int typeVar = generatedMethod.getNumberOfTypeVariables();
@@ -1220,7 +1231,7 @@ public class UnsolvedSymbolGenerator {
 
         for (MemberType typeToReplace : typesInOriginalToReplaceWithTypeVariables) {
           MemberType newTypeVariable =
-              new SolvedMemberType(JavaParserUtil.getGeneratedTypeParameterName(typeVar));
+              new SolvedMemberType(generatedMethod.getTypeVariableName(typeVar));
 
           if (typeToReplace.equals(newTypeVariable)) {
             continue;
@@ -1265,8 +1276,7 @@ public class UnsolvedSymbolGenerator {
             && unsolved.usesGeneratedName()) {
           Set<MemberType> potentialReturns = new LinkedHashSet<>();
           for (int i = 0; i < generatedMethod.getNumberOfTypeVariables(); i++) {
-            potentialReturns.add(
-                new SolvedMemberType(JavaParserUtil.getGeneratedTypeParameterName(i)));
+            potentialReturns.add(new SolvedMemberType(generatedMethod.getTypeVariableName(i)));
           }
 
           generatedMethod.replaceReturnType(unsolved, potentialReturns);
@@ -1389,6 +1399,7 @@ public class UnsolvedSymbolGenerator {
       }
 
       generatedMethod.setNumberOfTypeVariables(totalNumberOfTypeParametersNeeded);
+      generatedMethod.declareTypeVariables(callerTypeVariablesToDeclare);
 
       if (hasNullInSignature) {
         methodsWithNullInSignature.add(generatedMethod);
@@ -1486,6 +1497,9 @@ public class UnsolvedSymbolGenerator {
    * @param constructorName The name of the constructor
    * @param arguments The arguments of the constructor call
    * @param numberOfTypeParams The number of type parameters of the constructor only
+   * @param callSite The constructor call, used to find the calling context's type variables
+   * @param instantiatedType The type being instantiated, which supplies the declaring type's type
+   *     arguments at this call site
    * @param result The result of inferContext
    */
   private void handleConstructorCall(
@@ -1493,6 +1507,8 @@ public class UnsolvedSymbolGenerator {
       String constructorName,
       List<Expression> arguments,
       int numberOfTypeParams,
+      Node callSite,
+      FullyQualifiedNameSet instantiatedType,
       List<UnsolvedSymbolAlternates<?>> result) {
     Map<Expression, Set<FullyQualifiedNameSet>> argumentToParameterPotentialFQNs = new HashMap<>();
 
@@ -1524,6 +1540,13 @@ public class UnsolvedSymbolGenerator {
       simpleNames.add(simpleNamesForThisArgumentType);
       argumentToParameterPotentialFQNs.put(argument, fqns);
     }
+
+    // Type variables of the calling context can reach this signature through the argument types,
+    // but are not in scope in the synthetic declaration, so the constructor has to declare them
+    // itself.
+    List<String> callerTypeVariablesToDeclare =
+        typeVariablesToDeclareFromCaller(
+            callSite, typeVariableNamesSubstitutedByReceiver(instantiatedType));
 
     Set<String> potentialFQNs = new LinkedHashSet<>();
 
@@ -1563,9 +1586,185 @@ public class UnsolvedSymbolGenerator {
       addNewSymbolToGeneratedSymbolsMap(generatedMethod);
 
       generatedMethod.setNumberOfTypeVariables(numberOfTypeParams);
+      generatedMethod.declareTypeVariables(callerTypeVariablesToDeclare);
 
       result.add(generatedMethod);
     }
+  }
+
+  /**
+   * Returns the type variable names that the parameterization at this call site substitutes into
+   * the declaring type's type parameters, and which a member generated here may therefore keep
+   * referring to. See {@link #typeVariableNamesSubstitutedByReceiver} for why that is the
+   * criterion.
+   *
+   * @param methodCall the call site
+   * @param potentialScopeFQNs the types that could declare this method
+   * @return the substituted type variable names, or an empty set if there is no such
+   *     parameterization
+   */
+  private Set<String> typeVariableNamesSubstitutedAtCallSite(
+      MethodCallExpr methodCall, Collection<Set<String>> potentialScopeFQNs) {
+    if (methodCall.hasScope()
+        && !methodCall.getScope().get().isThisExpr()
+        && !methodCall.getScope().get().isSuperExpr()) {
+      Set<FullyQualifiedNameSet> scopeTypes =
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall.getScope().get());
+
+      // With several possibilities there is no single parameterization to read a substitution off
+      // of, so report nothing and let every caller type variable be declared on the member; that is
+      // always compilable, only less precise.
+      return scopeTypes.size() == 1
+          ? typeVariableNamesSubstitutedByReceiver(scopeTypes.iterator().next())
+          : Set.of();
+    }
+
+    // For this, super, and unqualified calls the member is declared in an ancestor, and the
+    // parameterization that JLS 4.5.2 substitutes through is the one written in this type's extends
+    // or implements clause.
+    TypeDeclaration<?> enclosing = JavaParserUtil.getEnclosingClassLikeOptional(methodCall);
+
+    if (enclosing == null || !enclosing.isClassOrInterfaceDeclaration()) {
+      return Set.of();
+    }
+
+    ClassOrInterfaceDeclaration enclosingClass = enclosing.asClassOrInterfaceDeclaration();
+    List<ClassOrInterfaceType> ancestors = new ArrayList<>(enclosingClass.getExtendedTypes());
+    ancestors.addAll(enclosingClass.getImplementedTypes());
+
+    Set<String> substituted = new LinkedHashSet<>();
+    for (ClassOrInterfaceType ancestor : ancestors) {
+      FullyQualifiedNameSet ancestorFQNs = fullyQualifiedNameGenerator.getFQNsFromType(ancestor);
+
+      // Only ancestors that could declare this method: another ancestor's parameterization says
+      // nothing about the type this method actually lands in.
+      if (potentialScopeFQNs.stream()
+          .noneMatch(scope -> !Collections.disjoint(scope, ancestorFQNs.erasedFqns()))) {
+        continue;
+      }
+
+      substituted.addAll(typeVariableNamesSubstitutedByReceiver(ancestorFQNs));
+    }
+    System.err.println(
+        "DBG call="
+            + methodCall
+            + " ancestors="
+            + ancestors
+            + " scopes="
+            + potentialScopeFQNs
+            + " substituted="
+            + substituted);
+    return substituted;
+  }
+
+  /**
+   * Returns the type variables of the calling context that a synthetic member generated from this
+   * call site must declare itself.
+   *
+   * <p>A synthetic member's parameter and return types are built out of the types of the
+   * expressions at a call site, and those types may mention type variables bound by the calling
+   * method or class. Such a name means nothing in the synthetic declaration (JLS 6.3): depending on
+   * what happens to be declared there it is either unresolvable or, worse, silently captured by an
+   * unrelated declaration of the same name. Declaring it on the member binds it, and costs no
+   * precision, because invocation type inference (JLS 18.5) instantiates it back to the caller's
+   * type variable at this call site.
+   *
+   * <p>The exception is a name that reaches the signature through the declaring type's own type
+   * parameter, which {@code substitutedByReceiver} identifies; see {@link
+   * #typeVariableNamesSubstitutedByReceiver}. Declaring such a name on the member would shadow the
+   * declaring type's type parameter and sever that substitution.
+   *
+   * <p>Names that no signature ends up mentioning are harmless to include, since {@link
+   * UnsolvedMethod} prints only the type variables its signature actually uses.
+   *
+   * @param callSite the call site the signature is being derived from
+   * @param substitutedByReceiver names that must not be declared, because the receiver substitutes
+   *     them into the declaring type's type parameters
+   * @return the type variable names to declare, innermost enclosing declaration first
+   */
+  private List<String> typeVariablesToDeclareFromCaller(
+      Node callSite, Set<String> substitutedByReceiver) {
+    List<String> toDeclare = new ArrayList<>();
+    for (String name : JavaParserUtil.getTypeParameterNamesInScope(callSite)) {
+      if (!substitutedByReceiver.contains(name)) {
+        toDeclare.add(name);
+      }
+    }
+    return toDeclare;
+  }
+
+  /**
+   * Returns the type variable names that a synthetic member may keep referring to because the
+   * receiver at the call site substitutes them into its declaring type's type parameters.
+   *
+   * <p>By JLS 4.5.2 the type of a member of {@code C<A1..An>} is its type in {@code C} with the
+   * class's type parameters replaced by {@code A1..An}. So a name written at position {@code i} of
+   * the signature denotes {@code Ai} at this call site, and keeping the caller's name there is
+   * correct exactly when the class's {@code i}th type parameter is spelled the same as the caller's
+   * type variable and the receiver instantiates it to that very type variable. Any other case --
+   * notably a static member, where JLS 8.1.2 forbids referring to the class's type parameters at
+   * all, and a receiver that instantiates the parameter to something else -- has no such channel.
+   *
+   * <p>A member accessed through a type name rather than an instance needs no special case: the
+   * type of such a scope carries no type arguments, so nothing is reported as substitutable.
+   *
+   * @param receiverType the receiver's type at the call site, or the instantiated type for a
+   *     constructor; null if there is no receiver
+   * @return the type variable names that the receiver substitutes into the declaring type
+   */
+  private Set<String> typeVariableNamesSubstitutedByReceiver(
+      @Nullable FullyQualifiedNameSet receiverType) {
+    if (receiverType == null || receiverType.typeArguments().isEmpty()) {
+      return Set.of();
+    }
+
+    if (!(findExistingAndUpdateFQNs(receiverType.erasedFqns())
+        instanceof UnsolvedClassOrInterfaceAlternates declaringType)) {
+      return Set.of();
+    }
+
+    List<String> classTypeParams = declaringType.getTypeVariables();
+    List<FullyQualifiedNameSet> typeArgs = receiverType.typeArguments();
+
+    Set<String> substituted = new LinkedHashSet<>();
+    for (int i = 0; i < typeArgs.size(); i++) {
+      String typeArgName = getTypeVariableNameIfBare(typeArgs.get(i));
+
+      if (typeArgName == null) {
+        continue;
+      }
+
+      // The declaring type may not have been given its type parameter names yet. When that is so,
+      // this parameterization is the one that will name them, since handleClassOrInterfaceType
+      // prefers the call site's type variable names and the first parameterization to arrive wins.
+      if (classTypeParams.isEmpty()
+          || (i < classTypeParams.size() && typeArgName.equals(classTypeParams.get(i)))) {
+        substituted.add(typeArgName);
+      }
+    }
+    return substituted;
+  }
+
+  /**
+   * Returns the name this FQN set holds if it is a bare name -- one with no package, no type
+   * arguments and no wildcard, which is how {@link FullyQualifiedNameGenerator} represents a type
+   * variable -- and null otherwise.
+   *
+   * @param fqnSet the FQN set to inspect
+   * @return the bare name, or null if this FQN set does not hold one
+   */
+  private static @Nullable String getTypeVariableNameIfBare(FullyQualifiedNameSet fqnSet) {
+    if (fqnSet.wildcard() != null
+        || !fqnSet.typeArguments().isEmpty()
+        || fqnSet.erasedFqns().size() != 1) {
+      return null;
+    }
+
+    String name = fqnSet.erasedFqns().iterator().next();
+    if (name.indexOf('.') >= 0 || name.indexOf('[') >= 0 || JavaLangUtils.isPrimitive(name)) {
+      return null;
+    }
+    return name;
   }
 
   /**
@@ -2860,6 +3059,21 @@ public class UnsolvedSymbolGenerator {
       }
 
       if (rhsType.isEmpty()) {
+        UnsolvedMethodAlternates rhsMethod =
+            rhs.isMethodCallExpr()
+                ? findGeneratedMethodFromMethodCall(rhs.asMethodCallExpr())
+                : null;
+
+        // A generated method that returns one of its own type variables reports no type at this
+        // call site at all (see
+        // FullyQualifiedNameGenerator#getExpressionTypesIfRepresentsGenerated)
+        // because the call site does not constrain it. There is then no placeholder return type for
+        // the code below to reconcile with the LHS, so there is nothing to do here.
+        if (rhsMethod != null
+            && rhsMethod.getReturnTypes().stream().allMatch(rhsMethod::isOwnTypeVariable)) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
+
         throw new RuntimeException("Type has not been generated for the RHS of " + node);
       }
 

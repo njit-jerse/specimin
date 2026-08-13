@@ -35,6 +35,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.nodeTypes.NodeWithType;
+import com.github.javaparser.ast.nodeTypes.NodeWithTypeParameters;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
@@ -3552,5 +3553,35 @@ public class JavaParserUtil {
    */
   public static String getGeneratedTypeParameterName(int index) {
     return "T" + ((index > 0) ? index : "");
+  }
+
+  /**
+   * Returns the names of every type variable whose scope (JLS 6.3) contains the given node: the
+   * type parameters of each enclosing method, constructor, and type declaration.
+   *
+   * <p>These names are meaningful only inside the declarations that bind them. Code that copies a
+   * type out of this node and into a declaration somewhere else -- as synthetic member generation
+   * does, when it builds a signature out of the types at a call site -- cannot use them there.
+   *
+   * <p>The result is ordered innermost-first, so that a caller assigning replacement names in
+   * iteration order spends the lowest-numbered ones on the type variables nearest the node, which
+   * are the ones most likely to actually appear in the copied types.
+   *
+   * @param node the node to compute the in-scope type variables of
+   * @return the in-scope type variable names, innermost declaration first
+   */
+  public static List<String> getTypeParameterNamesInScope(Node node) {
+    List<String> names = new ArrayList<>();
+    for (Node current = node; current != null; current = current.getParentNode().orElse(null)) {
+      if (current instanceof NodeWithTypeParameters<?> withTypeParams) {
+        for (TypeParameter typeParam : withTypeParams.getTypeParameters()) {
+          String name = typeParam.getNameAsString();
+          if (!names.contains(name)) {
+            names.add(name);
+          }
+        }
+      }
+    }
+    return names;
   }
 }

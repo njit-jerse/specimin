@@ -40,6 +40,14 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   /** The number of type variables for this method. */
   private int numberOfTypeVariables;
 
+  /**
+   * Names for this method's type variables, by index. Indices not covered here are named by {@link
+   * JavaParserUtil#getGeneratedTypeParameterName}; this list holds only the names that differ from
+   * that scheme, which arise when a name already written into the signature has to be bound rather
+   * than replaced. See {@link #declareTypeVariables}.
+   */
+  private final List<String> explicitTypeVariableNames = new ArrayList<>();
+
   /** The access modifier of the method. */
   private String accessModifier;
 
@@ -303,7 +311,15 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       return "";
     }
 
-    return "<" + String.join(", ", getTypeVariablesImpl()) + ">";
+    List<String> used = getTypeVariablesImpl();
+
+    // A type variable may be allocated for this method but end up used by no alternate's
+    // signature, in which case there is no type parameter section to print at all.
+    if (used.isEmpty()) {
+      return "";
+    }
+
+    return "<" + String.join(", ", used) + ">";
   }
 
   /** Gets a list of the type variable names that are used in this method. */
@@ -327,7 +343,8 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       usedTypes.add(parsedType.asClassOrInterfaceType());
     }
 
-    if (returnType != null) {
+    // A constructor's return type is the empty string, which is not parseable as a type.
+    if (returnType != null && !returnType.toString().isEmpty()) {
       Type parsedType = StaticJavaParser.parseType(returnType.toString());
 
       if (parsedType.isClassOrInterfaceType()) {
@@ -357,12 +374,42 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    * @return the name of the type variable with the given index
    * @throws IllegalArgumentException if the index is out of bounds
    */
+  @Override
   public String getTypeVariableName(int index) {
     if (index < 0 || index >= numberOfTypeVariables) {
       throw new IllegalArgumentException(
           "Index out of bounds. There are only " + numberOfTypeVariables + " type variables.");
     }
+    if (index < explicitTypeVariableNames.size()) {
+      return explicitTypeVariableNames.get(index);
+    }
     return JavaParserUtil.getGeneratedTypeParameterName(index);
+  }
+
+  @Override
+  public void declareTypeVariables(List<String> names) {
+    for (String name : names) {
+      boolean alreadyDeclared = false;
+      for (int i = 0; i < numberOfTypeVariables; i++) {
+        if (getTypeVariableName(i).equals(name)) {
+          alreadyDeclared = true;
+          break;
+        }
+      }
+
+      if (alreadyDeclared) {
+        continue;
+      }
+
+      // Fill in the generated names for any indices below this one, so that the explicit name
+      // lands at the index it is being added at.
+      while (explicitTypeVariableNames.size() < numberOfTypeVariables) {
+        explicitTypeVariableNames.add(
+            JavaParserUtil.getGeneratedTypeParameterName(explicitTypeVariableNames.size()));
+      }
+      explicitTypeVariableNames.add(name);
+      numberOfTypeVariables++;
+    }
   }
 
   @Override
