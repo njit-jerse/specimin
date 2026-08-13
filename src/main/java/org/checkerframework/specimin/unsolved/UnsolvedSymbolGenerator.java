@@ -1645,15 +1645,6 @@ public class UnsolvedSymbolGenerator {
 
       substituted.addAll(typeVariableNamesSubstitutedByReceiver(ancestorFQNs));
     }
-    System.err.println(
-        "DBG call="
-            + methodCall
-            + " ancestors="
-            + ancestors
-            + " scopes="
-            + potentialScopeFQNs
-            + " substituted="
-            + substituted);
     return substituted;
   }
 
