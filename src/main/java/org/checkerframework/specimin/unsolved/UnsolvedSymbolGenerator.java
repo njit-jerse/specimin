@@ -2987,8 +2987,7 @@ public class UnsolvedSymbolGenerator {
           // Do not handle here: handle when we encounter the ancestor LambdaExpr node
           return UnsolvedGenerationResult.EMPTY;
         }
-      } else {
-        LambdaExpr lambdaExpr = (LambdaExpr) node;
+      } else if (node instanceof LambdaExpr lambdaExpr) {
 
         // The lambda's result type is read from its target type rather than from
         // Resolver#calculateResolvedType, which cannot type a lambda at all when its body is
@@ -3030,6 +3029,11 @@ public class UnsolvedSymbolGenerator {
         // This is a supported input: it selects addSuperType over forceSuperClass/
         // forceSuperInterface, and finalityOfLHS below falls back to deciding by name.
         getResolvedTypeOfLHS = () -> null;
+      } else {
+        throw new RuntimeException(
+            "Expected an assignment, variable declarator, return expression, or lambda; got "
+                + node.getClass()
+                + " instead!");
       }
 
       if (rhsType.isEmpty()) {
