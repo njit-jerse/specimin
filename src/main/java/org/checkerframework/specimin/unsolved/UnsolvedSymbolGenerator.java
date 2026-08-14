@@ -2932,26 +2932,19 @@ public class UnsolvedSymbolGenerator {
         || (node instanceof ReturnStmt returnStmt && returnStmt.getExpression().isPresent())
         || node instanceof LambdaExpr) {
       Set<MemberType> lhsType;
-      Set<MemberType> rhsType;
 
       Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS;
 
-      // There is a chance we find a final LHS type below. In this case, we cannot make the RHS a
-      // subtype. This can happen when the RHS is an unsolved method and we created a synthetic
-      // type for its return type, but we need to modify that return type to use a generic
-      // unconstrained type variable instead.
-      Expression rhs;
-      UnsolvedMethodAlternates methodWithPotentiallyUnconstrainedReturnType = null;
+      // A lambda has one result expression per return statement of its own, and each is separately
+      // constrained by the target type; every other kind of node here has exactly one.
+      List<Expression> rhsExpressions;
 
       if (node instanceof AssignExpr assignExpr) {
         Expression lhs = assignExpr.getTarget();
-        rhs = assignExpr.getValue();
+        rhsExpressions = List.of(assignExpr.getValue());
         lhsType =
             getMemberTypesAndExpectNonNullFromFQNSets(
                 fullyQualifiedNameGenerator.getFQNsForExpressionType(lhs));
-        rhsType =
-            getMemberTypesAndExpectNonNullFromFQNSets(
-                fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
 
         getResolvedTypeOfLHS = () -> Resolver.calculateResolvedType(lhs);
       } else if (node instanceof VariableDeclarator varDecl) {
@@ -2961,13 +2954,10 @@ public class UnsolvedSymbolGenerator {
           return UnsolvedGenerationResult.EMPTY;
         }
 
-        rhs = varDecl.getInitializer().get();
+        rhsExpressions = List.of(varDecl.getInitializer().get());
         MemberType lhsMemberType =
             getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(lhs), false);
         lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
-        rhsType =
-            getMemberTypesAndExpectNonNullFromFQNSets(
-                fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
 
         getResolvedTypeOfLHS = () -> Resolver.resolve(lhs);
       } else if (node instanceof ReturnStmt returnStmt) {
@@ -2975,13 +2965,10 @@ public class UnsolvedSymbolGenerator {
 
         if (methodOrLambda instanceof MethodDeclaration methodDecl) {
           Type lhs = methodDecl.getType();
-          rhs = returnStmt.getExpression().get();
+          rhsExpressions = List.of(returnStmt.getExpression().get());
           MemberType lhsMemberType =
               getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(lhs), false);
           lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
-          rhsType =
-              getMemberTypesAndExpectNonNullFromFQNSets(
-                  fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
           getResolvedTypeOfLHS = () -> Resolver.resolve(lhs);
         } else {
           // Do not handle here: handle when we encounter the ancestor LambdaExpr node
@@ -3001,15 +2988,22 @@ public class UnsolvedSymbolGenerator {
         }
 
         if (lambdaExpr.getExpressionBody().isPresent()) {
-          rhs = lambdaExpr.getExpressionBody().get();
+          rhsExpressions = List.of(lambdaExpr.getExpressionBody().get());
         } else {
-          ReturnStmt returnStmt = JavaParserUtil.findOwnReturnStmt(lambdaExpr);
+          // Every one of the lambda's own returns is a separate result expression that the target
+          // type constrains, so all of them are collected: constraining only the first would leave
+          // the rest free to keep a placeholder type the target type cannot accept.
+          rhsExpressions = new ArrayList<>();
 
-          if (returnStmt == null || returnStmt.getExpression().isEmpty()) {
-            return UnsolvedGenerationResult.EMPTY;
+          for (ReturnStmt returnStmt : JavaParserUtil.findOwnReturnStmts(lambdaExpr)) {
+            if (returnStmt.getExpression().isPresent()) {
+              rhsExpressions.add(returnStmt.getExpression().get());
+            }
           }
 
-          rhs = returnStmt.getExpression().get();
+          if (rhsExpressions.isEmpty()) {
+            return UnsolvedGenerationResult.EMPTY;
+          }
         }
 
         Set<MemberType> resultTypes = new LinkedHashSet<>();
@@ -3022,12 +3016,9 @@ public class UnsolvedSymbolGenerator {
         }
 
         lhsType = resultTypes;
-        rhsType =
-            getMemberTypesAndExpectNonNullFromFQNSets(
-                fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
         // The result type is known only by name here, so there is no ResolvedType to hand over.
         // This is a supported input: it selects addSuperType over forceSuperClass/
-        // forceSuperInterface, and isFinalClass below falls back to deciding by name.
+        // forceSuperInterface, and isNonExtendableType below falls back to deciding by name.
         getResolvedTypeOfLHS = () -> null;
       } else {
         throw new RuntimeException(
@@ -3036,63 +3027,69 @@ public class UnsolvedSymbolGenerator {
                 + " instead!");
       }
 
-      if (rhsType.isEmpty()) {
-        UnsolvedMethodAlternates rhsMethod =
-            rhs.isMethodCallExpr()
-                ? findGeneratedMethodFromMethodCall(rhs.asMethodCallExpr())
-                : null;
-
-        // A generated method that returns one of its own type variables reports no type at this
-        // call site at all (see
-        // FullyQualifiedNameGenerator#getExpressionTypesIfRepresentsGenerated)
-        // because the call site does not constrain it. There is then no placeholder return type for
-        // the code below to reconcile with the LHS, so there is nothing to do here.
-        if (rhsMethod != null
-            && rhsMethod.getReturnTypes().stream().allMatch(rhsMethod::isOwnTypeVariable)) {
-          return UnsolvedGenerationResult.EMPTY;
-        }
-
-        throw new RuntimeException("Type has not been generated for the RHS of " + node);
-      }
-
       if (lhsType.isEmpty()) {
         throw new RuntimeException("Type has not been generated for the LHS of " + node);
       }
 
-      if (rhs.isMethodCallExpr()) {
-        methodWithPotentiallyUnconstrainedReturnType =
-            findGeneratedMethodFromMethodCall(rhs.asMethodCallExpr());
-      }
+      for (Expression rhs : rhsExpressions) {
+        Set<MemberType> rhsType =
+            getMemberTypesAndExpectNonNullFromFQNSets(
+                fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
 
-      boolean handledAsFinalClass = false;
-      if (methodWithPotentiallyUnconstrainedReturnType != null
-          && isFinalClass(getResolvedTypeOfLHS.get(), lhsType)) {
-        Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
-        for (MemberType returnType :
-            methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
-          if (returnType instanceof UnsolvedMemberType unsolvedReturnType
-              && unsolvedReturnType.usesGeneratedName()) {
-            // Check to see if it is unused everywhere (no methods or fields)
-            if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
-              symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
+        // There is a chance the LHS type cannot be extended. In that case, we cannot make the RHS
+        // a subtype. This can happen when the RHS is an unsolved method and we created a synthetic
+        // type for its return type, but we need to modify that return type to use a generic
+        // unconstrained type variable instead.
+        UnsolvedMethodAlternates methodWithPotentiallyUnconstrainedReturnType =
+            rhs.isMethodCallExpr()
+                ? findGeneratedMethodFromMethodCall(rhs.asMethodCallExpr())
+                : null;
+
+        if (rhsType.isEmpty()) {
+          // A generated method that returns one of its own type variables reports no type at this
+          // call site at all (see
+          // FullyQualifiedNameGenerator#getExpressionTypesIfRepresentsGenerated)
+          // because the call site does not constrain it. There is then no placeholder return type
+          // for the code below to reconcile with the LHS, so there is nothing to do here.
+          if (methodWithPotentiallyUnconstrainedReturnType != null
+              && methodWithPotentiallyUnconstrainedReturnType.getReturnTypes().stream()
+                  .allMatch(methodWithPotentiallyUnconstrainedReturnType::isOwnTypeVariable)) {
+            continue;
+          }
+
+          throw new RuntimeException("Type has not been generated for the RHS of " + node);
+        }
+
+        boolean handledAsNonExtendable = false;
+        if (methodWithPotentiallyUnconstrainedReturnType != null
+            && isNonExtendableType(getResolvedTypeOfLHS.get(), lhsType)) {
+          Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
+          for (MemberType returnType :
+              methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
+            if (returnType instanceof UnsolvedMemberType unsolvedReturnType
+                && unsolvedReturnType.usesGeneratedName()) {
+              // Check to see if it is unused everywhere (no methods or fields)
+              if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
+                symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
+              }
             }
           }
+
+          methodWithPotentiallyUnconstrainedReturnType.setUnconstrainedReturnType();
+          for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
+            removeTypeAndReplaceUses(
+                new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
+                new SolvedMemberType("java.lang.Object"));
+          }
+
+          toRemove.addAll(symbolsToRemove);
+
+          handledAsNonExtendable = true;
         }
 
-        methodWithPotentiallyUnconstrainedReturnType.setUnconstrainedReturnType();
-        for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
-          removeTypeAndReplaceUses(
-              new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
-              new SolvedMemberType("java.lang.Object"));
+        if (!handledAsNonExtendable) {
+          handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
         }
-
-        toRemove.addAll(symbolsToRemove);
-
-        handledAsFinalClass = true;
-      }
-
-      if (!handledAsFinalClass) {
-        handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
       }
     } else if (node instanceof MethodCallExpr
         || node instanceof ObjectCreationExpr
@@ -4248,9 +4245,15 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Is the left-hand side of an assignment a final class? Nothing can be made a subtype of one, so
-   * a generated method whose result is assigned to it cannot be given a generated placeholder
-   * return type.
+   * Can no generated class be made a subtype of the left-hand side of an assignment? If so, a
+   * generated method whose result is assigned to it cannot be given a generated placeholder return
+   * type, and must fall back to an unconstrained type variable instead.
+   *
+   * <p>Final classes are the obvious case, but they are not the only one. A primitive and an array
+   * type have no declarable subtypes at all; an enum is implicitly final unless it has constant
+   * bodies, none of which a generated class could be (JLS 8.9); a record is implicitly final (JLS
+   * 8.10); and an annotation type cannot be extended. Only a non-final class or an interface can
+   * take a generated subtype.
    *
    * <p>The resolved type is preferred when there is one, but the left-hand side is sometimes known
    * only by name -- a lambda's result type, for instance, is derived from the lambda's target type
@@ -4260,16 +4263,17 @@ public class UnsolvedSymbolGenerator {
    *
    * <p>When deciding by name, {@code lhsTypes} is a disjunction: several candidate types, and
    * within each, several candidate names, exactly one of which the left-hand side really is. Every
-   * candidate must be a final class before this returns true, because a single non-final candidate
-   * is a reading under which a subtype is still possible. Note that false is not a safe default to
-   * approximate with when the answer is unclear: both answers can cost compilability, since the
-   * unconstrained return type that true leads to strands any member access on the result.
+   * candidate must be non-extendable before this returns true, because a single extendable
+   * candidate is a reading under which a subtype is still possible. Note that false is not a safe
+   * default to approximate with when the answer is unclear: both answers can cost compilability,
+   * since the unconstrained return type that true leads to strands any member access on the result.
    *
    * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
    * @param lhsTypes the type(s) of the left-hand side
-   * @return true if the left-hand side is known to be a final class
+   * @return true if no generated class could be made a subtype of the left-hand side
    */
-  private boolean isFinalClass(@Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes) {
+  private boolean isNonExtendableType(
+      @Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes) {
     if (resolvedLHSType != null) {
       if (!resolvedLHSType.isReferenceType()
           || resolvedLHSType.asReferenceType().getTypeDeclaration().isEmpty()) {
@@ -4292,7 +4296,7 @@ public class UnsolvedSymbolGenerator {
           && ((ClassOrInterfaceDeclaration) decl.toAst().get()).isFinal();
     }
 
-    // No candidates says nothing about finality, so do not let the loops below pass vacuously.
+    // No candidates says nothing either way, so do not let the loops below pass vacuously.
     if (lhsTypes.isEmpty()) {
       return false;
     }
@@ -4305,31 +4309,13 @@ public class UnsolvedSymbolGenerator {
       }
 
       for (String fqn : fqns) {
-        if (!isFinalClassName(fqn)) {
+        if (!JavaParserUtil.isNonExtendableTypeName(fqn, fqnsToCompilationUnits)) {
           return false;
         }
       }
     }
 
     return true;
-  }
-
-  /**
-   * Does this fully-qualified name name a final class? Names that Specimin will synthesize a type
-   * for are not final: Specimin chooses those types' modifiers, and never makes them final here.
-   *
-   * @param fqn a fully-qualified name
-   * @return true if the name is that of a final class
-   */
-  private boolean isFinalClassName(String fqn) {
-    if (JavaLangUtils.isFinalJdkClass(fqn)) {
-      return true;
-    }
-
-    return JavaParserUtil.getTypeFromQualifiedName(fqn, fqnsToCompilationUnits)
-            instanceof ClassOrInterfaceDeclaration ast
-        && !ast.isInterface()
-        && ast.isFinal();
   }
 
   /**
