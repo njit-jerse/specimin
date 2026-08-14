@@ -61,9 +61,9 @@ must have the expected outcomes (which may not always be passing). More on this 
 
 ### Integration Tests
 
-Specimin's integration tests come from a set of 20 historical typechecker
+Specimin's integration tests come from a set of historical typechecker
 bugs from the javac and Checker Framework issue trackers. Ideally,
-Specimin would reproduce the typechecker's output on all 20 of these bugs.
+Specimin would reproduce the typechecker's output on all of these bugs.
 However, due to Specimin's approximation, that isn't true for all of the historical
 bugs. The repo therefore has a set of files that indicate the expected status for
 each of these bugs along three axes:
