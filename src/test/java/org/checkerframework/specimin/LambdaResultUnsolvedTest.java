@@ -12,6 +12,13 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The lambda's target type here comes from a local variable declaration, and the result
  * expression is reached through an explicit {@code return} in a block body.
+ *
+ * <p>The result type is {@code String}, which is final, so the constraint arrives as the
+ * unconstrained-type-variable fallback rather than as {@code String} itself: nothing can be made a
+ * subtype of a final class, so a placeholder return type is impossible and {@code <T> T} is what
+ * satisfies the call site. That is the same output the equivalent non-lambda program produces for
+ * {@code String s = item.getPayload();}, and the reason the constraint is applied in {@code
+ * UnsolvedSymbolGenerator#addInformation} and not only during symbol generation.
  */
 public class LambdaResultUnsolvedTest {
   @Test

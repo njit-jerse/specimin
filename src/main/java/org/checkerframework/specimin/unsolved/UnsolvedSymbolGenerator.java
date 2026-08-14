@@ -2988,39 +2988,21 @@ public class UnsolvedSymbolGenerator {
           return UnsolvedGenerationResult.EMPTY;
         }
       } else {
-        LambdaExpr lambdaExpr =
-            (LambdaExpr)
-                node; // See if the lambda expression type is available. If not, we can't get a
-        // relationship
+        LambdaExpr lambdaExpr = (LambdaExpr) node;
 
-        ResolvedType solvableTypeFromLambda;
-        ResolvedType functionalInterface = Resolver.calculateResolvedType(lambdaExpr);
+        // The lambda's result type is read from its target type rather than from
+        // Resolver#calculateResolvedType, which cannot type a lambda at all when its body is
+        // unsolved: JavaParser's TypeExtractor resolves the body in order to infer the functional
+        // interface's type arguments, and that is exactly the case this constraint exists to fix.
+        Set<FullyQualifiedNameSet> resultTypeFQNs =
+            fullyQualifiedNameGenerator.getFQNsForLambdaResultType(lambdaExpr);
 
-        if (functionalInterface == null
-            || !functionalInterface.isReferenceType()
-            || functionalInterface.asReferenceType().getTypeDeclaration().isEmpty()) {
+        if (resultTypeFQNs == null) {
           return UnsolvedGenerationResult.EMPTY;
         }
-
-        ResolvedReferenceTypeDeclaration functionalInterfaceDecl =
-            functionalInterface.asReferenceType().getTypeDeclaration().get();
-
-        if (!functionalInterfaceDecl.isFunctionalInterface()) {
-          return UnsolvedGenerationResult.EMPTY;
-        }
-
-        solvableTypeFromLambda =
-            functionalInterfaceDecl.getAllMethods().iterator().next().returnType();
 
         if (lambdaExpr.getExpressionBody().isPresent()) {
-          MemberType lhsMemberType =
-              getMemberTypeFromFQNs(
-                  fullyQualifiedNameGenerator.getFQNsForResolvedType(solvableTypeFromLambda),
-                  false);
-          lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
-
           rhs = lambdaExpr.getExpressionBody().get();
-
         } else {
           ReturnStmt returnStmt = JavaParserUtil.findOwnReturnStmt(lambdaExpr);
 
@@ -3028,18 +3010,26 @@ public class UnsolvedSymbolGenerator {
             return UnsolvedGenerationResult.EMPTY;
           }
 
-          MemberType lhsMemberType =
-              getMemberTypeFromFQNs(
-                  fullyQualifiedNameGenerator.getFQNsForResolvedType(solvableTypeFromLambda),
-                  false);
-          lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
-
           rhs = returnStmt.getExpression().get();
         }
+
+        Set<MemberType> resultTypes = new LinkedHashSet<>();
+        for (FullyQualifiedNameSet resultTypeFQN : resultTypeFQNs) {
+          MemberType resultType = getMemberTypeFromFQNs(resultTypeFQN, false);
+
+          if (resultType != null) {
+            resultTypes.add(resultType);
+          }
+        }
+
+        lhsType = resultTypes;
         rhsType =
             getMemberTypesAndExpectNonNullFromFQNSets(
                 fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
-        getResolvedTypeOfLHS = () -> solvableTypeFromLambda;
+        // The result type is known only by name here, so there is no ResolvedType to hand over.
+        // This is a supported input: it selects addSuperType over forceSuperClass/
+        // forceSuperInterface, and finalityOfLHS below falls back to deciding by name.
+        getResolvedTypeOfLHS = () -> null;
       }
 
       if (rhsType.isEmpty()) {
@@ -3071,53 +3061,30 @@ public class UnsolvedSymbolGenerator {
       }
 
       boolean handledAsFinalClass = false;
-      if (methodWithPotentiallyUnconstrainedReturnType != null) {
-        ResolvedType resolvedLHSType = getResolvedTypeOfLHS.get();
-
-        if (resolvedLHSType != null
-            && resolvedLHSType.isReferenceType()
-            && resolvedLHSType.asReferenceType().getTypeDeclaration().isPresent()) {
-          ResolvedReferenceTypeDeclaration decl =
-              resolvedLHSType.asReferenceType().getTypeDeclaration().get();
-          boolean isFinal = false;
-
-          // If LHS is solvable, there is only one
-          if (decl.isClass()) {
-            isFinal = JavaLangUtils.isFinalJdkClass(decl.getQualifiedName());
-
-            if (!isFinal) {
-              if (decl.toAst().isPresent()) {
-                ClassOrInterfaceDeclaration ast = (ClassOrInterfaceDeclaration) decl.toAst().get();
-                isFinal = ast.isFinal();
-              }
+      if (methodWithPotentiallyUnconstrainedReturnType != null
+          && isFinalClass(getResolvedTypeOfLHS.get(), lhsType)) {
+        Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
+        for (MemberType returnType :
+            methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
+          if (returnType instanceof UnsolvedMemberType unsolvedReturnType
+              && unsolvedReturnType.usesGeneratedName()) {
+            // Check to see if it is unused everywhere (no methods or fields)
+            if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
+              symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
             }
-          }
-
-          if (isFinal) {
-            Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
-            for (MemberType returnType :
-                methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
-              if (returnType instanceof UnsolvedMemberType unsolvedReturnType
-                  && unsolvedReturnType.usesGeneratedName()) {
-                // Check to see if it is unused everywhere (no methods or fields)
-                if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
-                  symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
-                }
-              }
-            }
-
-            methodWithPotentiallyUnconstrainedReturnType.setUnconstrainedReturnType();
-            for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
-              removeTypeAndReplaceUses(
-                  new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
-                  new SolvedMemberType("java.lang.Object"));
-            }
-
-            toRemove.addAll(symbolsToRemove);
-
-            handledAsFinalClass = true;
           }
         }
+
+        methodWithPotentiallyUnconstrainedReturnType.setUnconstrainedReturnType();
+        for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
+          removeTypeAndReplaceUses(
+              new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
+              new SolvedMemberType("java.lang.Object"));
+        }
+
+        toRemove.addAll(symbolsToRemove);
+
+        handledAsFinalClass = true;
       }
 
       if (!handledAsFinalClass) {
@@ -4274,6 +4241,67 @@ public class UnsolvedSymbolGenerator {
     }
 
     return null;
+  }
+
+  /**
+   * Is the left-hand side of an assignment a final class? Nothing can be made a subtype of one, so
+   * a generated method whose result is assigned to it cannot be given a generated placeholder
+   * return type.
+   *
+   * <p>The resolved type is preferred when there is one, but the left-hand side is sometimes known
+   * only by name -- a lambda's result type, for instance, is derived from the lambda's target type
+   * rather than resolved. Deciding by name in that case is what lets the caller reach the same
+   * unconstrained-return-type fallback it would reach for the equivalent assignment or {@code
+   * return} statement, instead of going on to demand an impossible subtype.
+   *
+   * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
+   * @param lhsTypes the type(s) of the left-hand side
+   * @return true if the left-hand side is known to be a final class
+   */
+  private boolean isFinalClass(@Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes) {
+    if (resolvedLHSType != null) {
+      if (!resolvedLHSType.isReferenceType()
+          || resolvedLHSType.asReferenceType().getTypeDeclaration().isEmpty()) {
+        return false;
+      }
+
+      // If LHS is solvable, there is only one
+      ResolvedReferenceTypeDeclaration decl =
+          resolvedLHSType.asReferenceType().getTypeDeclaration().get();
+
+      if (!decl.isClass()) {
+        return false;
+      }
+
+      if (JavaLangUtils.isFinalJdkClass(decl.getQualifiedName())) {
+        return true;
+      }
+
+      return decl.toAst().isPresent()
+          && ((ClassOrInterfaceDeclaration) decl.toAst().get()).isFinal();
+    }
+
+    // A single type with a single name, or there is no one type to ask about.
+    if (lhsTypes.size() != 1) {
+      return false;
+    }
+
+    Set<String> fqns = lhsTypes.iterator().next().getFullyQualifiedNames();
+
+    if (fqns.size() != 1) {
+      return false;
+    }
+
+    String fqn = fqns.iterator().next();
+
+    if (JavaLangUtils.isFinalJdkClass(fqn)) {
+      return true;
+    }
+
+    return JavaParserUtil.getTypeFromQualifiedName(fqn, fqnsToCompilationUnits)
+            instanceof ClassOrInterfaceDeclaration ast
+        && !ast.isInterface()
+        && ast.isFinal();
   }
 
   /**

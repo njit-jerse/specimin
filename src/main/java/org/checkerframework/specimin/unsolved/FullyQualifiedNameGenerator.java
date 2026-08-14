@@ -1562,6 +1562,68 @@ public class FullyQualifiedNameGenerator {
   }
 
   /**
+   * Given a lambda expression, return the FQNs of the type its result expressions must have: the
+   * return type of the functional method of the lambda's target type. By JLS 15.27.3 each result
+   * expression of a lambda congruent with a function type sits in an assignment context whose
+   * target type is that function type's result, so this is the same kind of constraint that a
+   * variable initializer or a {@code return} in a method body imposes.
+   *
+   * <p>Note that this reads the lambda's *target* type, from {@link
+   * #getFQNsFromSurroundingContextType(Expression)}, rather than the lambda's own type from {@link
+   * #getFQNsForLambdaType(LambdaExpr)}: the latter is synthesized from the lambda's arity and
+   * voidness alone and so never carries a result type worth constraining anything with.
+   *
+   * @param lambda The lambda expression
+   * @return The FQNs of the required type of the lambda's result expressions, or null if the target
+   *     type does not constrain them
+   */
+  public @Nullable Set<FullyQualifiedNameSet> getFQNsForLambdaResultType(LambdaExpr lambda) {
+    if (!lambda.hasParentNode()) {
+      return null;
+    }
+
+    Set<FullyQualifiedNameSet> targetTypes = getFQNsFromSurroundingContextType(lambda);
+
+    if (targetTypes == null) {
+      return null;
+    }
+
+    Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
+
+    for (FullyQualifiedNameSet targetType : targetTypes) {
+      if (targetType.erasedFqns().size() != 1) {
+        // Which functional interface this is has to be known before its functional method's return
+        // type can be read off.
+        return null;
+      }
+
+      if (targetType.typeArguments().isEmpty()
+          && targetType.erasedFqns().iterator().next().startsWith("java.util.function.")) {
+        // A raw java.util.function type. Its result type is whatever the raw type erases it to,
+        // which constrains nothing; bail out before normalization, which indexes type arguments.
+        return null;
+      }
+
+      FullyQualifiedNameSet resultType =
+          FunctionalInterfaceHelper.getReturnTypeFromNormalizedFunctionalInterface(
+              FunctionalInterfaceHelper.convertToNormalFunctionalInterface(targetType));
+
+      if (resultType == null || resultType.wildcard() != null) {
+        // Either the functional method is void or the interface is not one whose result type can be
+        // read off its type arguments (both give null), or the result is a wildcard, as it is for
+        // the Supplier<?>/Function<?, ?> that Specimin synthesizes for a lambda passed to an
+        // unsolved method. None of these constrain the result expressions at all, and per the rule
+        // that a guess is worse than silence, saying nothing is the right answer.
+        return null;
+      }
+
+      result.add(resultType);
+    }
+
+    return result.isEmpty() ? null : result;
+  }
+
+  /**
    * Given an expression that can be resolved (but calculateResolvedType() fails), return the best
    * shot at its type based on a resolved declaration. May return null if a type cannot be found
    * from the resolved declaration.
@@ -1936,10 +1998,21 @@ public class FullyQualifiedNameGenerator {
         }
       }
     } else if (parentNode instanceof ReturnStmt returnStmt) {
-      if (JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt)
-          instanceof MethodDeclaration methodDecl) {
+      Node methodOrLambda = JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt);
+
+      if (methodOrLambda instanceof MethodDeclaration methodDecl) {
         return Set.of(getFQNsFromType(methodDecl.getType()));
+      } else if (methodOrLambda instanceof LambdaExpr lambda) {
+        return getFQNsForLambdaResultType(lambda);
       }
+    } else if (parentNode instanceof ExpressionStmt exprStmt
+        && exprStmt.getParentNode().orElse(null) instanceof LambdaExpr lambda
+        && lambda.getExpressionBody().isPresent()
+        && lambda.getExpressionBody().get().equals(expr)) {
+      // An expression-bodied lambda has no ReturnStmt to hang the constraint on. Its body is stored
+      // as an ExpressionStmt, which getExpressionBody() unwraps, so the result expression's parent
+      // is that statement rather than the lambda.
+      return getFQNsForLambdaResultType(lambda);
     } else if (parentNode instanceof ForEachStmt forEachStmt) {
 
       if (forEachStmt.getIterable().equals(expr)) {

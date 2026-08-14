@@ -2,7 +2,7 @@ package org.example;
 
 public class Item {
 
-    public java.lang.String getPayload() {
+    public <T> T getPayload() {
         throw new java.lang.Error();
     }
 }
