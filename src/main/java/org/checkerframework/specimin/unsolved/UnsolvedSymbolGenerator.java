@@ -2989,9 +2989,9 @@ public class UnsolvedSymbolGenerator {
         }
       } else if (node instanceof LambdaExpr lambdaExpr) {
 
-        // The lambda's result type is read from its target type rather than from
-        // Resolver#calculateResolvedType, which cannot type a lambda at all when its body is
-        // unsolved: JavaParser's TypeExtractor resolves the body in order to infer the functional
+        // Must not call Resolver#calculateResolvedType on a lambda when its body is
+        // unsolved, because JavaParser's TypeExtractor creates a circular dependency: it resolves
+        // the body in order to infer the functional
         // interface's type arguments, and that is exactly the case this constraint exists to fix.
         Set<FullyQualifiedNameSet> resultTypeFQNs =
             fullyQualifiedNameGenerator.getFQNsForLambdaResultType(lambdaExpr);
