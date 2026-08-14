@@ -3027,7 +3027,7 @@ public class UnsolvedSymbolGenerator {
                 fullyQualifiedNameGenerator.getFQNsForExpressionType(rhs));
         // The result type is known only by name here, so there is no ResolvedType to hand over.
         // This is a supported input: it selects addSuperType over forceSuperClass/
-        // forceSuperInterface, and finalityOfLHS below falls back to deciding by name.
+        // forceSuperInterface, and isFinalClass below falls back to deciding by name.
         getResolvedTypeOfLHS = () -> null;
       } else {
         throw new RuntimeException(
@@ -4258,6 +4258,13 @@ public class UnsolvedSymbolGenerator {
    * unconstrained-return-type fallback it would reach for the equivalent assignment or {@code
    * return} statement, instead of going on to demand an impossible subtype.
    *
+   * <p>When deciding by name, {@code lhsTypes} is a disjunction: several candidate types, and
+   * within each, several candidate names, exactly one of which the left-hand side really is. Every
+   * candidate must be a final class before this returns true, because a single non-final candidate
+   * is a reading under which a subtype is still possible. Note that false is not a safe default to
+   * approximate with when the answer is unclear: both answers can cost compilability, since the
+   * unconstrained return type that true leads to strands any member access on the result.
+   *
    * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
    * @param lhsTypes the type(s) of the left-hand side
    * @return true if the left-hand side is known to be a final class
@@ -4285,19 +4292,36 @@ public class UnsolvedSymbolGenerator {
           && ((ClassOrInterfaceDeclaration) decl.toAst().get()).isFinal();
     }
 
-    // A single type with a single name, or there is no one type to ask about.
-    if (lhsTypes.size() != 1) {
+    // No candidates says nothing about finality, so do not let the loops below pass vacuously.
+    if (lhsTypes.isEmpty()) {
       return false;
     }
 
-    Set<String> fqns = lhsTypes.iterator().next().getFullyQualifiedNames();
+    for (MemberType lhsType : lhsTypes) {
+      Set<String> fqns = lhsType.getFullyQualifiedNames();
 
-    if (fqns.size() != 1) {
-      return false;
+      if (fqns.isEmpty()) {
+        return false;
+      }
+
+      for (String fqn : fqns) {
+        if (!isFinalClassName(fqn)) {
+          return false;
+        }
+      }
     }
 
-    String fqn = fqns.iterator().next();
+    return true;
+  }
 
+  /**
+   * Does this fully-qualified name name a final class? Names that Specimin will synthesize a type
+   * for are not final: Specimin chooses those types' modifiers, and never makes them final here.
+   *
+   * @param fqn a fully-qualified name
+   * @return true if the name is that of a final class
+   */
+  private boolean isFinalClassName(String fqn) {
     if (JavaLangUtils.isFinalJdkClass(fqn)) {
       return true;
     }
