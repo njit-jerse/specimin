@@ -1608,12 +1608,15 @@ public class FullyQualifiedNameGenerator {
           FunctionalInterfaceHelper.getReturnTypeFromNormalizedFunctionalInterface(
               FunctionalInterfaceHelper.convertToNormalFunctionalInterface(targetType));
 
-      if (resultType == null || resultType.wildcard() != null) {
-        // Either the functional method is void or the interface is not one whose result type can be
-        // read off its type arguments (both give null), or the result is a wildcard, as it is for
-        // the Supplier<?>/Function<?, ?> that Specimin synthesizes for a lambda passed to an
-        // unsolved method. None of these constrain the result expressions at all, and per the rule
-        // that a guess is worse than silence, saying nothing is the right answer.
+      if (resultType == null
+          || resultType.wildcard() != null
+          || SpeciminGenerationUtils.isATypeVariable(resultType)) {
+        // Nothing usable. Either the functional method is void or the interface is not one whose
+        // result type can be read off its type arguments (both give null); or the result is a
+        // wildcard, as it is for the Supplier<?>/Function<?, ?> that Specimin synthesizes for a
+        // lambda passed to an unsolved method; or it is a type variable of some enclosing
+        // declaration, which names no type at all and is not even in scope where the constrained
+        // symbol would be generated.
         return null;
       }
 
