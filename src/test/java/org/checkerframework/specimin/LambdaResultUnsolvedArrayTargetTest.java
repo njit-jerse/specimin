@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * A lambda result type need not be a final class to rule out a generated placeholder type. An array
- * type has no declarable subtypes at all: by JLS 4.10.3 its only supertypes are {@code Object},
+ * type has no declarable subtypes at all: by JLS 4.10.3 its only non-array supertypes are {@code Object},
  * {@code Cloneable} and {@code Serializable}, and no class declaration can name it as a superclass.
  *
  * <p>Two lambdas here demand incompatible result types from the same unsolved call, so no concrete
