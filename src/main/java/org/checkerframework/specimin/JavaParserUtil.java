@@ -1956,6 +1956,45 @@ public class JavaParserUtil {
   }
 
   /**
+   * Can no generated class be made a subtype of the type with this name? Callers that are about to
+   * name a type as the supertype of a synthetic class, or that need to know whether a synthetic
+   * placeholder type could stand in for it, should ask this first.
+   *
+   * <p>Beyond the JDK and primitive cases that {@link JavaLangUtils#isNonExtendableJdkTypeName}
+   * settles, a declaration in the project qualifies when it is a final class, an enum (implicitly
+   * final unless a constant has a class body, JLS 8.9), a record (implicitly final, JLS 8.10), or
+   * an annotation type. A non-final class or an interface can take a generated subtype, and so does
+   * not qualify; neither does a name Specimin will synthesize a type for, since Specimin writes
+   * that declaration itself and does not make it final.
+   *
+   * @param fqn a fully-qualified name
+   * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
+   * @return true if no generated class could be made a subtype of the named type
+   */
+  public static boolean isNonExtendableTypeName(
+      String fqn, Map<String, CompilationUnit> fqnToCompilationUnits) {
+    if (fqn.startsWith("?")) {
+      // A wildcard names a bound rather than a type. A type satisfying the bound may well be
+      // extendable, so this says nothing.
+      return false;
+    }
+
+    if (JavaLangUtils.isNonExtendableJdkTypeName(fqn)) {
+      return true;
+    }
+
+    TypeDeclaration<?> decl = getTypeFromQualifiedName(fqn, fqnToCompilationUnits);
+
+    if (decl instanceof ClassOrInterfaceDeclaration classOrInterface) {
+      return !classOrInterface.isInterface() && classOrInterface.isFinal();
+    }
+
+    // An enum, record, or annotation declaration in the project; none can be extended. Null means
+    // the name is not in the project at all, which says nothing either way.
+    return decl != null;
+  }
+
+  /**
    * Given an AssociableToAST that could give a detached node, find its attached equivalent. This
    * method is only necessary when you need to call resolve() or calculateResolvedType() on its
    * children. Throws if the result is null; use {@link #tryFindAttachedNode(AssociableToAST, Map)}
@@ -2600,6 +2639,30 @@ public class JavaParserUtil {
    * @return the first return statement belonging to {@code lambda}, or null if it has none
    */
   public static @Nullable ReturnStmt findOwnReturnStmt(LambdaExpr lambda) {
+    List<ReturnStmt> ownReturns = findOwnReturnStmts(lambda);
+    return ownReturns.isEmpty() ? null : ownReturns.get(0);
+  }
+
+  /**
+   * Returns every return statement in the given lambda's block body that belongs to that lambda, in
+   * source order.
+   *
+   * <p>A return may be nested arbitrarily deep inside the body, so the search is recursive. It is
+   * therefore frequent for a return reached to belong to a nested lambda, or to a method of an
+   * anonymous or local class declared in the body; such a return belongs to that construct rather
+   * than to this lambda, and is skipped.
+   *
+   * <p>Callers that reason about one property shared by all of a legal body's returns -- their
+   * voidness, say -- can use {@link #findOwnReturnStmt(LambdaExpr)} instead, but callers that
+   * constrain the returned expressions need all of them, since each is a separate expression with
+   * its own type.
+   *
+   * @param lambda a lambda expression whose body is a block statement
+   * @return every return statement belonging to {@code lambda}; empty if it has none of its own
+   */
+  public static List<ReturnStmt> findOwnReturnStmts(LambdaExpr lambda) {
+    List<ReturnStmt> ownReturns = new ArrayList<>();
+
     for (ReturnStmt returnStmt : lambda.getBody().asBlockStmt().findAll(ReturnStmt.class)) {
       // Reference equality is intentional: we need to know whether this exact return statement
       // belongs to this lambda, not whether some structurally-equal return statement does (a
@@ -2609,10 +2672,11 @@ public class JavaParserUtil {
       @SuppressWarnings({"ReferenceEquality", "not.interned"})
       boolean belongsToThisLambda = findClosestMethodOrLambdaAncestor(returnStmt) == lambda;
       if (belongsToThisLambda) {
-        return returnStmt;
+        ownReturns.add(returnStmt);
       }
     }
-    return null;
+
+    return ownReturns;
   }
 
   /**

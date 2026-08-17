@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
 
@@ -58,16 +59,39 @@ public class SpeciminGenerationUtils {
    * @return True if the MemberType is a type variable, false otherwise
    */
   public static boolean isATypeVariable(MemberType memberType) {
-    if (memberType.getFullyQualifiedNames().size() != 1) {
+    return isATypeVariable(
+        memberType.getFullyQualifiedNames(), memberType.getTypeArguments().isEmpty());
+  }
+
+  /**
+   * Determine if a FullyQualifiedNameSet is a type variable. Same heuristic as {@link
+   * #isATypeVariable(MemberType)}.
+   *
+   * @param fqnSet The FullyQualifiedNameSet to check
+   * @return True if the FullyQualifiedNameSet is a type variable, false otherwise
+   */
+  public static boolean isATypeVariable(FullyQualifiedNameSet fqnSet) {
+    return fqnSet.wildcard() == null
+        && isATypeVariable(fqnSet.erasedFqns(), fqnSet.typeArguments().isEmpty());
+  }
+
+  /**
+   * Shared implementation of the type-variable heuristic: a type variable is named by a single name
+   * that is already simple, is not a primitive, and carries no type arguments.
+   *
+   * @param names the candidate names of the type
+   * @param hasNoTypeArguments whether the type has no type arguments
+   * @return True if this is a type variable, false otherwise
+   */
+  private static boolean isATypeVariable(Set<String> names, boolean hasNoTypeArguments) {
+    if (names.size() != 1) {
       return false;
     }
 
-    String name = memberType.getFullyQualifiedNames().iterator().next();
+    String name = names.iterator().next();
     String simple = JavaParserUtil.getSimpleNameFromQualifiedName(JavaParserUtil.erase(name));
 
-    return name.equals(simple)
-        && memberType.getTypeArguments().isEmpty()
-        && !JavaLangUtils.isPrimitive(simple);
+    return name.equals(simple) && hasNoTypeArguments && !JavaLangUtils.isPrimitive(simple);
   }
 
   /**

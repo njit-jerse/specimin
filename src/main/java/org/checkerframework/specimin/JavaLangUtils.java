@@ -447,6 +447,23 @@ public final class JavaLangUtils {
   }
 
   /**
+   * Could the given name be a type that no generated class can be made a subtype of, judged from
+   * the name alone? Answers only for names this class knows about; a name that belongs to the
+   * project under analysis needs its declaration inspected, which {@link
+   * JavaParserUtil#isNonExtendableTypeName} does on top of this.
+   *
+   * <p>Three kinds qualify. A primitive has no subtypes at all. An array type's only supertypes are
+   * {@code Object}, {@code Cloneable} and {@code Serializable} (JLS 4.10.3), and no class
+   * declaration can name one as a superclass. A final JDK class cannot be extended (JLS 8.1.1.2).
+   *
+   * @param name a simple or fully-qualified name
+   * @return true if the input might name a type that cannot be extended
+   */
+  public static boolean isNonExtendableJdkTypeName(String name) {
+    return isPrimitive(name) || name.endsWith("[]") || isFinalJdkClass(name);
+  }
+
+  /**
    * Is the given name java.lang.String? String is worth asking about on its own because it is the
    * only type that changes what an operator means: a {@code +} with a String operand is a string
    * concatenation rather than an addition (JLS 15.18.1), and a concatenation places no constraint
