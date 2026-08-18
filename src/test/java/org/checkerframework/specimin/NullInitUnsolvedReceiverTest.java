@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Checks that Specimin does not try to constrain a variable's type with the NullType resulting from
  * a {@code null} initializer. Regression test for <a
- * href="https://github.com/njit-jerse/specimin/issues/511">...</a>.
+ * href="https://github.com/njit-jerse/specimin/issues/511">#511</a>.
  */
 public class NullInitUnsolvedReceiverTest {
   @Test
