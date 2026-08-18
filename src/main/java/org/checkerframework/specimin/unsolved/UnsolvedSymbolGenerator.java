@@ -3622,6 +3622,19 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Returns true if the type of a value assigned to a variable tells us anything about that
+   * variable's type. The null type does not: {@code null} is assignable to every reference type
+   * (JLS 4.1), so a {@code null} initializer or assignment is compatible with any declared type.
+   *
+   * @param type the resolved type of an initializer or of an assigned value, or null if it could
+   *     not be resolved
+   * @return true if type constrains the assigned variable's type
+   */
+  private static boolean constrainsVariableType(@Nullable ResolvedType type) {
+    return type != null && !type.isNull();
+  }
+
+  /**
    * Given a method call expression, try to match its return types to known child classes if this
    * method declaration behind the call matches all of these requirements:
    *
@@ -3759,7 +3772,7 @@ public class UnsolvedSymbolGenerator {
             ResolvedType resolvedType =
                 Resolver.calculateResolvedType(varDecl.getInitializer().get());
 
-            if (resolvedType == null) {
+            if (!constrainsVariableType(resolvedType)) {
               continue;
             }
 
@@ -3776,7 +3789,7 @@ public class UnsolvedSymbolGenerator {
             && assignExpr.getTarget().toString().equals(scope.toString())) {
           ResolvedType resolvedType = Resolver.calculateResolvedType(assignExpr.getValue());
 
-          if (resolvedType != null) {
+          if (constrainsVariableType(resolvedType)) {
             potentialTypes.add(resolvedType);
           }
         }
@@ -3792,8 +3805,8 @@ public class UnsolvedSymbolGenerator {
         // Check to see if any of these contain the same method signature; if so, we can
         // update the return type of the current generated one to match it
 
-        // Must be a reference type: if it were not, the method would be solvable, which we
-        // checked already
+        // Must be a reference type: the null type was filtered out above, and for any other
+        // non-reference type the method would be solvable, which we checked already
         ResolvedReferenceType refType = type.asReferenceType();
 
         // The type must also be a user-defined class, not a built-in Java class. This means we
