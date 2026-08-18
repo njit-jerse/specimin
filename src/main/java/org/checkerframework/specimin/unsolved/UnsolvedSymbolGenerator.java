@@ -76,6 +76,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import org.checkerframework.checker.nullness.qual.EnsuresNonNullIf;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
@@ -3630,6 +3632,7 @@ public class UnsolvedSymbolGenerator {
    *     not be resolved
    * @return true if type constrains the assigned variable's type
    */
+  @EnsuresNonNullIf(result = true, expression = "#1")
   private static boolean constrainsVariableType(@Nullable ResolvedType type) {
     return type != null && !type.isNull();
   }
