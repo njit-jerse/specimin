@@ -4,7 +4,7 @@ import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
 /**
- * Checks that Specimin does not try to constrain a variables type with the NullType resulting from
+ * Checks that Specimin does not try to constrain a variable's type with the NullType resulting from
  * a {@code null} initializer. Regression test for <a
  * href="https://github.com/njit-jerse/specimin/issues/511">...</a>.
  */
