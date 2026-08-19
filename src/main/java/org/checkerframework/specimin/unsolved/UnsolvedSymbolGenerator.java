@@ -3079,9 +3079,9 @@ public class UnsolvedSymbolGenerator {
         }
 
         if (!handledAsNonExtendable) {
-          // This tests checks for conflicts that making the LHS a supertype of the RHS cannot
-          // repair.
-          // An unconstrained return type is used instead.
+          // This test checks for conflicts that making the LHS a supertype of the RHS cannot
+          // repair, because every candidate return type already exists and so there is no generated
+          // type to give a supertype to . An unconstrained return type is used instead.
           if (methodWithPotentiallyUnconstrainedReturnType != null
               && returnTypeCanConflictWithLHS
               && rhsType.stream().allMatch(type -> type instanceof SolvedMemberType)) {
@@ -4328,21 +4328,21 @@ public class UnsolvedSymbolGenerator {
    * superclass or superinterface (JLS 8.1.4, 8.1.5). Only a non-final class or an interface can
    * take a generated subtype.
    *
-   * <p>Every one of those kinds is reported only when {@code conflicting} says the method's current
-   * return type is one the left-hand side rejects. A non-extendable left-hand side is not on its
-   * own a reason to weaken a return type: for {@code int x = item.get();}, {@code int} is the right
-   * return type for {@code get}. It is only when there is a second, incompatible use site that an
-   * unconstrained type variable is required; {@code conflicting} should be {@code true} whenever
-   * there might be a second, incompatible use site.
+   * <p>Every one of those kinds is reported only when {@code mayConflict} says the method's current
+   * return type may be one the left-hand side rejects. A non-extendable left-hand side is not on
+   * its own a reason to weaken a return type: for {@code int x = item.get();}, {@code int} is the
+   * right return type for {@code get}. It is only when there is a second, incompatible use site
+   * that an unconstrained type variable is required; {@code mayConflict} should be {@code true}
+   * whenever there might be a second, incompatible use site.
    *
-   * <p>This is not the only place the unconstrained type variable fallback can be generated. A
-   * conflict is not always visible from the site that can act on it -- given {@code Payload p =
-   * item.get(); String s = item.get();} the return type settles on {@code String}, and the {@code
+   * <p>A conflict is not always visible from the site that can act on it -- given {@code Payload p
+   * = item.get(); String s = item.get();} the return type settles on {@code String}, and the {@code
    * String} assignment sees nothing wrong -- so {@code addInformation} also falls back when a site
    * sees a conflict it cannot repair by adding a supertype, and {@link
    * #makeSyntheticTypeASubtypeOfExpressionType} does the same when a cast or instanceof cannot get
    * the subtype it needs. Between them, whichever site can see the problem is the one that fixes
-   * it.
+   * it. All of these sites are needed for soundness: removing any one of them would lead to
+   * non-compilable output.
    *
    * <p>The resolved type is preferred when there is one, but the left-hand side is sometimes known
    * only by name -- a lambda's result type, for instance, is derived from the lambda's target type
@@ -4359,13 +4359,13 @@ public class UnsolvedSymbolGenerator {
    *
    * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
    * @param lhsTypes the type(s) of the left-hand side
-   * @param conflicting whether the assignment context may confilct with the existing type of the
-   *     left-hand side. Only a resolved primitive, array, enum, record, annotation type or type
+   * @param mayConflict whether the assignment context may confilct with the existing type of the
+   *     right-hand side. Only a resolved primitive, array, enum, record, annotation type or type
    *     variable consults this; see above.
    * @return true if no generated class could be made a subtype of the left-hand side
    */
   private boolean isNonExtendableType(
-      @Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes, boolean conflicting) {
+      @Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes, boolean mayConflict) {
     if (resolvedLHSType != null) {
       // None of these is a reference type, so none of them reaches the declaration-keyed tests
       // below. A type variable is included because a class declaration may not name one as a
@@ -4373,7 +4373,7 @@ public class UnsolvedSymbolGenerator {
       if (resolvedLHSType.isPrimitive()
           || resolvedLHSType.isArray()
           || resolvedLHSType.isTypeVariable()) {
-        return conflicting;
+        return mayConflict;
       }
 
       if (!resolvedLHSType.isReferenceType()
@@ -4386,7 +4386,7 @@ public class UnsolvedSymbolGenerator {
           resolvedLHSType.asReferenceType().getTypeDeclaration().get();
 
       if (decl.isEnum() || decl.isRecord() || decl.isAnnotation()) {
-        return conflicting;
+        return mayConflict;
       }
 
       if (!decl.isClass()) {
@@ -4394,10 +4394,10 @@ public class UnsolvedSymbolGenerator {
       }
 
       if (JavaLangUtils.isFinalJdkClass(decl.getQualifiedName())) {
-        return conflicting;
+        return mayConflict;
       }
 
-      return conflicting
+      return mayConflict
           && decl.toAst().isPresent()
           && ((ClassOrInterfaceDeclaration) decl.toAst().get()).isFinal();
     }
@@ -4425,8 +4425,8 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Handles the relationship between the LHS and RHS types by making the type of the LHS a
-   * supertype of the type of the RHS, if the type of the RHS is unsolved.
+   * Makes the type of the LHS (of some pseudo-assignment) a supertype of the type of the RHS, if
+   * the type of the RHS is unsolved.
    *
    * @param lhsTypes The type(s) of the LHS
    * @param rhsTypes The type(s) of the RHS
