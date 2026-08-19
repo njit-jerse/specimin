@@ -10,12 +10,7 @@ import org.junit.jupiter.api.Test;
  * method's return type becomes an unconstrained type variable, which {@code T} instantiates to
  * {@code Baz} at the cast and to {@code Integer} at the assignment.
  *
- * <p>Before this was handled, the dropped requirement left {@code Baz} declared as {@code extends
- * int}, which is not a Java program at all.
- *
- * <p>The repair happens at the cast rather than at the assignment because only the cast can see the
- * problem: by the time the assignment is examined, the return type may already be {@code int},
- * which satisfies the assignment and gives it no reason to act. {@link
+ * <p>{@link
  * NonExtendableCastOperandReversedTest} is the same program with the two statements swapped.
  */
 public class NonExtendableCastOperandPrimitiveTest {

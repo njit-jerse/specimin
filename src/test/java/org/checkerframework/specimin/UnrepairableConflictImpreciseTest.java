@@ -11,14 +11,14 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The reason is that the test for "this site is in conflict with the return type" is type
  * equality, not assignability: {@code Dog} is not {@code Animal}, so the {@code Animal} assignment
- * reports a conflict, finds that it cannot be repaired by adding a supertype -- {@code Dog} is a
+ * conservatively appears to be a conflict, and Specimin cannot be repair it by adding a supertype -- {@code Dog} is a
  * class from the input, so there is nothing of Specimin's to change -- and falls back. Deciding
  * this properly needs {@code UnsolvedSymbolGenerator} to be able to ask whether one type is
- * assignable to another, which needs a type solver it does not currently hold; equality is the
- * approximation that is available, and it errs toward the answer that always compiles.
+ * assignable to another, which needs a type solver; equality is the
+ * approximation that is available, and it errs toward an answer that always compiles.
  *
- * <p><b>If a later change teaches that check about assignability, this expectation should be
- * relaxed to {@code Dog get()}.</b> Doing so is safe and is an improvement, not a regression:
+ * <p><b>If a later change can
+ * relax this to {@code Dog get()}, it should. </b> Doing so is safe and is an improvement, not a regression:
  * nothing here depends on the type variable, and the swapped-statement version in {@link
  * UnrepairableConflictSupertypeTest} -- where the conflict is genuine, because the return type is
  * the supertype and cannot be assigned to the subtype -- is the one that must keep falling back.

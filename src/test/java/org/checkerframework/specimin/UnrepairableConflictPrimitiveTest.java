@@ -14,11 +14,6 @@ import org.junit.jupiter.api.Test;
  * <p>What breaks the tie is the {@code int} assignment noticing that the conflict it does see
  * cannot be fixed by making {@code Payload} a subtype of {@code int}. Nothing Specimin generated is
  * involved on that side, so there is no supertype to add and the fallback is the only move left.
- *
- * <p>This is the fixture that lets {@code UnsolvedSymbolGenerator#isNonExtendableType} treat every
- * non-extendable kind alike. A final class used to be answered for unconditionally, which papered
- * over this shape for {@code String} while leaving it broken for a primitive; with the repair
- * reachable from both directions, the exemption is unnecessary.
  */
 public class UnrepairableConflictPrimitiveTest {
   @Test

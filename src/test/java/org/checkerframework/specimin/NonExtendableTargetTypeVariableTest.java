@@ -12,10 +12,6 @@ import org.junit.jupiter.api.Test;
  * <p>The target method's {@code U} is not in scope in the generated {@code Item}, so the generated
  * method binds a type variable of its own; the name it gets is whichever one is free, which is why
  * the expected output says {@code T1} rather than {@code T}.
- *
- * <p>Only this assignment form is fixed. The lambda form of the same program -- {@code Supplier<U>
- * s = () -> item.get();} -- still does not compile, because the constraint is unnameable at symbol
- * generation time; see issue 509.
  */
 public class NonExtendableTargetTypeVariableTest {
   @Test
