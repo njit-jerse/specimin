@@ -76,7 +76,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
 import org.checkerframework.checker.nullness.qual.EnsuresNonNullIf;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
@@ -3062,9 +3061,15 @@ public class UnsolvedSymbolGenerator {
           throw new RuntimeException("Type has not been generated for the RHS of " + node);
         }
 
+        // Does this site's target type reject what the method currently returns? See
+        // isNonExtendableType, which uses this to decide the kinds of target for which the
+        // fallback is worth what it costs in precision.
+        boolean returnTypeConflictsWithLHS = !lhsType.containsAll(rhsType);
+
         boolean handledAsNonExtendable = false;
         if (methodWithPotentiallyUnconstrainedReturnType != null
-            && isNonExtendableType(getResolvedTypeOfLHS.get(), lhsType)) {
+            && isNonExtendableType(
+                getResolvedTypeOfLHS.get(), lhsType, returnTypeConflictsWithLHS)) {
           Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
           for (MemberType returnType :
               methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
@@ -4268,8 +4273,19 @@ public class UnsolvedSymbolGenerator {
    * <p>Final classes are the obvious case, but they are not the only one. A primitive and an array
    * type have no declarable subtypes at all; an enum is implicitly final unless it has constant
    * bodies, none of which a generated class could be (JLS 8.9); a record is implicitly final (JLS
-   * 8.10); and an annotation type cannot be extended. Only a non-final class or an interface can
+   * 8.10); an annotation type cannot be extended; and a type variable may not be named as a
+   * superclass or superinterface (JLS 8.1.4, 8.1.5). Only a non-final class or an interface can
    * take a generated subtype.
+   *
+   * <p>Those kinds beyond the final class are reported only when {@code conflicting} says the
+   * method's current return type is one the left-hand side rejects. A non-extendable left-hand side
+   * is not on its own a reason to weaken a return type: {@code int x = item.get();} on its own
+   * already gets {@code int get()}, which satisfies it exactly, and answering true there would
+   * trade that for {@code <T> T} and buy nothing. It is the second, incompatible use site that
+   * makes the type variable the only answer that compiles, and that is what {@code conflicting}
+   * reports. A final class is exempt from the gate: a placeholder return type that was named as the
+   * supertype of another generated type reaches this method already replaced by the final class, so
+   * the conflict its subtypes are in is no longer visible here.
    *
    * <p>The resolved type is preferred when there is one, but the left-hand side is sometimes known
    * only by name -- a lambda's result type, for instance, is derived from the lambda's target type
@@ -4286,11 +4302,23 @@ public class UnsolvedSymbolGenerator {
    *
    * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
    * @param lhsTypes the type(s) of the left-hand side
+   * @param conflicting whether what the method currently returns is a type the left-hand side
+   *     rejects. Only a resolved primitive, array, enum, record, annotation type or type variable
+   *     consults this; see above.
    * @return true if no generated class could be made a subtype of the left-hand side
    */
   private boolean isNonExtendableType(
-      @Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes) {
+      @Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes, boolean conflicting) {
     if (resolvedLHSType != null) {
+      // None of these is a reference type, so none of them reaches the declaration-keyed tests
+      // below. A type variable is included because a class declaration may not name one as a
+      // superclass or superinterface (JLS 8.1.4, 8.1.5).
+      if (resolvedLHSType.isPrimitive()
+          || resolvedLHSType.isArray()
+          || resolvedLHSType.isTypeVariable()) {
+        return conflicting;
+      }
+
       if (!resolvedLHSType.isReferenceType()
           || resolvedLHSType.asReferenceType().getTypeDeclaration().isEmpty()) {
         return false;
@@ -4299,6 +4327,10 @@ public class UnsolvedSymbolGenerator {
       // If LHS is solvable, there is only one
       ResolvedReferenceTypeDeclaration decl =
           resolvedLHSType.asReferenceType().getTypeDeclaration().get();
+
+      if (decl.isEnum() || decl.isRecord() || decl.isAnnotation()) {
+        return conflicting;
+      }
 
       if (!decl.isClass()) {
         return false;
