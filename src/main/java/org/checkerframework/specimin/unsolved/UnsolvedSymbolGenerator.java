@@ -2880,9 +2880,9 @@ public class UnsolvedSymbolGenerator {
     } else if (node instanceof CastExpr castExpr
         && !castExpr.getExpression().isLambdaExpr()
         && !castExpr.getExpression().isMethodReferenceExpr()) {
-      // A cast (T) e compiles only if a cast between e's type and T would be accepted, which is
-      // exactly the condition JLS 15.20.2 (quoted above) imposes on instanceof. A synthetic T is
-      // therefore handled the same way here as it is there.
+      // A cast (T) e compiles only if casting conversion accepts e's type to T (JLS 15.16, 5.5),
+      // which is exactly the condition JLS 15.20.2 (quoted above) carries over to instanceof. A
+      // synthetic T is therefore handled the same way here as it is there.
       //
       // Constraining e's type to make the cast legal would be wrong, because it would also degrade
       // the type inferred for e at its other use sites. Since Specimin chooses what T is, it can
@@ -3495,9 +3495,10 @@ public class UnsolvedSymbolGenerator {
    * Records that a synthetic type must be a subtype of the type of the given expression.
    *
    * <p>Shared by the {@code instanceof} and cast cases of {@link #addInformation}, which impose the
-   * same requirement for the same reason: JLS 15.20.2 gives {@code x instanceof T} and {@code (T)
-   * x} the same legality condition. When {@code T} is synthetic, Specimin chooses its supertypes,
-   * so it can satisfy that condition without constraining {@code x}'s type.
+   * same requirement for the same reason: the cast must be accepted by casting conversion (JLS
+   * 5.5), and JLS 15.20.2 gives {@code x instanceof T} that same legality condition. When {@code T}
+   * is synthetic, Specimin chooses its supertypes, so it can satisfy the condition without
+   * constraining {@code x}'s type.
    *
    * @param syntheticType the type named by the instanceof or the cast. Must not be resolvable; the
    *     caller is responsible for checking that, since a type that already exists has supertypes
@@ -4324,9 +4325,10 @@ public class UnsolvedSymbolGenerator {
    * <p>Final classes are the obvious case, but they are not the only one. A primitive and an array
    * type have no declarable subtypes at all; an enum is implicitly final unless it has constant
    * bodies, none of which a generated class could be (JLS 8.9); a record is implicitly final (JLS
-   * 8.10); an annotation type cannot be extended; and a type variable may not be named as a
-   * superclass or superinterface (JLS 8.1.4, 8.1.5). Only a non-final class or an interface can
-   * take a generated subtype.
+   * 8.10); an annotation type cannot be extended; a sealed class or interface admits only the
+   * subtypes its {@code permits} clause names, which a synthetic type never is; and a type variable
+   * may not be named as a superclass or superinterface (JLS 8.1.4, 8.1.5). Only a non-final,
+   * non-sealed class or interface can take a generated subtype.
    *
    * <p>Every one of those kinds is reported only when {@code mayConflict} says the method's current
    * return type may be one the left-hand side rejects. A non-extendable left-hand side is not on
@@ -4385,6 +4387,12 @@ public class UnsolvedSymbolGenerator {
           resolvedLHSType.asReferenceType().getTypeDeclaration().get();
 
       if (decl.isEnum() || decl.isRecord() || decl.isAnnotation()) {
+        return mayConflict;
+      }
+
+      // Checked before isClass() because sealed interface also cannot have synthetic subtypes.
+      if (decl.toAst().orElse(null) instanceof TypeDeclaration<?> ast
+          && JavaParserUtil.isSealed(ast)) {
         return mayConflict;
       }
 
