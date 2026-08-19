@@ -3081,7 +3081,7 @@ public class UnsolvedSymbolGenerator {
         if (!handledAsNonExtendable) {
           // This test checks for conflicts that making the LHS a supertype of the RHS cannot
           // repair, because every candidate return type already exists and so there is no generated
-          // type to give a supertype to . An unconstrained return type is used instead.
+          // type to give a supertype to. An unconstrained return type is used instead.
           if (methodWithPotentiallyUnconstrainedReturnType != null
               && returnTypeCanConflictWithLHS
               && rhsType.stream().allMatch(type -> type instanceof SolvedMemberType)) {
@@ -4359,9 +4359,8 @@ public class UnsolvedSymbolGenerator {
    *
    * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
    * @param lhsTypes the type(s) of the left-hand side
-   * @param mayConflict whether the assignment context may confilct with the existing type of the
-   *     right-hand side. Only a resolved primitive, array, enum, record, annotation type or type
-   *     variable consults this; see above.
+   * @param mayConflict whether the assignment context may conflict with the existing type of the
+   *     right-hand side. Only a resolved LHS type consults this; the name-keyed path ignores it.
    * @return true if no generated class could be made a subtype of the left-hand side
    */
   private boolean isNonExtendableType(
