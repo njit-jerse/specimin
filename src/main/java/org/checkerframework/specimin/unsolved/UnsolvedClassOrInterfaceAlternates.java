@@ -303,10 +303,10 @@ public class UnsolvedClassOrInterfaceAlternates
    *   <li>{@code java.lang.Object}, which every class already extends implicitly.
    * </ul>
    *
-   * <p>The non-extendable test is the one that can be made from a name and the JDK alone. An enum,
-   * record or final class declared in the project under analysis is equally unextendable but is not
-   * recognized here, because that needs the compilation units, which this class does not have;
-   * callers that do have them are expected to have checked already.
+   * <p>The non-extendable test is based on the name and the JDK alone. An enum, record or final
+   * class declared in the project under analysis is also unextendable but is not recognized here,
+   * because that needs the compilation units, which this class does not have; callers that do have
+   * them are expected to have checked already.
    *
    * <p>Dropping a supertype only leaves the generated class less constrained, which is always safe,
    * whereas naming either of the former two is never safe. This is intended as a defensive

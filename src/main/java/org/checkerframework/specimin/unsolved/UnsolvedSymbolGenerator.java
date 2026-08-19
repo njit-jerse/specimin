@@ -3064,35 +3064,31 @@ public class UnsolvedSymbolGenerator {
           throw new RuntimeException("Type has not been generated for the RHS of " + node);
         }
 
-        // Does this site's target type reject what the method currently returns? See
-        // isNonExtendableType, which uses this to decide the kinds of target for which the
-        // fallback is worth what it costs in precision.
-        boolean returnTypeConflictsWithLHS = !lhsType.containsAll(rhsType);
+        // Could this site's target type reject what the method currently returns? See
+        // isNonExtendableType, which uses this to decide when to fall back to an unconstrained
+        // type variable to satisfy all use sites.
+        boolean returnTypeCanConflictWithLHS = !lhsType.containsAll(rhsType);
 
         boolean handledAsNonExtendable = false;
         if (methodWithPotentiallyUnconstrainedReturnType != null
             && isNonExtendableType(
-                getResolvedTypeOfLHS.get(), lhsType, returnTypeConflictsWithLHS)) {
+                getResolvedTypeOfLHS.get(), lhsType, returnTypeCanConflictWithLHS)) {
           toRemove.addAll(useUnconstrainedReturnType(methodWithPotentiallyUnconstrainedReturnType));
 
           handledAsNonExtendable = true;
         }
 
         if (!handledAsNonExtendable) {
-          // A conflict that handleLHSAndRHSRelationship cannot repair. It works by making the
-          // return type a subtype of the left-hand side, which it can only do to a type Specimin
-          // generated; when every possible return type is one that already exists, there is
-          // nothing it can change, and it would silently leave the site broken. An unconstrained
-          // return type is then the repair, and making it here is what lets the non-extendable
-          // check above be gated on a conflict this site can see: the site that cannot see one is
-          // covered from the other direction.
+          // This tests checks for conflicts that making the LHS a supertype of the RHS cannot
+          // repair.
+          // An unconstrained return type is used instead.
           if (methodWithPotentiallyUnconstrainedReturnType != null
-              && returnTypeConflictsWithLHS
+              && returnTypeCanConflictWithLHS
               && rhsType.stream().allMatch(type -> type instanceof SolvedMemberType)) {
             toRemove.addAll(
                 useUnconstrainedReturnType(methodWithPotentiallyUnconstrainedReturnType));
           } else {
-            handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+            makeLHSSupertypeOfRHS(lhsType, rhsType, getResolvedTypeOfLHS);
           }
         }
       }
@@ -3184,7 +3180,7 @@ public class UnsolvedSymbolGenerator {
                 "Type has not been generated for the LHS of parameter " + i + " of " + node);
           }
 
-          handleLHSAndRHSRelationship(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
+          makeLHSSupertypeOfRHS(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
         }
       } else {
         List<? extends NodeWithParameters<?>> withUnresolvableArgs =
@@ -3293,7 +3289,7 @@ public class UnsolvedSymbolGenerator {
                   "Type has not been generated for the LHS of parameter " + i + " of " + node);
             }
 
-            handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+            makeLHSSupertypeOfRHS(lhsType, rhsType, getResolvedTypeOfLHS);
           }
         } else {
           for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
@@ -3343,7 +3339,7 @@ public class UnsolvedSymbolGenerator {
                   "Type has not been generated for the LHS of parameter " + i + " of " + node);
             }
 
-            handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+            makeLHSSupertypeOfRHS(lhsType, rhsType, getResolvedTypeOfLHS);
           }
         }
       }
@@ -4334,19 +4330,19 @@ public class UnsolvedSymbolGenerator {
    *
    * <p>Every one of those kinds is reported only when {@code conflicting} says the method's current
    * return type is one the left-hand side rejects. A non-extendable left-hand side is not on its
-   * own a reason to weaken a return type: {@code int x = item.get();} on its own already gets
-   * {@code int get()}, which satisfies it exactly, and answering true there would trade that for
-   * {@code <T> T} and buy nothing. It is the second, incompatible use site that makes the type
-   * variable the only answer that compiles, and that is what {@code conflicting} reports.
+   * own a reason to weaken a return type: for {@code int x = item.get();}, {@code int} is the right
+   * return type for {@code get}. It is only when there is a second, incompatible use site that an
+   * unconstrained type variable is required; {@code conflicting} should be {@code true} whenever
+   * there might be a second, incompatible use site.
    *
-   * <p>The gate is safe only because this is not the only place the fallback can be reached. A
-   * conflict is not always visible from the site that is able to act on it -- given {@code Payload
-   * p = item.get(); String s = item.get();} the return type settles on {@code String}, and the
-   * {@code String} assignment sees nothing wrong -- so {@code addInformation} also falls back when
-   * a site sees a conflict it cannot repair by adding a supertype, and {@link
+   * <p>This is not the only place the unconstrained type variable fallback can be generated. A
+   * conflict is not always visible from the site that can act on it -- given {@code Payload p =
+   * item.get(); String s = item.get();} the return type settles on {@code String}, and the {@code
+   * String} assignment sees nothing wrong -- so {@code addInformation} also falls back when a site
+   * sees a conflict it cannot repair by adding a supertype, and {@link
    * #makeSyntheticTypeASubtypeOfExpressionType} does the same when a cast or instanceof cannot get
    * the subtype it needs. Between them, whichever site can see the problem is the one that fixes
-   * it, so no kind of left-hand side needs to be exempted from the gate here.
+   * it.
    *
    * <p>The resolved type is preferred when there is one, but the left-hand side is sometimes known
    * only by name -- a lambda's result type, for instance, is derived from the lambda's target type
@@ -4363,9 +4359,9 @@ public class UnsolvedSymbolGenerator {
    *
    * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
    * @param lhsTypes the type(s) of the left-hand side
-   * @param conflicting whether what the method currently returns is a type the left-hand side
-   *     rejects. Only a resolved primitive, array, enum, record, annotation type or type variable
-   *     consults this; see above.
+   * @param conflicting whether the assignment context may confilct with the existing type of the
+   *     left-hand side. Only a resolved primitive, array, enum, record, annotation type or type
+   *     variable consults this; see above.
    * @return true if no generated class could be made a subtype of the left-hand side
    */
   private boolean isNonExtendableType(
@@ -4406,7 +4402,7 @@ public class UnsolvedSymbolGenerator {
           && ((ClassOrInterfaceDeclaration) decl.toAst().get()).isFinal();
     }
 
-    // No candidates says nothing either way, so do not let the loops below pass vacuously.
+    // "No candidates" says nothing either way, so do not let the loops below pass vacuously.
     if (lhsTypes.isEmpty()) {
       return false;
     }
@@ -4437,7 +4433,7 @@ public class UnsolvedSymbolGenerator {
    * @param getResolvedTypeOfLHS A supplier for the resolved type of the LHS. Typically a call to
    *     resolve() or calculateResolvedType().
    */
-  private void handleLHSAndRHSRelationship(
+  private void makeLHSSupertypeOfRHS(
       Set<MemberType> lhsTypes,
       Set<MemberType> rhsTypes,
       Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS) {
@@ -4534,7 +4530,7 @@ public class UnsolvedSymbolGenerator {
                   "Null member type wildcard bound when resolved wildcard bound is not null");
             }
 
-            handleLHSAndRHSRelationship(Set.of(memberTypeBound), rhsTypeParameters, () -> bound);
+            makeLHSSupertypeOfRHS(Set.of(memberTypeBound), rhsTypeParameters, () -> bound);
           } else {
             // If the LHS were unsolved, we would make it extend every single class in the RHS; but
             // since the LHS is solved, we can't do this
@@ -4617,10 +4613,10 @@ public class UnsolvedSymbolGenerator {
           // ? extends with ? extends; there is no ? extends with ? super
           if (isUpperBound) {
             // Foo<? extends Bound> = Foo<A> tells us that A is a subtype of Bound.
-            handleLHSAndRHSRelationship(Set.of(bound), rhsTypeParameters, () -> null);
+            makeLHSSupertypeOfRHS(Set.of(bound), rhsTypeParameters, () -> null);
           } else {
             // Foo<? super Bound> = Foo<A> tells us that Bound is a subtype of A.
-            handleLHSAndRHSRelationship(rhsTypeParameters, Set.of(bound), () -> null);
+            makeLHSSupertypeOfRHS(rhsTypeParameters, Set.of(bound), () -> null);
           }
         } else {
           for (MemberType rhsType : rhsTypes) {
