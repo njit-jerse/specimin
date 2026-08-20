@@ -299,9 +299,14 @@ public class UnsolvedClassOrInterfaceAlternates
    *       declaration. A class declaration is not in the scope of any method's type parameters, so
    *       naming one here cannot compile. This is a heuristic, because it might also reject names
    *       in the default package.
-   *   <li>A final JDK class, which nothing is permitted to extend.
+   *   <li>A type no declaration can extend: a primitive, an array type, or a final JDK class.
    *   <li>{@code java.lang.Object}, which every class already extends implicitly.
    * </ul>
+   *
+   * <p>The non-extendable test is based on the name and the JDK alone. An enum, record or final
+   * class declared in the project under analysis is also unextendable but is not recognized here,
+   * because that needs the compilation units, which this class does not have; callers that do have
+   * them are expected to have checked already.
    *
    * <p>Dropping a supertype only leaves the generated class less constrained, which is always safe,
    * whereas naming either of the former two is never safe. This is intended as a defensive
@@ -317,7 +322,8 @@ public class UnsolvedClassOrInterfaceAlternates
 
     return superType.equals(SolvedMemberType.JAVA_LANG_OBJECT)
         || SpeciminGenerationUtils.isATypeVariable(superType)
-        || superType.getFullyQualifiedNames().stream().anyMatch(JavaLangUtils::isFinalJdkClass);
+        || superType.getFullyQualifiedNames().stream()
+            .anyMatch(JavaLangUtils::isNonExtendableJdkTypeName);
   }
 
   /**

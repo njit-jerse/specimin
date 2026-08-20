@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
@@ -1956,16 +1957,28 @@ public class JavaParserUtil {
   }
 
   /**
+   * Is this declaration sealed, so that only the types its {@code permits} clause names may extend
+   * or implement it (JLS 8.1.1.2 for classes, 9.1.1.4 for interfaces)?
+   *
+   * @param decl a type declaration
+   * @return true if the declaration is sealed
+   */
+  public static boolean isSealed(TypeDeclaration<?> decl) {
+    return decl.hasModifier(Modifier.Keyword.SEALED);
+  }
+
+  /**
    * Can no generated class be made a subtype of the type with this name? Callers that are about to
    * name a type as the supertype of a synthetic class, or that need to know whether a synthetic
    * placeholder type could stand in for it, should ask this first.
    *
    * <p>Beyond the JDK and primitive cases that {@link JavaLangUtils#isNonExtendableJdkTypeName}
    * settles, a declaration in the project qualifies when it is a final class, an enum (implicitly
-   * final unless a constant has a class body, JLS 8.9), a record (implicitly final, JLS 8.10), or
-   * an annotation type. A non-final class or an interface can take a generated subtype, and so does
-   * not qualify; neither does a name Specimin will synthesize a type for, since Specimin writes
-   * that declaration itself and does not make it final.
+   * final unless a constant has a class body, JLS 8.9), a record (implicitly final, JLS 8.10), an
+   * annotation type, or {@linkplain #isSealed sealed}. A non-final, non-sealed class or interface
+   * can take a generated subtype, and so does not qualify; neither does a name Specimin will
+   * synthesize a type for, since Specimin writes that declaration itself and does not make it
+   * final.
    *
    * @param fqn a fully-qualified name
    * @param fqnToCompilationUnits A map of fully-qualified type names to their compilation units
@@ -1986,7 +1999,8 @@ public class JavaParserUtil {
     TypeDeclaration<?> decl = getTypeFromQualifiedName(fqn, fqnToCompilationUnits);
 
     if (decl instanceof ClassOrInterfaceDeclaration classOrInterface) {
-      return !classOrInterface.isInterface() && classOrInterface.isFinal();
+      return isSealed(classOrInterface)
+          || (!classOrInterface.isInterface() && classOrInterface.isFinal());
     }
 
     // An enum, record, or annotation declaration in the project; none can be extended. Null means

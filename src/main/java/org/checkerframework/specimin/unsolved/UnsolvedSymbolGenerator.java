@@ -76,7 +76,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
 import org.checkerframework.checker.nullness.qual.EnsuresNonNullIf;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
@@ -2875,13 +2874,15 @@ public class UnsolvedSymbolGenerator {
         return UnsolvedGenerationResult.EMPTY;
       }
 
-      makeSyntheticTypeASubtypeOfExpressionType(type, instanceOf.getExpression(), "instanceof");
+      toRemove.addAll(
+          makeSyntheticTypeASubtypeOfExpressionType(
+              type, instanceOf.getExpression(), "instanceof"));
     } else if (node instanceof CastExpr castExpr
         && !castExpr.getExpression().isLambdaExpr()
         && !castExpr.getExpression().isMethodReferenceExpr()) {
-      // A cast (T) e compiles only if a cast between e's type and T would be accepted, which is
-      // exactly the condition JLS 15.20.2 (quoted above) imposes on instanceof. A synthetic T is
-      // therefore handled the same way here as it is there.
+      // A cast (T) e compiles only if casting conversion accepts e's type to T (JLS 15.16, 5.5),
+      // which is exactly the condition JLS 15.20.2 (quoted above) carries over to instanceof. A
+      // synthetic T is therefore handled the same way here as it is there.
       //
       // Constraining e's type to make the cast legal would be wrong, because it would also degrade
       // the type inferred for e at its other use sites. Since Specimin chooses what T is, it can
@@ -2898,7 +2899,8 @@ public class UnsolvedSymbolGenerator {
         return UnsolvedGenerationResult.EMPTY;
       }
 
-      makeSyntheticTypeASubtypeOfExpressionType(type, castExpr.getExpression(), "cast");
+      toRemove.addAll(
+          makeSyntheticTypeASubtypeOfExpressionType(type, castExpr.getExpression(), "cast"));
     }
 
     // This condition checks to see if the return type of a synthetic method definition
@@ -3062,35 +3064,32 @@ public class UnsolvedSymbolGenerator {
           throw new RuntimeException("Type has not been generated for the RHS of " + node);
         }
 
+        // Could this site's target type reject what the method currently returns? See
+        // isNonExtendableType, which uses this to decide when to fall back to an unconstrained
+        // type variable to satisfy all use sites.
+        boolean returnTypeCanConflictWithLHS = !lhsType.containsAll(rhsType);
+
         boolean handledAsNonExtendable = false;
         if (methodWithPotentiallyUnconstrainedReturnType != null
-            && isNonExtendableType(getResolvedTypeOfLHS.get(), lhsType)) {
-          Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
-          for (MemberType returnType :
-              methodWithPotentiallyUnconstrainedReturnType.getReturnTypes()) {
-            if (returnType instanceof UnsolvedMemberType unsolvedReturnType
-                && unsolvedReturnType.usesGeneratedName()) {
-              // Check to see if it is unused everywhere (no methods or fields)
-              if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
-                symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
-              }
-            }
-          }
-
-          methodWithPotentiallyUnconstrainedReturnType.setUnconstrainedReturnType();
-          for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
-            removeTypeAndReplaceUses(
-                new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
-                new SolvedMemberType("java.lang.Object"));
-          }
-
-          toRemove.addAll(symbolsToRemove);
+            && isNonExtendableType(
+                getResolvedTypeOfLHS.get(), lhsType, returnTypeCanConflictWithLHS)) {
+          toRemove.addAll(useUnconstrainedReturnType(methodWithPotentiallyUnconstrainedReturnType));
 
           handledAsNonExtendable = true;
         }
 
         if (!handledAsNonExtendable) {
-          handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+          // This test checks for conflicts that making the LHS a supertype of the RHS cannot
+          // repair, because every candidate return type already exists and so there is no generated
+          // type to give a supertype to. An unconstrained return type is used instead.
+          if (methodWithPotentiallyUnconstrainedReturnType != null
+              && returnTypeCanConflictWithLHS
+              && rhsType.stream().allMatch(type -> type instanceof SolvedMemberType)) {
+            toRemove.addAll(
+                useUnconstrainedReturnType(methodWithPotentiallyUnconstrainedReturnType));
+          } else {
+            makeLHSSupertypeOfRHS(lhsType, rhsType, getResolvedTypeOfLHS);
+          }
         }
       }
     } else if (node instanceof MethodCallExpr
@@ -3181,7 +3180,7 @@ public class UnsolvedSymbolGenerator {
                 "Type has not been generated for the LHS of parameter " + i + " of " + node);
           }
 
-          handleLHSAndRHSRelationship(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
+          makeLHSSupertypeOfRHS(Set.of(lhsType), rhsType, getResolvedTypeOfLHS);
         }
       } else {
         List<? extends NodeWithParameters<?>> withUnresolvableArgs =
@@ -3290,7 +3289,7 @@ public class UnsolvedSymbolGenerator {
                   "Type has not been generated for the LHS of parameter " + i + " of " + node);
             }
 
-            handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+            makeLHSSupertypeOfRHS(lhsType, rhsType, getResolvedTypeOfLHS);
           }
         } else {
           for (int i = 0; i < nodeWithArgs.getArguments().size(); i++) {
@@ -3340,7 +3339,7 @@ public class UnsolvedSymbolGenerator {
                   "Type has not been generated for the LHS of parameter " + i + " of " + node);
             }
 
-            handleLHSAndRHSRelationship(lhsType, rhsType, getResolvedTypeOfLHS);
+            makeLHSSupertypeOfRHS(lhsType, rhsType, getResolvedTypeOfLHS);
           }
         }
       }
@@ -3458,20 +3457,57 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Replaces a generated method's return type with an unconstrained type variable, for use when
+   * some requirement on the result of a call to that method cannot be met by any type Specimin
+   * could generate. A type variable can be instantiated separately at every call site, so it meets
+   * every such requirement at once, at the cost of saying nothing about the result.
+   *
+   * <p>A placeholder return type that this leaves with no remaining use is deleted rather than
+   * emitted as an unreferenced file.
+   *
+   * @param method the generated method whose return type cannot serve some use of its result
+   * @return the placeholder types that are no longer needed, for the caller to drop from the slice
+   */
+  private List<UnsolvedSymbolAlternates<?>> useUnconstrainedReturnType(
+      UnsolvedMethodAlternates method) {
+    Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
+    for (MemberType returnType : method.getReturnTypes()) {
+      if (returnType instanceof UnsolvedMemberType unsolvedReturnType
+          && unsolvedReturnType.usesGeneratedName()) {
+        // Check to see if it is unused everywhere (no methods or fields)
+        if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
+          symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
+        }
+      }
+    }
+
+    method.setUnconstrainedReturnType();
+    for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
+      removeTypeAndReplaceUses(
+          new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
+          new SolvedMemberType("java.lang.Object"));
+    }
+
+    return new ArrayList<>(symbolsToRemove);
+  }
+
+  /**
    * Records that a synthetic type must be a subtype of the type of the given expression.
    *
    * <p>Shared by the {@code instanceof} and cast cases of {@link #addInformation}, which impose the
-   * same requirement for the same reason: JLS 15.20.2 gives {@code x instanceof T} and {@code (T)
-   * x} the same legality condition. When {@code T} is synthetic, Specimin chooses its supertypes,
-   * so it can satisfy that condition without constraining {@code x}'s type.
+   * same requirement for the same reason: the cast must be accepted by casting conversion (JLS
+   * 5.5), and JLS 15.20.2 gives {@code x instanceof T} that same legality condition. When {@code T}
+   * is synthetic, Specimin chooses its supertypes, so it can satisfy the condition without
+   * constraining {@code x}'s type.
    *
    * @param syntheticType the type named by the instanceof or the cast. Must not be resolvable; the
    *     caller is responsible for checking that, since a type that already exists has supertypes
    *     Specimin does not get to choose.
    * @param operand the operand of the instanceof or the cast
    * @param kind how to describe the construct in error messages, e.g. "cast"
+   * @return the placeholder types that are no longer needed, for the caller to drop from the slice
    */
-  private void makeSyntheticTypeASubtypeOfExpressionType(
+  private List<UnsolvedSymbolAlternates<?>> makeSyntheticTypeASubtypeOfExpressionType(
       Type syntheticType, Expression operand, String kind) {
     Set<MemberType> operandTypes =
         getMemberTypesAndExpectNonNullFromFQNSets(
@@ -3484,26 +3520,45 @@ public class UnsolvedSymbolGenerator {
       // nothing to make the synthetic type a subtype of, and nothing needs to be: the type
       // variable is instantiated to the synthetic type at this site, which makes the cast or
       // instanceof legal on its own.
-      return;
+      return List.of();
     }
 
-    // Nothing can be made a subtype of a final class. Note that these are the types Specimin
-    // inferred for the operand, which may be an over-approximation of its real type, so this is
-    // worth checking even though a cast or instanceof naming a synthetic supertype of a final
-    // class could not appear in a program that compiles. Dropping the supertype leaves the
-    // synthetic type unconstrained, which is no worse than not having tried; adding it would emit
-    // a class that extends a final class, which cannot compile in any context.
+    // Nothing can be made a subtype of a final class, or of any other non-extendable type. Note
+    // that these are the types Specimin inferred for the operand, which may be an
+    // over-approximation of its real type, so this is worth checking even though a cast or
+    // instanceof naming a synthetic supertype of such a type could not appear in a program that
+    // compiles. Adding the supertype would emit a class that extends a final class or a
+    // primitive, which cannot compile in any context.
     Set<MemberType> extendableOperandTypes =
         operandTypes.stream()
             .filter(
                 operandType ->
                     !(operandType instanceof SolvedMemberType)
                         || operandType.getFullyQualifiedNames().stream()
-                            .noneMatch(JavaLangUtils::isFinalJdkClass))
+                            .noneMatch(
+                                fqn ->
+                                    JavaParserUtil.isNonExtendableTypeName(
+                                        fqn, fqnsToCompilationUnits)))
             .collect(Collectors.toCollection(LinkedHashSet::new));
 
     if (extendableOperandTypes.isEmpty()) {
-      return;
+      // The requirement cannot be met by making the synthetic type a subtype, so it has to be met
+      // on the other side: if the operand is a call to a generated method, that method's return
+      // type is the thing standing in the way, and an unconstrained one accommodates this site
+      // along with every other. Repairing it here rather than leaving the requirement dropped is
+      // what makes the outcome independent of the order these sites are visited in -- the site
+      // that assigns the result elsewhere may already have been visited, and would then see a
+      // return type that satisfies it and no reason to act.
+      if (operand.isMethodCallExpr()) {
+        UnsolvedMethodAlternates generatedMethod =
+            findGeneratedMethodFromMethodCall(operand.asMethodCallExpr());
+
+        if (generatedMethod != null) {
+          return useUnconstrainedReturnType(generatedMethod);
+        }
+      }
+
+      return List.of();
     }
 
     UnsolvedClassOrInterfaceAlternates unsolvedSyntheticType =
@@ -3518,6 +3573,8 @@ public class UnsolvedSymbolGenerator {
               + syntheticType);
     }
     unsolvedSyntheticType.addSuperType(extendableOperandTypes);
+
+    return List.of();
   }
 
   /**
@@ -4268,8 +4325,26 @@ public class UnsolvedSymbolGenerator {
    * <p>Final classes are the obvious case, but they are not the only one. A primitive and an array
    * type have no declarable subtypes at all; an enum is implicitly final unless it has constant
    * bodies, none of which a generated class could be (JLS 8.9); a record is implicitly final (JLS
-   * 8.10); and an annotation type cannot be extended. Only a non-final class or an interface can
-   * take a generated subtype.
+   * 8.10); an annotation type cannot be extended; a sealed class or interface admits only the
+   * subtypes its {@code permits} clause names, which a synthetic type never is; and a type variable
+   * may not be named as a superclass or superinterface (JLS 8.1.4, 8.1.5). Only a non-final,
+   * non-sealed class or interface can take a generated subtype.
+   *
+   * <p>Every one of those kinds is reported only when {@code mayConflict} says the method's current
+   * return type may be one the left-hand side rejects. A non-extendable left-hand side is not on
+   * its own a reason to weaken a return type: for {@code int x = item.get();}, {@code int} is the
+   * right return type for {@code get}. It is only when there is a second, incompatible use site
+   * that an unconstrained type variable is required; {@code mayConflict} should be {@code true}
+   * whenever there might be a second, incompatible use site.
+   *
+   * <p>A conflict is not always visible from the site that can act on it -- given {@code Payload p
+   * = item.get(); String s = item.get();} the return type settles on {@code String}, and the {@code
+   * String} assignment sees nothing wrong -- so {@code addInformation} also falls back when a site
+   * sees a conflict it cannot repair by adding a supertype, and {@link
+   * #makeSyntheticTypeASubtypeOfExpressionType} does the same when a cast or instanceof cannot get
+   * the subtype it needs. Between them, whichever site can see the problem is the one that fixes
+   * it. All of these sites are needed for soundness: removing any one of them would lead to
+   * non-compilable output.
    *
    * <p>The resolved type is preferred when there is one, but the left-hand side is sometimes known
    * only by name -- a lambda's result type, for instance, is derived from the lambda's target type
@@ -4286,11 +4361,22 @@ public class UnsolvedSymbolGenerator {
    *
    * @param resolvedLHSType the resolved type of the left-hand side, or null if it is not resolvable
    * @param lhsTypes the type(s) of the left-hand side
+   * @param mayConflict whether the assignment context may conflict with the existing type of the
+   *     right-hand side. Only a resolved LHS type consults this; the name-keyed path ignores it.
    * @return true if no generated class could be made a subtype of the left-hand side
    */
   private boolean isNonExtendableType(
-      @Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes) {
+      @Nullable ResolvedType resolvedLHSType, Set<MemberType> lhsTypes, boolean mayConflict) {
     if (resolvedLHSType != null) {
+      // None of these is a reference type, so none of them reaches the declaration-keyed tests
+      // below. A type variable is included because a class declaration may not name one as a
+      // superclass or superinterface (JLS 8.1.4, 8.1.5).
+      if (resolvedLHSType.isPrimitive()
+          || resolvedLHSType.isArray()
+          || resolvedLHSType.isTypeVariable()) {
+        return mayConflict;
+      }
+
       if (!resolvedLHSType.isReferenceType()
           || resolvedLHSType.asReferenceType().getTypeDeclaration().isEmpty()) {
         return false;
@@ -4300,19 +4386,30 @@ public class UnsolvedSymbolGenerator {
       ResolvedReferenceTypeDeclaration decl =
           resolvedLHSType.asReferenceType().getTypeDeclaration().get();
 
+      if (decl.isEnum() || decl.isRecord() || decl.isAnnotation()) {
+        return mayConflict;
+      }
+
+      // Checked before isClass() because sealed interface also cannot have synthetic subtypes.
+      if (decl.toAst().orElse(null) instanceof TypeDeclaration<?> ast
+          && JavaParserUtil.isSealed(ast)) {
+        return mayConflict;
+      }
+
       if (!decl.isClass()) {
         return false;
       }
 
       if (JavaLangUtils.isFinalJdkClass(decl.getQualifiedName())) {
-        return true;
+        return mayConflict;
       }
 
-      return decl.toAst().isPresent()
+      return mayConflict
+          && decl.toAst().isPresent()
           && ((ClassOrInterfaceDeclaration) decl.toAst().get()).isFinal();
     }
 
-    // No candidates says nothing either way, so do not let the loops below pass vacuously.
+    // "No candidates" says nothing either way, so do not let the loops below pass vacuously.
     if (lhsTypes.isEmpty()) {
       return false;
     }
@@ -4335,15 +4432,15 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Handles the relationship between the LHS and RHS types by making the type of the LHS a
-   * supertype of the type of the RHS, if the type of the RHS is unsolved.
+   * Makes the type of the LHS (of some pseudo-assignment) a supertype of the type of the RHS, if
+   * the type of the RHS is unsolved.
    *
    * @param lhsTypes The type(s) of the LHS
    * @param rhsTypes The type(s) of the RHS
    * @param getResolvedTypeOfLHS A supplier for the resolved type of the LHS. Typically a call to
    *     resolve() or calculateResolvedType().
    */
-  private void handleLHSAndRHSRelationship(
+  private void makeLHSSupertypeOfRHS(
       Set<MemberType> lhsTypes,
       Set<MemberType> rhsTypes,
       Supplier<@Nullable ResolvedType> getResolvedTypeOfLHS) {
@@ -4440,7 +4537,7 @@ public class UnsolvedSymbolGenerator {
                   "Null member type wildcard bound when resolved wildcard bound is not null");
             }
 
-            handleLHSAndRHSRelationship(Set.of(memberTypeBound), rhsTypeParameters, () -> bound);
+            makeLHSSupertypeOfRHS(Set.of(memberTypeBound), rhsTypeParameters, () -> bound);
           } else {
             // If the LHS were unsolved, we would make it extend every single class in the RHS; but
             // since the LHS is solved, we can't do this
@@ -4523,10 +4620,10 @@ public class UnsolvedSymbolGenerator {
           // ? extends with ? extends; there is no ? extends with ? super
           if (isUpperBound) {
             // Foo<? extends Bound> = Foo<A> tells us that A is a subtype of Bound.
-            handleLHSAndRHSRelationship(Set.of(bound), rhsTypeParameters, () -> null);
+            makeLHSSupertypeOfRHS(Set.of(bound), rhsTypeParameters, () -> null);
           } else {
             // Foo<? super Bound> = Foo<A> tells us that Bound is a subtype of A.
-            handleLHSAndRHSRelationship(rhsTypeParameters, Set.of(bound), () -> null);
+            makeLHSSupertypeOfRHS(rhsTypeParameters, Set.of(bound), () -> null);
           }
         } else {
           for (MemberType rhsType : rhsTypes) {
