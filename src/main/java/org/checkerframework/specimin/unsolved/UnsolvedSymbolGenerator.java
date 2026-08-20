@@ -3161,7 +3161,7 @@ public class UnsolvedSymbolGenerator {
             // implicit methods also cannot reach this branch, since their parameter types always
             // resolve.
             if (!(asAst instanceof NodeWithParameters<?> calleeWithParams)) {
-              throw new RuntimeException("asAst must be a callable, but was: " + asAst);
+              throw new RuntimeException("asAst must be a callable, but was: " + asAst, ex);
             }
 
             Type type = calleeWithParams.getParameter(i).getType();
