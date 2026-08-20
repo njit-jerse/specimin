@@ -478,8 +478,9 @@ public class JavaParserUtil {
     if (resolved instanceof ResolvedValueDeclaration valueDecl) {
       return getTypeFromResolvedValueDeclaration(valueDecl, fqnToCompilationUnits);
     } else if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDecl) {
-      if (resolvedMethodDecl.toAst().isPresent()) {
-        NodeWithType<?, ?> methodDecl = (NodeWithType<?, ?>) resolvedMethodDecl.toAst().get();
+      // This instanceof test is a workaround for a JavaParser bug: an enum's implicit values()
+      // and valueOf(String) report the enum declaration as their AST, which is not a NodeWithType.
+      if (resolvedMethodDecl.toAst().orElse(null) instanceof NodeWithType<?, ?> methodDecl) {
         return methodDecl.getType();
       }
     }
@@ -1623,10 +1624,11 @@ public class JavaParserUtil {
         classOrInterfaceType = type.asClassOrInterfaceType();
       }
     } else if (resolved instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
-      MethodDeclaration method =
-          (MethodDeclaration) tryFindAttachedNode(resolvedMethodDeclaration, fqnToCompilationUnits);
-
-      if (method != null) {
+      // Instanceof is needed to work around a JavaParser bug: if the method were to be an
+      // implicitly-declared enum method (values or valueOf), JavaParser would return an AST
+      // node representing the enum itself, rather than a MethodDeclaration.
+      if (tryFindAttachedNode(resolvedMethodDeclaration, fqnToCompilationUnits)
+          instanceof MethodDeclaration method) {
         Type type = method.getType();
         if (type != null && type.isClassOrInterfaceType()) {
           classOrInterfaceType = type.asClassOrInterfaceType();
