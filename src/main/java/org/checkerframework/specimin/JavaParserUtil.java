@@ -247,6 +247,22 @@ public class JavaParserUtil {
   }
 
   /**
+   * Wrapper for {@link #getEnclosingClassLike(Node)} that returns the input node if it itself is
+   * class-like. Use this instead of {@link #getEnclosingClassLike(Node)} when the input node might
+   * be an enum's implicit {@code values} or {@code valueOf} method, because JavaParser represents
+   * those with the enum itself's AST node.
+   *
+   * @param node a class-like node, or a node contained in a class-like structure
+   * @return the node itself if it is class-like, otherwise its nearest enclosing class-like node
+   */
+  public static TypeDeclaration<?> getClassLikeOrEnclosing(Node node) {
+    if (node instanceof TypeDeclaration<?> typeDecl) {
+      return typeDecl;
+    }
+    return getEnclosingClassLike(node);
+  }
+
+  /**
    * Gets the super class of a node. If one does not exist, this method will throw.
    *
    * @param node The node to find the super class of
@@ -2046,7 +2062,10 @@ public class JavaParserUtil {
       return null;
     }
 
-    TypeDeclaration<?> declaration = getEnclosingClassLike(detachedNode);
+    // Not getEnclosingClassLike: a resolved declaration's AST is sometimes the type declaration
+    // itself rather than a member of one. JavaParser models an enum's implicitly declared values()
+    // and valueOf(String) (JLS 8.9.3) this way, since neither has an AST node of its own.
+    TypeDeclaration<?> declaration = getClassLikeOrEnclosing(detachedNode);
 
     TypeDeclaration<?> attached =
         getTypeFromQualifiedName(
