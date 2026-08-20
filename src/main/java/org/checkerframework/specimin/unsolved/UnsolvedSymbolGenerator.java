@@ -3115,9 +3115,10 @@ public class UnsolvedSymbolGenerator {
       }
 
       if (resolved != null) {
-        NodeWithParameters<?> asAst =
-            (NodeWithParameters<?>)
-                JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
+        // Only narrowed where a callable is actually required: an enum's implicit values() and
+        // valueOf(String) have no method AST of their own, so this is sometimes the enum
+        // declaration, which has no parameters.
+        Node asAst = JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
 
         // If this call invokes a callable whose throws clause names a synthetic exception, and
         // that exception is not caught or declared in the enclosing context, then the exception
@@ -3157,13 +3158,15 @@ public class UnsolvedSymbolGenerator {
                   }
                 };
           } catch (UnsolvedSymbolException ex) {
-            if (asAst == null) {
-              // asAst cannot be null here: if the parameter type is unresolvable, then it must be
-              // in the project because JDK parameters will always be resolvable
-              throw new RuntimeException("asAst cannot be null");
+            // asAst is a callable here: if the parameter type is unresolvable, then it must be
+            // in the project, because JDK parameters will always be resolvable. An enum's
+            // implicit methods cannot reach this branch, since their parameter types always
+            // resolve.
+            if (!(asAst instanceof NodeWithParameters<?> calleeWithParams)) {
+              throw new RuntimeException("asAst must be a callable, but was: " + asAst);
             }
 
-            Type type = asAst.getParameter(i).getType();
+            Type type = calleeWithParams.getParameter(i).getType();
 
             lhsType =
                 getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(type), false);
@@ -3715,15 +3718,15 @@ public class UnsolvedSymbolGenerator {
   private void matchMethodReturnTypesToKnownChildClasses(MethodCallExpr methodCall) {
     Collection<Set<String>> potentialScopeFQNs = null;
     ResolvedMethodDeclaration resolvedMethod = Resolver.resolve(methodCall);
-    NodeWithType<?, ?> ast = null;
+    // Only ever used as a Node: an enum's implicit values() and valueOf(String) have no method AST
+    // of their own, so this is sometimes the enum declaration, which is not a NodeWithType.
+    Node ast = null;
 
     if (resolvedMethod == null) {
       potentialScopeFQNs = fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
     } else {
       // Potential scope is all unsolvable ancestors
-      ast =
-          (NodeWithType<?, ?>)
-              JavaParserUtil.tryFindAttachedNode(resolvedMethod, fqnsToCompilationUnits);
+      ast = JavaParserUtil.tryFindAttachedNode(resolvedMethod, fqnsToCompilationUnits);
       if (ast == null) {
         return;
       }
@@ -3732,7 +3735,7 @@ public class UnsolvedSymbolGenerator {
     if (ast != null) {
       List<ClassOrInterfaceType> unsolvableAncestors =
           JavaParserUtil.getAllUnsolvableAncestors(
-              JavaParserUtil.getEnclosingClassLike((Node) ast), fqnsToCompilationUnits);
+              JavaParserUtil.getClassLikeOrEnclosing(ast), fqnsToCompilationUnits);
 
       if (unsolvableAncestors.isEmpty()) {
         return;
