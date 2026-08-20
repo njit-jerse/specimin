@@ -3115,9 +3115,7 @@ public class UnsolvedSymbolGenerator {
       }
 
       if (resolved != null) {
-        // Only narrowed where a callable is actually required: an enum's implicit values() and
-        // valueOf(String) have no method AST of their own, so this is sometimes the enum
-        // declaration, which has no parameters.
+
         Node asAst = JavaParserUtil.tryFindAttachedNode(resolved, fqnsToCompilationUnits);
 
         // If this call invokes a callable whose throws clause names a synthetic exception, and
@@ -3160,7 +3158,7 @@ public class UnsolvedSymbolGenerator {
           } catch (UnsolvedSymbolException ex) {
             // asAst is a callable here: if the parameter type is unresolvable, then it must be
             // in the project, because JDK parameters will always be resolvable. An enum's
-            // implicit methods cannot reach this branch, since their parameter types always
+            // implicit methods also cannot reach this branch, since their parameter types always
             // resolve.
             if (!(asAst instanceof NodeWithParameters<?> calleeWithParams)) {
               throw new RuntimeException("asAst must be a callable, but was: " + asAst);
@@ -3718,8 +3716,6 @@ public class UnsolvedSymbolGenerator {
   private void matchMethodReturnTypesToKnownChildClasses(MethodCallExpr methodCall) {
     Collection<Set<String>> potentialScopeFQNs = null;
     ResolvedMethodDeclaration resolvedMethod = Resolver.resolve(methodCall);
-    // Only ever used as a Node: an enum's implicit values() and valueOf(String) have no method AST
-    // of their own, so this is sometimes the enum declaration, which is not a NodeWithType.
     Node ast = null;
 
     if (resolvedMethod == null) {
