@@ -10,8 +10,10 @@ import org.junit.jupiter.api.Test;
  * so an unconstrained type variable is again the only return type that satisfies both assignments.
  *
  * <p>The target method's {@code U} is not in scope in the generated {@code Item}, so the generated
- * method binds a type variable of its own; the name it gets is whichever one is free, which is why
- * the expected output says {@code T1} rather than {@code T}.
+ * method binds a type variable of its own. The name it gets is incidental: it is whichever one is
+ * free when the unconstrained return type is installed, and here that is the caller's own {@code
+ * U}, reused as the name of the generated method's variable. {@code <U> U get()} and {@code <T1> T1
+ * get()} declare the same signature.
  */
 public class NonExtendableTargetTypeVariableTest {
   @Test

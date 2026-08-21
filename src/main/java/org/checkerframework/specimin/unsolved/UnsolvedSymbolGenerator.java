@@ -128,6 +128,14 @@ public class UnsolvedSymbolGenerator {
   private final Map<String, UnsolvedSymbolAlternates<?>> generatedSymbols = new HashMap<>();
 
   /**
+   * The bound each placeholder return type was interposed on by {@link #returnTypesForNewMethod},
+   * so that {@link #collapseMemberlessPlaceholderReturnTypes} can put the bound back if no use site
+   * ever needed the placeholder.
+   */
+  private final Map<UnsolvedClassOrInterfaceAlternates, MemberType> placeholderReturnTypeBounds =
+      new LinkedHashMap<>();
+
+  /**
    * Gets all generated symbols.
    *
    * @return The map of fqns to generated symbols.
@@ -1377,10 +1385,7 @@ public class UnsolvedSymbolGenerator {
                   fullyQualifiedNameGenerator.getFQNsFromType(
                       declarationInThisTypeWithSameSignature.getType())));
         } else {
-          for (FullyQualifiedNameSet fqns :
-              fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall)) {
-            returnTypes.add(getOrCreateMemberTypeFromFQNs(fqns));
-          }
+          returnTypes.addAll(returnTypesForNewMethod(methodCall));
         }
 
         generatedMethod =
@@ -3456,6 +3461,135 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Returns the type to give a synthetic method's return type when the method is first generated.
+   *
+   * <p>The type a use site's context asks for is an upper bound on the return type, not the return
+   * type: JLS 5.2 requires only that the result be assignable to it. Adopting it as the return type
+   * throws away the difference, and with it any requirement a use site elsewhere places on the
+   * result, such as a member read off the result (which might come from a different subtype).
+   * Which use site is generated first would then decide the output. So when the context is the only
+   * thing that knows a type, and the bound is a type Specimin cannot add members to, this returns
+   * the placeholder the method would get with no context at all, leaving every use site free to say
+   * what it needs of the result.
+   *
+   * <p>The bound is not thereby lost: it is remembered here, {@link #addInformation} records it as
+   * the placeholder's supertype along with whatever other use sites require, and {@link
+   * #collapseMemberlessPlaceholderReturnTypes} puts it back directly if nothing else does. That
+   * same pass collapses a placeholder no use site ever puts a member on, so this costs no
+   * minimality when the extra precision goes unused.
+   *
+   * @param methodCall the call to the method being generated
+   * @return the return type(s) to give it
+   */
+  private Set<MemberType> returnTypesForNewMethod(MethodCallExpr methodCall) {
+    Set<FullyQualifiedNameSet> withContext =
+        fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall);
+
+    FullyQualifiedNameSet placeholderFQNs = placeholderToInterposeOn(methodCall, withContext);
+
+    if (placeholderFQNs == null) {
+      return withContext.stream()
+          .map(this::getOrCreateMemberTypeFromFQNs)
+          .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    MemberType placeholder = getOrCreateMemberTypeFromFQNs(placeholderFQNs);
+    MemberType bound = getOrCreateMemberTypeFromFQNs(withContext.iterator().next());
+
+    if (placeholder instanceof UnsolvedMemberType unsolvedPlaceholder) {
+      // Only remembered, not installed as a supertype here. Installing it would lock in the bound
+      // from whichever use site happened to be generated first, and block the more specific bound a
+      // later site may impose.
+      // Supertypes are merged by addInformation once every site has been seen.
+      placeholderReturnTypeBounds.put(unsolvedPlaceholder.getUnsolvedType(), bound);
+    }
+
+    Set<MemberType> returnTypes = new LinkedHashSet<>();
+    returnTypes.add(placeholder);
+    return returnTypes;
+  }
+
+  /**
+   * Decides whether a synthetic method being generated should be given a placeholder return type
+   * standing in front of the bound its use site's context imposes, and returns that placeholder.
+   *
+   * @param methodCall the call to the method being generated
+   * @param withContext the type the method call reports, with surrounding context consulted
+   * @return the FQNs of the placeholder to use as the return type, or null to adopt {@code
+   *     withContext} directly
+   */
+  private @Nullable FullyQualifiedNameSet placeholderToInterposeOn(
+      MethodCallExpr methodCall, Set<FullyQualifiedNameSet> withContext) {
+    // More than one candidate bound means Specimin does not know which type the result must be
+    // assignable to, so there is no single supertype to give a placeholder.
+    if (withContext.size() != 1 || !needsAPlaceholderInFrontOfIt(withContext.iterator().next())) {
+      return null;
+    }
+
+    boolean before = fullyQualifiedNameGenerator.getShouldUseSurroundingContextType();
+    fullyQualifiedNameGenerator.setShouldUseSurroundingContextType(false);
+    Set<FullyQualifiedNameSet> withoutContext;
+    try {
+      withoutContext = fullyQualifiedNameGenerator.getFQNsForExpressionType(methodCall);
+    } finally {
+      fullyQualifiedNameGenerator.setShouldUseSurroundingContextType(before);
+    }
+
+    // Only a placeholder is a stand-in for "not known yet". Anything else that survives without the
+    // context is a real answer, and is no less real than what the context asked for.
+    if (withoutContext.size() != 1 || !withoutContext.iterator().next().usesGeneratedName()) {
+      return null;
+    }
+
+    return withoutContext.iterator().next();
+  }
+
+  /**
+   * Returns whether a bound a use site imposes on a synthetic method's return type has to be
+   * carried by a placeholder subtype rather than adopted as the return type.
+   *
+   * @param fqns the FQNs of the bound
+   * @return true if a placeholder must stand in front of this bound
+   */
+  private boolean needsAPlaceholderInFrontOfIt(FullyQualifiedNameSet fqns) {
+    // If the type is definitely synthetic, Specimin can edit it directly, so no placeholder is needed.
+    if (!doesOverlapWithKnownType(fqns.erasedFqns())) {
+      return false;
+    }
+
+    return isExtendableBound(fqns);
+  }
+
+  /**
+   * Returns whether a type Specimin could infer for an expression is one that a synthetic type may
+   * be made a subtype of without losing anything the type says.
+   *
+   * <p>A type that fails this test is not merely a bound on the expression's type: nothing else is
+   * assignable to it, so it is the type, and a caller should adopt it rather than stand a
+   * placeholder in front of it.
+   *
+   * @param fqns the FQNs of the inferred type
+   * @return true if a synthetic subtype of it could exist and would say everything it says
+   */
+  private boolean isExtendableBound(FullyQualifiedNameSet fqns) {
+    // A wildcard cannot be named in an extends clause, so a placeholder standing in for one could
+    // only record the sanitized form of it as its supertype, silently widening `Baz<?>` to
+    // `Baz<Object>`. The same goes for a wildcard nested in a type argument.
+    if (fqns.wildcard() != null
+        || fqns.typeArguments().stream().anyMatch(arg -> !isExtendableBound(arg))) {
+      return false;
+    }
+
+    // `class X extends T` is not legal for a type variable T (JLS 8.1.4 requires a class type).
+    if (SpeciminGenerationUtils.isATypeVariable(fqns)) {
+      return false;
+    }
+
+    return fqns.erasedFqns().stream()
+        .noneMatch(fqn -> JavaParserUtil.isNonExtendableTypeName(fqn, fqnsToCompilationUnits));
+  }
+
+  /**
    * Replaces a generated method's return type with an unconstrained type variable, for use when
    * some requirement on the result of a call to that method cannot be met by any type Specimin
    * could generate. A type variable can be instantiated separately at every call site, so it meets
@@ -3469,25 +3603,127 @@ public class UnsolvedSymbolGenerator {
    */
   private List<UnsolvedSymbolAlternates<?>> useUnconstrainedReturnType(
       UnsolvedMethodAlternates method) {
-    Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove = new HashSet<>();
-    for (MemberType returnType : method.getReturnTypes()) {
-      if (returnType instanceof UnsolvedMemberType unsolvedReturnType
-          && unsolvedReturnType.usesGeneratedName()) {
-        // Check to see if it is unused everywhere (no methods or fields)
-        if (findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
-          symbolsToRemove.add(unsolvedReturnType.getUnsolvedType());
-        }
-      }
-    }
+    Set<UnsolvedClassOrInterfaceAlternates> symbolsToRemove =
+        memberlessPlaceholderReturnTypes(method);
 
     method.setUnconstrainedReturnType();
     for (UnsolvedClassOrInterfaceAlternates symbolToRemove : symbolsToRemove) {
-      removeTypeAndReplaceUses(
-          new UnsolvedMemberType(symbolToRemove, 0, List.of(), false),
-          new SolvedMemberType("java.lang.Object"));
+      discardPlaceholder(symbolToRemove, SolvedMemberType.JAVA_LANG_OBJECT);
     }
 
     return new ArrayList<>(symbolsToRemove);
+  }
+
+  /**
+   * Returns the placeholder types among a generated method's return types that carry no members.
+   *
+   * <p>A placeholder exists to be the thing use sites hang requirements on. One that has collected
+   * none says nothing that its bound does not already say, so it is safe to discard; one that has
+   * collected a member is the only type in the slice that declares that member, and discarding it
+   * would drop the requirement that produced it. This is the question that separates a placeholder
+   * worth keeping from an inert one, and both {@link #useUnconstrainedReturnType} and {@link
+   * #collapseMemberlessPlaceholderReturnTypes} turn on it.
+   *
+   * @param method a generated method
+   * @return the placeholder return types of that method that declare no members
+   */
+  private Set<UnsolvedClassOrInterfaceAlternates> memberlessPlaceholderReturnTypes(
+      UnsolvedMethodAlternates method) {
+    Set<UnsolvedClassOrInterfaceAlternates> memberless = new LinkedHashSet<>();
+    for (MemberType returnType : method.getReturnTypes()) {
+      if (returnType instanceof UnsolvedMemberType unsolvedReturnType
+          && unsolvedReturnType.usesGeneratedName()
+          && findAllMembers(unsolvedReturnType.getUnsolvedType()).isEmpty()) {
+        memberless.add(unsolvedReturnType.getUnsolvedType());
+      }
+    }
+    return memberless;
+  }
+
+  /**
+   * Drops a placeholder type from the slice, rewriting everything that named it to name {@code
+   * replaceWith} instead.
+   *
+   * @param placeholder the placeholder type to discard
+   * @param replaceWith the type that takes its place at every site that named it
+   */
+  private void discardPlaceholder(
+      UnsolvedClassOrInterfaceAlternates placeholder, MemberType replaceWith) {
+    removeTypeAndReplaceUses(new UnsolvedMemberType(placeholder, 0, List.of(), false), replaceWith);
+  }
+
+  /**
+   * Replaces every synthetic return type that exists only to carry requirements, and never
+   * collected any, with the bound it was interposed on.
+   *
+   * <p>{@link #returnTypesForNewMethod} declines to adopt a use site's context type as a synthetic
+   * method's return type, because doing so would discard whatever a use site elsewhere needs of the
+   * result. That is only worth paying for when some use site actually needed something: when none
+   * did, the placeholder is an extra file in the output that says exactly what its bound says.
+   * Running after every use site has been seen is what makes this decidable, and is why it cannot
+   * be decided at generation time.
+   *
+   * <p>What a memberless placeholder collapses to is the supertype the use sites settled on, which
+   * may be narrower than the bound it was created for; the recorded bound is the fallback for when
+   * no use site recorded anything, which is what happens when the bound is {@code
+   * java.lang.Object}. A placeholder required to be a subtype of several types at once collapses to
+   * none of them, and falls back to an unconstrained return type instead.
+   *
+   * @return the placeholder types that are no longer needed, for the caller to drop from the slice
+   */
+  public List<UnsolvedSymbolAlternates<?>> collapseMemberlessPlaceholderReturnTypes() {
+    List<UnsolvedSymbolAlternates<?>> removed = new ArrayList<>();
+
+    for (UnsolvedSymbolAlternates<?> symbol : Set.copyOf(generatedSymbols.values())) {
+      if (!(symbol instanceof UnsolvedMethodAlternates method)) {
+        continue;
+      }
+
+      Set<UnsolvedClassOrInterfaceAlternates> memberless = memberlessPlaceholderReturnTypes(method);
+
+      for (MemberType returnType : Set.copyOf(method.getReturnTypes())) {
+        if (!(returnType instanceof UnsolvedMemberType unsolved)) {
+          continue;
+        }
+
+        UnsolvedClassOrInterfaceAlternates placeholder = unsolved.getUnsolvedType();
+        MemberType bound = placeholderReturnTypeBounds.get(placeholder);
+
+        // Only placeholders interposed by returnTypesForNewMethod are this pass's business.
+        if (bound == null) {
+          continue;
+        }
+
+        if (!memberless.contains(placeholder)) {
+          if (placeholder.getSuperTypeCount() == 0) {
+            // The placeholder carries a member, but no use site ended up recording what it must be
+            // assignable to. Putting the bound back is what keeps this from dropping the
+            // requirement that created the placeholder in the first place.
+            placeholder.addSuperType(Set.of(bound));
+          }
+          continue;
+        }
+
+        if (placeholder.getSuperTypeCount() > 1) {
+          // Use sites required this result to be a subtype of several types at once, and an empty
+          // placeholder cannot be all of them. A type variable can, since it is instantiated
+          // separately at each site.
+          removed.addAll(useUnconstrainedReturnType(method));
+          continue;
+        }
+
+        // Prefer what the use sites settled on over the bound this placeholder was created for: a
+        // later site may have narrowed it, and the narrower type satisfies the earlier site too.
+        MemberType soleSuperType = placeholder.getSoleSuperType();
+        MemberType replacement = soleSuperType != null ? soleSuperType : bound;
+
+        method.replaceReturnType(returnType, replacement);
+        discardPlaceholder(placeholder, replacement);
+        removed.add(placeholder);
+      }
+    }
+
+    return removed;
   }
 
   /**

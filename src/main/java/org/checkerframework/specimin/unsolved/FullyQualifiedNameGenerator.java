@@ -106,6 +106,9 @@ public class FullyQualifiedNameGenerator {
   /** Whether to check generated symbols when getting expression types. */
   private boolean shouldCheckGeneratedSymbols = true;
 
+  /** Whether an expression's surrounding context may supply its type. */
+  private boolean shouldUseSurroundingContextType = true;
+
   /**
    * Create a new instance. Needs a map of type FQNs to compilation units for symbol resolution.
    *
@@ -142,6 +145,30 @@ public class FullyQualifiedNameGenerator {
    */
   public boolean getShouldCheckGeneratedSymbols() {
     return shouldCheckGeneratedSymbols;
+  }
+
+  /**
+   * Sets whether an expression's surrounding context may supply its type. Default is true; ensure
+   * that this is set back to true after your operation is done if you set it to false.
+   *
+   * <p>A context type is an upper bound on the expression's type, not the type itself: JLS 5.2 asks
+   * only that the expression be assignable to it. Set this to false to ask what the expression's
+   * type is on its own, so that the bound can be recorded as a bound instead of being mistaken for
+   * the answer.
+   *
+   * @param shouldUseSurroundingContextType Whether surrounding context may supply expression types
+   */
+  public void setShouldUseSurroundingContextType(boolean shouldUseSurroundingContextType) {
+    this.shouldUseSurroundingContextType = shouldUseSurroundingContextType;
+  }
+
+  /**
+   * Returns whether an expression's surrounding context may supply its type.
+   *
+   * @return Whether this FullyQualifiedNameGenerator consults surrounding context
+   */
+  public boolean getShouldUseSurroundingContextType() {
+    return shouldUseSurroundingContextType;
   }
 
   /**
@@ -635,7 +662,7 @@ public class FullyQualifiedNameGenerator {
     }
 
     // Handle the cases where the type of the expression can be inferred from surrounding context
-    if (expr.hasParentNode()) {
+    if (shouldUseSurroundingContextType && expr.hasParentNode()) {
       @Nullable Set<FullyQualifiedNameSet> fromLHS = getFQNsFromSurroundingContextType(expr);
       if (fromLHS != null) {
         return fromLHS;

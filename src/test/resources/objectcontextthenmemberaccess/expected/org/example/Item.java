@@ -1,7 +1,7 @@
 package org.example;
 public class Item {
 
-    public <U> U get() {
+    public org.example.GetPayloadReturnType getPayload() {
         throw new java.lang.Error();
     }
 }

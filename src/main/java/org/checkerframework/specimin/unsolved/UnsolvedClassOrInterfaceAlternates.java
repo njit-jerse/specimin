@@ -865,6 +865,30 @@ public class UnsolvedClassOrInterfaceAlternates
   }
 
   /**
+   * Returns this type's single supertype, if it has exactly one. Useful to decide whether this type
+   * can be replaced by its supertype everywhere.
+   *
+   * @return the sole supertype of this type, or null if it does not have exactly one
+   */
+  public @Nullable MemberType getSoleSuperType() {
+    if (superTypeRelationships.size() != 1) {
+      return null;
+    }
+
+    Set<MemberType> onlySet = superTypeRelationships.keySet().iterator().next();
+    return onlySet.size() == 1 ? onlySet.iterator().next() : null;
+  }
+
+  /**
+   * Returns the number of distinct supertype constraints recorded for this type.
+   *
+   * @return how many separate supertypes this type has been required to have
+   */
+  public int getSuperTypeCount() {
+    return superTypeRelationships.size();
+  }
+
+  /**
    * Checks to see if the given superType is in any mutually exclusive set key of the
    * superTypeRelationships map.
    *
