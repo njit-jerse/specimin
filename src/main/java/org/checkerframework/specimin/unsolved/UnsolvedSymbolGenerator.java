@@ -954,9 +954,10 @@ public class UnsolvedSymbolGenerator {
       Node node =
           JavaParserUtil.tryFindAttachedNode(resolvedMethodDeclaration, fqnsToCompilationUnits);
 
-      if (node != null) {
-        NodeWithType<?, ?> toAst = (NodeWithType<?, ?>) node;
-
+      // Not every resolved method has a method AST: an enum's implicit values() and
+      // valueOf(String) (JLS 8.9.3) report the enum declaration, which has no type to infer from.
+      // Nothing is lost by skipping it, since their return types are the enum itself.
+      if (node instanceof NodeWithType<?, ?> toAst) {
         inferContextImpl(toAst.getType(), result);
       }
 
@@ -1876,11 +1877,8 @@ public class UnsolvedSymbolGenerator {
             JavaParserUtil.getMethodDeclarationsFromMethodRef(argument.asMethodReferenceExpr());
 
         for (ResolvedMethodLikeDeclaration method : resolved) {
-          NodeWithParameters<?> ast =
-              (NodeWithParameters<?>)
-                  JavaParserUtil.tryFindAttachedNode(method, fqnsToCompilationUnits);
-
-          if (ast == null) {
+          if (!(JavaParserUtil.tryFindAttachedNode(method, fqnsToCompilationUnits)
+              instanceof NodeWithParameters<?> ast)) {
             continue;
           }
 
