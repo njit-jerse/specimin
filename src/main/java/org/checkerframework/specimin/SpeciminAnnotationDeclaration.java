@@ -217,13 +217,14 @@ public class SpeciminAnnotationDeclaration extends JavaParserAnnotationDeclarati
 
     @Override
     public boolean isAbstract() {
-      // Implicitly abstract, per JLS 9.6.1. Note that "default" in the sense of isDefaultMethod is
-      // about interface default methods, not about an annotation member's default value.
+      // Implicitly abstract, per JLS 9.6.1.
       return true;
     }
 
     @Override
     public boolean isDefaultMethod() {
+      // "default" here refers to interface default methods, not an annotation member's
+      // default value.
       return false;
     }
 
