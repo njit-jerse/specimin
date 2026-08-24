@@ -1382,7 +1382,7 @@ public class FullyQualifiedNameGenerator {
       // A type variable (JLS 4.4) is named by its declaration, and that name is all Specimin can
       // say about it: the variable is in scope wherever the type is being reported, so emitting
       // the name reproduces the original type exactly.
-      return new FullyQualifiedNameSet(resolvedType.asTypeVariable().describe());
+      return new FullyQualifiedNameSet(resolvedType.describe());
     } else if (resolvedType.isWildcard()) {
       if (resolvedType.asWildcard().isBounded()) {
         FullyQualifiedNameSet bound =
@@ -1405,25 +1405,20 @@ public class FullyQualifiedNameGenerator {
           );
     } else if (resolvedType.isUnionType()) {
       // A union type is the type of a multi-catch parameter, and JLS 14.20 declares that
-      // parameter's type to be the lub of the alternatives. Reporting one alternative instead
-      // would be unsound in the direction that costs compilability -- a use site given the type
-      // of one alternative rejects a value of another -- so report the bound that JLS 11.1.1
-      // guarantees for every alternative. Specimin does not compute lubs, so this is as tight as
-      // the bound gets.
+      // parameter's type to be the lub of the alternatives. Specimin does not compute lubs,
+      // so this is as tight as the bound can get.
       return new FullyQualifiedNameSet("java.lang.Throwable");
     } else if (resolvedType instanceof ResolvedIntersectionType intersectionType) {
       // Every member of an intersection type (JLS 4.9) is a supertype of the value, and JLS 4.6
       // erases the intersection to its leftmost member, so that member is the one to report.
-      // Unreachable today: JavaParser's IntersectionType#convertToUsage always throws, so an
-      // intersection written in source never resolves, and Specimin drives none of the type
-      // inference that builds one internally.
+      // TODO: this is currently unreachable: JavaParser's IntersectionType#convertToUsage always
+      // throws, so an intersection written in source never resolves.
       return getFQNsForResolvedType(intersectionType.getElements().iterator().next());
     }
 
     // What is left denotes no type that can be written in a Java program: inference variables
     // (JLS 18) and JavaParser's placeholder for a lambda argument whose type is still being
-    // resolved. There is no name to report, so report the supertype of every reference type
-    // (JLS 4.10.2), which constrains nothing.
+    // resolved. There is no name to report, so return the top type (Object).
     return new FullyQualifiedNameSet("java.lang.Object");
   }
 
