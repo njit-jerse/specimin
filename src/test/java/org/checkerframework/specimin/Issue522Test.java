@@ -4,10 +4,7 @@ import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
 /**
- * Reproduces issue 522. Resolving the left-hand side of {@code handlers = in} produces a
- * ResolvedArrayType, and Specimin used to name it by its description -- the source form {@code
- * com.example.Foo<?>[]} -- which is not an erased FQN and, because of the wildcard, is rejected
- * outright by FullyQualifiedNameSet.
+ * Regression test for <a href="https://github.com/njit-jerse/specimin/issues/522">issue #522</a>.
  */
 public class Issue522Test {
   @Test

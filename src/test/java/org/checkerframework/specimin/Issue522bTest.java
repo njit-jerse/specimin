@@ -4,10 +4,7 @@ import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
 /**
- * The variant of issue 522 whose array element type is generic but not a wildcard. The description
- * Specimin used to name it by, {@code com.example.Foo<java.lang.String>[]}, passes
- * FullyQualifiedNameSet's wildcard check, so this shape used to fail later instead: nothing is
- * registered under that name, and looking it up threw.
+ * A variant of issue 522 whose array element type is generic but not a wildcard.
  */
 public class Issue522bTest {
   @Test
