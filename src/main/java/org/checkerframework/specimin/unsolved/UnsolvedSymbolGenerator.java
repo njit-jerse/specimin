@@ -3464,20 +3464,19 @@ public class UnsolvedSymbolGenerator {
   /**
    * Returns the type to give a synthetic method's return type when the method is first generated.
    *
-   * <p>The type a use site's context asks for is an upper bound on the return type, not the return
-   * type: JLS 5.2 requires only that the result be assignable to it. Adopting it as the return type
-   * throws away the difference, and with it any requirement a use site elsewhere places on the
+   * <p>The type a use site's context asks for is an upper bound on the return type, not the actual
+   * return type: JLS 5.2 requires only that the result be assignable to it. Adopting it directly as
+   * the return type may contradict another requirement that a use site elsewhere places on the
    * result, such as a member read off the result (which might come from a different subtype). Which
    * use site is generated first would then decide the output. So when the context is the only thing
-   * that knows a type, and the bound is a type Specimin cannot add members to, this returns the
-   * placeholder the method would get with no context at all, leaving every use site free to say
+   * that knows a type, and the bound is a type Specimin cannot add members to, this method returns
+   * the placeholder the method would get with no context at all, leaving every use site free to say
    * what it needs of the result.
    *
-   * <p>The bound is not thereby lost: it is remembered here, {@link #addInformation} records it as
-   * the placeholder's supertype along with whatever other use sites require, and {@link
-   * #collapseMemberlessPlaceholderReturnTypes} puts it back directly if nothing else does. That
-   * same pass collapses a placeholder no use site ever puts a member on, so this costs no
-   * minimality when the extra precision goes unused.
+   * <p>{@link #addInformation} will later record the bound as the placeholder's supertype along
+   * with whatever other use sites require, and {@link #collapseMemberlessPlaceholderReturnTypes}
+   * puts it back directly if nothing else does. That same pass collapses a placeholder no use site
+   * ever puts a member on, so this costs no minimality when the extra precision goes unused.
    *
    * @param methodCall the call to the method being generated
    * @return the return type(s) to give it
