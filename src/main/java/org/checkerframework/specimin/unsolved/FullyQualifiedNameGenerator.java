@@ -165,6 +165,29 @@ public class FullyQualifiedNameGenerator {
    *     expression's declaration could be located in.
    */
   public Collection<Set<String>> getFQNsForExpressionLocation(Expression expr) {
+    Collection<Set<String>> result = new LinkedHashSet<>();
+
+    for (Set<String> alternative : getFQNsForExpressionLocationImpl(expr)) {
+      // Arrays never have unsolved members (JLS 10.7). So, arrays are treated as solvable
+      // types here.
+      if (!alternative.isEmpty() && alternative.stream().allMatch(fqn -> fqn.endsWith("[]"))) {
+        continue;
+      }
+      result.add(alternative);
+    }
+
+    return result;
+  }
+
+  /**
+   * Computes the declaring types for an expression, without the filtering that {@link
+   * #getFQNsForExpressionLocation(Expression)} applies to the result. Call that method instead.
+   *
+   * @param expr The expression to do the analysis upon
+   * @return A collection of sets of FQNs. Each set represents a different type that the
+   *     expression's declaration could be located in.
+   */
+  private Collection<Set<String>> getFQNsForExpressionLocationImpl(Expression expr) {
     Collection<Set<String>> alreadyGenerated =
         getFQNsForExpressionLocationIfRepresentsGenerated(expr);
 
@@ -571,8 +594,13 @@ public class FullyQualifiedNameGenerator {
     }
     // cast expression
     else if (expr.isCastExpr()) {
+      Type castType = expr.asCastExpr().getType();
+      // This branch runs only for an unsolvable cast target, which is usually a class or interface
+      // type but can also be an array of one, which getFQNsFromClassOrInterfaceType cannot take.
       return Set.of(
-          getFQNsFromClassOrInterfaceType(expr.asCastExpr().getType().asClassOrInterfaceType()));
+          castType.isClassOrInterfaceType()
+              ? getFQNsFromClassOrInterfaceType(castType.asClassOrInterfaceType())
+              : getFQNsFromType(castType));
     } else if (expr.isClassExpr()) {
       return Set.of(
           new FullyQualifiedNameSet(

@@ -2229,6 +2229,23 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Does the given method reference name a member of an array type?
+   *
+   * <p>Such a reference never has anything for Specimin to synthesize, and no declaring type to put
+   * it in: JLS 10.7 gives an array type only {@code length}, {@code clone()}, and the members
+   * inherited from {@code Object}, and JLS 15.13 makes {@code T[]::new} an array creation reference
+   * rather than a reference to a declared constructor.
+   *
+   * @param methodRef The method reference expression
+   * @return true if the method reference's scope is an array type
+   */
+  private boolean hasArrayScope(MethodReferenceExpr methodRef) {
+    return fullyQualifiedNameGenerator.getFQNsForExpressionType(methodRef.getScope()).stream()
+        .flatMap(fqns -> fqns.erasedFqns().stream())
+        .anyMatch(fqn -> fqn.endsWith("[]"));
+  }
+
+  /**
    * Helper method for {@link #inferContextImpl(Node, List)}. Generates the method corresponding
    * with the given method reference expression (parameterless void). If the method reference
    * matches a method in java.lang.Object, no new method is generated. Likewise, if a method with
@@ -2249,7 +2266,8 @@ public class UnsolvedSymbolGenerator {
 
     boolean needToGenerateMethod =
         fullyQualifiedNameGenerator.getExpressionTypesIfRepresentsGenerated(methodRef) == null
-            && JavaParserUtil.getMethodDeclarationsFromMethodRef(methodRef).isEmpty();
+            && JavaParserUtil.getMethodDeclarationsFromMethodRef(methodRef).isEmpty()
+            && !hasArrayScope(methodRef);
 
     String methodName = JavaParserUtil.erase(methodRef.getIdentifier());
     boolean isConstructor = false;
@@ -3508,9 +3526,29 @@ public class UnsolvedSymbolGenerator {
    */
   private List<UnsolvedSymbolAlternates<?>> makeSyntheticTypeASubtypeOfExpressionType(
       Type syntheticType, Expression operand, String kind) {
-    Set<MemberType> operandTypes =
-        getMemberTypesAndExpectNonNullFromFQNSets(
-            fullyQualifiedNameGenerator.getFQNsForExpressionType(operand));
+    Set<FullyQualifiedNameSet> operandFQNs =
+        fullyQualifiedNameGenerator.getFQNsForExpressionType(operand);
+
+    // An array type has no declaration to attach a supertype to, so a synthetic array imposes its
+    // requirement on its element type instead: JLS 4.10.3 makes S[] a subtype of T[] exactly when
+    // S is a subtype of T, so peeling the same number of brackets off both sides states the same
+    // requirement about types that do have declarations. When the operand is not an array that
+    // deep there is no such reduction, and the requirement is one no choice of element supertype
+    // can meet.
+    int arrayLevel = syntheticType.getArrayLevel();
+    if (arrayLevel > 0) {
+      Set<FullyQualifiedNameSet> elementFQNs =
+          FullyQualifiedNameSet.stripArrayLevels(operandFQNs, arrayLevel);
+
+      if (elementFQNs == null) {
+        return meetRequirementOnOperandInstead(operand);
+      }
+
+      operandFQNs = elementFQNs;
+      syntheticType = syntheticType.getElementType();
+    }
+
+    Set<MemberType> operandTypes = getMemberTypesAndExpectNonNullFromFQNSets(operandFQNs);
 
     if (operandTypes.isEmpty()) {
       // No information about the operand's type. This happens when the operand's type is
@@ -3541,23 +3579,7 @@ public class UnsolvedSymbolGenerator {
             .collect(Collectors.toCollection(LinkedHashSet::new));
 
     if (extendableOperandTypes.isEmpty()) {
-      // The requirement cannot be met by making the synthetic type a subtype, so it has to be met
-      // on the other side: if the operand is a call to a generated method, that method's return
-      // type is the thing standing in the way, and an unconstrained one accommodates this site
-      // along with every other. Repairing it here rather than leaving the requirement dropped is
-      // what makes the outcome independent of the order these sites are visited in -- the site
-      // that assigns the result elsewhere may already have been visited, and would then see a
-      // return type that satisfies it and no reason to act.
-      if (operand.isMethodCallExpr()) {
-        UnsolvedMethodAlternates generatedMethod =
-            findGeneratedMethodFromMethodCall(operand.asMethodCallExpr());
-
-        if (generatedMethod != null) {
-          return useUnconstrainedReturnType(generatedMethod);
-        }
-      }
-
-      return List.of();
+      return meetRequirementOnOperandInstead(operand);
     }
 
     UnsolvedClassOrInterfaceAlternates unsolvedSyntheticType =
@@ -3572,6 +3594,34 @@ public class UnsolvedSymbolGenerator {
               + syntheticType);
     }
     unsolvedSyntheticType.addSuperType(extendableOperandTypes);
+
+    return List.of();
+  }
+
+  /**
+   * Handles a requirement from a cast or instanceof that no choice of supertype for the synthetic
+   * type can meet, by meeting it on the other side instead.
+   *
+   * <p>If the operand is a call to a generated method, that method's return type is the thing
+   * standing in the way, and an unconstrained one accommodates this site along with every other.
+   * Repairing it here rather than leaving the requirement dropped is what makes the outcome
+   * independent of the order these sites are visited in -- the site that assigns the result
+   * elsewhere may already have been visited, and would then see a return type that satisfies it and
+   * no reason to act. Any other operand has a type Specimin does not get to choose, so the
+   * requirement is dropped.
+   *
+   * @param operand the operand of the instanceof or the cast
+   * @return the placeholder types that are no longer needed, for the caller to drop from the slice
+   */
+  private List<UnsolvedSymbolAlternates<?>> meetRequirementOnOperandInstead(Expression operand) {
+    if (operand.isMethodCallExpr()) {
+      UnsolvedMethodAlternates generatedMethod =
+          findGeneratedMethodFromMethodCall(operand.asMethodCallExpr());
+
+      if (generatedMethod != null) {
+        return useUnconstrainedReturnType(generatedMethod);
+      }
+    }
 
     return List.of();
   }
