@@ -1344,8 +1344,10 @@ public class FullyQualifiedNameGenerator {
 
       if (JavaParserUtil.areTypeOrOuterTypesPrivate(qualifiedName, fqnToCompilationUnits)) {
         // If private, then we use java.lang.Object since this method is likely for use by
-        // symbols not in the current class.
-        qualifiedName = "java.lang.Object";
+        // symbols not in the current class. The type arguments are dropped along with the name:
+        // JLS 4.5 only permits them on a generic type, and Object is not one, so carrying them
+        // over would render java.lang.Object<...>.
+        return new FullyQualifiedNameSet("java.lang.Object");
       }
       return new FullyQualifiedNameSet(
           Set.of(qualifiedName),
