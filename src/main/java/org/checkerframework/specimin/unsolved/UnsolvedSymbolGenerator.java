@@ -3487,26 +3487,34 @@ public class UnsolvedSymbolGenerator {
 
     FullyQualifiedNameSet placeholderFQNs = placeholderToInterposeOn(methodCall, withContext);
 
-    if (placeholderFQNs == null) {
-      return withContext.stream()
-          .map(this::getOrCreateMemberTypeFromFQNs)
-          .collect(Collectors.toCollection(LinkedHashSet::new));
+    if (placeholderFQNs != null) {
+      MemberType placeholder = getOrCreateMemberTypeFromFQNs(placeholderFQNs);
+
+      // Interposing is only safe if the placeholder came back as a type this class can hang the
+      // bound on. A placeholder named by a single dotless name -- which is what a scope in the
+      // default package produces -- is read as a type variable by getMemberTypeFromFQNs and comes
+      // back solved, with no synthetic type behind it and so nowhere to record the bound. Adopting
+      // the bound directly is what Specimin did before placeholders existed, so falling back to it
+      // is never worse than not interposing at all. Nothing is leaked by having asked: the branch
+      // that returns a solved type creates no symbol.
+      if (placeholder instanceof UnsolvedMemberType unsolvedPlaceholder) {
+        // The bound is only remembered, not installed as a supertype here. Installing it would lock
+        // in the bound from whichever use site happened to be generated first, and block the more
+        // specific bound a later site may impose. Supertypes are merged by addInformation once
+        // every use site has been seen.
+        placeholderReturnTypeBounds.put(
+            unsolvedPlaceholder.getUnsolvedType(),
+            getOrCreateMemberTypeFromFQNs(withContext.iterator().next()));
+
+        Set<MemberType> returnTypes = new LinkedHashSet<>();
+        returnTypes.add(placeholder);
+        return returnTypes;
+      }
     }
 
-    MemberType placeholder = getOrCreateMemberTypeFromFQNs(placeholderFQNs);
-    MemberType bound = getOrCreateMemberTypeFromFQNs(withContext.iterator().next());
-
-    if (placeholder instanceof UnsolvedMemberType unsolvedPlaceholder) {
-      // Only remembered, not installed as a supertype here. Installing it would lock in the bound
-      // from whichever use site happened to be generated first, and block the more specific bound a
-      // later site may impose.
-      // Supertypes are merged by addInformation once every site has been seen.
-      placeholderReturnTypeBounds.put(unsolvedPlaceholder.getUnsolvedType(), bound);
-    }
-
-    Set<MemberType> returnTypes = new LinkedHashSet<>();
-    returnTypes.add(placeholder);
-    return returnTypes;
+    return withContext.stream()
+        .map(this::getOrCreateMemberTypeFromFQNs)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
   /**
