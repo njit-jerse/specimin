@@ -1353,11 +1353,9 @@ public class FullyQualifiedNameGenerator {
               .map(this::getFQNsForResolvedType)
               .toList());
     } else if (resolvedType.isArray()) {
-      // JLS 10.1 writes an array type as its element type followed by one [] per dimension.
-      // Specimin encodes that by hanging the brackets off the erased FQN and leaving the element
-      // type's arguments beside them, which is what getFQNsFromType builds for the same type
-      // written out in source, and what getMemberTypeFromFQNs and SolvedMemberType#toString read
-      // back. An element type is never itself a wildcard, so there is no wildcard to carry up.
+      // Specimin represents an array type as the erased FQN, followed by array brackets, and then
+      // the element type's arguments (i.e., a "source-code friendly" encoding, JLS 10.1).
+      // An element type is never itself a wildcard, so there is no wildcard to carry up.
       int arrayLevel = resolvedType.arrayLevel();
       ResolvedType elementType = resolvedType;
 
