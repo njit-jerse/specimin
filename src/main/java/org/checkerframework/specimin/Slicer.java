@@ -144,6 +144,14 @@ public class Slicer {
 
     slicer.buildSlice();
 
+    // Every use site has now been seen, so a placeholder return type that no use site put a
+    // member on can be recognized as saying nothing and replaced by the bound it stands for.
+    // This must run before supertype relationships are expanded into alternates, so that the
+    // placeholders it removes are not first turned into alternates of other types.
+    unsolvedSymbolGenerator
+        .collapseMemberlessPlaceholderReturnTypes()
+        .forEach(slicer.generatedSymbolSlice::remove);
+
     unsolvedSymbolGenerator.generateAllAlternatesBasedOnSuperTypeRelationships();
 
     Set<Node> dependentSlice = new HashSet<>();
