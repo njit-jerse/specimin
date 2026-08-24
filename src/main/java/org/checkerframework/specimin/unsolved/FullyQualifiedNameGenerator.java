@@ -1328,13 +1328,6 @@ public class FullyQualifiedNameGenerator {
   /**
    * Given a resolved type, return the FQNs of its type.
    *
-   * <p>The cases below are exhaustive over the shapes JavaParser can hand back, so that no shape
-   * reaches the fallback and gets named by {@link ResolvedType#describe()}. A description is the
-   * type's source form, which coincides with an erased FQN only for the shapes that have no type
-   * arguments and no punctuation: for the rest it produces a name that no other part of Specimin
-   * can look up, or -- once a wildcard appears in it -- one that {@link FullyQualifiedNameSet}
-   * rejects outright.
-   *
    * @param resolvedType The resolved type
    * @return The FQNs of the type
    */
