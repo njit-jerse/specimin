@@ -8,10 +8,6 @@ import org.junit.jupiter.api.Test;
  * may not name a type variable as a superclass or superinterface (JLS 8.1.4, 8.1.5), and the only
  * values assignable to an unbounded type variable are {@code null} and values already of that type,
  * so an unconstrained type variable is again the only return type that satisfies both assignments.
- *
- * <p>The target method's {@code U} is not in scope in the generated {@code Item}, so the generated
- * method binds a type variable of its own; the name it gets is whichever one is free, which is why
- * the expected output says {@code T1} rather than {@code T}.
  */
 public class NonExtendableTargetTypeVariableTest {
   @Test
