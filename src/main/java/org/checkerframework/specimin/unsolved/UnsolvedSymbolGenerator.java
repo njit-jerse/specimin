@@ -1283,7 +1283,8 @@ public class UnsolvedSymbolGenerator {
         if (generatedMethod.getNumberOfTypeVariables() > 0
             && generatedMethodReturnTypes.size() == 1
             && generatedMethodReturnTypes.iterator().next() instanceof UnsolvedMemberType unsolved
-            && unsolved.usesGeneratedName()) {
+            && unsolved.usesGeneratedName()
+            && !isInterposedPlaceholder(unsolved)) {
           Set<MemberType> potentialReturns = new LinkedHashSet<>();
           for (int i = 0; i < generatedMethod.getNumberOfTypeVariables(); i++) {
             potentialReturns.add(new SolvedMemberType(generatedMethod.getTypeVariableName(i)));
@@ -3466,10 +3467,10 @@ public class UnsolvedSymbolGenerator {
    * <p>The type a use site's context asks for is an upper bound on the return type, not the return
    * type: JLS 5.2 requires only that the result be assignable to it. Adopting it as the return type
    * throws away the difference, and with it any requirement a use site elsewhere places on the
-   * result, such as a member read off the result (which might come from a different subtype).
-   * Which use site is generated first would then decide the output. So when the context is the only
-   * thing that knows a type, and the bound is a type Specimin cannot add members to, this returns
-   * the placeholder the method would get with no context at all, leaving every use site free to say
+   * result, such as a member read off the result (which might come from a different subtype). Which
+   * use site is generated first would then decide the output. So when the context is the only thing
+   * that knows a type, and the bound is a type Specimin cannot add members to, this returns the
+   * placeholder the method would get with no context at all, leaving every use site free to say
    * what it needs of the result.
    *
    * <p>The bound is not thereby lost: it is remembered here, {@link #addInformation} records it as
@@ -3507,6 +3508,22 @@ public class UnsolvedSymbolGenerator {
     Set<MemberType> returnTypes = new LinkedHashSet<>();
     returnTypes.add(placeholder);
     return returnTypes;
+  }
+
+  /**
+   * Returns whether a type is a placeholder {@link #returnTypesForNewMethod} interposed on a bound.
+   *
+   * <p>Such a placeholder shares a symptom with the placeholder a method gets when nothing at all
+   * is known about its return type -- both carry a generated name -- but means something different.
+   * This one stands for a type that must be assignable to a bound Specimin has recorded, so
+   * replacing it with something unconstrained drops that bound. Code that keys off {@code
+   * usesGeneratedName} to mean "nothing is known here" has to exclude these.
+   *
+   * @param type a type appearing as a generated method's return type
+   * @return true if this type was interposed on a bound
+   */
+  private boolean isInterposedPlaceholder(UnsolvedMemberType type) {
+    return placeholderReturnTypeBounds.containsKey(type.getUnsolvedType());
   }
 
   /**
@@ -3552,7 +3569,8 @@ public class UnsolvedSymbolGenerator {
    * @return true if a placeholder must stand in front of this bound
    */
   private boolean needsAPlaceholderInFrontOfIt(FullyQualifiedNameSet fqns) {
-    // If the type is definitely synthetic, Specimin can edit it directly, so no placeholder is needed.
+    // If the type is definitely synthetic, Specimin can edit it directly, so no placeholder is
+    // needed.
     if (!doesOverlapWithKnownType(fqns.erasedFqns())) {
       return false;
     }
