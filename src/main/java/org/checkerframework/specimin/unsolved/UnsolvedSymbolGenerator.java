@@ -802,9 +802,7 @@ public class UnsolvedSymbolGenerator {
 
     if (enclosingQualifiedNameResolves(expr)) {
       // The enclosing name settles which part of it is the type, and expr is to the left of that
-      // type: a package. Treating expr as a field instead is not merely imprecise, it is
-      // unrepairable, because a field named "java" declared in a supertype of the class under
-      // analysis obscures the package "java" (JLS 6.4.2) and the enclosing name stops compiling.
+      // type, so it must be a package.
       return true;
     }
 
