@@ -19,7 +19,7 @@ import java.util.List;
  */
 public class SpeciminTypeSolvers {
   /** The combined type solver. */
-  private final CombinedTypeSolver typeSolver;
+  private final SpeciminCombinedTypeSolver typeSolver;
 
   /** The solver that reads in files from the root. */
   private final JavaParserTypeSolver javaParserTypeSolver;
@@ -38,7 +38,7 @@ public class SpeciminTypeSolvers {
     this.memoryTypeSolver = new MemoryTypeSolver();
     this.javaParserTypeSolver = new JavaParserTypeSolver(new File(root));
     this.typeSolver =
-        new CombinedTypeSolver(new JdkTypeSolver(), javaParserTypeSolver, memoryTypeSolver);
+        new SpeciminCombinedTypeSolver(new JdkTypeSolver(), javaParserTypeSolver, memoryTypeSolver);
 
     for (String path : jarPaths) {
       this.typeSolver.add(new JarTypeSolver(path));
@@ -46,12 +46,12 @@ public class SpeciminTypeSolvers {
   }
 
   /**
-   * Gets the {@link CombinedTypeSolver} associated with this instance. Use this as the type solver
-   * for resolution.
+   * Gets the {@link SpeciminCombinedTypeSolver} associated with this instance. Use this as the type
+   * solver for resolution.
    *
-   * @return The {@link CombinedTypeSolver}
+   * @return The {@link SpeciminCombinedTypeSolver}
    */
-  public CombinedTypeSolver getTypeSolver() {
+  public SpeciminCombinedTypeSolver getTypeSolver() {
     return typeSolver;
   }
 
