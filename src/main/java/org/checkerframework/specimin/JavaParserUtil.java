@@ -2252,8 +2252,8 @@ public class JavaParserUtil {
    * constant context such as an annotation argument or a {@code case} label.
    *
    * <p>The two methods differ only for {@code String}: the null literal is not a constant
-   * expression, so a String constant needs a string literal instead. Primitives already get
-   * literals, and no other type can be a constant variable at all, so nothing else can be improved.
+   * expression, so a String constant needs a string literal instead. (Primitives are the only other
+   * constant variable types, and already get literal initializers.)
    *
    * @param variableType the type of the variable, as a fully-qualified name
    * @return a default value for that type, which is a constant expression if the type permits one
@@ -2270,11 +2270,9 @@ public class JavaParserUtil {
    * resolvable, returns that element's declared type. An expression inside an array initializer
    * supplies one element of an array-typed element, so the component type is returned for it.
    *
-   * <p>JLS 9.7.1 requires an element value to be assignment-compatible with the element's declared
-   * type, so the answer is a fact about the expression's type rather than a guess. Returns null
-   * when the expression is not in an element value position, when the annotation type is one
-   * Specimin has to synthesize (and which therefore constrains nothing, since Specimin chooses the
-   * element's type itself), or when the annotation type declares no matching element.
+   * <p>Returns null when the expression is not in an element value position, when the annotation
+   * type is one Specimin has to synthesize (and which therefore constrains nothing, since Specimin
+   * chooses the element's type itself), or when the annotation type declares no matching element.
    *
    * @param expr the expression to test
    * @return the declared type of the annotation element this expression supplies, or null
