@@ -639,6 +639,13 @@ public class UnsolvedSymbolGenerator {
 
     Expression scope = field.getScope();
 
+    if (isPackageName(scope)) {
+      // JLS 6.5.2: the leftmost identifier of this qualified name is not a variable in scope, so
+      // no prefix of the name is an expression. So, this node _must_ be a package name (e.g.,
+      // "java.util" in "java.util.UUID.fromString(s)"), not an actual field access.
+      return;
+    }
+
     // Special case: handle this/super separately since potentialScopeFQNs
     // provides more information than a this/super expression alone in
     // inferContextImpl
@@ -750,6 +757,37 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Returns true if the given expression is a package name rather than an expression. By JLS 6.5.2,
+   * an ambiguous name whose leftmost identifier is not a variable in scope must be a package or
+   * type name. This method returns true when that structural condition means the input must be a
+   * package or type name, and the usual package vs type heuristic suggests that the input is
+   * probably a package rather than a class.
+   *
+   * @param expr The expression to check
+   * @return True if the expression is a package name
+   */
+  private boolean isPackageName(Expression expr) {
+    if (Resolver.calculateResolvedType(expr) != null) {
+      return false;
+    }
+
+    if (expr.isFieldAccessExpr()) {
+      // A qualified name that names a type -- org.sampling.Baz in org.sampling.Baz.myField -- ends
+      // the package part of the name, even though its own leftmost identifier is a package.
+      return !JavaParserUtil.isAClassPath(expr.toString())
+          && isPackageName(expr.asFieldAccessExpr().getScope());
+    }
+
+    if (!expr.isNameExpr()) {
+      return false;
+    }
+
+    return !JavaParserUtil.isAClassName(expr.asNameExpr().getNameAsString())
+        && Resolver.resolve(expr.asNameExpr()) == null
+        && fullyQualifiedNameGenerator.getFQNsForExpressionLocation(expr).isEmpty();
+  }
+
+  /**
    * Helper method for {@link #inferContextImpl(Node, List)}. Adds the existing definition to the
    * result if found, or a new definition if one does not already exist. This method handles cases
    * where NameExpr could be either a type or a field (when getting the scope of a FieldAccessExpr,
@@ -824,6 +862,15 @@ public class UnsolvedSymbolGenerator {
 
     Collection<Set<String>> parentClassFQNs =
         fullyQualifiedNameGenerator.getFQNsForExpressionLocation(nameExpr);
+
+    if (parentClassFQNs.isEmpty()) {
+      // No type could declare a member with this name. By JLS 6.5.2, an
+      // ambiguous name that is neither a variable in scope nor a type is reclassified as a package
+      // name, which is the usual reason to get here: the leftmost identifier of a fully-qualified
+      // name used as an expression, such as "java" in "java.util.UUID.fromString(s)".
+      return;
+    }
+
     Set<String> fieldFQNs = new LinkedHashSet<>();
 
     for (Set<String> set : parentClassFQNs) {
