@@ -170,6 +170,115 @@ public class JavaParserUtil {
   }
 
   /**
+   * Returns the leftmost identifier of the qualified name that the given expression belongs to, or
+   * null if the expression is not part of a qualified name. A qualified name is a chain of {@code
+   * FieldAccessExpr}s bottoming out in a {@code NameExpr}: for {@code a.b.C} and for every prefix
+   * of it, the root is {@code a}.
+   *
+   * @param expr the expression to find the root of
+   * @return the leftmost identifier, or null if there is not one
+   */
+  public static @Nullable NameExpr getQualifiedNameRoot(Expression expr) {
+    Expression root = expr;
+
+    while (root.isFieldAccessExpr()) {
+      root = root.asFieldAccessExpr().getScope();
+    }
+
+    return root.isNameExpr() ? root.asNameExpr() : null;
+  }
+
+  /**
+   * Returns true if the given expression belongs to a qualified name whose leftmost identifier is
+   * not a variable in scope. JLS 6.5.2 then reclassifies that identifier -- and every prefix of the
+   * name up to the type the name eventually reaches -- as a package or type name, never an
+   * expression name. Deciding where in the name that type begins is a separate question, which
+   * {@link #isAQualifiedTypeName(FieldAccessExpr)} answers.
+   *
+   * @param expr the expression to check
+   * @return true if the expression is part of a name rooted in a package or type name
+   */
+  public static boolean isRootedInAPackageOrTypeName(Expression expr) {
+    NameExpr root = getQualifiedNameRoot(expr);
+
+    return root != null && Resolver.resolve(root) == null;
+  }
+
+  /**
+   * Returns true if the given qualified name names a type, such as {@code
+   * org.apache.commons.io.IOUtils} in {@code org.apache.commons.io.IOUtils.toString(s)}. To check a
+   * simple name, use {@link #isAClassName(String)} instead.
+   *
+   * <p>Deciding where the package part of a qualified name ends and the type part begins in general
+   * requires the classpath (JLS 6.5.2 asks whether package {@code Q} contains a type {@code Id}),
+   * which Specimin does not have for unsolvable names. {@link #isAClassPath(String)} guesses from
+   * the naming convention, and is deferred to for names that do match the usual convention. When
+   * the convention is broken, for example because no segment of the name is "spelled like a class",
+   * as in {@code IOUtils} or {@code utils}, this method checks the name's syntactic position: the
+   * leftmost identifier is not a variable in scope, so no prefix of the name is an expression name
+   * (JLS 6.5.2), and a package name may not qualify a method invocation (JLS 15.12) or be used as
+   * an expression.
+   *
+   * @param expr the qualified name to check
+   * @return true if the qualified name names a type
+   */
+  public static boolean isAQualifiedTypeName(FieldAccessExpr expr) {
+    if (isAClassPath(expr.toString())) {
+      return true;
+    }
+
+    Expression maximal = expr;
+    while (maximal.getParentNode().orElse(null) instanceof FieldAccessExpr parent) {
+      maximal = parent;
+    }
+
+    // Defer to the naming convention wherever it can find the package/type boundary itself.
+    for (Expression prefix = maximal;
+        prefix.isFieldAccessExpr();
+        prefix = prefix.asFieldAccessExpr().getScope()) {
+      if (isAClassPath(prefix.toString())) {
+        return false;
+      }
+    }
+
+    NameExpr root = getQualifiedNameRoot(maximal);
+
+    if (root == null || isAClassName(root.getNameAsString())) {
+      return false;
+    }
+
+    if (!isRootedInAPackageOrTypeName(maximal)) {
+      return false;
+    }
+
+    Expression typePart;
+    if (maximal.getParentNode().orElse(null) instanceof MethodCallExpr call
+        && call.getScope().isPresent()
+        && call.getScope().get().toString().equals(maximal.toString())) {
+      // The qualifier of a method invocation is a type name here, so the whole name is the type.
+      typePart = maximal;
+    } else if (maximal.isFieldAccessExpr()) {
+      // The name is itself an expression, so its last identifier is a field of the type named by
+      // everything to its left.
+      typePart = maximal.asFieldAccessExpr().getScope();
+    } else {
+      return false;
+    }
+
+    // The type part may not extend past a segment spelled like a class: in
+    // org.apache.commons.io.IOUtils.FIELD, IOUtils names the type and FIELD is a member of it,
+    // because a package named org.apache.commons.io.IOUtils is not a package Java code would have.
+    while (typePart.isFieldAccessExpr()
+        && !isProbablyAPackage(typePart.asFieldAccessExpr().getScope().toString())) {
+      typePart = typePart.asFieldAccessExpr().getScope();
+    }
+
+    // Distinct prefixes of one qualified name never print the same, so comparing the printed
+    // names identifies which prefix this is without relying on node identity.
+    return typePart.toString().equals(expr.toString());
+  }
+
+  /**
    * This method checks if a string represents a simple class name.
    *
    * @param string the string to be checked
@@ -369,7 +478,7 @@ public class JavaParserUtil {
         nameOfScope = scope.asNameExpr().getNameAsString();
       } else if (scope.isFieldAccessExpr()) {
         nameOfScope = scope.asFieldAccessExpr().toString();
-        if (isAClassPath(nameOfScope)) {
+        if (isAClassPath(nameOfScope) || isAQualifiedTypeName(scope.asFieldAccessExpr())) {
           return nameOfScope + "." + nameOfExpr;
         }
       } else {

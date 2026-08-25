@@ -585,7 +585,9 @@ public class FullyQualifiedNameGenerator {
       return Set.of(getFQNsFromClassOrInterfaceType(JavaParserUtil.getSuperClass(expr)));
     }
     // scope of a static field/method
-    else if (JavaParserUtil.isAClassPath(expr.toString())) {
+    else if (JavaParserUtil.isAClassPath(expr.toString())
+        || (expr.isFieldAccessExpr()
+            && JavaParserUtil.isAQualifiedTypeName(expr.asFieldAccessExpr()))) {
       Expression scoped = expr;
 
       while (scoped instanceof NodeWithTraversableScope
@@ -2442,7 +2444,7 @@ public class FullyQualifiedNameGenerator {
 
     // Not imported
     boolean shouldAddAfter = false;
-    if (JavaParserUtil.isAClassPath(fullName)) {
+    if (fullName.contains(".") && !fullName.contains(" ")) {
       if (JavaParserUtil.isAClassName(firstIdentifier)) {
         // Likely an inner class of another class, not a fully-qualified name;
         // put the package FQN first so best effort generates that instead
