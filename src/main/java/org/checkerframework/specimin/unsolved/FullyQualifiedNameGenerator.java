@@ -54,6 +54,8 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclarati
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.model.typesystem.LazyType;
+import com.github.javaparser.resolution.types.ResolvedIntersectionType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.resolution.types.ResolvedTypeVariable;
@@ -1358,19 +1360,59 @@ public class FullyQualifiedNameGenerator {
    * @return The FQNs of the type
    */
   public FullyQualifiedNameSet getFQNsForResolvedType(ResolvedType resolvedType) {
+    // A LazyType stands in for the type it wraps, but it only forwards some of the shape
+    // predicates below (isConstraint, isUnionType and isInferenceVariable are missing), so unwrap
+    // it here rather than relying on which ones it happens to forward.
+    while (resolvedType instanceof LazyType lazyType) {
+      resolvedType = lazyType.getType();
+    }
+
     if (resolvedType.isReferenceType()) {
       String qualifiedName = resolvedType.asReferenceType().getQualifiedName();
 
       if (JavaParserUtil.areTypeOrOuterTypesPrivate(qualifiedName, fqnToCompilationUnits)) {
         // If private, then we use java.lang.Object since this method is likely for use by
-        // symbols not in the current class.
-        qualifiedName = "java.lang.Object";
+        // symbols not in the current class. The type arguments are dropped along with the name:
+        // JLS 4.5 only permits them on a generic type, and Object is not one, so carrying them
+        // over would render java.lang.Object<...>.
+        return new FullyQualifiedNameSet("java.lang.Object");
       }
       return new FullyQualifiedNameSet(
           Set.of(qualifiedName),
           resolvedType.asReferenceType().typeParametersValues().stream()
               .map(this::getFQNsForResolvedType)
               .toList());
+    } else if (resolvedType.isArray()) {
+      // Specimin represents an array type as the erased FQN, followed by array brackets, and then
+      // the element type's arguments (i.e., a "source-code friendly" encoding, JLS 10.1).
+      // An element type is never itself a wildcard, so there is no wildcard to carry up.
+      int arrayLevel = resolvedType.arrayLevel();
+      ResolvedType elementType = resolvedType;
+
+      for (int i = 0; i < arrayLevel; i++) {
+        elementType = elementType.asArrayType().getComponentType();
+      }
+
+      FullyQualifiedNameSet elementFqns = getFQNsForResolvedType(elementType);
+      Set<String> erasedFqns = new LinkedHashSet<>();
+
+      for (String fqn : elementFqns.erasedFqns()) {
+        erasedFqns.add(fqn + "[]".repeat(arrayLevel));
+      }
+
+      return new FullyQualifiedNameSet(erasedFqns, elementFqns.typeArguments());
+    } else if (resolvedType.isPrimitive() || resolvedType.isVoid()) {
+      // A description of a primitive type (JLS 4.2) or of void (JLS 8.4.5) is its keyword, which
+      // is how Specimin names both of them elsewhere.
+      return new FullyQualifiedNameSet(resolvedType.describe());
+    } else if (resolvedType.isNull()) {
+      // The null type (JLS 4.1) has no name in the language; Specimin spells it "null".
+      return new FullyQualifiedNameSet("null");
+    } else if (resolvedType.isTypeVariable()) {
+      // A type variable (JLS 4.4) is named by its declaration, and that name is all Specimin can
+      // say about it: the variable is in scope wherever the type is being reported, so emitting
+      // the name reproduces the original type exactly.
+      return new FullyQualifiedNameSet(resolvedType.describe());
     } else if (resolvedType.isWildcard()) {
       if (resolvedType.asWildcard().isBounded()) {
         FullyQualifiedNameSet bound =
@@ -1391,13 +1433,23 @@ public class FullyQualifiedNameGenerator {
           erasedConstraint.typeArguments(),
           "? super" // lambda constraints are always ? super
           );
+    } else if (resolvedType.isUnionType()) {
+      // A union type is the type of a multi-catch parameter, and JLS 14.20 declares that
+      // parameter's type to be the lub of the alternatives. Specimin does not compute lubs,
+      // so this is as tight as the bound can get.
+      return new FullyQualifiedNameSet("java.lang.Throwable");
+    } else if (resolvedType instanceof ResolvedIntersectionType intersectionType) {
+      // Every member of an intersection type (JLS 4.9) is a supertype of the value, and JLS 4.6
+      // erases the intersection to its leftmost member, so that member is the one to report.
+      // TODO: this is currently unreachable: JavaParser's IntersectionType#convertToUsage always
+      // throws, so an intersection written in source never resolves.
+      return getFQNsForResolvedType(intersectionType.getElements().iterator().next());
     }
 
-    if (resolvedType.isNull()) {
-      return new FullyQualifiedNameSet("null");
-    }
-
-    return new FullyQualifiedNameSet(resolvedType.describe());
+    // What is left denotes no type that can be written in a Java program: inference variables
+    // (JLS 18) and JavaParser's placeholder for a lambda argument whose type is still being
+    // resolved. There is no name to report, so return the top type (Object).
+    return new FullyQualifiedNameSet("java.lang.Object");
   }
 
   /**
