@@ -1,6 +1,7 @@
 package org.checkerframework.specimin.unsolved;
 
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -115,6 +116,41 @@ public record FullyQualifiedNameSet(
     }
     Set<String> erasedFqns = inferredType.iterator().next().erasedFqns();
     return erasedFqns.size() == 1 ? erasedFqns.iterator().next() : null;
+  }
+
+  /**
+   * Removes the given number of array levels from every name in the given inferred type, or returns
+   * null if some name is not an array that deep.
+   *
+   * <p>JLS 4.10.3 derives array subtyping from the element types: {@code S[]} is a subtype of
+   * {@code T[]} exactly when {@code S} is a subtype of {@code T}. A caller that has to relate two
+   * array types can use this method to strip the brackets off both before it relates what is left.
+   *
+   * @param inferredType an inferred type, as produced by FullyQualifiedNameGenerator
+   * @param levels how many array levels to remove; must not be negative
+   * @return the element type at the given depth, or null if some name is not an array that deep
+   */
+  public static @Nullable Set<FullyQualifiedNameSet> stripArrayLevels(
+      Set<FullyQualifiedNameSet> inferredType, int levels) {
+    String brackets = "[]".repeat(levels);
+    Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
+
+    for (FullyQualifiedNameSet fqnSet : inferredType) {
+      Set<String> stripped = new LinkedHashSet<>();
+
+      for (String fqn : fqnSet.erasedFqns()) {
+        if (!fqn.endsWith(brackets)) {
+          return null;
+        }
+        stripped.add(fqn.substring(0, fqn.length() - brackets.length()));
+      }
+
+      result.add(
+          new FullyQualifiedNameSet(
+              stripped, fqnSet.typeArguments(), fqnSet.wildcard(), fqnSet.usesGeneratedName()));
+    }
+
+    return result;
   }
 
   @Override
