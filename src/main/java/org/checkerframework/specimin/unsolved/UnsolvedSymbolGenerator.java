@@ -623,7 +623,8 @@ public class UnsolvedSymbolGenerator {
     // We need to handle the case where the scope could be a class, like org.example.MyClass,
     // because resolving the scope of a static field like org.example.MyClass.a would return
     // another FieldAccessExpr, not a ClassOrInterfaceType
-    if (JavaParserUtil.isAClassPath(field.toString())) {
+    if (JavaParserUtil.isAClassPath(field.toString())
+        || JavaParserUtil.isAQualifiedTypeName(field)) {
       for (FullyQualifiedNameSet potentialFQNs :
           fullyQualifiedNameGenerator.getFQNsForExpressionType(field)) {
         UnsolvedClassOrInterfaceAlternates generated =
@@ -757,11 +758,35 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Returns true if some qualified name that strictly contains the given expression resolves to a
+   * type: {@code java.util} is contained this way by {@code java.util.UUID}.
+   *
+   * @param expr The expression to check
+   * @return True if an enclosing qualified name resolves to a type
+   */
+  private static boolean enclosingQualifiedNameResolves(Expression expr) {
+    // A FieldAccessExpr's only Expression child is its scope -- the member is a SimpleName -- so
+    // every step of this walk extends the same qualified name to the left of another identifier.
+    Node current = expr;
+    while (current.getParentNode().orElse(null) instanceof FieldAccessExpr parent) {
+      current = parent;
+
+      if (Resolver.calculateResolvedType(parent) != null) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Returns true if the given expression is a package name rather than an expression. By JLS 6.5.2,
    * an ambiguous name whose leftmost identifier is not a variable in scope must be a package or
-   * type name. This method returns true when that structural condition means the input must be a
-   * package or type name, and the usual package vs type heuristic suggests that the input is
-   * probably a package rather than a class.
+   * type name; {@link JavaParserUtil#isRootedInAPackageOrTypeName(Expression)} tests for that, and
+   * this method then decides whether the input falls on the package side of the name. Either an
+   * enclosing name resolves, which locates the type exactly, or nothing in the name is recognized
+   * as a type by {@link JavaParserUtil#isAQualifiedTypeName(FieldAccessExpr)} and its declaration
+   * cannot be anywhere.
    *
    * @param expr The expression to check
    * @return True if the expression is a package name
@@ -771,19 +796,28 @@ public class UnsolvedSymbolGenerator {
       return false;
     }
 
-    if (expr.isFieldAccessExpr()) {
-      // A qualified name that names a type -- org.sampling.Baz in org.sampling.Baz.myField -- ends
-      // the package part of the name, even though its own leftmost identifier is a package.
-      return !JavaParserUtil.isAClassPath(expr.toString())
-          && isPackageName(expr.asFieldAccessExpr().getScope());
-    }
-
-    if (!expr.isNameExpr()) {
+    if (!JavaParserUtil.isRootedInAPackageOrTypeName(expr)) {
       return false;
     }
 
+    if (enclosingQualifiedNameResolves(expr)) {
+      // The enclosing name settles which part of it is the type, and expr is to the left of that
+      // type: a package. Treating expr as a field instead is not merely imprecise, it is
+      // unrepairable, because a field named "java" declared in a supertype of the class under
+      // analysis obscures the package "java" (JLS 6.4.2) and the enclosing name stops compiling.
+      return true;
+    }
+
+    if (expr.isFieldAccessExpr()) {
+      FieldAccessExpr asField = expr.asFieldAccessExpr();
+
+      // A qualified name that names a type -- org.sampling.Baz in org.sampling.Baz.myField -- ends
+      // the package part of the name, even though its own leftmost identifier is a package.
+      return !JavaParserUtil.isAQualifiedTypeName(asField) && isPackageName(asField.getScope());
+    }
+
+    // A name rooted in a package or type name that is not a field access is that root itself.
     return !JavaParserUtil.isAClassName(expr.asNameExpr().getNameAsString())
-        && Resolver.resolve(expr.asNameExpr()) == null
         && fullyQualifiedNameGenerator.getFQNsForExpressionLocation(expr).isEmpty();
   }
 
@@ -857,6 +891,13 @@ public class UnsolvedSymbolGenerator {
 
         result.add(generated);
       }
+      return;
+    }
+
+    if (isPackageName(nameExpr)) {
+      // The leftmost identifier of a qualified name such as "java" in
+      // "java.util.UUID.fromString(s)". Generating a field for it would obscure the package
+      // (JLS 6.4.2) and stop the qualified name from compiling.
       return;
     }
 
