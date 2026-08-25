@@ -90,7 +90,13 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
         + type
         + " "
         + name
-        + (isStatic && isFinal ? " = " + JavaParserUtil.getInitializerRHS(type.toString()) : "")
+        // A constant expression is used rather than the ordinary default so that this field is a
+        // constant variable (JLS 4.12.4) whenever its type permits one. That is required when the
+        // field is read from a constant context, such as an annotation argument, and costs nothing
+        // anywhere else: a constant expression is a legal initializer wherever the default was.
+        + (isStatic && isFinal
+            ? " = " + JavaParserUtil.getConstantInitializerRHS(type.toString())
+            : "")
         + ";";
   }
 
