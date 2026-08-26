@@ -11,22 +11,12 @@ import java.util.Set;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
 
-/**
- * A synthetic method or constructor declaration: everything a declaration has whether or not it is
- * a constructor. {@link UnsolvedMethod} adds a name and a return type; {@link UnsolvedConstructor}
- * adds neither, because JLS 8.8.1 gives a constructor no return type and fixes its name to the
- * simple name of the type that declares it.
- *
- * <p>The pair matches JavaParser's own split, where {@code MethodDeclaration} and {@code
- * ConstructorDeclaration} are both {@code CallableDeclaration}s.
- */
+/** A synthetic method or constructor. */
 public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
     implements UnsolvedCallableCommon {
+
   /** The list of the types of the parameters of this callable. */
   private final List<MemberType> parameterList;
-
-  /** This field is set to true if this is a static method. */
-  private boolean isStatic;
 
   /** The list of the types of the exceptions thrown by this callable. */
   private final List<MemberType> throwsList;
@@ -54,7 +44,6 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
    * @param throwsList the list of exceptions thrown
    * @param mustPreserve the set of nodes that must be preserved with this alternate
    * @param accessModifier the access modifier
-   * @param isStatic whether this is static
    * @param typeVariableNames the names of the type variables, in declaration order
    */
   protected UnsolvedCallable(
@@ -62,7 +51,6 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
       List<MemberType> throwsList,
       Set<Node> mustPreserve,
       String accessModifier,
-      boolean isStatic,
       List<String> typeVariableNames) {
     super(mustPreserve);
 
@@ -71,7 +59,6 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
     this.throwsList = new ArrayList<>(throwsList);
 
     this.accessModifier = accessModifier;
-    this.isStatic = isStatic;
     this.typeVariableNames = new ArrayList<>(typeVariableNames);
   }
 
@@ -98,6 +85,14 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
    * @return the name to declare this callable under
    */
   protected abstract String declaredName(@ClassGetSimpleName String declaringTypeName);
+
+  /**
+   * Returns {@code "static "} if this callable is declared static, and the empty string otherwise.
+   * A constructor is never static (JLS 8.8), so only a method can return anything here.
+   *
+   * @return the static modifier to print, followed by a space, or the empty string
+   */
+  protected abstract String staticModifier();
 
   /**
    * Returns the text that precedes the declared name in this callable's signature: the return type
@@ -166,12 +161,6 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
     }
   }
 
-  /** Set isStatic to true */
-  @Override
-  public void setStatic() {
-    isStatic = true;
-  }
-
   /**
    * This method sets the number of type variables for the current class
    *
@@ -214,9 +203,7 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
       signature.append(" ");
     }
 
-    if (isStatic) {
-      signature.append("static ");
-    }
+    signature.append(staticModifier());
 
     String typeVariables = getTypeVariablesAsString();
 
@@ -365,10 +352,5 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
   @Override
   public void setContent(String content) {
     this.content = content;
-  }
-
-  @Override
-  public boolean isStatic() {
-    return isStatic;
   }
 }

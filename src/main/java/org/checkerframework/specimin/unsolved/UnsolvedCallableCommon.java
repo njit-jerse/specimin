@@ -7,8 +7,9 @@ import java.util.List;
  * should return the same value for each alternate; each setter should do the same operation to each
  * alternate. If these requirements are not met, do not include the method in this interface.
  *
- * <p>A method's name and return type are not here: a constructor has neither (JLS 8.8.1), so they
- * belong to {@link UnsolvedMethod} and {@link UnsolvedMethodAlternates}.
+ * <p>A method's name, return type and staticness are not here: a constructor has no name or return
+ * type of its own (JLS 8.8.1) and can never be static (JLS 8.8), so all three belong to {@link
+ * UnsolvedMethod} and {@link UnsolvedMethodAlternates}.
  */
 public interface UnsolvedCallableCommon {
   /**
@@ -31,16 +32,6 @@ public interface UnsolvedCallableCommon {
    * @return the access modifier
    */
   String getAccessModifier();
-
-  /** Makes this method static. */
-  void setStatic();
-
-  /**
-   * Returns true if this method is static
-   *
-   * @return True if the method is static
-   */
-  boolean isStatic();
 
   /**
    * Gets the number of type variables.

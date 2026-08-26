@@ -1033,7 +1033,6 @@ public class FullyQualifiedNameGenerator {
         }
       }
 
-      // A ::new reference resolves to a constructor, so this cannot be narrowed to methods.
       Set<UnsolvedCallableAlternates<?>> generatedMethods = new LinkedHashSet<>();
 
       for (Entry<String, UnsolvedSymbolAlternates<?>> genSymbolEntry :
@@ -1060,8 +1059,8 @@ public class FullyQualifiedNameGenerator {
             // An unbound reference to an instance method takes the receiver as an extra leading
             // parameter. A constructor reference does not: its scope names the type being
             // instantiated, not a receiver, so its parameters are the constructor's one for one.
-            if (!(alternate instanceof UnsolvedConstructor)
-                && !method.isStatic()
+            if (alternate instanceof UnsolvedMethod asMethod
+                && !asMethod.isStatic()
                 && JavaParserUtil.methodRefHasTypeScope(methodRef)) {
               parameterTypes.add(getFQNsFromType(methodRef.getScope().asTypeExpr().getType()));
             }

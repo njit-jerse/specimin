@@ -2406,15 +2406,15 @@ public class UnsolvedSymbolGenerator {
             FunctionalInterfaceHelper.getReturnTypeFromNormalizedFunctionalInterface(normalized);
       }
 
-      MemberType returnType;
+      // Null for a constructor reference, which resolves to a declaration that has no return type
+      // at all (JLS 8.8.1).
+      @Nullable MemberType returnType = null;
 
       boolean isVoid = false;
       if (isConstructor) {
         if (returnTypeFromTypeArgs != null) {
           parameters.remove(parameters.size() - 1);
         }
-
-        returnType = new SolvedMemberType("");
       } else {
         if (returnTypeFromTypeArgs != null) {
           parameters.remove(parameters.size() - 1);
@@ -2490,16 +2490,27 @@ public class UnsolvedSymbolGenerator {
       UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
 
       if (generated == null) {
-        UnsolvedCallableAlternates<?> generatedMethod =
-            isConstructor
-                ? UnsolvedConstructorAlternates.create(scope, parametersAsMemberType)
-                : UnsolvedMethodAlternates.create(
-                    methodName, Set.of(returnType), scope, parametersAsMemberType);
+        UnsolvedCallableAlternates<?> generatedMethod;
 
-        // isStatic is only ever set for a method: a constructor reference's scope is never a
-        // receiver, so the branch that computes it is skipped for one.
-        if (isStatic) {
-          generatedMethod.setStatic();
+        if (isConstructor) {
+          generatedMethod = UnsolvedConstructorAlternates.create(scope, parametersAsMemberType);
+        } else {
+          if (returnType == null) {
+            throw new RuntimeException(
+                "A method reference that is not a constructor reference must have a return type: "
+                    + methodRef);
+          }
+
+          UnsolvedMethodAlternates asMethod =
+              UnsolvedMethodAlternates.create(
+                  methodName, Set.of(returnType), scope, parametersAsMemberType);
+
+          // Only a method can be static (JLS 8.8).
+          if (isStatic) {
+            asMethod.setStatic();
+          }
+
+          generatedMethod = asMethod;
         }
 
         if (methodRef.getTypeArguments().isPresent()) {
@@ -3281,7 +3292,6 @@ public class UnsolvedSymbolGenerator {
                 nodeWithArgs, fqnsToCompilationUnits);
 
         if (withUnresolvableArgs.isEmpty()) {
-          // Only the parameter types are read below, which a constructor has just as a method does.
           UnsolvedCallableAlternates<?> genMethod;
           if (node instanceof MethodCallExpr methodCall) {
             Collection<Set<String>> methodScope =

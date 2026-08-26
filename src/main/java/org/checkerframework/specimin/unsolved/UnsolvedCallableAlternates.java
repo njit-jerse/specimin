@@ -91,12 +91,6 @@ public abstract class UnsolvedCallableAlternates<T extends UnsolvedCallable>
     return fqns;
   }
 
-  /** Makes this callable static. */
-  @Override
-  public void setStatic() {
-    applyToAllAlternates(UnsolvedCallable::setStatic);
-  }
-
   /**
    * Gets the number of type variables.
    *
@@ -283,10 +277,5 @@ public abstract class UnsolvedCallableAlternates<T extends UnsolvedCallable>
   @Override
   public void setContent(String content) {
     applyToAllAlternates(UnsolvedCallable::setContent, content);
-  }
-
-  @Override
-  public boolean isStatic() {
-    return getAlternates().get(0).isStatic();
   }
 }

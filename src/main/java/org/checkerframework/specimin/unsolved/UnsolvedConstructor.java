@@ -31,8 +31,7 @@ public class UnsolvedConstructor extends UnsolvedCallable {
       Set<Node> mustPreserve,
       String accessModifier,
       List<String> typeVariableNames) {
-    // A constructor is never static (JLS 8.8).
-    super(parameterList, throwsList, mustPreserve, accessModifier, false, typeVariableNames);
+    super(parameterList, throwsList, mustPreserve, accessModifier, typeVariableNames);
   }
 
   /**
@@ -69,15 +68,10 @@ public class UnsolvedConstructor extends UnsolvedCallable {
     return "";
   }
 
-  /**
-   * A constructor cannot be static (JLS 8.8). Reaching this is a sign that a caller meant to handle
-   * methods only; test for {@link UnsolvedMethod} instead.
-   *
-   * @throws UnsupportedOperationException always
-   */
   @Override
-  public void setStatic() {
-    throw new UnsupportedOperationException("A constructor cannot be static: " + this);
+  protected String staticModifier() {
+    // A constructor is never static (JLS 8.8).
+    return "";
   }
 
   @Override

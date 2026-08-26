@@ -10,9 +10,8 @@ import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
 /**
  * An UnsolvedMethod instance is a representation of a method that can not be solved by
- * SymbolSolver. The reason is that the class file of that method is not in the root directory. See
- * {@link UnsolvedConstructor} for the constructor case, which has neither a name nor a return type
- * of its own.
+ * SymbolSolver. The reason is that the class file of that method is not in the root directory. An
+ * instance of this class cannot represent a constructor; see {@link UnsolvedConstructor}.
  *
  * <p>Note for {@link #equals}: <strong>Use with caution: two UnsolvedMethods may return not equal
  * but they may belong to the same UnsolvedMethodAlternates. This could be the case when the same
@@ -25,6 +24,9 @@ public class UnsolvedMethod extends UnsolvedCallable {
 
   /** The return type of the method. */
   private MemberType returnType;
+
+  /** This field is set to true if this method is a static method. */
+  private boolean isStatic;
 
   /**
    * Create an instance of UnsolvedMethod.
@@ -119,9 +121,29 @@ public class UnsolvedMethod extends UnsolvedCallable {
       String accessModifier,
       boolean isStatic,
       List<String> typeVariableNames) {
-    super(parameterList, throwsList, mustPreserve, accessModifier, isStatic, typeVariableNames);
+    super(parameterList, throwsList, mustPreserve, accessModifier, typeVariableNames);
     this.name = name;
     this.returnType = returnType;
+    this.isStatic = isStatic;
+  }
+
+  /**
+   * Returns true if this method is static.
+   *
+   * @return True if the method is static
+   */
+  public boolean isStatic() {
+    return isStatic;
+  }
+
+  /** Set isStatic to true */
+  public void setStatic() {
+    isStatic = true;
+  }
+
+  @Override
+  protected String staticModifier() {
+    return isStatic ? "static " : "";
   }
 
   @Override

@@ -297,6 +297,20 @@ public class UnsolvedMethodAlternates extends UnsolvedCallableAlternates<Unsolve
     return getAlternates().get(0).getName();
   }
 
+  /** Makes this method static. */
+  public void setStatic() {
+    applyToAllAlternates(UnsolvedMethod::setStatic);
+  }
+
+  /**
+   * Returns true if this method is static.
+   *
+   * @return True if the method is static
+   */
+  public boolean isStatic() {
+    return getAlternates().get(0).isStatic();
+  }
+
   /**
    * For all the alternates that have oldType as return type, replace it with newType.
    *
