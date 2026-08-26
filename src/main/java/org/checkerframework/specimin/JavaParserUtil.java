@@ -2267,8 +2267,10 @@ public class JavaParserUtil {
 
   /**
    * If the given expression supplies the value of an annotation element whose annotation type is
-   * resolvable, returns that element's declared type. An expression inside an array initializer
-   * supplies one element of an array-typed element, so the component type is returned for it.
+   * resolvable, returns the type that expression must have. That is the element's declared type,
+   * except that an expression supplying a single component of an array-typed element gets the
+   * component type: either from inside a braced initializer, or as the unbraced single value that
+   * JLS 9.7.1 accepts as shorthand for a one-element array.
    *
    * <p>Returns null when the expression is not in an element value position, when the annotation
    * type is one Specimin has to synthesize (and which therefore constrains nothing, since Specimin
@@ -2280,12 +2282,12 @@ public class JavaParserUtil {
   public static @Nullable ResolvedType getAnnotationElementType(Expression expr) {
     Node parent = expr.getParentNode().orElse(null);
 
-    // An array-valued element is written as an ArrayInitializerExpr whose values each have the
-    // element type's component type. Nested array initializers are impossible, because no legal
-    // element type is an array of arrays, so at most one level is unwrapped here.
-    boolean isArrayElement = false;
+    // A braced array value is an ArrayInitializerExpr whose values each supply one component of the
+    // array. Nested array initializers are impossible, because no legal element type is an array of
+    // arrays, so at most one level is stepped over here.
+    boolean insideBraces = false;
     if (parent instanceof ArrayInitializerExpr arrayInitializer) {
-      isArrayElement = true;
+      insideBraces = true;
       parent = arrayInitializer.getParentNode().orElse(null);
     }
 
@@ -2325,11 +2327,20 @@ public class JavaParserUtil {
         return null;
       }
 
-      if (!isArrayElement) {
-        return elementType;
+      if (insideBraces) {
+        // The expression supplies one component of the array. A non-array element type here means
+        // the input does not compile, so report nothing rather than a type that cannot be right.
+        return elementType.isArray() ? elementType.asArrayType().getComponentType() : null;
       }
 
-      return elementType.isArray() ? elementType.asArrayType().getComponentType() : null;
+      // The expression is the whole element value. JLS 9.7.1 also lets an array-typed element take
+      // a single value without braces, as shorthand for a one-element array, so a value that is not
+      // itself an initializer supplies one component rather than the whole array.
+      if (elementType.isArray() && !expr.isArrayInitializerExpr()) {
+        return elementType.asArrayType().getComponentType();
+      }
+
+      return elementType;
     }
 
     return null;
