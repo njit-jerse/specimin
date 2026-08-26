@@ -11,6 +11,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
@@ -201,19 +202,28 @@ public class Resolver {
       if (result != null) {
         return result;
       }
+    }
 
-      result = JavaParserUtil.tryResolveNodeIfInAnonymousClass(expr);
+    // Nothing resolves inside an anonymous class whose supertype is unsolvable, because
+    // JavaParser builds a JavaParserAnonymousClassDeclaration (which resolves that supertype)
+    // before it looks up the name. For example, even a java.lang type named in the body of such
+    // is considered "unsolvable" by JavaParser. We only retry expressions and types, because those
+    // denote the same thing wherever they are written; the alternative resolution strategy here
+    // tries to hoist them out of the anonymous class and checks if they resolve there.
+    if (unsolvable instanceof Expression || unsolvable instanceof Type) {
+      Object resolvedOutsideAnonymousClass =
+          JavaParserUtil.tryResolveNodeIfInAnonymousClass(unsolvable);
+
+      if (resolvedOutsideAnonymousClass != null) {
+        return resolvedOutsideAnonymousClass;
+      }
+    }
+
+    if (unsolvable instanceof MethodCallExpr methodCallExpr) {
+      Object result = handleUnresolvableRecordMember(methodCallExpr);
 
       if (result != null) {
         return result;
-      }
-
-      if (expr.isMethodCallExpr()) {
-        result = handleUnresolvableRecordMember(expr.asMethodCallExpr());
-
-        if (result != null) {
-          return result;
-        }
       }
     }
 
