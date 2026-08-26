@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
+import org.checkerframework.specimin.QualifiedTypeName;
 
 /**
  * /** Given a name, return type, a set of parameters and a set of potential encapsulating classes,
@@ -225,6 +226,82 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   }
 
   /**
+   * Creates a new unsolved constructor declaration. There is no name parameter: JLS 8.8.1 requires
+   * a constructor to be declared under the simple name of its declaring type, so the name is read
+   * from the declaring type rather than supplied by the caller. Neither is there a return type
+   * parameter: a constructor declares none, which {@link UnsolvedMethod#toString} represents as the
+   * empty type.
+   *
+   * @param declaringTypes The types whose constructor this could be
+   * @param parameters Potential parameters of the constructor. Each set represents a possibility of
+   *     parameter types at that position
+   * @return The constructor definition
+   */
+  public static UnsolvedMethodAlternates createConstructor(
+      List<UnsolvedClassOrInterfaceAlternates> declaringTypes, List<Set<MemberType>> parameters) {
+    return withConstructorsMarked(
+        create(
+            declaringTypes.get(0).getClassName(),
+            Set.of(new SolvedMemberType("")),
+            declaringTypes,
+            parameters));
+  }
+
+  /**
+   * Creates a new unsolved constructor declaration, recording nodes that must be preserved if a
+   * given parameter type is chosen. See {@link #createConstructor} for why there is no name
+   * parameter.
+   *
+   * @param declaringTypes The types whose constructor this could be
+   * @param parameters Potential parameters of the constructor. Each map represents a possibility of
+   *     parameter types at that position, along with nodes that must be preserved if that type is
+   *     chosen
+   * @return The constructor definition
+   */
+  public static UnsolvedMethodAlternates createConstructorWithPreservation(
+      List<UnsolvedClassOrInterfaceAlternates> declaringTypes,
+      List<Map<MemberType, @Nullable Node>> parameters) {
+    return withConstructorsMarked(
+        createWithPreservation(
+            declaringTypes.get(0).getClassName(),
+            Set.of(new SolvedMemberType("")),
+            declaringTypes,
+            parameters,
+            List.of()));
+  }
+
+  /**
+   * Replaces every alternate of the given method with a copy marked as a constructor. The create
+   * methods build ordinary methods; this is how the constructor factories above turn their result
+   * into constructors.
+   *
+   * @param method the method whose alternates should be marked
+   * @return {@code method}, for chaining
+   */
+  private static UnsolvedMethodAlternates withConstructorsMarked(UnsolvedMethodAlternates method) {
+    List<UnsolvedMethod> alternates = method.getAlternates();
+
+    for (int i = 0; i < alternates.size(); i++) {
+      UnsolvedMethod alternate = alternates.get(i);
+
+      alternates.set(
+          i,
+          new UnsolvedMethod(
+              alternate.getName(),
+              alternate.getReturnType(),
+              alternate.getParameterList(),
+              alternate.getThrownExceptions(),
+              alternate.getMustPreserveNodes(),
+              alternate.getAccessModifier(),
+              alternate.isStatic(),
+              alternate.getTypeVariableNames(),
+              true));
+    }
+
+    return method;
+  }
+
+  /**
    * Updates return types and must preserve nodes. Saves the intersection of the previous and the
    * input, since we know more information to narrow potential return types down.
    *
@@ -256,7 +333,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
                   Set.of((Node) entry.getValue()),
                   old.getAccessModifier(),
                   old.isStatic(),
-                  old.getTypeVariableNames());
+                  old.getTypeVariableNames(),
+                  old.isConstructor());
           addAlternate(method);
         }
       }
@@ -292,9 +370,9 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
     Set<String> fqns = new LinkedHashSet<>();
 
     for (UnsolvedMethod methodAlternate : getAlternates()) {
-      StringBuilder methodSignature = new StringBuilder();
-
-      methodSignature.append(methodAlternate.getName()).append('(');
+      // The name is prepended below, once per declaring type: a constructor takes its name from
+      // the type that declares it, so it is not the same for every key built here.
+      StringBuilder methodSignature = new StringBuilder("(");
 
       List<MemberType> parameterList = methodAlternate.getParameterList();
       for (int i = 0; i < parameterList.size(); i++) {
@@ -314,7 +392,14 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
 
       for (UnsolvedClassOrInterfaceAlternates alternate : getAlternateDeclaringTypes()) {
         for (String fqn : alternate.getFullyQualifiedNames()) {
-          fqns.add(fqn + "#" + methodSignature);
+          // A constructor is named for the type that declares it (JLS 8.8.1), so every alternate
+          // declaring type contributes a key under its own simple name.
+          String name =
+              methodAlternate.isConstructor()
+                  ? QualifiedTypeName.parse(fqn).simpleName()
+                  : methodAlternate.getName();
+
+          fqns.add(fqn + "#" + name + methodSignature);
         }
       }
     }
@@ -430,6 +515,11 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
   }
 
   @Override
+  public boolean isConstructor() {
+    return getAlternates().get(0).isConstructor();
+  }
+
+  @Override
   public List<MemberType> getThrownExceptions() {
     return getAlternates().get(0).getThrownExceptions();
   }
@@ -471,7 +561,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
               alternate.getMustPreserveNodes(),
               alternate.getAccessModifier(),
               alternate.isStatic(),
-              alternate.getTypeVariableNames());
+              alternate.getTypeVariableNames(),
+              alternate.isConstructor());
       copy.addThrownException(exception);
       throwing.add(copy);
     }
@@ -554,7 +645,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
                 alternate.getMustPreserveNodes(),
                 alternate.getAccessModifier(),
                 alternate.isStatic(),
-                alternate.getTypeVariableNames());
+                alternate.getTypeVariableNames(),
+                alternate.isConstructor());
         addAlternate(newAlternate);
       }
 
@@ -596,7 +688,8 @@ public class UnsolvedMethodAlternates extends UnsolvedSymbolAlternates<UnsolvedM
                   alternate.getMustPreserveNodes(),
                   alternate.getAccessModifier(),
                   alternate.isStatic(),
-                  alternate.getTypeVariableNames());
+                  alternate.getTypeVariableNames(),
+                  alternate.isConstructor());
 
           addAlternate(newAlternate);
         }

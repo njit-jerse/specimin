@@ -327,7 +327,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       }
     }
     for (UnsolvedMethod method : methods) {
-      sb.append(method.toString(typeOfType));
+      sb.append(method.toString(typeOfType, className));
     }
     sb.append("}\n");
     return sb.toString();

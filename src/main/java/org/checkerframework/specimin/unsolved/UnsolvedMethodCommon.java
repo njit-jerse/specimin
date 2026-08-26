@@ -16,6 +16,15 @@ public interface UnsolvedMethodCommon {
   String getName();
 
   /**
+   * Returns whether this is a constructor rather than an ordinary method. A constructor's name is
+   * not its own: JLS 8.8.1 requires it to be the simple name of the declaring type, so it is read
+   * from that type wherever the name is needed rather than trusted from {@link #getName}.
+   *
+   * @return true if this is a constructor
+   */
+  boolean isConstructor();
+
+  /**
    * Getter for the throws list.
    *
    * @return the throws list

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
 
 /**
@@ -22,8 +23,15 @@ import org.checkerframework.specimin.JavaParserUtil;
  * to, call .equals on UnsolvedMethodAlternates instead of here.</strong>
  */
 public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedMethodCommon {
-  /** The name of the method */
+  /**
+   * The name of the method. For a constructor this is the simple name of the declaring type, which
+   * is where {@link #toString} takes it from instead: JLS 8.8.1 fixes a constructor's name to be
+   * that simple name, so it is not independent state and no caller supplies it.
+   */
   private final String name;
+
+  /** Whether this is a constructor rather than an ordinary method. */
+  private final boolean isConstructor;
 
   /** The return type of the method. */
   private MemberType returnType;
@@ -146,8 +154,46 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
       String accessModifier,
       boolean isStatic,
       List<String> typeVariableNames) {
+    this(
+        name,
+        returnType,
+        parameterList,
+        throwsList,
+        mustPreserve,
+        accessModifier,
+        isStatic,
+        typeVariableNames,
+        false);
+  }
+
+  /**
+   * Create an instance of UnsolvedMethod, which may be a constructor. Prefer {@link
+   * UnsolvedMethodAlternates#createConstructor} to calling this directly with {@code isConstructor}
+   * set: it derives the name from the declaring type, which is the only name JLS 8.8.1 permits.
+   *
+   * @param name the name of the method; for a constructor, the declaring type's simple name
+   * @param returnType the return type of the method; the empty type for a constructor
+   * @param parameterList the list of parameters for this method
+   * @param throwsList the list of exceptions thrown by this method
+   * @param accessModifier the access modifier of this method
+   * @param mustPreserve the set of nodes that must be preserved with this alternate
+   * @param isStatic whether this method is static
+   * @param typeVariableNames the names of this method's type variables, in declaration order
+   * @param isConstructor whether this is a constructor rather than an ordinary method
+   */
+  public UnsolvedMethod(
+      String name,
+      MemberType returnType,
+      List<MemberType> parameterList,
+      List<MemberType> throwsList,
+      Set<Node> mustPreserve,
+      String accessModifier,
+      boolean isStatic,
+      List<String> typeVariableNames,
+      boolean isConstructor) {
     super(mustPreserve);
     this.name = name;
+    this.isConstructor = isConstructor;
     this.returnType = returnType;
 
     // Parameter and throws lists should be mutable, so copy them to be safe
@@ -190,6 +236,11 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
   @Override
   public String getName() {
     return name;
+  }
+
+  @Override
+  public boolean isConstructor() {
+    return isConstructor;
   }
 
   /**
@@ -287,9 +338,12 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
    * Return the content of the method. Note that the body of the method is stubbed out.
    *
    * @param type The type of the declaring type
+   * @param declaringTypeName The simple name of the declaring type. A constructor is declared under
+   *     this name (JLS 8.8.1), so it is read from the declaring type rather than stored.
    * @return the content of the method with the body stubbed out
    */
-  public String toString(UnsolvedClassOrInterfaceType type) {
+  public String toString(
+      UnsolvedClassOrInterfaceType type, @ClassGetSimpleName String declaringTypeName) {
     StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
       MemberType parameterType = parameterList.get(i);
@@ -319,7 +373,7 @@ public class UnsolvedMethod extends UnsolvedSymbolAlternate implements UnsolvedM
     if (!returnTypeAsString.isEmpty()) {
       signature.append(returnTypeAsString).append(" ");
     }
-    signature.append(name).append("(");
+    signature.append(isConstructor ? declaringTypeName : name).append("(");
     signature.append(arguments);
     signature.append(")");
 

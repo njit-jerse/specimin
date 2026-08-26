@@ -22,7 +22,6 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
-import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
@@ -80,6 +79,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
+import org.checkerframework.specimin.QualifiedTypeName;
 import org.checkerframework.specimin.Resolver;
 
 /**
@@ -588,17 +588,17 @@ public class FullyQualifiedNameGenerator {
     else if (JavaParserUtil.isAClassPath(expr.toString())
         || (expr.isFieldAccessExpr()
             && JavaParserUtil.isAQualifiedTypeName(expr.asFieldAccessExpr()))) {
-      Expression scoped = expr;
+      QualifiedTypeName name = QualifiedTypeName.ofTypeName(expr);
 
-      while (scoped instanceof NodeWithTraversableScope
-          && ((NodeWithTraversableScope) scoped).traverseScope().isPresent()) {
-        scoped = ((NodeWithTraversableScope) scoped).traverseScope().get();
-      }
+      // An expression that writes no name has no identifiers to read, so its text is all there is
+      // to go on.
+      String firstIdentifier = name == null ? expr.toString() : name.firstIdentifier();
+      String fullName = name == null ? expr.toString() : name.toString();
 
       return Set.of(
           new FullyQualifiedNameSet(
               getFQNsFromErasedClassName(
-                  scoped.toString(), expr.toString(), expr.findCompilationUnit().get(), expr)));
+                  firstIdentifier, fullName, expr.findCompilationUnit().get(), expr)));
     } else if (expr.isNameExpr() && JavaParserUtil.isAClassName(expr.toString())) {
       return Set.of(
           new FullyQualifiedNameSet(
@@ -2318,21 +2318,13 @@ public class FullyQualifiedNameGenerator {
       return new FullyQualifiedNameSet(type.getNameAsString());
     }
     // If a ClassOrInterfaceType is Map.Entry, we need to find the import with java.util.Map, not
-    // java.util.Map.Entry.
-    // Hence, look for the import with the "earliest" scope (with Map.Entry, this would be Map).
-    String getImportedName = type.getNameAsString();
-
-    Optional<ClassOrInterfaceType> scope = type.getScope();
-
-    while (scope.isPresent()) {
-      getImportedName = scope.get().getNameAsString();
-      scope = scope.get().getScope();
-    }
+    // java.util.Map.Entry: it is the first identifier that an import binds (JLS 6.5.5.2).
+    QualifiedTypeName name = QualifiedTypeName.of(type);
 
     Set<String> erasedFQNs =
         getFQNsFromErasedClassNameImpl(
-            JavaParserUtil.erase(getImportedName),
-            JavaParserUtil.erase(type.getNameWithScope()),
+            name.firstIdentifier(),
+            name.toString(),
             type.findCompilationUnit().get(),
             type,
             alreadyTraversed);
@@ -2357,16 +2349,8 @@ public class FullyQualifiedNameGenerator {
    */
   public FullyQualifiedNameSet getFQNsFromAnnotation(AnnotationExpr anno) {
     // If an annotation is @Foo.Bar, we need to find the import with org.example.Foo, not
-    // org.example.Foo.Bar.
-    // Hence, look for the import with the "earliest" scope (with @Foo.Bar, this would be Foo).
-    String getImportedName = anno.getNameAsString();
-
-    Optional<Name> scope = anno.getName().getQualifier();
-
-    while (scope.isPresent()) {
-      getImportedName = scope.get().asString();
-      scope = scope.get().getQualifier();
-    }
+    // org.example.Foo.Bar: it is the first identifier that an import binds (JLS 6.5.5.2).
+    QualifiedTypeName name = QualifiedTypeName.of(anno.getName());
 
     TypeDeclaration<?> parent = null;
 
@@ -2379,7 +2363,7 @@ public class FullyQualifiedNameGenerator {
 
     return new FullyQualifiedNameSet(
         getFQNsFromErasedClassName(
-            getImportedName, anno.getNameAsString(), anno.findCompilationUnit().get(), parent));
+            name.firstIdentifier(), name.toString(), anno.findCompilationUnit().get(), parent));
   }
 
   /**

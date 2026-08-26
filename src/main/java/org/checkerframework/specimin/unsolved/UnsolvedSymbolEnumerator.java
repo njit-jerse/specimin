@@ -6,7 +6,9 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
+import org.checkerframework.specimin.QualifiedTypeName;
 import org.checkerframework.specimin.Slicer;
 
 /**
@@ -252,6 +254,47 @@ public class UnsolvedSymbolEnumerator {
             .computeIfAbsent(declaringType.getAlternates().get(0), k -> new LinkedHashSet<>())
             .add(alternate);
       }
+
+      // A nested type is emitted only inside its enclosing type's declaration, so filing it above
+      // is not enough: the type that encloses it has to be placed as well, and it may be reachable
+      // by no other route. A single-type-import declaration may name a nested type (JLS 7.5.1), in
+      // which case the enclosing type is never written in the input at all.
+      //
+      // Only the enclosure of the alternate this best effort chose is placed. The other alternate
+      // declaring types are enclosures of the alternates it did not choose, and emitting those
+      // would emit whole types that nothing in the output refers to.
+      UnsolvedClassOrInterfaceAlternates enclosing = chosenEnclosingType(type);
+
+      if (enclosing != null) {
+        addTypeToCorrectDataStructure(enclosing, outerTypes, outerTypesToInnerTypes);
+      }
     }
+  }
+
+  /**
+   * Returns the alternate declaring type that encloses the alternate of {@code type} that this best
+   * effort chose, i.e. the one whose fully-qualified name is that alternate's qualifier.
+   *
+   * @param type a type that has at least one alternate declaring type
+   * @return the enclosing type of the chosen alternate, or null if no alternate declaring type is
+   *     that alternate's qualifier
+   */
+  private @Nullable UnsolvedClassOrInterfaceAlternates chosenEnclosingType(
+      UnsolvedClassOrInterfaceAlternates type) {
+    QualifiedTypeName enclosingName =
+        QualifiedTypeName.parse(type.getAlternates().get(0).getFullyQualifiedName())
+            .enclosingName();
+
+    if (enclosingName == null) {
+      return null;
+    }
+
+    for (UnsolvedClassOrInterfaceAlternates declaringType : type.getAlternateDeclaringTypes()) {
+      if (declaringType.getFullyQualifiedNames().contains(enclosingName.toString())) {
+        return declaringType;
+      }
+    }
+
+    return null;
   }
 }

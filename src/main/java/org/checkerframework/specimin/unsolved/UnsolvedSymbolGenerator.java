@@ -71,7 +71,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -80,6 +79,7 @@ import org.checkerframework.checker.nullness.qual.EnsuresNonNullIf;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
+import org.checkerframework.specimin.QualifiedTypeName;
 import org.checkerframework.specimin.Resolver;
 
 /**
@@ -216,7 +216,6 @@ public class UnsolvedSymbolGenerator {
     } else if (node instanceof ObjectCreationExpr
         || node instanceof ExplicitConstructorInvocationStmt) {
       UnsolvedClassOrInterfaceAlternates scope;
-      String constructorName;
       List<Expression> arguments;
       int numberOfTypeParams = 0;
       // The type being instantiated plays the role a receiver's type plays for a method call: it
@@ -235,7 +234,6 @@ public class UnsolvedSymbolGenerator {
         // Do not generate here; that should be taken care of in the inferContextImpl call above.
         scope = (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(instantiatedType);
 
-        constructorName = constructor.getTypeAsString();
         arguments = constructor.getArguments();
 
         // While rare, constructors can have type parameters, just like how a method can define
@@ -262,7 +260,6 @@ public class UnsolvedSymbolGenerator {
           // Do not generate here; that should be taken care of in the inferContextImpl call above.
           scope = (UnsolvedClassOrInterfaceAlternates) findExistingAndUpdateFQNs(instantiatedType);
 
-          constructorName = superClass.getNameAsString();
           arguments = constructor.getArguments();
         } else {
           // We should never reach this case unless the user inputted a bad program (i.e.
@@ -280,14 +277,7 @@ public class UnsolvedSymbolGenerator {
       // A constructor call indicates a class
       scope.setType(UnsolvedClassOrInterfaceType.CLASS);
 
-      handleConstructorCall(
-          scope,
-          JavaParserUtil.erase(constructorName),
-          arguments,
-          numberOfTypeParams,
-          node,
-          instantiatedType,
-          result);
+      handleConstructorCall(scope, arguments, numberOfTypeParams, node, instantiatedType, result);
     } else if (node instanceof MethodDeclaration methodDecl) {
       handleMethodDeclarationWithOverride(methodDecl, result);
     }
@@ -1588,7 +1578,6 @@ public class UnsolvedSymbolGenerator {
    * constructor invocation statements (super/this) and constructor calls (new ...()).
    *
    * @param location The location of the constructor
-   * @param constructorName The name of the constructor
    * @param arguments The arguments of the constructor call
    * @param numberOfTypeParams The number of type parameters of the constructor only
    * @param callSite The constructor call, used to find the calling context's type variables
@@ -1598,7 +1587,6 @@ public class UnsolvedSymbolGenerator {
    */
   private void handleConstructorCall(
       UnsolvedClassOrInterfaceAlternates location,
-      String constructorName,
       List<Expression> arguments,
       int numberOfTypeParams,
       Node callSite,
@@ -1649,7 +1637,7 @@ public class UnsolvedSymbolGenerator {
         potentialFQNs.add(
             potentialScopeFQN
                 + "#"
-                + constructorName
+                + QualifiedTypeName.parse(potentialScopeFQN).simpleName()
                 + "("
                 + String.join(", ", simpleNamesCombo)
                 + ")");
@@ -1670,12 +1658,8 @@ public class UnsolvedSymbolGenerator {
               argumentToParameterPotentialFQNsWithMethodRefsHandled);
 
       UnsolvedMethodAlternates generatedMethod =
-          UnsolvedMethodAlternates.createWithPreservation(
-              constructorName,
-              Set.of(new SolvedMemberType("")),
-              List.of(location),
-              parametersToMustPreserve,
-              List.of());
+          UnsolvedMethodAlternates.createConstructorWithPreservation(
+              List.of(location), parametersToMustPreserve);
 
       addNewSymbolToGeneratedSymbolsMap(generatedMethod);
 
@@ -2494,8 +2478,12 @@ public class UnsolvedSymbolGenerator {
 
       for (Set<String> set : potentialScopeFQNs) {
         for (String potentialScopeFQN : set) {
+          // A constructor is named for the type that declares it (JLS 8.8.1).
+          String name =
+              isConstructor ? QualifiedTypeName.parse(potentialScopeFQN).simpleName() : methodName;
+
           potentialFQNs.add(
-              potentialScopeFQN + "#" + methodName + "(" + String.join(", ", simpleNames) + ")");
+              potentialScopeFQN + "#" + name + "(" + String.join(", ", simpleNames) + ")");
         }
       }
 
@@ -2503,8 +2491,10 @@ public class UnsolvedSymbolGenerator {
 
       if (generated == null) {
         UnsolvedMethodAlternates generatedMethod =
-            UnsolvedMethodAlternates.create(
-                methodName, Set.of(returnType), scope, parametersAsMemberType);
+            isConstructor
+                ? UnsolvedMethodAlternates.createConstructor(scope, parametersAsMemberType)
+                : UnsolvedMethodAlternates.create(
+                    methodName, Set.of(returnType), scope, parametersAsMemberType);
 
         if (isStatic) {
           generatedMethod.setStatic();
@@ -2793,7 +2783,7 @@ public class UnsolvedSymbolGenerator {
                 continue;
               }
 
-              if (!Objects.equals(method.getName(), syntheticType.getClassName())) {
+              if (!method.isConstructor()) {
                 continue;
               }
 
@@ -2803,11 +2793,7 @@ public class UnsolvedSymbolGenerator {
 
             if (!foundConstructor) {
               UnsolvedMethodAlternates constructor =
-                  UnsolvedMethodAlternates.create(
-                      syntheticType.getClassName(),
-                      Set.of(new SolvedMemberType("")),
-                      List.of(syntheticType),
-                      List.of());
+                  UnsolvedMethodAlternates.createConstructor(List.of(syntheticType), List.of());
 
               constructor.setContent(superCall);
               toAdd.add(constructor);
@@ -5126,7 +5112,6 @@ public class UnsolvedSymbolGenerator {
    */
   private Set<String> getFQNsForUnsolvableConstructor(Node node) {
     UnsolvedClassOrInterfaceAlternates scope;
-    String constructorName;
     List<Expression> arguments;
 
     if (node instanceof ObjectCreationExpr constructor) {
@@ -5135,7 +5120,6 @@ public class UnsolvedSymbolGenerator {
               findExistingAndUpdateFQNs(
                   fullyQualifiedNameGenerator.getFQNsFromType(constructor.getType()));
 
-      constructorName = constructor.getTypeAsString();
       arguments = constructor.getArguments();
     } else if (node instanceof ExplicitConstructorInvocationStmt constructor) {
       // If it's unresolvable, it's a constructor in the unsolved parent class
@@ -5147,7 +5131,6 @@ public class UnsolvedSymbolGenerator {
             (UnsolvedClassOrInterfaceAlternates)
                 findExistingAndUpdateFQNs(fullyQualifiedNameGenerator.getFQNsFromType(superClass));
 
-        constructorName = superClass.getNameAsString();
         arguments = constructor.getArguments();
       } else {
         // We should never reach this case unless the user inputted a bad program (i.e.
@@ -5164,9 +5147,6 @@ public class UnsolvedSymbolGenerator {
     if (scope == null) {
       throw new RuntimeException("Scope not created when it should've been");
     }
-
-    constructorName =
-        JavaParserUtil.getSimpleNameFromQualifiedName(JavaParserUtil.erase(constructorName));
 
     List<Set<String>> simpleNames = new ArrayList<>();
 
@@ -5187,7 +5167,7 @@ public class UnsolvedSymbolGenerator {
         potentialFQNs.add(
             potentialScopeFQN
                 + "#"
-                + constructorName
+                + QualifiedTypeName.parse(potentialScopeFQN).simpleName()
                 + "("
                 + String.join(", ", simpleNameList)
                 + ")");
