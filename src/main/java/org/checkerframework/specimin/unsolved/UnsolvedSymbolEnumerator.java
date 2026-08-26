@@ -6,7 +6,9 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
+import org.checkerframework.specimin.QualifiedTypeName;
 import org.checkerframework.specimin.Slicer;
 
 /**
@@ -21,8 +23,8 @@ public class UnsolvedSymbolEnumerator {
   /** The unsolved fields that must be included in the output. */
   private final Set<UnsolvedFieldAlternates> unsolvedFields = new LinkedHashSet<>();
 
-  /** The unsolved methods that must be included in the output. */
-  private final Set<UnsolvedMethodAlternates> unsolvedMethods = new LinkedHashSet<>();
+  /** The unsolved methods and constructors that must be included in the output. */
+  private final Set<UnsolvedCallableAlternates<?>> unsolvedMethods = new LinkedHashSet<>();
 
   /**
    * Creates a new instance of UnsolvedSymbolEnumerator.
@@ -39,12 +41,12 @@ public class UnsolvedSymbolEnumerator {
         }
 
         unsolvedFields.add(field);
-      } else if (unsolvedSymbol instanceof UnsolvedMethodAlternates method) {
+      } else if (unsolvedSymbol instanceof UnsolvedCallableAlternates<?> callable) {
         if (unsolvedSymbol.getAlternateDeclaringTypes().isEmpty()) {
           continue;
         }
 
-        unsolvedMethods.add(method);
+        unsolvedMethods.add(callable);
       }
     }
   }
@@ -96,10 +98,10 @@ public class UnsolvedSymbolEnumerator {
       addAllUsedTypesToSet(field.getType(), outerTypes, outerTypesToInnerTypes);
     }
 
-    Map<UnsolvedClassOrInterface, Set<UnsolvedMethod>> typesToMethods = new LinkedHashMap<>();
+    Map<UnsolvedClassOrInterface, Set<UnsolvedCallable>> typesToMethods = new LinkedHashMap<>();
 
-    for (UnsolvedMethodAlternates unsolved : unsolvedMethods) {
-      UnsolvedMethod method = unsolved.getAlternates().get(0);
+    for (UnsolvedCallableAlternates<?> unsolved : unsolvedMethods) {
+      UnsolvedCallable method = unsolved.getAlternates().get(0);
       UnsolvedClassOrInterfaceAlternates typeAlternates =
           unsolved.getAlternateDeclaringTypes().get(0);
       UnsolvedClassOrInterface type = typeAlternates.getAlternates().get(0);
@@ -111,7 +113,10 @@ public class UnsolvedSymbolEnumerator {
 
       typesToMethods.get(type).add(method);
 
-      addAllUsedTypesToSet(method.getReturnType(), outerTypes, outerTypesToInnerTypes);
+      // Only a method has a return type (JLS 8.8.1).
+      if (method instanceof UnsolvedMethod asMethod) {
+        addAllUsedTypesToSet(asMethod.getReturnType(), outerTypes, outerTypesToInnerTypes);
+      }
 
       for (MemberType parameterType : method.getParameterList()) {
         addAllUsedTypesToSet(parameterType, outerTypes, outerTypesToInnerTypes);
@@ -147,7 +152,7 @@ public class UnsolvedSymbolEnumerator {
   private String getTypeDeclarationAsString(
       UnsolvedClassOrInterface type,
       Map<UnsolvedClassOrInterface, Set<UnsolvedField>> typesToFields,
-      Map<UnsolvedClassOrInterface, Set<UnsolvedMethod>> typesToMethods,
+      Map<UnsolvedClassOrInterface, Set<UnsolvedCallable>> typesToMethods,
       Map<UnsolvedClassOrInterface, Set<UnsolvedClassOrInterface>> outerTypesToInnerTypes,
       Set<Node> ableToRemove,
       boolean isInnerClass) {
@@ -157,7 +162,7 @@ public class UnsolvedSymbolEnumerator {
       fields = Set.of();
     }
 
-    Set<UnsolvedMethod> methods = typesToMethods.get(type);
+    Set<UnsolvedCallable> methods = typesToMethods.get(type);
 
     if (methods == null) {
       methods = Set.of();
@@ -175,7 +180,7 @@ public class UnsolvedSymbolEnumerator {
       ableToRemove.removeAll(field.getMustPreserveNodes());
     }
 
-    for (UnsolvedMethod method : methods) {
+    for (UnsolvedCallable method : methods) {
       ableToRemove.removeAll(method.getMustPreserveNodes());
     }
 
@@ -252,6 +257,47 @@ public class UnsolvedSymbolEnumerator {
             .computeIfAbsent(declaringType.getAlternates().get(0), k -> new LinkedHashSet<>())
             .add(alternate);
       }
+
+      // A nested type is emitted only inside its enclosing type's declaration, so filing it above
+      // is not enough: the type that encloses it has to be placed as well, and it may be reachable
+      // by no other route. A single-type-import declaration may name a nested type (JLS 7.5.1), in
+      // which case the enclosing type is never written in the input at all.
+      //
+      // Only the enclosure of the alternate this best effort chose is placed. The other alternate
+      // declaring types are enclosures of the alternates it did not choose, and emitting those
+      // would emit whole types that nothing in the output refers to.
+      UnsolvedClassOrInterfaceAlternates enclosing = chosenEnclosingType(type);
+
+      if (enclosing != null) {
+        addTypeToCorrectDataStructure(enclosing, outerTypes, outerTypesToInnerTypes);
+      }
     }
+  }
+
+  /**
+   * Returns the alternate declaring type that encloses the alternate of {@code type} that this best
+   * effort chose, i.e. the one whose fully-qualified name is that alternate's qualifier.
+   *
+   * @param type a type that has at least one alternate declaring type
+   * @return the enclosing type of the chosen alternate, or null if no alternate declaring type is
+   *     that alternate's qualifier
+   */
+  private @Nullable UnsolvedClassOrInterfaceAlternates chosenEnclosingType(
+      UnsolvedClassOrInterfaceAlternates type) {
+    QualifiedTypeName enclosingName =
+        QualifiedTypeName.parse(type.getAlternates().get(0).getFullyQualifiedName())
+            .enclosingName();
+
+    if (enclosingName == null) {
+      return null;
+    }
+
+    for (UnsolvedClassOrInterfaceAlternates declaringType : type.getAlternateDeclaringTypes()) {
+      if (declaringType.getFullyQualifiedNames().contains(enclosingName.toString())) {
+        return declaringType;
+      }
+    }
+
+    return null;
   }
 }

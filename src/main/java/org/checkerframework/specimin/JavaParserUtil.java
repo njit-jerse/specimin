@@ -3319,7 +3319,7 @@ public class JavaParserUtil {
 
     ClassOrInterfaceType asClassOrInterface = scope.asTypeExpr().getType().asClassOrInterfaceType();
 
-    if (asClassOrInterface.getScope().isPresent()
+    if (QualifiedTypeName.of(asClassOrInterface).isQualified()
         || asClassOrInterface.getTypeArguments().isPresent()) {
       // A qualified name or an explicitly parameterized name is unambiguously a type.
       return null;
