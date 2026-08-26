@@ -22,14 +22,17 @@ import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
@@ -56,6 +59,8 @@ import com.github.javaparser.resolution.MethodUsage;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.AssociableToAST;
+import com.github.javaparser.resolution.declarations.ResolvedAnnotationDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedAnnotationMemberDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedEnumConstantDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
@@ -2241,6 +2246,107 @@ public class JavaParserUtil {
   }
 
   /**
+   * Like {@link #getInitializerRHS(String)}, but the returned value is guaranteed to be a constant
+   * expression (JLS 15.29) whenever one exists for the given type. A {@code static final} field
+   * initialized with it is therefore a constant variable (JLS 4.12.4), and so may be read from a
+   * constant context such as an annotation argument or a {@code case} label.
+   *
+   * <p>The two methods differ only for {@code String}: the null literal is not a constant
+   * expression, so a String constant needs a string literal instead. (Primitives are the only other
+   * constant variable types, and already get literal initializers.)
+   *
+   * @param variableType the type of the variable, as a fully-qualified name
+   * @return a default value for that type, which is a constant expression if the type permits one
+   */
+  public static String getConstantInitializerRHS(String variableType) {
+    if (JavaLangUtils.isJavaLangString(variableType)) {
+      return "\"\"";
+    }
+    return getInitializerRHS(variableType);
+  }
+
+  /**
+   * If the given expression supplies the value of an annotation element whose annotation type is
+   * resolvable, returns the type that expression must have. That is the element's declared type,
+   * except that an expression supplying a single component of an array-typed element gets the
+   * component type: either from inside a braced initializer, or as the unbraced single value that
+   * JLS 9.7.1 accepts as shorthand for a one-element array.
+   *
+   * <p>Returns null when the expression is not in an element value position, when the annotation
+   * type is one Specimin has to synthesize (and which therefore constrains nothing, since Specimin
+   * chooses the element's type itself), or when the annotation type declares no matching element.
+   *
+   * @param expr the expression to test
+   * @return the declared type of the annotation element this expression supplies, or null
+   */
+  public static @Nullable ResolvedType getAnnotationElementType(Expression expr) {
+    Node parent = expr.getParentNode().orElse(null);
+
+    // A braced array value is an ArrayInitializerExpr whose values each supply one component of the
+    // array. Nested array initializers are impossible, because no legal element type is an array of
+    // arrays, so at most one level is stepped over here.
+    boolean insideBraces = false;
+    if (parent instanceof ArrayInitializerExpr arrayInitializer) {
+      insideBraces = true;
+      parent = arrayInitializer.getParentNode().orElse(null);
+    }
+
+    // No identity check against the annotation's value is needed in either case below: the value
+    // is the only Expression child of both node kinds, since a MemberValuePair holds its name as a
+    // SimpleName.
+    String elementName;
+    AnnotationExpr annotation;
+    if (parent instanceof SingleMemberAnnotationExpr singleMember) {
+      elementName = "value";
+      annotation = singleMember;
+    } else if (parent instanceof MemberValuePair pair
+        && pair.getParentNode().orElse(null) instanceof AnnotationExpr enclosing) {
+      elementName = pair.getNameAsString();
+      annotation = enclosing;
+    } else {
+      return null;
+    }
+
+    ResolvedAnnotationDeclaration resolved = Resolver.resolve(annotation);
+
+    if (resolved == null) {
+      return null;
+    }
+
+    for (ResolvedAnnotationMemberDeclaration member : resolved.getAnnotationMembers()) {
+      if (!member.getName().equals(elementName)) {
+        continue;
+      }
+
+      ResolvedType elementType;
+      try {
+        elementType = member.getType();
+      } catch (UnsolvedSymbolException ex) {
+        // The annotation type resolves but the element's type does not, so there is nothing to
+        // report.
+        return null;
+      }
+
+      if (insideBraces) {
+        // The expression supplies one component of the array. A non-array element type here means
+        // the input does not compile, so report nothing rather than a type that cannot be right.
+        return elementType.isArray() ? elementType.asArrayType().getComponentType() : null;
+      }
+
+      // The expression is the whole element value. JLS 9.7.1 also lets an array-typed element take
+      // a single value without braces, as shorthand for a one-element array, so a value that is not
+      // itself an initializer supplies one component rather than the whole array.
+      if (elementType.isArray() && !expr.isArrayInitializerExpr()) {
+        return elementType.asArrayType().getComponentType();
+      }
+
+      return elementType;
+    }
+
+    return null;
+  }
+
+  /**
    * Given a list of parameter types, return a super/this(...) call with the default values of those
    * types.
    *
@@ -2903,14 +3009,14 @@ public class JavaParserUtil {
    * @return true if node is in a position requiring a compile-time constant
    */
   public static boolean isInConstantContext(Node node) {
+    if (isInsideAnnotation(node)) {
+      return true;
+    }
+
     Node child = node;
     Node parent = child.getParentNode().orElse(null);
 
     while (parent != null) {
-      if (parent instanceof AnnotationExpr) {
-        return true;
-      }
-
       if (parent instanceof SwitchEntry entry && isCaseLabel(entry, child)) {
         return true;
       }
@@ -2928,6 +3034,18 @@ public class JavaParserUtil {
     }
 
     return false;
+  }
+
+  /**
+   * Returns true if the given node is inside an annotation, and so supplies an annotation element
+   * value or part of one. JLS 9.7.1 restricts such a value to a constant expression, a class
+   * literal, an enum constant, an annotation, or an array initializer of those.
+   *
+   * @param node the node to test
+   * @return true if node is inside an annotation
+   */
+  public static boolean isInsideAnnotation(Node node) {
+    return node.findAncestor(AnnotationExpr.class).isPresent();
   }
 
   /**
@@ -2973,21 +3091,44 @@ public class JavaParserUtil {
   }
 
   /**
-   * Returns true if the given type is one that a constant variable may be declared with: a
-   * primitive type or {@code String} (JLS 4.12.4). No other type can be a constant variable, so a
-   * field of any other type is never usable in a constant context.
+   * Applies {@link JavaLangUtils#isConstantVariableType(String)} to a resolved type. Unlike {@link
+   * #isConstantVariableType(Type)}, this names the type exactly, so it does not approximate.
+   *
+   * @param type a resolved type
+   * @return true if a constant variable could have this type
+   */
+  public static boolean isConstantVariableType(ResolvedType type) {
+    if (type.isPrimitive()) {
+      return JavaLangUtils.isConstantVariableType(type.describe());
+    }
+    return type.isReferenceType()
+        && JavaLangUtils.isConstantVariableType(type.asReferenceType().getQualifiedName());
+  }
+
+  /**
+   * Applies {@link JavaLangUtils#isConstantVariableType(String)} to a declared type, without
+   * resolving it.
    *
    * @param type the declared type of a field
    * @return true if a field of this type could be a constant variable
    */
   private static boolean isConstantVariableType(Type type) {
+    String name;
     if (type.isPrimitiveType()) {
-      return true;
+      // Type#asString() pretty-prints any type annotation along with the type, so the name is
+      // taken from JavaParser's Primitive enum instead.
+      name = type.asPrimitiveType().getType().asString();
+    } else if (type instanceof ClassOrInterfaceType classType) {
+      // getNameAsString() returns the last identifier, with any package qualification held
+      // separately as the scope, so qualifying it with java.lang matches both "String" and
+      // "java.lang.String" -- and, imprecisely, a String declared in some other package. Callers of
+      // this overload deliberately work on unresolved syntax, where that is the best available
+      // answer.
+      name = "java.lang." + classType.getNameAsString();
+    } else {
+      return false;
     }
-    // Matches both "String" and "java.lang.String": getNameAsString() returns the last identifier,
-    // with any package qualification held separately as the scope.
-    return type instanceof ClassOrInterfaceType classType
-        && classType.getNameAsString().equals("String");
+    return JavaLangUtils.isConstantVariableType(name);
   }
 
   /**

@@ -518,15 +518,12 @@ public class UnsolvedSymbolGenerator {
                   .iterator()
                   .next();
         }
-      } else if (toLookUpTypeFor instanceof FieldAccessExpr fieldAccess
-          && JavaParserUtil.isProbablyAConstant(fieldAccess.getNameAsString())
-          && !declaringTypeIsSyntheticNonEnum(fieldAccess)) {
-        // An enum constant's type is the enum itself, so the member's type is the field's scope.
+      } else if (isEnumConstantAnnotationArgument(toLookUpTypeFor)) {
+        // An enum constant's type is the enum itself, so the member's type is the constant's
+        // declaring type rather than the constant's own (empty) declared type.
         rawFqns =
-            fullyQualifiedNameGenerator
-                .getFQNsForExpressionType(fieldAccess.getScope())
-                .iterator()
-                .next();
+            new FullyQualifiedNameSet(
+                getConstantDeclaringTypeFQNs(toLookUpTypeFor).iterator().next());
       } else {
         rawFqns =
             fullyQualifiedNameGenerator.getFQNsForExpressionType(toLookUpTypeFor).iterator().next();
@@ -678,61 +675,23 @@ public class UnsolvedSymbolGenerator {
         potentialParents.add((UnsolvedClassOrInterfaceAlternates) generated);
       }
 
-      @SuppressWarnings("unchecked")
-      boolean isInAnnotation = field.findAncestor(AnnotationExpr.class).isPresent();
-
-      // Whether this field access is being generated as an enum constant, as opposed to a static
-      // final constant of an ordinary class. Only meaningful when isInAnnotation is true.
-      boolean isEnumConstant = false;
-
-      if (isInAnnotation) {
-        // A field access in an annotation argument is usually an enum constant, but it can also be
-        // a static final constant of an ordinary class. This is only a guess, so it must not
-        // override anything we actually know: a constructor call on the same type, for example,
-        // establishes that it is a class (see the ObjectCreationExpr case of inferContextImpl).
-        isEnumConstant = true;
-        for (UnsolvedClassOrInterfaceAlternates parent : potentialParents) {
-          if (parent.getType() == UnsolvedClassOrInterfaceType.UNKNOWN) {
-            parent.setType(UnsolvedClassOrInterfaceType.ENUM);
-          } else if (parent.getType() != UnsolvedClassOrInterfaceType.ENUM) {
-            isEnumConstant = false;
-          }
-        }
-      }
+      AnnotationArgumentKind annotationArgumentKind =
+          classifyAnnotationArgument(field, potentialParents);
+      boolean isConstantVariable = mustBeConstantVariable(annotationArgumentKind);
 
       boolean isStatic = JavaParserUtil.getFQNIfStaticMember(field) != null;
 
       UnsolvedFieldAlternates createdField;
       if (typeToMustPreserveNode.isEmpty()) {
-        Set<MemberType> types;
-        if (isEnumConstant) {
-          // An enum constant declaration names no type, so the empty type is what should be
-          // printed; see UnsolvedField#toString.
-          types = Set.of(new SolvedMemberType(""));
-        } else if (isInAnnotation) {
-          // The declaring type is not an enum, so this is an ordinary field being used as an
-          // annotation argument. JLS 9.7.1 requires such an argument to be a constant expression,
-          // so the field must be given a primitive (or String) type and a constant initializer.
-          types = Set.of(ANNOTATION_CONSTANT_TYPE);
-        } else {
-          types = new LinkedHashSet<>();
-          for (FullyQualifiedNameSet potentialTypeFQNs :
-              fullyQualifiedNameGenerator.getFQNsForExpressionType(field)) {
-            types.add(getOrCreateMemberTypeFromFQNs(potentialTypeFQNs));
-          }
-        }
-
         createdField =
             UnsolvedFieldAlternates.create(
                 field.getNameAsString(),
-                types,
+                getTypesForGeneratedField(field, annotationArgumentKind),
                 potentialParents,
                 // A constant expression must be reached through a static field, and a final field
                 // that is not static would be emitted without an initializer.
-                isStatic || (isInAnnotation && !isEnumConstant),
-                // A non-enum constant used as an annotation argument must be final for it to be a
-                // constant expression.
-                isInAnnotation && !isEnumConstant);
+                isStatic || isConstantVariable,
+                isConstantVariable);
       } else {
         createdField =
             UnsolvedFieldAlternates.create(
@@ -745,6 +704,111 @@ public class UnsolvedSymbolGenerator {
       ((UnsolvedFieldAlternates) alreadyGenerated)
           .updateFieldTypesAndMustPreserveNodes(typeToMustPreserveNode);
     }
+  }
+
+  /**
+   * How a name that appears as an annotation argument must be declared. JLS 9.7.1 permits only two
+   * kinds of name in that position: an enum constant, or a constant variable, whose type is
+   * necessarily a primitive or {@code String} (JLS 4.12.4).
+   */
+  private enum AnnotationArgumentKind {
+    /** An enum constant, whose declaring type is therefore an enum. */
+    ENUM_CONSTANT,
+    /**
+     * A constant variable whose type the annotation type dictates, because that annotation type is
+     * known.
+     */
+    DECLARED_CONSTANT,
+    /**
+     * A constant variable whose type Specimin must invent, because the annotation type is itself
+     * synthetic and so constrains the argument's type in no way.
+     */
+    INVENTED_CONSTANT
+  }
+
+  /**
+   * Classifies a name or field access that appears as an annotation argument, deciding how the
+   * synthetic field generated for it must be declared. Shared by {@link #handleNameExpr} and {@link
+   * #handleFieldAccessExpr}, which differ only in how they find the declaring types.
+   *
+   * <p>As a side effect, a declaring type that Specimin has not already classified as something
+   * else is promoted to an enum whenever the argument is treated as an enum constant.
+   *
+   * @param constant the NameExpr or FieldAccessExpr a field is being generated for
+   * @param potentialParents the synthetic types that may declare that field
+   * @return the classification, or null if the expression is not an annotation argument
+   */
+  private @Nullable AnnotationArgumentKind classifyAnnotationArgument(
+      Expression constant, List<UnsolvedClassOrInterfaceAlternates> potentialParents) {
+    if (!JavaParserUtil.isInsideAnnotation(constant)) {
+      return null;
+    }
+
+    // A name whose required type is a primitive or String can only be a constant variable, and the
+    // element's declaration says which one it is. Every other element type either requires an enum
+    // constant or admits no name at all, so it is left to the guess below.
+    ResolvedType elementType = JavaParserUtil.getAnnotationElementType(constant);
+
+    if (elementType != null && JavaParserUtil.isConstantVariableType(elementType)) {
+      return AnnotationArgumentKind.DECLARED_CONSTANT;
+    }
+
+    // A name in an annotation argument is usually an enum constant, but it can also be a static
+    // final constant of an ordinary class. This is only a guess, so it must not override anything
+    // we actually know: a constructor call on the same type, for example, establishes that it is a
+    // class (see the ObjectCreationExpr case of inferContextImpl).
+    boolean isEnumConstant = true;
+    for (UnsolvedClassOrInterfaceAlternates parent : potentialParents) {
+      if (parent.getType() == UnsolvedClassOrInterfaceType.UNKNOWN) {
+        parent.setType(UnsolvedClassOrInterfaceType.ENUM);
+      } else if (parent.getType() != UnsolvedClassOrInterfaceType.ENUM) {
+        isEnumConstant = false;
+      }
+    }
+
+    return isEnumConstant
+        ? AnnotationArgumentKind.ENUM_CONSTANT
+        : AnnotationArgumentKind.INVENTED_CONSTANT;
+  }
+
+  /**
+   * Returns true if a field classified this way is a constant variable, and so must be declared
+   * {@code static final} with a constant initializer. An enum constant needs neither, and a field
+   * that is not an annotation argument at all is under no such obligation.
+   *
+   * @param kind the classification, or null if the field is not an annotation argument
+   * @return true if the field must be declared as a constant variable
+   */
+  private static boolean mustBeConstantVariable(@Nullable AnnotationArgumentKind kind) {
+    return kind != null && kind != AnnotationArgumentKind.ENUM_CONSTANT;
+  }
+
+  /**
+   * Returns the possible types of a synthetic field, honoring any constraint that the field's use
+   * as an annotation argument imposes.
+   *
+   * @param constant the NameExpr or FieldAccessExpr the field is generated for
+   * @param kind how the field is used as an annotation argument, or null if it is not one
+   * @return the possible types of the field
+   */
+  private Set<MemberType> getTypesForGeneratedField(
+      Expression constant, @Nullable AnnotationArgumentKind kind) {
+    if (kind == AnnotationArgumentKind.ENUM_CONSTANT) {
+      // An enum constant declaration names no type, so the empty type is what should be printed;
+      // see UnsolvedField#toString.
+      return Set.of(new SolvedMemberType(""));
+    }
+
+    if (kind == AnnotationArgumentKind.INVENTED_CONSTANT) {
+      return Set.of(ANNOTATION_CONSTANT_TYPE);
+    }
+
+    Set<MemberType> types = new LinkedHashSet<>();
+    for (FullyQualifiedNameSet potentialTypeFQNs :
+        fullyQualifiedNameGenerator.getFQNsForExpressionType(constant)) {
+      types.add(getOrCreateMemberTypeFromFQNs(potentialTypeFQNs));
+    }
+    return types;
   }
 
   /**
@@ -924,23 +988,18 @@ public class UnsolvedSymbolGenerator {
       // NameExpr and static import must be static and final
       boolean isStaticImport = JavaParserUtil.getFQNIfStaticMember(nameExpr) != null;
 
+      AnnotationArgumentKind annotationArgumentKind =
+          classifyAnnotationArgument(nameExpr, generatedClasses);
+      boolean isConstantVariable = mustBeConstantVariable(annotationArgumentKind);
+
       if (typeToMustPreserveNode.isEmpty()) {
-        Set<MemberType> memberTypes = new LinkedHashSet<>();
-
-        for (FullyQualifiedNameSet typeFQNs :
-            fullyQualifiedNameGenerator.getFQNsForExpressionType(nameExpr)) {
-          MemberType type = getOrCreateMemberTypeFromFQNs(typeFQNs);
-
-          memberTypes.add(type);
-        }
-
         generatedField =
             UnsolvedFieldAlternates.create(
                 nameExpr.getNameAsString(),
-                memberTypes,
+                getTypesForGeneratedField(nameExpr, annotationArgumentKind),
                 generatedClasses,
-                isStaticImport,
-                isStaticImport);
+                isStaticImport || isConstantVariable,
+                isStaticImport || isConstantVariable);
       } else {
         generatedField =
             UnsolvedFieldAlternates.create(
@@ -5041,36 +5100,84 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Determines whether Specimin has already classified the declaring type of a field access as a
-   * synthetic type that is not an enum.
+   * Returns the candidate types that could declare the constant a name or field access refers to.
+   * Each element is one candidate type, given as the set of fully-qualified names it could have.
    *
-   * <p>This exists because a field access in an annotation argument is ambiguous: it may be an enum
-   * constant, or a static final constant of an ordinary class. Specimin resolves that ambiguity in
-   * {@link #handleFieldAccessExpr} by classifying the declaring type, and this method reports that
-   * decision so that the annotation member's type can be made consistent with it. It is therefore
-   * not a general test for enum-ness: it says only whether we have already decided against it. A
-   * declaring type that Specimin did not synthesize is not a decision of ours, so it is not
-   * reported here even if it is in fact not an enum.
+   * @param constant a NameExpr or FieldAccessExpr
+   * @return the candidate declaring types; empty if none could be determined
+   */
+  private Collection<Set<String>> getConstantDeclaringTypeFQNs(Expression constant) {
+    if (constant instanceof FieldAccessExpr fieldAccess) {
+      // A qualified constant's scope is its declaring type, which is more direct than the location
+      // analysis that a bare name requires.
+      Collection<Set<String>> result = new LinkedHashSet<>();
+      for (FullyQualifiedNameSet scopeFQNs :
+          fullyQualifiedNameGenerator.getFQNsForExpressionType(fieldAccess.getScope())) {
+        result.add(scopeFQNs.erasedFqns());
+      }
+      return result;
+    }
+
+    // A bare name has no scope, so its declaring type is wherever the name could have been
+    // declared: the type named by a static import, or an unsolvable supertype of the enclosing
+    // class.
+    return fullyQualifiedNameGenerator.getFQNsForExpressionLocation(constant);
+  }
+
+  /**
+   * Returns true if an annotation argument is being generated as an enum constant. The annotation
+   * element's type is then the declaring enum, since an enum constant declaration has no type of
+   * its own.
    *
-   * <p>The scope may have more than one candidate type. This method mirrors the rule used when the
-   * field itself is generated: a single candidate that is definitively not an enum is enough to
-   * decide against enum-ness, since the field's type must then be one that works for that
+   * <p>This must be called after the argument has been passed to {@link #inferContextImpl}, so that
+   * any synthetic declaring type has already been created and classified.
+   *
+   * @param constant the annotation argument
+   * @return true if the argument is an enum constant whose declaring enum Specimin can name
+   */
+  private boolean isEnumConstantAnnotationArgument(Expression constant) {
+    String name;
+    if (constant instanceof NameExpr nameExpr) {
+      name = nameExpr.getNameAsString();
+    } else if (constant instanceof FieldAccessExpr fieldAccess) {
+      name = fieldAccess.getNameAsString();
+    } else {
+      return false;
+    }
+
+    return JavaParserUtil.isProbablyAConstant(name)
+        && !getConstantDeclaringTypeFQNs(constant).isEmpty()
+        && !declaringTypeIsSyntheticNonEnum(constant);
+  }
+
+  /**
+   * Determines whether Specimin has already classified the declaring type of a constant used as an
+   * annotation argument as a synthetic type that is not an enum.
+   *
+   * <p>This exists because such a name is ambiguous: it may be an enum constant, or a static final
+   * constant of an ordinary class. Specimin resolves that ambiguity in {@link
+   * #classifyAnnotationArgument}, and this method reports that decision so that the annotation
+   * member's type can be made consistent with it. It is therefore not a general test for enum-ness:
+   * it says only whether we have already decided against it. A declaring type that Specimin did not
+   * synthesize is not a decision of ours, so it is not reported here even if it is in fact not an
+   * enum.
+   *
+   * <p>The constant may have more than one candidate declaring type. This method mirrors the rule
+   * used when the field itself is generated: a single candidate that is definitively not an enum is
+   * enough to decide against enum-ness, since the field's type must then be one that works for that
    * candidate. Checking only one candidate would let the two decisions disagree, which would emit a
    * constant of one type and an annotation member of another.
    *
-   * <p>This must be called after the field access has been passed to {@link #inferContextImpl}, so
-   * that any synthetic declaring type has already been created and classified.
+   * <p>This must be called after the constant has been passed to {@link #inferContextImpl}, so that
+   * any synthetic declaring type has already been created and classified.
    *
-   * @param fieldAccess the field access to check the declaring type of
+   * @param constant the NameExpr or FieldAccessExpr to check the declaring type of
    * @return true if any candidate declaring type is a synthetic type classified as something other
    *     than an enum; false otherwise, including when every candidate was classified as an enum and
    *     when no candidate is a synthetic type at all
    */
-  private boolean declaringTypeIsSyntheticNonEnum(FieldAccessExpr fieldAccess) {
-    Set<FullyQualifiedNameSet> scopeFQNs =
-        fullyQualifiedNameGenerator.getFQNsForExpressionType(fieldAccess.getScope());
-
-    for (FullyQualifiedNameSet candidateFQNs : scopeFQNs) {
+  private boolean declaringTypeIsSyntheticNonEnum(Expression constant) {
+    for (Set<String> candidateFQNs : getConstantDeclaringTypeFQNs(constant)) {
       UnsolvedSymbolAlternates<?> scope = findExistingAndUpdateFQNs(candidateFQNs);
 
       if (!(scope instanceof UnsolvedClassOrInterfaceAlternates scopeType)) {

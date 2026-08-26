@@ -360,6 +360,20 @@ public final class JavaLangUtils {
   }
 
   /**
+   * Returns true if a variable of the named type can be a <em>constant variable</em> (JLS 4.12.4),
+   * which requires the type to be a primitive type or {@code String}. No other type can be a
+   * constant variable, so a variable of any other type is never usable in a constant context, such
+   * as an annotation argument or a {@code case} label.
+   *
+   * @param type a primitive type name, or a fully-qualified class name. A simple class name is not
+   *     accepted, for the reason given in {@link #isJavaLangString(String)}.
+   * @return true if a constant variable can have this type
+   */
+  public static boolean isConstantVariableType(String type) {
+    return isPrimitive(type) || isJavaLangString(type);
+  }
+
+  /**
    * Converts a primitive to its boxed type (i.e. int --> Integer)
    *
    * @param primitive the primitive type (int, boolean, char, etc.)
