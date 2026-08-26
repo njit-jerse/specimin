@@ -1,0 +1,36 @@
+targets run: 700
+repositories: 7
+
+Outcome of each build:
+  base  compiles=651, does not compile=28, no output (crash/timeout)=21
+  new   compiles=653, does not compile=26, no output (crash/timeout)=21
+
+Transition matrix (rows: base, columns: new):
+                                compiles       fails       empty          na
+                    compiles         651           0           0           0
+            does not compile           2          26           0           0
+                empty output           0           0           0           0
+   no output (crash/timeout)           0           0           0          21
+
+Emitted programs differ textually on 3 of 679 targets that both builds completed (0%).
+
+REGRESSIONS   (compiled before, does not now): 0
+IMPROVEMENTS  (did not compile before, does now): 2
+
+Improved targets:
+  [retrofit-0009] retrofit2.RequestFactory.Builder#parseHeaders(String[],boolean)
+      retrofit2/RequestFactory.java  base=fails  new=compiles
+  [retrofit-0033] retrofit2.OkHttpCall#enqueue(Callback<T>)
+      retrofit2/OkHttpCall.java  base=fails  new=compiles
+
+By repository (targets / regressions / improvements):
+  checkstyle                100     0     0   (compiling: base 84, new 84)
+  commons-io                100     0     0   (compiling: base 92, new 92)
+  commons-lang              100     0     0   (compiling: base 99, new 99)
+  gson                      100     0     0   (compiling: base 97, new 97)
+  jsoup                     100     0     0   (compiling: base 99, new 99)
+  junit4                    100     0     0   (compiling: base 97, new 97)
+  retrofit                  100     0     2   (compiling: base 83, new 85)
+
+base  status: crash=21, ok=679 | seconds per invocation: mean 11.7, median 10.4, max 28.8
+new   status: crash=21, ok=679 | seconds per invocation: mean 11.7, median 10.6, max 28.8

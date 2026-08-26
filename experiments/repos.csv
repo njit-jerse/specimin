@@ -1,0 +1,12 @@
+# Repositories that run_experiment.sh runs Specimin on: name,clone URL,commit,source root.
+# The commit is pinned so that a re-run measures the same code. The source root must be the
+# directory that --root wants: the one javac would be invoked from, usually ending in src/main/java.
+# These six are popular, widely-known Java projects (1k-24k stars) that each build from a single
+# source root and use ordinary Java, not a JVM language or a heavily generated source tree.
+gson,https://github.com/google/gson,61f2c646066e959f65cb99a826a2a759be42dbdd,gson/src/main/java
+jsoup,https://github.com/jhy/jsoup,7860d088e044236e288c1f88a743b68b2a0edece,src/main/java
+commons-lang,https://github.com/apache/commons-lang,e073d5dc20ab6e011a59eefda83bc3a43a83dc4b,src/main/java
+commons-io,https://github.com/apache/commons-io,a7011276ed44394c5ca40a3dc6779e436a719038,src/main/java
+retrofit,https://github.com/square/retrofit,3ca1229c3361ec6753608c91d20fe6d04566a241,retrofit/src/main/java
+junit4,https://github.com/junit-team/junit4,890f3c972647de378f25e7271d8fbbd9d3456b79,src/main/java
+checkstyle,https://github.com/checkstyle/checkstyle,1f43190bc57a5ed3ce50408f28eba64864a2d91c,src/main/java

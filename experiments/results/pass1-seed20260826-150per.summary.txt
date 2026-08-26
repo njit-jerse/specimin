@@ -1,0 +1,38 @@
+targets run: 1050
+repositories: 7
+
+Outcome of each build:
+  base  compiles=984, does not compile=37, no output (crash/timeout)=29
+  new   compiles=985, does not compile=36, no output (crash/timeout)=29
+
+Transition matrix (rows: base, columns: new):
+                                compiles       fails       empty          na
+                    compiles         983           1           0           0
+            does not compile           2          35           0           0
+                empty output           0           0           0           0
+   no output (crash/timeout)           0           0           0          29
+
+REGRESSIONS   (compiled before, does not now): 1
+IMPROVEMENTS  (did not compile before, does now): 2
+
+Regressing targets:
+  [commons-lang-0093] org.apache.commons.lang3.builder.ToStringBuilder#append(int[])
+      org/apache/commons/lang3/builder/ToStringBuilder.java  base=compiles  new=fails
+
+Improved targets:
+  [retrofit-0008] retrofit2.RequestBuilder#RequestBuilder(String,HttpUrl,String,Headers,MediaType,boolean,boolean,boolean)
+      retrofit2/RequestBuilder.java  base=fails  new=compiles
+  [retrofit-0108] retrofit2.Response#error(int,ResponseBody)
+      retrofit2/Response.java  base=fails  new=compiles
+
+By repository (targets / regressions / improvements):
+  checkstyle                150     0     0   (compiling: base 126, new 126)
+  commons-io                150     0     0   (compiling: base 142, new 142)
+  commons-lang              150     1     0   (compiling: base 146, new 145)
+  gson                      150     0     0   (compiling: base 145, new 145)
+  jsoup                     150     0     0   (compiling: base 148, new 148)
+  junit4                    150     0     0   (compiling: base 142, new 142)
+  retrofit                  150     0     2   (compiling: base 135, new 137)
+
+base  status: crash=29, ok=1021 | seconds per invocation: mean 9.2, median 5.2, max 287.7
+new   status: crash=29, ok=1021 | seconds per invocation: mean 9.7, median 5.2, max 288.2
