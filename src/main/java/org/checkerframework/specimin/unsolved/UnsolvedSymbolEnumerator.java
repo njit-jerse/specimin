@@ -23,8 +23,8 @@ public class UnsolvedSymbolEnumerator {
   /** The unsolved fields that must be included in the output. */
   private final Set<UnsolvedFieldAlternates> unsolvedFields = new LinkedHashSet<>();
 
-  /** The unsolved methods that must be included in the output. */
-  private final Set<UnsolvedMethodAlternates> unsolvedMethods = new LinkedHashSet<>();
+  /** The unsolved methods and constructors that must be included in the output. */
+  private final Set<UnsolvedCallableAlternates<?>> unsolvedMethods = new LinkedHashSet<>();
 
   /**
    * Creates a new instance of UnsolvedSymbolEnumerator.
@@ -41,12 +41,12 @@ public class UnsolvedSymbolEnumerator {
         }
 
         unsolvedFields.add(field);
-      } else if (unsolvedSymbol instanceof UnsolvedMethodAlternates method) {
+      } else if (unsolvedSymbol instanceof UnsolvedCallableAlternates<?> callable) {
         if (unsolvedSymbol.getAlternateDeclaringTypes().isEmpty()) {
           continue;
         }
 
-        unsolvedMethods.add(method);
+        unsolvedMethods.add(callable);
       }
     }
   }
@@ -98,10 +98,10 @@ public class UnsolvedSymbolEnumerator {
       addAllUsedTypesToSet(field.getType(), outerTypes, outerTypesToInnerTypes);
     }
 
-    Map<UnsolvedClassOrInterface, Set<UnsolvedMethod>> typesToMethods = new LinkedHashMap<>();
+    Map<UnsolvedClassOrInterface, Set<UnsolvedCallable>> typesToMethods = new LinkedHashMap<>();
 
-    for (UnsolvedMethodAlternates unsolved : unsolvedMethods) {
-      UnsolvedMethod method = unsolved.getAlternates().get(0);
+    for (UnsolvedCallableAlternates<?> unsolved : unsolvedMethods) {
+      UnsolvedCallable method = unsolved.getAlternates().get(0);
       UnsolvedClassOrInterfaceAlternates typeAlternates =
           unsolved.getAlternateDeclaringTypes().get(0);
       UnsolvedClassOrInterface type = typeAlternates.getAlternates().get(0);
@@ -113,7 +113,10 @@ public class UnsolvedSymbolEnumerator {
 
       typesToMethods.get(type).add(method);
 
-      addAllUsedTypesToSet(method.getReturnType(), outerTypes, outerTypesToInnerTypes);
+      // Only a method has a return type (JLS 8.8.1).
+      if (method instanceof UnsolvedMethod asMethod) {
+        addAllUsedTypesToSet(asMethod.getReturnType(), outerTypes, outerTypesToInnerTypes);
+      }
 
       for (MemberType parameterType : method.getParameterList()) {
         addAllUsedTypesToSet(parameterType, outerTypes, outerTypesToInnerTypes);
@@ -149,7 +152,7 @@ public class UnsolvedSymbolEnumerator {
   private String getTypeDeclarationAsString(
       UnsolvedClassOrInterface type,
       Map<UnsolvedClassOrInterface, Set<UnsolvedField>> typesToFields,
-      Map<UnsolvedClassOrInterface, Set<UnsolvedMethod>> typesToMethods,
+      Map<UnsolvedClassOrInterface, Set<UnsolvedCallable>> typesToMethods,
       Map<UnsolvedClassOrInterface, Set<UnsolvedClassOrInterface>> outerTypesToInnerTypes,
       Set<Node> ableToRemove,
       boolean isInnerClass) {
@@ -159,7 +162,7 @@ public class UnsolvedSymbolEnumerator {
       fields = Set.of();
     }
 
-    Set<UnsolvedMethod> methods = typesToMethods.get(type);
+    Set<UnsolvedCallable> methods = typesToMethods.get(type);
 
     if (methods == null) {
       methods = Set.of();
@@ -177,7 +180,7 @@ public class UnsolvedSymbolEnumerator {
       ableToRemove.removeAll(field.getMustPreserveNodes());
     }
 
-    for (UnsolvedMethod method : methods) {
+    for (UnsolvedCallable method : methods) {
       ableToRemove.removeAll(method.getMustPreserveNodes());
     }
 

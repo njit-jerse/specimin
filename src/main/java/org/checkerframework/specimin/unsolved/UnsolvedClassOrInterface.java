@@ -223,7 +223,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    * @return the content of the class
    */
   public String toString(
-      Collection<UnsolvedMethod> methods,
+      Collection<UnsolvedCallable> methods,
       Collection<UnsolvedField> fields,
       Collection<String> innerClassDefinitions,
       boolean isInnerClass) {
@@ -326,7 +326,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
         sb.append("    ").append(variableDeclarations.toString(typeOfType)).append("\n");
       }
     }
-    for (UnsolvedMethod method : methods) {
+    for (UnsolvedCallable method : methods) {
       sb.append(method.toString(typeOfType, className));
     }
     sb.append("}\n");

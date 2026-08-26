@@ -12,22 +12,23 @@ import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 /**
  * A type name decomposed into its identifiers: {@code library.Outer.Nested} becomes {@code
  * [library, Outer, Nested]}. Specifically, this class can answer questions about:
- *  <ul>
- *    <li>the <b>first identifier</b> is the one a single-type-import must be matched against (JLS
- *        6.5.5.2 resolves {@code Outer.Nested} by first resolving {@code Outer}, so it is {@code
- *        Outer} that {@code import library.Outer;} binds), and
- *    <li>the <b>simple name</b> is the last identifier (JLS 6.2), which is the name a constructor
- *        declaration must use (JLS 8.8.1) and the name the type is declared under.
- *  </ul>
  *
- * <p>Deciding where a name's package part ends and its type part begins does <em>not</em> have
- * an exact answer in the general case, and is not handled by this class: JLS 6.5.2 asks whether package
- * {@code Q} contains a type {@code Id}, which needs a classpath that Specimin may not have.
+ * <ul>
+ *   <li>the <b>first identifier</b> is the one a single-type-import must be matched against (JLS
+ *       6.5.5.2 resolves {@code Outer.Nested} by first resolving {@code Outer}, so it is {@code
+ *       Outer} that {@code import library.Outer;} binds), and
+ *   <li>the <b>simple name</b> is the last identifier (JLS 6.2), which is the name a constructor
+ *       declaration must use (JLS 8.8.1) and the name the type is declared under.
+ * </ul>
+ *
+ * <p>Deciding where a name's package part ends and its type part begins does <em>not</em> have an
+ * exact answer in the general case, and is not handled by this class: JLS 6.5.2 asks whether
+ * package {@code Q} contains a type {@code Id}, which needs a classpath that Specimin may not have.
  * Naming convention logic is used to guess the answer to that question via {@link
  * JavaParserUtil#isProbablyAPackage(String)} and {@link JavaParserUtil#isAClassPath(String)}.
  *
- * <p>Prefer this class' AST factories over {@link #parse(String)}: a name that is still attached to source
- * carries its own structure, so reading it needs no string surgery. Type arguments and array
+ * <p>Prefer this class' AST factories over {@link #parse(String)}: a name that is still attached to
+ * source carries its own structure, so reading it needs no string surgery. Type arguments and array
  * brackets are not part of a type's name and are dropped by every factory.
  */
 public final class QualifiedTypeName {
@@ -88,8 +89,8 @@ public final class QualifiedTypeName {
    * out in a {@code NameExpr} that a qualified name takes anywhere else.
    *
    * <p>Callers that reach this method by way of a naming-convention guess, such as {@link
-   * JavaParserUtil#isAClassPath(String)}, are still asking an exact question of it: given
-   * that this name denotes a type, what are its identifiers?
+   * JavaParserUtil#isAClassPath(String)}, are still asking an exact question of it: given that this
+   * name denotes a type, what are its identifiers?
    *
    * @param expr the expression
    * @return the decomposition of the name {@code expr} writes, or null if {@code expr} is not a

@@ -1646,7 +1646,7 @@ public class UnsolvedSymbolGenerator {
 
     UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
 
-    if (!(generated instanceof UnsolvedMethodAlternates)) {
+    if (!(generated instanceof UnsolvedConstructorAlternates)) {
       for (Expression argument : arguments) {
         inferContextImpl(argument, result);
       }
@@ -1657,8 +1657,8 @@ public class UnsolvedSymbolGenerator {
               argumentToParameterPotentialFQNs,
               argumentToParameterPotentialFQNsWithMethodRefsHandled);
 
-      UnsolvedMethodAlternates generatedMethod =
-          UnsolvedMethodAlternates.createConstructorWithPreservation(
+      UnsolvedConstructorAlternates generatedMethod =
+          UnsolvedConstructorAlternates.createWithPreservation(
               List.of(location), parametersToMustPreserve);
 
       addNewSymbolToGeneratedSymbolsMap(generatedMethod);
@@ -2490,12 +2490,14 @@ public class UnsolvedSymbolGenerator {
       UnsolvedSymbolAlternates<?> generated = findExistingAndUpdateFQNs(potentialFQNs);
 
       if (generated == null) {
-        UnsolvedMethodAlternates generatedMethod =
+        UnsolvedCallableAlternates<?> generatedMethod =
             isConstructor
-                ? UnsolvedMethodAlternates.createConstructor(scope, parametersAsMemberType)
+                ? UnsolvedConstructorAlternates.create(scope, parametersAsMemberType)
                 : UnsolvedMethodAlternates.create(
                     methodName, Set.of(returnType), scope, parametersAsMemberType);
 
+        // isStatic is only ever set for a method: a constructor reference's scope is never a
+        // receiver, so the branch that computes it is skipped for one.
         if (isStatic) {
           generatedMethod.setStatic();
         }
@@ -2778,22 +2780,18 @@ public class UnsolvedSymbolGenerator {
             boolean foundConstructor = false;
 
             for (UnsolvedSymbolAlternates<?> alternate : generatedSymbols.values()) {
-              if (!(alternate instanceof UnsolvedMethodAlternates method)
+              if (!(alternate instanceof UnsolvedConstructorAlternates constructor)
                   || !alternate.getAlternateDeclaringTypes().contains(syntheticType)) {
                 continue;
               }
 
-              if (!method.isConstructor()) {
-                continue;
-              }
-
               foundConstructor = true;
-              method.setContent(superCall);
+              constructor.setContent(superCall);
             }
 
             if (!foundConstructor) {
-              UnsolvedMethodAlternates constructor =
-                  UnsolvedMethodAlternates.createConstructor(List.of(syntheticType), List.of());
+              UnsolvedConstructorAlternates constructor =
+                  UnsolvedConstructorAlternates.create(List.of(syntheticType), List.of());
 
               constructor.setContent(superCall);
               toAdd.add(constructor);
@@ -3283,7 +3281,8 @@ public class UnsolvedSymbolGenerator {
                 nodeWithArgs, fqnsToCompilationUnits);
 
         if (withUnresolvableArgs.isEmpty()) {
-          UnsolvedMethodAlternates genMethod;
+          // Only the parameter types are read below, which a constructor has just as a method does.
+          UnsolvedCallableAlternates<?> genMethod;
           if (node instanceof MethodCallExpr methodCall) {
             Collection<Set<String>> methodScope =
                 fullyQualifiedNameGenerator.getFQNsForExpressionLocation(methodCall);
@@ -3341,7 +3340,7 @@ public class UnsolvedSymbolGenerator {
               return UnsolvedGenerationResult.EMPTY;
             }
             genMethod =
-                (UnsolvedMethodAlternates)
+                (UnsolvedConstructorAlternates)
                     findExistingAndUpdateFQNs(getFQNsForUnsolvableConstructor(node));
 
             // The synthetic constructor's parameter types are computed from the current (best
@@ -3985,13 +3984,15 @@ public class UnsolvedSymbolGenerator {
     }
 
     for (UnsolvedSymbolAlternates<?> symbol : generatedSymbols.values()) {
-      if (symbol instanceof UnsolvedMethodAlternates method) {
-        if (method.getAlternates().stream()
+      if (symbol instanceof UnsolvedCallableAlternates<?> callable) {
+        if (callable.getAlternates().stream()
             .anyMatch(alt -> alt.getParameterList().contains(syntheticType))) {
-          oldFQNsToUpdated.put(method.getFullyQualifiedNames(), method);
-          method.replaceParameterType(syntheticType, Set.of(replaceWith));
+          oldFQNsToUpdated.put(callable.getFullyQualifiedNames(), callable);
+          callable.replaceParameterType(syntheticType, Set.of(replaceWith));
         }
-        if (method.getReturnTypes().contains(syntheticType)) {
+        // Only a method has a return type to replace (JLS 8.8.1).
+        if (callable instanceof UnsolvedMethodAlternates method
+            && method.getReturnTypes().contains(syntheticType)) {
           method.replaceReturnType(syntheticType, Set.of(replaceWith));
         }
       } else if (symbol instanceof UnsolvedFieldAlternates field) {
@@ -5410,22 +5411,26 @@ public class UnsolvedSymbolGenerator {
     }
 
     Set<String> keysToRemove = new HashSet<>();
-    Set<UnsolvedMethodAlternates> methodsWithChangedSignatures = new HashSet<>();
+    Set<UnsolvedCallableAlternates<?>> methodsWithChangedSignatures = new HashSet<>();
     for (UnsolvedSymbolAlternates<?> symbol : generatedSymbols.values()) {
-      if (symbol instanceof UnsolvedMethodAlternates method) {
-        for (MemberType returnType : method.getReturnTypes()) {
-          if (returnType instanceof UnsolvedMemberType unsolvedReturn) {
-            UnsolvedClassOrInterfaceAlternates unsolvedType = unsolvedReturn.getUnsolvedType();
-            SolvedMemberType correct = typeCorrect.get(unsolvedType);
-            if (correct != null) {
-              method.replaceReturnType(unsolvedReturn, correct);
+      if (symbol instanceof UnsolvedCallableAlternates<?> callable) {
+        // Only a method has a return type to correct (JLS 8.8.1); a constructor's parameters are
+        // corrected below just like a method's.
+        if (callable instanceof UnsolvedMethodAlternates method) {
+          for (MemberType returnType : method.getReturnTypes()) {
+            if (returnType instanceof UnsolvedMemberType unsolvedReturn) {
+              UnsolvedClassOrInterfaceAlternates unsolvedType = unsolvedReturn.getUnsolvedType();
+              SolvedMemberType correct = typeCorrect.get(unsolvedType);
+              if (correct != null) {
+                method.replaceReturnType(unsolvedReturn, correct);
+              }
             }
           }
         }
 
-        Set<String> oldSignatures = method.getFullyQualifiedNames();
+        Set<String> oldSignatures = callable.getFullyQualifiedNames();
         boolean signatureChanged = false;
-        for (UnsolvedMethod alternate : method.getAlternates()) {
+        for (UnsolvedCallable alternate : callable.getAlternates()) {
           for (MemberType paramType : alternate.getParameterList()) {
             if (paramType instanceof UnsolvedMemberType unsolvedParam) {
               UnsolvedClassOrInterfaceAlternates unsolvedType = unsolvedParam.getUnsolvedType();
@@ -5440,10 +5445,10 @@ public class UnsolvedSymbolGenerator {
 
         if (signatureChanged) {
           keysToRemove.addAll(oldSignatures);
-          methodsWithChangedSignatures.add(method);
+          methodsWithChangedSignatures.add(callable);
         }
 
-        method.removeDuplicateAlternates();
+        callable.removeDuplicateAlternates();
       } else if (symbol instanceof UnsolvedFieldAlternates field) {
         for (MemberType fieldType : field.getTypes()) {
           if (fieldType instanceof UnsolvedMemberType unsolvedType) {
@@ -5463,7 +5468,7 @@ public class UnsolvedSymbolGenerator {
       generatedSymbols.remove(signatureToRemove);
     }
 
-    for (UnsolvedMethodAlternates method : methodsWithChangedSignatures) {
+    for (UnsolvedCallableAlternates<?> method : methodsWithChangedSignatures) {
       addNewSymbolToGeneratedSymbolsMap(method);
     }
 

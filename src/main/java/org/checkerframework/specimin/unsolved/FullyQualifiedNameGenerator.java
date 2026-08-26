@@ -1033,11 +1033,12 @@ public class FullyQualifiedNameGenerator {
         }
       }
 
-      Set<UnsolvedMethodAlternates> generatedMethods = new LinkedHashSet<>();
+      // A ::new reference resolves to a constructor, so this cannot be narrowed to methods.
+      Set<UnsolvedCallableAlternates<?>> generatedMethods = new LinkedHashSet<>();
 
       for (Entry<String, UnsolvedSymbolAlternates<?>> genSymbolEntry :
           generatedSymbols.entrySet()) {
-        if (!(genSymbolEntry.getValue() instanceof UnsolvedMethodAlternates method)) {
+        if (!(genSymbolEntry.getValue() instanceof UnsolvedCallableAlternates<?> method)) {
           continue;
         }
 
@@ -1052,11 +1053,16 @@ public class FullyQualifiedNameGenerator {
       if (!generatedMethods.isEmpty()) {
         Set<FullyQualifiedNameSet> functionalInterfaces = new LinkedHashSet<>();
 
-        for (UnsolvedMethodAlternates method : generatedMethods) {
-          for (UnsolvedMethod alternate : method.getAlternates()) {
+        for (UnsolvedCallableAlternates<?> method : generatedMethods) {
+          for (UnsolvedCallable alternate : method.getAlternates()) {
             List<FullyQualifiedNameSet> parameterTypes = new ArrayList<>();
 
-            if (!method.isStatic() && JavaParserUtil.methodRefHasTypeScope(methodRef)) {
+            // An unbound reference to an instance method takes the receiver as an extra leading
+            // parameter. A constructor reference does not: its scope names the type being
+            // instantiated, not a receiver, so its parameters are the constructor's one for one.
+            if (!(alternate instanceof UnsolvedConstructor)
+                && !method.isStatic()
+                && JavaParserUtil.methodRefHasTypeScope(methodRef)) {
               parameterTypes.add(getFQNsFromType(methodRef.getScope().asTypeExpr().getType()));
             }
 
@@ -1070,7 +1076,8 @@ public class FullyQualifiedNameGenerator {
             functionalInterfaces.add(
                 getQualifiedNameOfFunctionalInterface(
                     parameterTypes,
-                    !isConstructor && alternate.getReturnType().toString().equals("void")));
+                    !(alternate instanceof UnsolvedConstructor)
+                        && alternate.getReturnType().toString().equals("void")));
           }
         }
 

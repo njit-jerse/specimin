@@ -3,27 +3,14 @@ package org.checkerframework.specimin.unsolved;
 import java.util.List;
 
 /**
- * Common interface for {@link UnsolvedMethod} and {@link UnsolvedMethodAlternates}. Each getter
+ * Common interface for {@link UnsolvedCallable} and {@link UnsolvedCallableAlternates}. Each getter
  * should return the same value for each alternate; each setter should do the same operation to each
  * alternate. If these requirements are not met, do not include the method in this interface.
+ *
+ * <p>A method's name and return type are not here: a constructor has neither (JLS 8.8.1), so they
+ * belong to {@link UnsolvedMethod} and {@link UnsolvedMethodAlternates}.
  */
-public interface UnsolvedMethodCommon {
-  /**
-   * Get the name of this method.
-   *
-   * @return the name of this method
-   */
-  String getName();
-
-  /**
-   * Returns whether this is a constructor rather than an ordinary method. A constructor's name is
-   * not its own: JLS 8.8.1 requires it to be the simple name of the declaring type, so it is read
-   * from that type wherever the name is needed rather than trusted from {@link #getName}.
-   *
-   * @return true if this is a constructor
-   */
-  boolean isConstructor();
-
+public interface UnsolvedCallableCommon {
   /**
    * Getter for the throws list.
    *
@@ -93,7 +80,8 @@ public interface UnsolvedMethodCommon {
   void declareTypeVariables(List<String> names);
 
   /**
-   * Sets the return type.
+   * Sets the return type. A constructor has no return type (JLS 8.8.1) and throws from this; see
+   * {@link UnsolvedConstructor#setReturnType}.
    *
    * @param memberType The return type
    */
