@@ -2442,6 +2442,10 @@ public class FullyQualifiedNameGenerator {
       }
     }
 
+    // The implicit "import java.lang.*" (JLS 7.5.5) is not written in the file, so it has to be
+    // modelled here, or else a java.lang type gets guessed into the enclosing package instead.
+    String javaLangFQN = getJavaLangFQNIfInScope(firstIdentifier, fullName, compilationUnit);
+
     // Not imported
     boolean shouldAddAfter = false;
     if (fullName.contains(".") && !fullName.contains(" ")) {
@@ -2491,7 +2495,45 @@ public class FullyQualifiedNameGenerator {
         }
       }
     }
+
+    if (javaLangFQN != null) {
+      // A real java.lang type beats every guess here, all of which name a class that Specimin
+      // would have to invent.
+      Set<String> withJavaLang = new LinkedHashSet<>();
+      withJavaLang.add(javaLangFQN);
+      withJavaLang.addAll(fqns);
+      return withJavaLang;
+    }
+
     return fqns;
+  }
+
+  /**
+   * Returns the fully-qualified java.lang name that an unresolvable simple name could refer to via
+   * the implicit {@code import java.lang.*}, or null if it could not refer to one.
+   *
+   * @param firstIdentifier The leftmost identifier of the class name/class path
+   * @param fullName The full, known name of the class
+   * @param compilationUnit The compilation unit in which the name appears
+   * @return The java.lang FQN this name could denote, or null if there is none
+   */
+  private @Nullable String getJavaLangFQNIfInScope(
+      String firstIdentifier, String fullName, CompilationUnit compilationUnit) {
+    if (JavaLangUtils.isPrimitive(firstIdentifier)
+        || !JavaLangUtils.isJavaLangOrPrimitiveName(firstIdentifier)) {
+      return null;
+    }
+
+    // A type declared in the compilation unit's own package shadows the implicit import
+    // (JLS 6.5.5.1), so java.lang only applies if the input declares no such type.
+    Optional<PackageDeclaration> packageDecl = compilationUnit.getPackageDeclaration();
+    String packagePrefix = packageDecl.isPresent() ? packageDecl.get().getNameAsString() + "." : "";
+
+    if (fqnToCompilationUnits.containsKey(packagePrefix + firstIdentifier)) {
+      return null;
+    }
+
+    return "java.lang." + fullName;
   }
 
   /**
