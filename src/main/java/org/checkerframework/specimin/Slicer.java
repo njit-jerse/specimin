@@ -268,8 +268,22 @@ public class Slicer {
         }
       }
 
+      // A parameterized type does not resolve when one of its type arguments does not, even
+      // though its own name is solvable, so fall back to the erasure: that is what puts the
+      // named type's declaration in the slice. The type arguments reach the worklist separately,
+      // as child nodes of this one.
+      ResolvedType erasure =
+          resolved == null && node instanceof ClassOrInterfaceType type
+              ? Resolver.resolveErasure(type)
+              : null;
+
       if (resolved != null) {
         generateUnsolvedSymbol = handleResolvedObject(node, resolved);
+      } else if (erasure != null) {
+        // Deliberately leaves generateUnsolvedSymbol set: this only adds the declaration, and
+        // generation for a type whose erasure is already known is a no-op, because
+        // UnsolvedSymbolGenerator#handleClassOrInterfaceType returns early on such a type.
+        handleResolvedObject(node, erasure);
       } else if (node instanceof MethodReferenceExpr methodRef) {
         // Deliberately leaves generateUnsolvedSymbol set: preserving candidates and generating
         // are not alternatives here. Generation still has to run to synthesize the reference's
