@@ -182,17 +182,15 @@ public class Resolver {
   }
 
   /**
-   * Resolves the erasure of a parameterized type whose type arguments make it unresolvable. {@link
-   * Resolvable#resolve()} on a {@link ClassOrInterfaceType} converts its type arguments as well, so
-   * a single unresolvable type argument makes the whole type unresolvable even when the type's own
-   * name is perfectly solvable. This method answers "what type is named here", ignoring the
-   * arguments, which is what a caller that only needs the type's declaration wants.
-   *
-   * <p>Returns null if the type has no type arguments (in which case {@link #resolve} already
-   * covers it) or if the erasure is itself unresolvable.
+   * Attempts to resolve the erasure of a parameterized type whose type arguments make it
+   * unresolvable. {@link Resolvable#resolve()} on a {@link ClassOrInterfaceType} converts its type
+   * arguments as well, so any unresolvable type argument makes the whole type unresolvable, even if
+   * the erasure would be resolvable. This method constructs the erasure and tries to resolve it,
+   * returning non-null only if that succeeds.
    *
    * @param type The type whose erasure to resolve
-   * @return The resolved erasure, or null if it cannot be resolved
+   * @return The resolved erasure, or null if it cannot be resolved (or if it has no type arguments
+   *     to erase)
    */
   public static @Nullable ResolvedType resolveErasure(ClassOrInterfaceType type) {
     Optional<NodeList<Type>> typeArguments = type.getTypeArguments();

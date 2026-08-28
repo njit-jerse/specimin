@@ -268,10 +268,9 @@ public class Slicer {
         }
       }
 
-      // A parameterized type does not resolve when one of its type arguments does not, even
-      // though its own name is solvable, so fall back to the erasure: that is what puts the
-      // named type's declaration in the slice. The type arguments reach the worklist separately,
-      // as child nodes of this one.
+      // A parameterized type does not resolve when one of its type arguments is unsolved, even
+      // though its own name is solvable, so fall back to the erasure to ensure that the
+      // named type's declaration is in the slice. The type arguments are handled later.
       ResolvedType erasure =
           resolved == null && node instanceof ClassOrInterfaceType type
               ? Resolver.resolveErasure(type)
