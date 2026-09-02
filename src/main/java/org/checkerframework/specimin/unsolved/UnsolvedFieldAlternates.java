@@ -179,6 +179,20 @@ public class UnsolvedFieldAlternates extends UnsolvedSymbolAlternates<UnsolvedFi
   }
 
   /**
+   * Makes every alternate a constant variable of the given type; see {@link
+   * UnsolvedField#makeConstantVariable}.
+   *
+   * @param type the constant's type
+   */
+  public void makeConstantVariable(MemberType type) {
+    for (UnsolvedField alternate : getAlternates()) {
+      alternate.makeConstantVariable(type);
+    }
+
+    removeDuplicateAlternates();
+  }
+
+  /**
    * Replaces a field type with a new type in all alternates.
    *
    * @param oldType The type to replace
