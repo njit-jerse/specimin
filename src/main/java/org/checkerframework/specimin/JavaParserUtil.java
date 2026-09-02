@@ -89,6 +89,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -4051,6 +4052,26 @@ public class JavaParserUtil {
         names.add(name);
       }
     }
+  }
+
+  /**
+   * Returns the names of the type variables that a type written in a declaration mentions: the
+   * subset of {@link #getReferenceableTypeParameterNames(Node)} at that type that actually appears
+   * in it. These are exactly the names that a substitution applied to the type could replace.
+   *
+   * @param type a type, attached to the AST
+   * @return the names of the type variables that the type mentions
+   */
+  public static Set<String> getTypeVariablesMentionedIn(Type type) {
+    List<String> referenceable = getReferenceableTypeParameterNames(type);
+    Set<String> result = new LinkedHashSet<>();
+    for (ClassOrInterfaceType mentioned : type.findAll(ClassOrInterfaceType.class)) {
+      // A type variable is a simple name; a qualified one names a nested type instead.
+      if (mentioned.getScope().isEmpty() && referenceable.contains(mentioned.getNameAsString())) {
+        result.add(mentioned.getNameAsString());
+      }
+    }
+    return result;
   }
 
   /**
