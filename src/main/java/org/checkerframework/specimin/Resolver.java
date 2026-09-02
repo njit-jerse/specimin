@@ -10,8 +10,10 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
+import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.MethodAmbiguityException;
@@ -25,6 +27,7 @@ import com.github.javaparser.resolution.declarations.ResolvedParameterDeclaratio
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.List;
 import java.util.Map;
@@ -208,6 +211,84 @@ public class Resolver {
       type.setTypeArguments(typeArguments.get());
     }
     return erasure;
+  }
+
+  /**
+   * Attempts to resolve an expression that names a member of a type whose type arguments make that
+   * type unresolvable. A member access does not resolve when its receiver's type does not, but JLS
+   * 4.5.2 makes the members of a parameterized type the members of the generic declaration with a
+   * substitution applied -- so the access names the same declaration on the parameterized type as
+   * it does on the erasure. This erases the receiver's declared type and tries again, returning
+   * non-null only if that succeeds.
+   *
+   * @param expr The member access to resolve
+   * @return The declaration that the access names, or null if it cannot be found this way
+   * @param <T> The type to resolve to
+   */
+  public static <T> @Nullable T resolveThroughErasedReceiver(Resolvable<T> expr) {
+    if (!(expr instanceof Expression original)
+        || !(expr instanceof NodeWithTraversableScope)
+        || original.getParentNode().isEmpty()) {
+      return null;
+    }
+
+    // Resolve a clone standing in for the expression, rather than the expression itself: resolving
+    // it while the receiver's type is erased would leave JavaParser's caches holding the erased
+    // answer for the real node, which every later resolution of it would then see.
+    Expression standIn = original.clone();
+    original.replace(standIn);
+    ClassOrInterfaceType receiverType = null;
+    NodeList<Type> typeArguments = null;
+    try {
+      receiverType =
+          getDeclaredTypeOfReceiver(
+              ((NodeWithTraversableScope) standIn).traverseScope().orElse(null));
+      if (receiverType == null
+          || receiverType.getTypeArguments().isEmpty()
+          || receiverType.getTypeArguments().get().isEmpty()) {
+        return null;
+      }
+      typeArguments = receiverType.getTypeArguments().get();
+      receiverType.removeTypeArguments();
+
+      @SuppressWarnings(
+          "unchecked") // standIn is a clone of expr, so it resolves to the same thing.
+      Resolvable<T> asResolvable = (Resolvable<T>) standIn;
+      return resolve(asResolvable);
+    } finally {
+      if (receiverType != null && typeArguments != null) {
+        receiverType.setTypeArguments(typeArguments);
+      }
+      standIn.replace(original);
+    }
+  }
+
+  /**
+   * Returns the declared type of a receiver expression, as written in the AST, or null if it is not
+   * one that names a type whose type arguments can be erased in place.
+   *
+   * @param receiver The receiver expression, or null
+   * @return The receiver's declared type, or null
+   */
+  private static @Nullable ClassOrInterfaceType getDeclaredTypeOfReceiver(
+      @Nullable Expression receiver) {
+    if (fqnToCompilationUnits == null) {
+      throw new UnsupportedOperationException(
+          "fqnToCompilationUnits must be set before calling resolve");
+    }
+    if (receiver instanceof ObjectCreationExpr creation) {
+      return creation.getType();
+    }
+    if (!(receiver instanceof Resolvable<?> resolvable)) {
+      return null;
+    }
+    Object resolvedReceiver = resolve(resolvable);
+    if (!(resolvedReceiver instanceof ResolvedValueDeclaration valueDeclaration)) {
+      return null;
+    }
+    Type declaredType =
+        JavaParserUtil.getTypeFromResolvedValueDeclaration(valueDeclaration, fqnToCompilationUnits);
+    return declaredType instanceof ClassOrInterfaceType asClass ? asClass : null;
   }
 
   /**

@@ -32,6 +32,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.ast.nodeTypes.NodeWithTraversableScope;
 import com.github.javaparser.ast.nodeTypes.NodeWithType;
+import com.github.javaparser.ast.nodeTypes.NodeWithTypeParameters;
 import com.github.javaparser.ast.nodeTypes.NodeWithVariables;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ForEachStmt;
@@ -1792,13 +1793,13 @@ public class FullyQualifiedNameGenerator {
         return getFQNsForExpressionType(initializer);
       }
 
-      return Set.of(getFQNsFromType(type));
+      return Set.of(getFQNsFromTypeInMemberDeclaration(expr, type));
     }
     // methods, new ClassName()
     else if (node instanceof NodeWithType<?, ?> withType) {
       Type type = withType.getType();
       if (!type.isUnknownType()) {
-        return Set.of(getFQNsFromType(type));
+        return Set.of(getFQNsFromTypeInMemberDeclaration(expr, type));
       }
 
       Pair<ResolvedType, Map<String, Node>> resolvedWithPlaceholders =
@@ -1820,6 +1821,267 @@ public class FullyQualifiedNameGenerator {
     }
 
     return null;
+  }
+
+  /**
+   * Returns the type of a use of a member when the receiver substitutes a type variable that the
+   * member's declared type mentions, and null when it substitutes none. The substituted type may be
+   * one that no declaration in the input names, in which case a caller that generates symbols has
+   * to learn of it from here: reading the declaration alone finds only the type variable.
+   *
+   * @param memberUse the expression naming the member
+   * @param declaredType the member's declared type, as written in the declaration
+   * @return the substituted type, or null if the use substitutes nothing
+   */
+  public @Nullable Set<FullyQualifiedNameSet> getFQNsIfMemberTypeIsSubstituted(
+      Expression memberUse, Type declaredType) {
+    if (declaredType.isUnknownType()) {
+      return null;
+    }
+    Map<String, FullyQualifiedNameSet> substitution =
+        getSubstitutionForMemberUse(memberUse, declaredType);
+    return substitution.isEmpty()
+        ? null
+        : Set.of(substitute(getFQNsFromType(declaredType), substitution));
+  }
+
+  /**
+   * Returns what a type written in a member's declaration -- the member's own type, or the type of
+   * one of its parameters -- means at a use of that member. If the member is declared by a generic
+   * type and the use reads it through a parameterized receiver, the receiver supplies a
+   * substitution for the declaring type's type variables, and the type at the use is the declared
+   * type with that substitution applied (JLS 4.5.2). JavaParser normally performs that substitution
+   * itself, so this is reached only when it could not -- which, in practice, means that one of the
+   * receiver's type arguments is unsolved.
+   *
+   * @param memberUse the expression naming the member
+   * @param declaredType a type written in the member's declaration
+   * @return what that type means at the use
+   */
+  public FullyQualifiedNameSet getFQNsFromTypeInMemberDeclaration(
+      Expression memberUse, Type declaredType) {
+    Map<String, FullyQualifiedNameSet> substitution =
+        getSubstitutionForMemberUse(memberUse, declaredType);
+    FullyQualifiedNameSet declaredFQNs = getFQNsFromType(declaredType);
+    return substitution.isEmpty() ? declaredFQNs : substitute(declaredFQNs, substitution);
+  }
+
+  /**
+   * Computes the substitution that a use of a member imposes on the type variables that its
+   * declared type mentions. Two sources contribute: the type arguments of the receiver, for type
+   * variables of the declaring type (JLS 4.5.2, following the supertype chain per JLS 8.4.8), and
+   * explicit type arguments on the call, for type variables of the member itself (JLS 15.12.2.1).
+   *
+   * @param memberUse the expression naming the member
+   * @param declaredType the member's declared type
+   * @return the substitution, which is empty when the use imposes none
+   */
+  private Map<String, FullyQualifiedNameSet> getSubstitutionForMemberUse(
+      Expression memberUse, Type declaredType) {
+    Set<String> substitutable = getSubstitutableTypeVariablesIn(declaredType);
+    if (substitutable.isEmpty()) {
+      return Map.of();
+    }
+
+    Map<String, FullyQualifiedNameSet> result = new HashMap<>();
+
+    MethodDeclaration declaringMethod =
+        declaredType.findAncestor(MethodDeclaration.class).orElse(null);
+    if (declaringMethod != null
+        && memberUse instanceof MethodCallExpr call
+        && call.getTypeArguments().isPresent()
+        && call.getTypeArguments().get().size() == declaringMethod.getTypeParameters().size()) {
+      NodeList<Type> typeArguments = call.getTypeArguments().get();
+      for (int i = 0; i < typeArguments.size(); i++) {
+        result.put(
+            declaringMethod.getTypeParameters().get(i).getNameAsString(),
+            getFQNsFromType(typeArguments.get(i)));
+      }
+    }
+
+    TypeDeclaration<?> declaringType = JavaParserUtil.getEnclosingClassLikeOptional(declaredType);
+    Expression receiver =
+        memberUse instanceof NodeWithTraversableScope withScope
+            ? withScope.traverseScope().orElse(null)
+            : null;
+
+    // A receiver of this or super names the declaring type itself or a supertype of it, in either
+    // case from inside the generic declaration, where its type variables are in scope and denote
+    // themselves.
+    if (declaringType != null
+        && receiver != null
+        && !receiver.isThisExpr()
+        && !receiver.isSuperExpr()) {
+      Set<FullyQualifiedNameSet> receiverTypes = getFQNsForExpressionType(receiver);
+      if (receiverTypes.size() == 1) {
+        Map<String, FullyQualifiedNameSet> fromReceiver =
+            getSubstitutionFromSubtype(
+                receiverTypes.iterator().next(), declaringType, new HashSet<>());
+        if (fromReceiver != null) {
+          result.putAll(fromReceiver);
+        }
+      }
+    }
+
+    result.keySet().retainAll(substitutable);
+    return result;
+  }
+
+  /**
+   * Computes the substitution that a subtype supplies for the type variables of one of its
+   * supertypes, by walking the supertype chain from {@code subtype} to {@code supertype} and
+   * composing the type arguments found at each step (JLS 8.4.8).
+   *
+   * @param subtype the type through which the supertype's members are being read
+   * @param supertype the declaration whose type variables are to be substituted
+   * @param visited the FQNs already visited, to stop cycles in a malformed hierarchy
+   * @return the substitution, or null if {@code supertype} is not reachable from {@code subtype}
+   */
+  private @Nullable Map<String, FullyQualifiedNameSet> getSubstitutionFromSubtype(
+      FullyQualifiedNameSet subtype, TypeDeclaration<?> supertype, Set<String> visited) {
+    if (subtype.erasedFqns().size() != 1) {
+      // The subtype is not known precisely enough to say which declaration's type parameters its
+      // type arguments correspond to.
+      return null;
+    }
+    String subtypeFQN = subtype.erasedFqns().iterator().next();
+    if (!visited.add(subtypeFQN)) {
+      return null;
+    }
+    TypeDeclaration<?> subtypeDeclaration =
+        JavaParserUtil.getTypeFromQualifiedName(subtypeFQN, fqnToCompilationUnits);
+    if (subtypeDeclaration == null) {
+      return null;
+    }
+
+    Map<String, FullyQualifiedNameSet> here = new HashMap<>();
+    if (subtypeDeclaration instanceof NodeWithTypeParameters<?> withTypeParameters) {
+      NodeList<TypeParameter> typeParameters = withTypeParameters.getTypeParameters();
+      List<FullyQualifiedNameSet> typeArguments = subtype.typeArguments();
+      // Unequal sizes mean a raw type, which supplies no substitution at all.
+      if (typeParameters.size() == typeArguments.size()) {
+        for (int i = 0; i < typeParameters.size(); i++) {
+          FullyQualifiedNameSet typeArgument = typeArguments.get(i);
+          if (typeArgument.erasedFqns().isEmpty() || "? super".equals(typeArgument.wildcard())) {
+            // JLS 5.1.10: reading a member through a wildcard sees a capture variable whose upper
+            // bound is the wildcard's. For an unbounded or lower-bounded wildcard that bound is
+            // Object, which constrains the member's type not at all.
+            continue;
+          }
+          here.put(
+              typeParameters.get(i).getNameAsString(),
+              typeArgument.wildcard() == null
+                  ? typeArgument
+                  : new FullyQualifiedNameSet(
+                      typeArgument.erasedFqns(),
+                      typeArgument.typeArguments(),
+                      null,
+                      typeArgument.usesGeneratedName()));
+        }
+      }
+    }
+
+    if (subtypeFQN.equals(supertype.getFullyQualifiedName().orElse(null))) {
+      return here;
+    }
+
+    for (ClassOrInterfaceType directSupertype : getDirectSupertypes(subtypeDeclaration)) {
+      Map<String, FullyQualifiedNameSet> fromSupertype =
+          getSubstitutionFromSubtype(
+              substitute(getFQNsFromType(directSupertype), here), supertype, visited);
+      if (fromSupertype != null) {
+        return fromSupertype;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Returns the extends and implements clauses of a type declaration.
+   *
+   * @param declaration the declaration
+   * @return its direct supertypes, as written
+   */
+  private static List<ClassOrInterfaceType> getDirectSupertypes(TypeDeclaration<?> declaration) {
+    List<ClassOrInterfaceType> result = new ArrayList<>();
+    if (declaration instanceof NodeWithExtends<?> withExtends) {
+      result.addAll(withExtends.getExtendedTypes());
+    }
+    if (declaration instanceof NodeWithImplements<?> withImplements) {
+      result.addAll(withImplements.getImplementedTypes());
+    }
+    return result;
+  }
+
+  /**
+   * Returns the names of the type variables that {@code type} mentions and that a use of the member
+   * it is the declared type of could substitute: those declared by the member itself or by one of
+   * its enclosing declarations.
+   *
+   * @param type the declared type of a member, attached to the AST
+   * @return the names of the substitutable type variables that the type mentions
+   */
+  private static Set<String> getSubstitutableTypeVariablesIn(Type type) {
+    Set<String> declared = new HashSet<>();
+    for (Node walk = type.getParentNode().orElse(null);
+        walk != null;
+        walk = walk.getParentNode().orElse(null)) {
+      if (walk instanceof NodeWithTypeParameters<?> withTypeParameters) {
+        for (TypeParameter typeParameter : withTypeParameters.getTypeParameters()) {
+          declared.add(typeParameter.getNameAsString());
+        }
+      }
+    }
+
+    Set<String> result = new HashSet<>();
+    for (ClassOrInterfaceType mentioned : type.findAll(ClassOrInterfaceType.class)) {
+      if (mentioned.getScope().isEmpty() && declared.contains(mentioned.getNameAsString())) {
+        result.add(mentioned.getNameAsString());
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Applies a substitution to an inferred type, replacing every occurrence of a substituted type
+   * variable -- including in type arguments and as an array's element type -- with the type that
+   * the substitution maps it to.
+   *
+   * @param fqns the inferred type to substitute into
+   * @param substitution a map from type variable names to the types substituted for them
+   * @return the substituted type
+   */
+  private static FullyQualifiedNameSet substitute(
+      FullyQualifiedNameSet fqns, Map<String, FullyQualifiedNameSet> substitution) {
+    if (fqns.erasedFqns().size() == 1) {
+      String name = fqns.erasedFqns().iterator().next();
+      String withoutBrackets = JavaParserUtil.removeArrayBrackets(name);
+      FullyQualifiedNameSet replacement = substitution.get(withoutBrackets);
+      if (replacement != null) {
+        String brackets = name.substring(withoutBrackets.length());
+        Set<String> replacementFQNs = new LinkedHashSet<>();
+        for (String replacementFQN : replacement.erasedFqns()) {
+          replacementFQNs.add(replacementFQN + brackets);
+        }
+        return new FullyQualifiedNameSet(
+            replacementFQNs,
+            replacement.typeArguments(),
+            fqns.wildcard(),
+            replacement.usesGeneratedName());
+      }
+    }
+
+    List<FullyQualifiedNameSet> typeArguments = new ArrayList<>();
+    boolean changed = false;
+    for (FullyQualifiedNameSet typeArgument : fqns.typeArguments()) {
+      FullyQualifiedNameSet substituted = substitute(typeArgument, substitution);
+      changed |= !substituted.equals(typeArgument);
+      typeArguments.add(substituted);
+    }
+    return changed
+        ? new FullyQualifiedNameSet(
+            fqns.erasedFqns(), typeArguments, fqns.wildcard(), fqns.usesGeneratedName())
+        : fqns;
   }
 
   /**
@@ -1920,6 +2182,19 @@ public class FullyQualifiedNameGenerator {
 
           // Constructors and methods both are ResolvedMethodLikeDeclaration
           if (resolved instanceof ResolvedMethodLikeDeclaration resolvedMethodLike) {
+            // A parameter type mentioning a type variable of the declaring type is not the type
+            // that the call requires of its argument: the receiver's type arguments are
+            // substituted in first (JLS 4.5.2).
+            if (withArguments instanceof Expression call
+                && JavaParserUtil.tryFindAttachedNode(resolvedMethodLike, fqnToCompilationUnits)
+                    instanceof NodeWithParameters<?> declaration) {
+              Set<FullyQualifiedNameSet> substituted =
+                  getFQNsIfMemberTypeIsSubstituted(call, declaration.getParameter(param).getType());
+              if (substituted != null) {
+                return substituted;
+              }
+            }
+
             try {
               ResolvedType paramType = resolvedMethodLike.getParam(param).getType();
 
@@ -1989,7 +2264,11 @@ public class FullyQualifiedNameGenerator {
           Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
 
           for (NodeWithParameters<?> callable : allPotentialCallables) {
-            result.add(getFQNsFromType(callable.getParameter(param).getType()));
+            Type parameterType = callable.getParameter(param).getType();
+            result.add(
+                withArguments instanceof Expression call
+                    ? getFQNsFromTypeInMemberDeclaration(call, parameterType)
+                    : getFQNsFromType(parameterType));
           }
 
           if (!result.isEmpty()) {
