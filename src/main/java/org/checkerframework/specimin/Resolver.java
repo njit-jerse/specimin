@@ -214,6 +214,19 @@ public class Resolver {
   }
 
   /**
+   * Attempts to resolve a node that fails to resolve only because of an unsolved type argument.
+   *
+   * @param toResolve The node to resolve
+   * @return the resolved node names, or null if erasing type arguments does not recover it
+   */
+  public static @Nullable Object resolveThroughErasure(Resolvable<?> toResolve) {
+    if (toResolve instanceof ClassOrInterfaceType type) {
+      return resolveErasure(type);
+    }
+    return resolveThroughErasedReceiver(toResolve);
+  }
+
+  /**
    * Attempts to resolve an expression that names a member of a type whose type arguments make that
    * type unresolvable. A member access does not resolve when its receiver's type does not, but JLS
    * 4.5.2 makes the members of a parameterized type the members of the generic declaration with a
@@ -225,7 +238,7 @@ public class Resolver {
    * @return The declaration that the access names, or null if it cannot be found this way
    * @param <T> The type to resolve to
    */
-  public static <T> @Nullable T resolveThroughErasedReceiver(Resolvable<T> expr) {
+  private static <T> @Nullable T resolveThroughErasedReceiver(Resolvable<T> expr) {
     if (!(expr instanceof Expression original)
         || !(expr instanceof NodeWithTraversableScope)
         || original.getParentNode().isEmpty()) {

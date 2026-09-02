@@ -1878,16 +1878,19 @@ public class FullyQualifiedNameGenerator {
    */
   private Map<String, FullyQualifiedNameSet> getSubstitutionForMemberUse(
       Expression memberUse, Type declaredType) {
-    Set<String> substitutable = getSubstitutableTypeVariablesIn(declaredType);
+    Set<String> substitutable = JavaParserUtil.getTypeVariablesMentionedIn(declaredType);
     if (substitutable.isEmpty()) {
       return Map.of();
     }
 
     Map<String, FullyQualifiedNameSet> result = new HashMap<>();
 
-    MethodDeclaration declaringMethod =
-        declaredType.findAncestor(MethodDeclaration.class).orElse(null);
-    if (declaringMethod != null
+    // The declaration the type is written in, which is the method being called only when the type
+    // is that method's own return or parameter type. Asking for the nearest enclosing method
+    // instead would reach past a field of an anonymous class, or past a constructor, to a method
+    // that declares unrelated type variables of its own.
+    BodyDeclaration<?> member = declaredType.findAncestor(BodyDeclaration.class).orElse(null);
+    if (member instanceof MethodDeclaration declaringMethod
         && memberUse instanceof MethodCallExpr call
         && call.getTypeArguments().isPresent()
         && call.getTypeArguments().get().size() == declaringMethod.getTypeParameters().size()) {
@@ -1985,7 +1988,8 @@ public class FullyQualifiedNameGenerator {
       return here;
     }
 
-    for (ClassOrInterfaceType directSupertype : getDirectSupertypes(subtypeDeclaration)) {
+    for (ClassOrInterfaceType directSupertype :
+        JavaParserUtil.getDirectSuperTypes(subtypeDeclaration)) {
       Map<String, FullyQualifiedNameSet> fromSupertype =
           getSubstitutionFromSubtype(
               substitute(getFQNsFromType(directSupertype), here), supertype, visited);
@@ -1994,52 +1998,6 @@ public class FullyQualifiedNameGenerator {
       }
     }
     return null;
-  }
-
-  /**
-   * Returns the extends and implements clauses of a type declaration.
-   *
-   * @param declaration the declaration
-   * @return its direct supertypes, as written
-   */
-  private static List<ClassOrInterfaceType> getDirectSupertypes(TypeDeclaration<?> declaration) {
-    List<ClassOrInterfaceType> result = new ArrayList<>();
-    if (declaration instanceof NodeWithExtends<?> withExtends) {
-      result.addAll(withExtends.getExtendedTypes());
-    }
-    if (declaration instanceof NodeWithImplements<?> withImplements) {
-      result.addAll(withImplements.getImplementedTypes());
-    }
-    return result;
-  }
-
-  /**
-   * Returns the names of the type variables that {@code type} mentions and that a use of the member
-   * it is the declared type of could substitute: those declared by the member itself or by one of
-   * its enclosing declarations.
-   *
-   * @param type the declared type of a member, attached to the AST
-   * @return the names of the substitutable type variables that the type mentions
-   */
-  private static Set<String> getSubstitutableTypeVariablesIn(Type type) {
-    Set<String> declared = new HashSet<>();
-    for (Node walk = type.getParentNode().orElse(null);
-        walk != null;
-        walk = walk.getParentNode().orElse(null)) {
-      if (walk instanceof NodeWithTypeParameters<?> withTypeParameters) {
-        for (TypeParameter typeParameter : withTypeParameters.getTypeParameters()) {
-          declared.add(typeParameter.getNameAsString());
-        }
-      }
-    }
-
-    Set<String> result = new HashSet<>();
-    for (ClassOrInterfaceType mentioned : type.findAll(ClassOrInterfaceType.class)) {
-      if (mentioned.getScope().isEmpty() && declared.contains(mentioned.getNameAsString())) {
-        result.add(mentioned.getNameAsString());
-      }
-    }
-    return result;
   }
 
   /**

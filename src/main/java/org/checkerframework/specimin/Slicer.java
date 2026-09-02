@@ -268,19 +268,11 @@ public class Slicer {
         }
       }
 
-      // A parameterized type does not resolve when one of its type arguments is unsolved, even
-      // though its own name is solvable, so fall back to the erasure to ensure that the
-      // named type's declaration is in the slice. The type arguments are handled later. A member
-      // access through a receiver of such a type does not resolve either, and names the same
-      // declaration that it names on the erasure (JLS 4.5.2), so it gets the same treatment.
-      Object erasure = null;
-      if (resolved == null) {
-        if (node instanceof ClassOrInterfaceType type) {
-          erasure = Resolver.resolveErasure(type);
-        } else {
-          erasure = Resolver.resolveThroughErasedReceiver(asResolvable);
-        }
-      }
+      // An unsolved type argument can make a parameterized type, and any member access through a
+      // receiver of that type, fail to resolve even though the declaration each names is known.
+      // Fall back to the erasure to ensure that declaration is in the slice; the type arguments
+      // are handled later.
+      Object erasure = resolved == null ? Resolver.resolveThroughErasure(asResolvable) : null;
 
       if (resolved != null) {
         generateUnsolvedSymbol = handleResolvedObject(node, resolved);
