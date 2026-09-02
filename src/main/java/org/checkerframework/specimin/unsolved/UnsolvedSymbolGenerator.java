@@ -68,6 +68,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -97,6 +98,21 @@ public class UnsolvedSymbolGenerator {
    * field's type must be primitive or String; {@code int} is as good a choice as any.
    */
   private static final SolvedMemberType ANNOTATION_CONSTANT_TYPE = new SolvedMemberType("int");
+
+  /**
+   * The type of a synthetic field that stands for an enum constant. An enum constant declaration
+   * names no type, so the empty type is what should be printed; see {@link UnsolvedField#toString}.
+   */
+  private static final SolvedMemberType ENUM_CONSTANT_TYPE = new SolvedMemberType("");
+
+  /**
+   * Synthetic types classified as enums only because a name used as an annotation argument was
+   * guessed to be an enum constant. That guess is the weakest evidence Specimin has, so it is the
+   * one that yields when a later value of the same annotation element shows the element's type is
+   * really a primitive or String; see {@link #reconcileAnnotationElementType}.
+   */
+  private final Set<UnsolvedClassOrInterfaceAlternates> enumsGuessedFromAnnotationArguments =
+      Collections.newSetFromMap(new IdentityHashMap<>());
 
   /** A map of fully qualified names to their corresponding compilation units. */
   private final Map<String, CompilationUnit> fqnsToCompilationUnits;
@@ -576,6 +592,9 @@ public class UnsolvedSymbolGenerator {
 
     if (gen == null) {
       gen = UnsolvedMethodAlternates.create(name, Set.of(type), List.of(annotation), List.of());
+      // An annotation type may declare each element only once (JLS 9.6), so a later use of the
+      // same element must find this declaration instead of adding a second one.
+      addNewSymbolToGeneratedSymbolsMap(gen);
     }
     // If it was created before, the last time could have been an empty array and defaulted to
     // String[]. This will correct it
@@ -583,9 +602,72 @@ public class UnsolvedSymbolGenerator {
     else if (annotationMemberValue.isArrayInitializerExpr()
         && annotationMemberValue.asArrayInitializerExpr().getValues().isNonEmpty()) {
       gen.setReturnType(type);
+    } else {
+      reconcileAnnotationElementType(gen, type);
     }
 
     return gen;
+  }
+
+  /**
+   * Overrides the type already chosen for an annotation element when a new value of that element
+   * shows the choice was wrong.
+   *
+   * <p>An annotation type declares each element only once (JLS 9.6), so every value of an element
+   * must fit one type. Specimin therefore has to pick between the types its use sites want when
+   * they disagree, and only one such disagreement is decidable: an element typed as a synthetic
+   * enum purely because some name was guessed to be an enum constant, against a value whose type
+   * Specimin did not invent at all and which a constant variable may have (JLS 4.12.4). The guess
+   * loses, and the name it was made about becomes an ordinary constant of the winning type.
+   *
+   * <p>Any other disagreement is left alone: with two invented types or two real ones there is no
+   * reason to believe either side over the other.
+   *
+   * @param element the element's already-generated declaration
+   * @param newType the type this value of the element requires
+   */
+  private void reconcileAnnotationElementType(
+      UnsolvedMethodAlternates element, MemberType newType) {
+    Set<MemberType> currentTypes = element.getReturnTypes();
+
+    if (currentTypes.size() != 1) {
+      // The alternates disagree, so there is no single choice to override.
+      return;
+    }
+
+    MemberType currentType = currentTypes.iterator().next();
+
+    if (currentType.equals(newType)
+        || !(currentType instanceof UnsolvedMemberType unsolved)
+        || !enumsGuessedFromAnnotationArguments.contains(unsolved.getUnsolvedType())) {
+      return;
+    }
+
+    Set<String> newFQNs = newType.getFullyQualifiedNames();
+
+    if (newFQNs.size() != 1 || !JavaLangUtils.isConstantVariableType(newFQNs.iterator().next())) {
+      return;
+    }
+
+    UnsolvedClassOrInterfaceAlternates guessedEnum = unsolved.getUnsolvedType();
+
+    element.setReturnType(newType);
+    guessedEnum.setType(UnsolvedClassOrInterfaceType.CLASS);
+    enumsGuessedFromAnnotationArguments.remove(guessedEnum);
+
+    // The constants of what is no longer an enum are ordinary fields, which unlike enum constants
+    // must declare a type and, since they are read from a constant context, an initializer.
+    for (String typeFQN : guessedEnum.getFullyQualifiedNames()) {
+      String memberPrefix = typeFQN + "#";
+
+      for (Map.Entry<String, UnsolvedSymbolAlternates<?>> entry : generatedSymbols.entrySet()) {
+        if (entry.getKey().startsWith(memberPrefix)
+            && entry.getValue() instanceof UnsolvedFieldAlternates field
+            && field.getTypes().equals(Set.of(ENUM_CONSTANT_TYPE))) {
+          field.makeConstantVariable(newType);
+        }
+      }
+    }
   }
 
   /**
@@ -738,6 +820,11 @@ public class UnsolvedSymbolGenerator {
      */
     DECLARED_CONSTANT,
     /**
+     * A constant variable whose type an already-generated element of a synthetic annotation type
+     * dictates.
+     */
+    SYNTHETIC_DECLARED_CONSTANT,
+    /**
      * A constant variable whose type Specimin must invent, because the annotation type is itself
      * synthetic and so constrains the argument's type in no way.
      */
@@ -771,6 +858,14 @@ public class UnsolvedSymbolGenerator {
       return AnnotationArgumentKind.DECLARED_CONSTANT;
     }
 
+    // A synthetic annotation type has no declaration in the input for getAnnotationElementType to
+    // read, but an earlier value for the same element may already have fixed its type. An
+    // annotation type declares each element only once (JLS 9.6), so that decision binds this value
+    // too: making this name an enum constant would contradict it.
+    if (getSyntheticAnnotationElementConstantType(constant) != null) {
+      return AnnotationArgumentKind.SYNTHETIC_DECLARED_CONSTANT;
+    }
+
     // A name in an annotation argument is usually an enum constant, but it can also be a static
     // final constant of an ordinary class. This is only a guess, so it must not override anything
     // we actually know: a constructor call on the same type, for example, establishes that it is a
@@ -779,6 +874,7 @@ public class UnsolvedSymbolGenerator {
     for (UnsolvedClassOrInterfaceAlternates parent : potentialParents) {
       if (parent.getType() == UnsolvedClassOrInterfaceType.UNKNOWN) {
         parent.setType(UnsolvedClassOrInterfaceType.ENUM);
+        enumsGuessedFromAnnotationArguments.add(parent);
       } else if (parent.getType() != UnsolvedClassOrInterfaceType.ENUM) {
         isEnumConstant = false;
       }
@@ -812,9 +908,13 @@ public class UnsolvedSymbolGenerator {
   private Set<MemberType> getTypesForGeneratedField(
       Expression constant, @Nullable AnnotationArgumentKind kind) {
     if (kind == AnnotationArgumentKind.ENUM_CONSTANT) {
-      // An enum constant declaration names no type, so the empty type is what should be printed;
-      // see UnsolvedField#toString.
-      return Set.of(new SolvedMemberType(""));
+      return Set.of(ENUM_CONSTANT_TYPE);
+    }
+
+    if (kind == AnnotationArgumentKind.SYNTHETIC_DECLARED_CONSTANT) {
+      String elementType = getSyntheticAnnotationElementConstantType(constant);
+      return Set.of(
+          elementType == null ? ANNOTATION_CONSTANT_TYPE : new SolvedMemberType(elementType));
     }
 
     if (kind == AnnotationArgumentKind.INVENTED_CONSTANT) {
@@ -5163,6 +5263,69 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * If the given expression supplies the value of an element of a synthetic annotation type, and
+   * Specimin has already given that element a primitive or {@code String} type, returns that type.
+   *
+   * <p>This is the counterpart of {@link JavaParserUtil#getAnnotationElementType} for annotation
+   * types that Specimin invents: there is no declaration in the input to resolve, so the element's
+   * type is whatever an earlier value for it caused Specimin to choose. Since an annotation type
+   * may declare each element only once (JLS 9.6), that choice constrains every other value of the
+   * same element just as a declared type would.
+   *
+   * @param value an expression appearing as, or within, an annotation element value
+   * @return the element's type, or null if it is not one Specimin has chosen or is not a type a
+   *     constant variable may have (JLS 4.12.4)
+   */
+  private @Nullable String getSyntheticAnnotationElementConstantType(Expression value) {
+    JavaParserUtil.AnnotationElementPosition position =
+        JavaParserUtil.getAnnotationElementPosition(value);
+
+    if (position == null || Resolver.resolve(position.annotation()) != null) {
+      return null;
+    }
+
+    UnsolvedSymbolAlternates<?> element = null;
+    for (String annotationFQN :
+        fullyQualifiedNameGenerator.getFQNsFromAnnotation(position.annotation()).erasedFqns()) {
+      element = generatedSymbols.get(annotationFQN + "#" + position.elementName() + "()");
+
+      if (element != null) {
+        break;
+      }
+    }
+
+    if (!(element instanceof UnsolvedMethodAlternates method)) {
+      return null;
+    }
+
+    Set<MemberType> returnTypes = method.getReturnTypes();
+
+    if (returnTypes.size() != 1) {
+      // The alternates disagree, so nothing has been decided yet.
+      return null;
+    }
+
+    Set<String> fqns = returnTypes.iterator().next().getFullyQualifiedNames();
+
+    if (fqns.size() != 1) {
+      return null;
+    }
+
+    String fqn = fqns.iterator().next();
+
+    // An expression inside braces supplies one component of an array-typed element, and so does an
+    // unbraced single value, which JLS 9.7.1 accepts as shorthand for a one-element array.
+    if (fqn.endsWith("[]") && (position.insideBraces() || !value.isArrayInitializerExpr())) {
+      fqn = JavaParserUtil.removeArrayBrackets(fqn);
+    } else if (position.insideBraces()) {
+      // The element is not an array, so this value cannot be one of its components.
+      return null;
+    }
+
+    return JavaLangUtils.isConstantVariableType(fqn) ? fqn : null;
+  }
+
+  /**
    * Returns true if an annotation argument is being generated as an enum constant. The annotation
    * element's type is then the declaring enum, since an enum constant declaration has no type of
    * its own.
@@ -5184,6 +5347,7 @@ public class UnsolvedSymbolGenerator {
     }
 
     return JavaParserUtil.isProbablyAConstant(name)
+        && getSyntheticAnnotationElementConstantType(constant) == null
         && !getConstantDeclaringTypeFQNs(constant).isEmpty()
         && !declaringTypeIsSyntheticNonEnum(constant);
   }

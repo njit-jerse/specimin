@@ -2267,20 +2267,25 @@ public class JavaParserUtil {
   }
 
   /**
-   * If the given expression supplies the value of an annotation element whose annotation type is
-   * resolvable, returns the type that expression must have. That is the element's declared type,
-   * except that an expression supplying a single component of an array-typed element gets the
-   * component type: either from inside a braced initializer, or as the unbraced single value that
-   * JLS 9.7.1 accepts as shorthand for a one-element array.
+   * The annotation element that an expression supplies a value for.
    *
-   * <p>Returns null when the expression is not in an element value position, when the annotation
-   * type is one Specimin has to synthesize (and which therefore constrains nothing, since Specimin
-   * chooses the element's type itself), or when the annotation type declares no matching element.
+   * @param annotation the annotation the value appears in
+   * @param elementName the name of the element the value is for
+   * @param insideBraces true if the expression supplies one component of a braced array value,
+   *     rather than the element value as a whole
+   */
+  public record AnnotationElementPosition(
+      AnnotationExpr annotation, String elementName, boolean insideBraces) {}
+
+  /**
+   * If the given expression appears in an annotation element value position, returns which element
+   * of which annotation it supplies a value for. This says nothing about the element's type: the
+   * annotation type need not be resolvable.
    *
    * @param expr the expression to test
-   * @return the declared type of the annotation element this expression supplies, or null
+   * @return the element position, or null if the expression is not in such a position
    */
-  public static @Nullable ResolvedType getAnnotationElementType(Expression expr) {
+  public static @Nullable AnnotationElementPosition getAnnotationElementPosition(Expression expr) {
     Node parent = expr.getParentNode().orElse(null);
 
     // A braced array value is an ArrayInitializerExpr whose values each supply one component of the
@@ -2295,18 +2300,42 @@ public class JavaParserUtil {
     // No identity check against the annotation's value is needed in either case below: the value
     // is the only Expression child of both node kinds, since a MemberValuePair holds its name as a
     // SimpleName.
-    String elementName;
-    AnnotationExpr annotation;
     if (parent instanceof SingleMemberAnnotationExpr singleMember) {
-      elementName = "value";
-      annotation = singleMember;
-    } else if (parent instanceof MemberValuePair pair
+      return new AnnotationElementPosition(singleMember, "value", insideBraces);
+    }
+
+    if (parent instanceof MemberValuePair pair
         && pair.getParentNode().orElse(null) instanceof AnnotationExpr enclosing) {
-      elementName = pair.getNameAsString();
-      annotation = enclosing;
-    } else {
+      return new AnnotationElementPosition(enclosing, pair.getNameAsString(), insideBraces);
+    }
+
+    return null;
+  }
+
+  /**
+   * If the given expression supplies the value of an annotation element whose annotation type is
+   * resolvable, returns the type that expression must have. That is the element's declared type,
+   * except that an expression supplying a single component of an array-typed element gets the
+   * component type: either from inside a braced initializer, or as the unbraced single value that
+   * JLS 9.7.1 accepts as shorthand for a one-element array.
+   *
+   * <p>Returns null when the expression is not in an element value position, when the annotation
+   * type is one Specimin has to synthesize (and which therefore constrains nothing, since Specimin
+   * chooses the element's type itself), or when the annotation type declares no matching element.
+   *
+   * @param expr the expression to test
+   * @return the declared type of the annotation element this expression supplies, or null
+   */
+  public static @Nullable ResolvedType getAnnotationElementType(Expression expr) {
+    AnnotationElementPosition position = getAnnotationElementPosition(expr);
+
+    if (position == null) {
       return null;
     }
+
+    boolean insideBraces = position.insideBraces();
+    String elementName = position.elementName();
+    AnnotationExpr annotation = position.annotation();
 
     ResolvedAnnotationDeclaration resolved = Resolver.resolve(annotation);
 
