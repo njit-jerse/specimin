@@ -3,6 +3,7 @@ package org.checkerframework.specimin;
 import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -11,6 +12,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.MethodAmbiguityException;
 import com.github.javaparser.resolution.Resolvable;
@@ -177,6 +179,35 @@ public class Resolver {
     }
 
     return result;
+  }
+
+  /**
+   * Attempts to resolve the erasure of a parameterized type whose type arguments make it
+   * unresolvable. {@link Resolvable#resolve()} on a {@link ClassOrInterfaceType} converts its type
+   * arguments as well, so any unresolvable type argument makes the whole type unresolvable, even if
+   * the erasure would be resolvable. This method constructs the erasure and tries to resolve it,
+   * returning non-null only if that succeeds.
+   *
+   * @param type The type whose erasure to resolve
+   * @return The resolved erasure, or null if it cannot be resolved (or if it has no type arguments
+   *     to erase)
+   */
+  public static @Nullable ResolvedType resolveErasure(ClassOrInterfaceType type) {
+    Optional<NodeList<Type>> typeArguments = type.getTypeArguments();
+    if (typeArguments.isEmpty() || typeArguments.get().isEmpty()) {
+      return null;
+    }
+
+    // Mutating and restoring the node is ugly, but a clone has no parent and therefore no
+    // resolution context. JavaParserUtil#tryGetErasedTypeOfNode does the same thing.
+    type.removeTypeArguments();
+    ResolvedType erasure;
+    try {
+      erasure = resolve(type);
+    } finally {
+      type.setTypeArguments(typeArguments.get());
+    }
+    return erasure;
   }
 
   /**
