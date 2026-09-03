@@ -1209,9 +1209,10 @@ public class UnsolvedSymbolGenerator {
    */
   private void handleMethodCallExpr(
       MethodCallExpr methodCall, List<UnsolvedSymbolAlternates<?>> result) {
-    ResolvedMethodDeclaration resolvedMethodDeclaration = Resolver.resolve(methodCall);
-
-    if (resolvedMethodDeclaration != null) {
+    // A call on an annotation member resolves to that member (JLS 9.6.1) rather than to a
+    // method; fall through to the unsolved handling below, as for a call that does not resolve.
+    if (Resolver.resolve(methodCall)
+        instanceof ResolvedMethodDeclaration resolvedMethodDeclaration) {
       Node node =
           JavaParserUtil.tryFindAttachedNode(resolvedMethodDeclaration, fqnsToCompilationUnits);
 
@@ -3401,7 +3402,13 @@ public class UnsolvedSymbolGenerator {
 
       ResolvedMethodLikeDeclaration resolved = null;
       if (!(node instanceof EnumConstantDeclaration)) {
-        resolved = (ResolvedMethodLikeDeclaration) Resolver.resolve((Resolvable<?>) nodeWithArgs);
+        // The upcast to Resolvable<?> bypasses the Object-returning overloads, so this has to
+        // check for itself: constructing a record answers with the record's declaration, which is
+        // not a callable at all (see Resolver#WIDENED_NODE_KINDS).
+        if (Resolver.resolve((Resolvable<?>) nodeWithArgs)
+            instanceof ResolvedMethodLikeDeclaration methodLike) {
+          resolved = methodLike;
+        }
       }
 
       if (resolved == null && node instanceof MethodCallExpr methodCall) {
@@ -4304,7 +4311,10 @@ public class UnsolvedSymbolGenerator {
    */
   private void matchMethodReturnTypesToKnownChildClasses(MethodCallExpr methodCall) {
     Collection<Set<String>> potentialScopeFQNs = null;
-    ResolvedMethodDeclaration resolvedMethod = Resolver.resolve(methodCall);
+    // An annotation member (JLS 9.6.1) has no declaring class to walk ancestors of, so treat it
+    // as unresolved and fall back to the call site's own location.
+    ResolvedMethodDeclaration resolvedMethod =
+        Resolver.resolve(methodCall) instanceof ResolvedMethodDeclaration method ? method : null;
     Node ast = null;
 
     if (resolvedMethod == null) {
@@ -4778,9 +4788,8 @@ public class UnsolvedSymbolGenerator {
     }
 
     for (MethodCallExpr call : tryStmt.getTryBlock().findAll(MethodCallExpr.class)) {
-      ResolvedMethodDeclaration resolved = Resolver.resolve(call);
-
-      if (resolved != null) {
+      // An annotation member (JLS 9.6.1) has no throws clause, so there is nothing to add.
+      if (Resolver.resolve(call) instanceof ResolvedMethodDeclaration resolved) {
         addSpecifiedExceptions(resolved, result);
         continue;
       }
@@ -4796,9 +4805,10 @@ public class UnsolvedSymbolGenerator {
     }
 
     for (ObjectCreationExpr creation : tryStmt.getTryBlock().findAll(ObjectCreationExpr.class)) {
-      ResolvedConstructorDeclaration resolved = Resolver.resolve(creation);
-
-      if (resolved != null) {
+      // Constructing a record resolves to the record's declaration (see
+      // Resolver#WIDENED_NODE_KINDS); a canonical constructor is implicitly declared (JLS
+      // 8.10.4) and so has no throws clause to add.
+      if (Resolver.resolve(creation) instanceof ResolvedConstructorDeclaration resolved) {
         addSpecifiedExceptions(resolved, result);
       }
       // Synthetic constructors are never generated with a throws clause, so there is nothing to

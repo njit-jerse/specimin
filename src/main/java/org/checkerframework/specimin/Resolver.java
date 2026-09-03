@@ -4,6 +4,7 @@ import com.github.javaparser.ast.AccessSpecifier;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -29,9 +30,12 @@ import com.github.javaparser.resolution.declarations.ResolvedTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
+import java.lang.reflect.ParameterizedType;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -97,31 +101,178 @@ public class Resolver {
   }
 
   /**
+   * Node kinds whose resolution can legitimately produce a declaration other than the one their
+   * {@code Resolvable<T>} type argument names, because JavaParser has no node for the declaration
+   * that is actually referred to. A record's constructor call names the record declaration, since a
+   * canonical constructor is implicitly declared (JLS 8.10.4); an enum constant names the enum's
+   * constructor; a constructor reference names a constructor rather than a method; and a call on an
+   * annotation member names that member (JLS 9.6.1), which is a value, not a method.
+   *
+   * <p>{@link #resolve} and {@link #resolveGuaranteeNonNull} are overloaded to return {@code
+   * Object} for exactly these kinds, so that callers are forced to dispatch on the runtime type.
+   * Any other kind of mismatch is rejected by {@link #discardIfWrongKind}, which keeps the generic
+   * signature honest. Adding a widening recovery path for a new node kind means adding the kind
+   * here <em>and</em> adding the matching overloads; {@code ResolverKindContractTest} enforces that
+   * the two stay in step.
+   */
+  private static final Set<Class<? extends Node>> WIDENED_NODE_KINDS =
+      Set.of(
+          ObjectCreationExpr.class,
+          MethodCallExpr.class,
+          MethodReferenceExpr.class,
+          EnumConstantDeclaration.class);
+
+  /** Cache for {@link #declaredResolvedKind}, which is reflective and called per recovery. */
+  private static final Map<Class<?>, Optional<Class<?>>> DECLARED_RESOLVED_KINDS =
+      new ConcurrentHashMap<>();
+
+  /**
+   * Returns the type argument that {@code nodeClass} supplies to {@link Resolvable}, that is, the
+   * kind of declaration (or type) that resolving such a node is declared to produce.
+   *
+   * @param nodeClass The class of the node being resolved
+   * @return That type argument, or null if it cannot be determined
+   */
+  private static @Nullable Class<?> declaredResolvedKind(Class<?> nodeClass) {
+    return DECLARED_RESOLVED_KINDS
+        .computeIfAbsent(nodeClass, Resolver::computeDeclaredResolvedKind)
+        .orElse(null);
+  }
+
+  /**
+   * Computes the value cached by {@link #declaredResolvedKind}, by walking {@code nodeClass}'s
+   * supertypes for the {@link Resolvable} interface.
+   *
+   * @param nodeClass The class of the node being resolved
+   * @return That type argument, or an empty Optional if it cannot be determined
+   */
+  private static Optional<Class<?>> computeDeclaredResolvedKind(Class<?> nodeClass) {
+    for (Class<?> current = nodeClass; current != null; current = current.getSuperclass()) {
+      for (java.lang.reflect.Type itf : current.getGenericInterfaces()) {
+        if (itf instanceof ParameterizedType parameterized
+            && parameterized.getRawType() == Resolvable.class
+            && parameterized.getActualTypeArguments()[0] instanceof Class<?> argument) {
+          return Optional.of(argument);
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  /**
+   * Discards a recovery-path result that is not what resolving {@code node} is declared to produce,
+   * unless {@code node} is one of the {@link #WIDENED_NODE_KINDS}.
+   *
+   * <p>Without this, the unchecked cast in {@link #resolve} reaches the caller as a {@code
+   * ClassCastException}. Null is the right answer for a discarded result rather than an exception:
+   * a recovery path that produces the wrong kind of thing has not found the declaration, and "not
+   * resolvable" is what every caller already handles. The type-versus-declaration case is the one
+   * that motivated this check -- {@link JavaParserUtil#tryResolveNodeIfInAnonymousClass} falls back
+   * to the node's <em>type</em>, which is no answer to "what declaration does this name?".
+   *
+   * @param node The node that was being resolved
+   * @param result The result a recovery path produced, possibly null
+   * @return {@code result}, or null if it is not a kind that {@code node} can resolve to
+   */
+  private static @Nullable Object discardIfWrongKind(Node node, @Nullable Object result) {
+    if (result == null || WIDENED_NODE_KINDS.stream().anyMatch(kind -> kind.isInstance(node))) {
+      return result;
+    }
+    Class<?> declared = declaredResolvedKind(node.getClass());
+    return declared == null || declared.isInstance(result) ? result : null;
+  }
+
+  /**
    * Resolves a resolvable node. Use instead of {@link Resolvable#resolve()} because this handles
    * all known exceptions, and returns null when otherwise unresolvable.
+   *
+   * <p>Overloads returning {@code Object} shadow this method for the node kinds whose resolution
+   * can widen; see {@link #WIDENED_NODE_KINDS}. For every other kind the result really is a {@code
+   * T}, because {@link #discardIfWrongKind} drops anything else.
    *
    * @param toResolve The node to resolve
    * @return The resolved object, or null if not resolvable
    * @param <T> The type to resolve to
    */
   @SuppressWarnings("unchecked")
-  // All casts to T are ok. It's not possible for toResolve to suddenly resolve to a different type.
+  // Safe: discardIfWrongKind has already dropped any result that is not a T, and the node kinds
+  // for which it permits a wider result are shadowed by the Object-returning overloads below.
   public static <T> @Nullable T resolve(Resolvable<T> toResolve) {
+    return (T) resolveWidened(toResolve);
+  }
+
+  /**
+   * Resolves an object creation expression. Returns {@code Object} rather than a {@code
+   * ResolvedConstructorDeclaration} because constructing a record resolves to the record's
+   * declaration; see {@link #WIDENED_NODE_KINDS}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object, or null if not resolvable
+   */
+  public static @Nullable Object resolve(ObjectCreationExpr toResolve) {
+    return resolveWidened(toResolve);
+  }
+
+  /**
+   * Resolves a method call. Returns {@code Object} rather than a {@code ResolvedMethodDeclaration}
+   * because a call on an annotation member resolves to that member; see {@link
+   * #WIDENED_NODE_KINDS}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object, or null if not resolvable
+   */
+  public static @Nullable Object resolve(MethodCallExpr toResolve) {
+    return resolveWidened(toResolve);
+  }
+
+  /**
+   * Resolves a method reference. Returns {@code Object} rather than a {@code
+   * ResolvedMethodDeclaration} because a constructor reference resolves to a constructor; see
+   * {@link #WIDENED_NODE_KINDS}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object, or null if not resolvable
+   */
+  public static @Nullable Object resolve(MethodReferenceExpr toResolve) {
+    return resolveWidened(toResolve);
+  }
+
+  /**
+   * Resolves an enum constant. Returns {@code Object} rather than a {@code
+   * ResolvedEnumConstantDeclaration} because an enum constant resolves to the enum's constructor
+   * when its arguments are unresolvable; see {@link #WIDENED_NODE_KINDS}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object, or null if not resolvable
+   */
+  public static @Nullable Object resolve(EnumConstantDeclaration toResolve) {
+    return resolveWidened(toResolve);
+  }
+
+  /**
+   * Implementation of every {@code resolve} overload: resolves the node, recovering from the
+   * exceptions JavaParser throws for cases it cannot handle.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object, or null if not resolvable
+   */
+  private static @Nullable Object resolveWidened(Resolvable<?> toResolve) {
     if (fqnToCompilationUnits == null) {
       throw new UnsupportedOperationException(
           "fqnToCompilationUnits must be set before calling resolve");
     }
 
+    Node node = (Node) toResolve;
     try {
       return toResolve.resolve();
     } catch (UnsolvedSymbolException ex) {
-      return (T) tryAlternativeResolutionForUnsolvableNode((Node) toResolve);
+      return discardIfWrongKind(node, tryAlternativeResolutionForUnsolvableNode(node));
     } catch (IllegalStateException ex) {
-      return (T) Resolver.handleIllegalStateException(ex, (Node) toResolve);
+      return discardIfWrongKind(node, Resolver.handleIllegalStateException(ex, node));
     } catch (MethodAmbiguityException ex) {
-      return (T) Resolver.handleMethodAmbiguityException(ex, (Node) toResolve);
+      return discardIfWrongKind(node, Resolver.handleMethodAmbiguityException(ex, node));
     } catch (UnsupportedOperationException ex) {
-      return (T) Resolver.handleUnsupportedOperationException(ex, (Node) toResolve);
+      return discardIfWrongKind(node, Resolver.handleUnsupportedOperationException(ex, node));
     }
   }
 
@@ -131,49 +282,108 @@ public class Resolver {
    * exception if it is not. Typically used with declarations, since those are almost always
    * solvable.
    *
+   * <p>As with {@link #resolve}, overloads returning {@code Object} shadow this method for the node
+   * kinds whose resolution can widen; see {@link #WIDENED_NODE_KINDS}.
+   *
    * @param toResolve The node to resolve
    * @return The resolved object
    * @param <T> The type to resolve to
    */
   @SuppressWarnings("unchecked")
-  // All casts to T are ok. It's not possible for toResolve to suddenly resolve to a different type.
+  // Safe for the same reason as in resolve: anything that is not a T has already been discarded.
   public static <T> @NonNull T resolveGuaranteeNonNull(Resolvable<T> toResolve) {
-    T result;
+    return (@NonNull T) resolveGuaranteeNonNullWidened(toResolve);
+  }
+
+  /**
+   * Resolves an object creation expression, throwing if it is not resolvable. Returns {@code
+   * Object} for the reason given on {@link #resolve(ObjectCreationExpr)}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object
+   */
+  public static @NonNull Object resolveGuaranteeNonNull(ObjectCreationExpr toResolve) {
+    return resolveGuaranteeNonNullWidened(toResolve);
+  }
+
+  /**
+   * Resolves a method call, throwing if it is not resolvable. Returns {@code Object} for the reason
+   * given on {@link #resolve(MethodCallExpr)}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object
+   */
+  public static @NonNull Object resolveGuaranteeNonNull(MethodCallExpr toResolve) {
+    return resolveGuaranteeNonNullWidened(toResolve);
+  }
+
+  /**
+   * Resolves a method reference, throwing if it is not resolvable. Returns {@code Object} for the
+   * reason given on {@link #resolve(MethodReferenceExpr)}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object
+   */
+  public static @NonNull Object resolveGuaranteeNonNull(MethodReferenceExpr toResolve) {
+    return resolveGuaranteeNonNullWidened(toResolve);
+  }
+
+  /**
+   * Resolves an enum constant, throwing if it is not resolvable. Returns {@code Object} for the
+   * reason given on {@link #resolve(EnumConstantDeclaration)}.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object
+   */
+  public static @NonNull Object resolveGuaranteeNonNull(EnumConstantDeclaration toResolve) {
+    return resolveGuaranteeNonNullWidened(toResolve);
+  }
+
+  /**
+   * Implementation of every {@code resolveGuaranteeNonNull} overload.
+   *
+   * @param toResolve The node to resolve
+   * @return The resolved object
+   */
+  private static @NonNull Object resolveGuaranteeNonNullWidened(Resolvable<?> toResolve) {
+    Node node = (Node) toResolve;
+    Object result;
 
     try {
       result = toResolve.resolve();
     } catch (UnsolvedSymbolException ex) {
-      Object resolved = Resolver.tryAlternativeResolutionForUnsolvableNode((Node) toResolve);
+      Object resolved = discardIfWrongKind(node, tryAlternativeResolutionForUnsolvableNode(node));
 
       if (resolved == null) {
         throw ex;
       }
 
-      result = (T) resolved;
+      result = resolved;
     } catch (IllegalStateException ex) {
-      Object resolved = Resolver.handleIllegalStateException(ex, (Node) toResolve);
+      Object resolved = discardIfWrongKind(node, Resolver.handleIllegalStateException(ex, node));
 
       if (resolved == null) {
         throw ex;
       }
 
-      result = (T) resolved;
+      result = resolved;
     } catch (MethodAmbiguityException ex) {
-      Object resolved = Resolver.handleMethodAmbiguityException(ex, (Node) toResolve);
+      Object resolved = discardIfWrongKind(node, Resolver.handleMethodAmbiguityException(ex, node));
 
       if (resolved == null) {
         throw ex;
       }
 
-      result = (T) resolved;
+      result = resolved;
     } catch (UnsupportedOperationException ex) {
-      Object resolved = Resolver.handleUnsupportedOperationException(ex, (Node) toResolve);
+      Object resolved =
+          discardIfWrongKind(node, Resolver.handleUnsupportedOperationException(ex, node));
 
       if (resolved == null) {
         throw ex;
       }
 
-      result = (T) resolved;
+      result = resolved;
     }
 
     if (result == null) {
@@ -306,7 +516,9 @@ public class Resolver {
 
   /**
    * Tries alternative resolution strategies for a node that cannot be resolved through JavaParser's
-   * symbol solver.
+   * symbol solver. Callers are responsible for passing the result through {@link
+   * #discardIfWrongKind}: some of these strategies answer with the node's type rather than with a
+   * declaration.
    *
    * @param unsolvable The unsolvable node
    * @return The resolved version of the node, or null if not resolvable.
