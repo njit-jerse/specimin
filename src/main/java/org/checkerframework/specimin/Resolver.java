@@ -292,7 +292,7 @@ public class Resolver {
   @SuppressWarnings("unchecked")
   // Safe for the same reason as in resolve: anything that is not a T has already been discarded.
   public static <T> @NonNull T resolveGuaranteeNonNull(Resolvable<T> toResolve) {
-    return (T) resolveGuaranteeNonNullWidened(toResolve);
+    return (@NonNull T) resolveGuaranteeNonNullWidened(toResolve);
   }
 
   /**
