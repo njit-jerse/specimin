@@ -15,10 +15,10 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
   private MemberType type;
 
   /** This is set to true if this field is a static field */
-  private final boolean isStatic;
+  private boolean isStatic;
 
   /** This is set to true if this field is a final field */
-  private final boolean isFinal;
+  private boolean isFinal;
 
   /**
    * Create an instance of UnsolvedField.
@@ -98,6 +98,22 @@ public class UnsolvedField extends UnsolvedSymbolAlternate implements UnsolvedFi
             ? " = " + JavaParserUtil.getConstantInitializerRHS(type.toString())
             : "")
         + ";";
+  }
+
+  /**
+   * Makes this field a constant variable (JLS 4.12.4) of the given type: {@code static final}, with
+   * a constant initializer supplied by {@link #toString}.
+   *
+   * <p>This is needed when a field generated as an enum constant must become an ordinary field,
+   * because its declaring type turned out not to be an enum after all. An enum constant declares
+   * neither a type nor these modifiers, so both have to be supplied here.
+   *
+   * @param type the constant's type, which must be one a constant variable may have
+   */
+  public void makeConstantVariable(MemberType type) {
+    this.type = type;
+    this.isStatic = true;
+    this.isFinal = true;
   }
 
   @Override
