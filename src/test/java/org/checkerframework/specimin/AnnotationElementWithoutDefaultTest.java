@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 /**
  * A synthetic annotation type that is used both with and without an argument needs a default value
  * for the corresponding element, or the argument-less use site does not compile (JLS 9.7.1).
+ *
+ * Regression test for <a href="https://github.com/njit-jerse/specimin/issues/542">#542</a>.
  */
 public class AnnotationElementWithoutDefaultTest {
   @Test

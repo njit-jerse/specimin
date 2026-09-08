@@ -100,17 +100,14 @@ public class SpeciminGenerationUtils {
    * whose type is the given one, or null if no such value can be named.
    *
    * <p>An element of an annotation type must have a default, or every use site of the annotation
-   * has to supply a value for it (JLS 9.7.1, and 9.7.2 and 9.7.3 for the marker and single-element
-   * shorthands). Specimin cannot recover the real default of an annotation type it never saw, but
-   * it does not need to: an annotation element value is not usable in a constant expression, so no
-   * typing judgment about the target can depend on which commensurate value (JLS 9.7) is chosen.
+   * has to supply a value for it. Specimin cannot recover the real default of an annotation type it
+   * never saw, but it does not need to: an annotation element value is not usable in a constant
+   * expression, so no typing judgment about the target can depend on which commensurate value is
+   * chosen.
    *
    * <p>A value is produced only for the element types that can be defaulted from the type alone:
-   * primitives, {@code String}, an unbounded or raw {@code Class}, and any array type. The two
-   * legal element types that are missing -- an enum type, which needs one of its constants, and an
-   * annotation type, which is only usable as a default if every one of <em>its</em> elements has a
-   * default -- both require knowing the members of another generated type, which is not available
-   * here.
+   * primitives, {@code String}, an unbounded or raw {@code Class}, and any array type. Null is
+   * returned otherwise.
    *
    * @param elementType the element's type
    * @return a value commensurate with that type, or null if none can be named
@@ -118,8 +115,6 @@ public class SpeciminGenerationUtils {
   public static @Nullable String getAnnotationElementDefaultValue(MemberType elementType) {
     String asWritten = elementType.toString();
 
-    // An empty ElementValueArrayInitializer is commensurate with every array type (JLS 9.7),
-    // whatever the component type turned out to be.
     if (asWritten.endsWith("[]")) {
       return "{}";
     }
@@ -127,8 +122,6 @@ public class SpeciminGenerationUtils {
     Set<String> fqns = elementType.getFullyQualifiedNames();
 
     if (fqns.size() != 1) {
-      // The alternates disagree about the element's type, so there is no one type to be
-      // commensurate with.
       return null;
     }
 
@@ -139,11 +132,13 @@ public class SpeciminGenerationUtils {
     }
 
     // A class literal is commensurate with a Class element type when its type is assignment
-    // compatible with the element type (JLS 9.7.1), which Class<Object> is for these two forms and
-    // need not be for a bounded one such as Class<? extends Number>.
+    // compatible with the element type (JLS 9.7.1), which Class<Object> is for these two forms.
     if (asWritten.equals("java.lang.Class") || asWritten.equals("java.lang.Class<?>")) {
       return "java.lang.Object.class";
     }
+
+    // TODO: handle bounded Class types (e.g., Class<? extends Number>), enums, and annotations.
+    // Right now, all three of these forms result in failed compilations.
 
     return null;
   }

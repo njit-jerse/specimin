@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
  * types that Specimin can name a value for: a primitive, {@code String}, {@code Class}, and an
  * array. The marker use site is what makes all four defaults necessary (JLS 9.7.2).
  *
- * <p>The two remaining legal element types (JLS 9.6.1) -- an enum type and an annotation type --
- * are deliberately absent, because Specimin does not default them; see {@link
- * org.checkerframework.specimin.unsolved.SpeciminGenerationUtils#getAnnotationElementDefaultValue}.
+ * <p>TODO: Other legal forms: an enum type, an annotation type, or a bounded Class type like
+ * {@code Class<? extends Number>} are not tested, because Specimin does not currently support
+ * them. Add them to this test when support for them is added.
  */
 public class AnnotationElementDefaultValuesTest {
   @Test
