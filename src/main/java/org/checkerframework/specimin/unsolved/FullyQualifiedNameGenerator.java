@@ -1438,8 +1438,7 @@ public class FullyQualifiedNameGenerator {
       // method reference) parameter, and its bound is already that parameter's declared type: the
       // producers unwrap a wildcard-parameterized functional interface's type argument to the
       // wildcard's bound before wrapping, which is the non-wildcard parameterization (JLS 9.9) that
-      // JLS 15.27.3 makes the ground target type. Only the type's describe() spells it "? super X";
-      // isAssignableBy delegates straight to the bound, so the wildcard is display, not meaning.
+      // JLS 15.27.3 makes the ground target type.
       return getFQNsForResolvedType(resolvedType.asConstraintType().getBound());
     } else if (resolvedType.isUnionType()) {
       // A union type is the type of a multi-catch parameter, and JLS 14.20 declares that

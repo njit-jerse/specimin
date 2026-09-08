@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
  * into a synthetic method's formal parameter type: per JLS 15.27.3, the ground target type of an
  * implicitly-typed lambda is the non-wildcard parameterization, so the parameter's type is {@code
  * String}, not {@code ? super String}.
+ *
+ * <p>Regression test for <a href="https://github.com/njit-jerse/specimin/issues/541">#541</a>.
  */
 public class WildcardSyntheticParamTest {
   @Test
