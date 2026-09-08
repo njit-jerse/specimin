@@ -462,8 +462,6 @@ public class UnsolvedSymbolGenerator {
    * @param result The result of inferContext
    */
   private void handleAnnotationExpr(AnnotationExpr anno, List<UnsolvedSymbolAlternates<?>> result) {
-    // TODO: handle default values when necessary
-
     if (Resolver.resolve(anno) != null) {
       return;
     }

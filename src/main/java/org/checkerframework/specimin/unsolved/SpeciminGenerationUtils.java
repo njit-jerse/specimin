@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
 
@@ -92,6 +93,54 @@ public class SpeciminGenerationUtils {
     String simple = JavaParserUtil.getSimpleNameFromQualifiedName(JavaParserUtil.erase(name));
 
     return name.equals(simple) && hasNoTypeArguments && !JavaLangUtils.isPrimitive(simple);
+  }
+
+  /**
+   * Returns a value that can be used as the default of an element of a synthetic annotation type
+   * whose type is the given one, or null if no such value can be named.
+   *
+   * <p>An element of an annotation type must have a default, or every use site of the annotation
+   * has to supply a value for it. Specimin cannot recover the real default of an annotation type it
+   * never saw, but it does not need to: an annotation element value is not usable in a constant
+   * expression, so no typing judgment about the target can depend on which commensurate value is
+   * chosen.
+   *
+   * <p>A value is produced only for the element types that can be defaulted from the type alone:
+   * primitives, {@code String}, an unbounded or raw {@code Class}, and any array type. Null is
+   * returned otherwise.
+   *
+   * @param elementType the element's type
+   * @return a value commensurate with that type, or null if none can be named
+   */
+  public static @Nullable String getAnnotationElementDefaultValue(MemberType elementType) {
+    String asWritten = elementType.toString();
+
+    if (asWritten.endsWith("[]")) {
+      return "{}";
+    }
+
+    Set<String> fqns = elementType.getFullyQualifiedNames();
+
+    if (fqns.size() != 1) {
+      return null;
+    }
+
+    String fqn = fqns.iterator().next();
+
+    if (JavaLangUtils.isPrimitive(fqn) || JavaLangUtils.isJavaLangString(fqn)) {
+      return JavaParserUtil.getConstantInitializerRHS(fqn);
+    }
+
+    // A class literal is commensurate with a Class element type when its type is assignment
+    // compatible with the element type (JLS 9.7.1), which Class<Object> is for these two forms.
+    if (asWritten.equals("java.lang.Class") || asWritten.equals("java.lang.Class<?>")) {
+      return "java.lang.Object.class";
+    }
+
+    // TODO: handle bounded Class types (e.g., Class<? extends Number>), enums, and annotations.
+    // Right now, all three of these forms result in failed compilations.
+
+    return null;
   }
 
   /**

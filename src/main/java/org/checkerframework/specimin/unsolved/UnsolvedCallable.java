@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
 
@@ -230,12 +231,30 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
     }
     signature.append(exceptions);
 
+    if (type == UnsolvedClassOrInterfaceType.ANNOTATION) {
+      String defaultValue = annotationElementDefaultValue();
+      if (defaultValue != null) {
+        signature.append(" default ").append(defaultValue);
+      }
+    }
+
     if (type == UnsolvedClassOrInterfaceType.ANNOTATION
         || type == UnsolvedClassOrInterfaceType.INTERFACE) {
       return "\n    " + signature + ";\n";
     } else {
       return "\n    " + signature + " {\n        " + content + "\n    }\n";
     }
+  }
+
+  /**
+   * Returns the value to declare as this callable's default, when it is being printed as a member
+   * of a synthetic annotation type. Only a method can be such a member (JLS 9.6), so the default
+   * implementation names no value.
+   *
+   * @return a value commensurate with this member's type (JLS 9.7), or null if none can be named
+   */
+  protected @Nullable String annotationElementDefaultValue() {
+    return null;
   }
 
   /**

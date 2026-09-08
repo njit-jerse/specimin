@@ -171,6 +171,11 @@ public class UnsolvedMethod extends UnsolvedCallable {
   }
 
   @Override
+  protected @Nullable String annotationElementDefaultValue() {
+    return SpeciminGenerationUtils.getAnnotationElementDefaultValue(returnType);
+  }
+
+  @Override
   protected List<MemberType> typesInSignature() {
     List<MemberType> types = new ArrayList<>(getParameterList());
     types.add(returnType);
