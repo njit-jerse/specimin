@@ -5,5 +5,5 @@ public @interface Foo {
 
     public java.lang.Deprecated x();
 
-    public com.example.Anno[] y();
+    public com.example.Anno[] y() default {};
 }
