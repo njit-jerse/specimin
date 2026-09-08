@@ -960,9 +960,11 @@ public class JavaParserUtil {
         return resolved instanceof ReflectionFieldDeclaration;
       }
     } else if (expr.isMethodCallExpr()) {
-      ResolvedMethodDeclaration resolvedScopeMethod = Resolver.resolve(expr.asMethodCallExpr());
-
-      if (resolvedScopeMethod == null) {
+      // A call on an annotation member resolves to that member rather than to a method (JLS
+      // 9.6.1), which has no declared type to read here; treat it as unhandled, as for a call
+      // that does not resolve at all.
+      if (!(Resolver.resolve(expr.asMethodCallExpr())
+          instanceof ResolvedMethodDeclaration resolvedScopeMethod)) {
         return false;
       }
 
@@ -1689,9 +1691,9 @@ public class JavaParserUtil {
 
     TypeDeclaration<?> enclosingClass;
 
-    ResolvedEnumConstantDeclaration resolvedDecl = Resolver.resolve(enumConstant);
-
-    if (resolvedDecl == null) {
+    // An enum constant whose arguments are unresolvable resolves to the enum's constructor
+    // instead (see Resolver#WIDENED_NODE_KINDS), which is not a constant to read a type from.
+    if (!(Resolver.resolve(enumConstant) instanceof ResolvedEnumConstantDeclaration resolvedDecl)) {
       return List.of();
     }
     ResolvedType type = resolvedDecl.getType();
@@ -2682,9 +2684,9 @@ public class JavaParserUtil {
         }
       } else if (methodCallParent.getParentNode().orElse(null) instanceof MethodCallExpr methodCall
           && methodCall.getArguments().contains(methodCallParent)) {
-        ResolvedMethodDeclaration methodDecl = Resolver.resolve(methodCall);
-
-        if (methodDecl != null) {
+        // An annotation member (JLS 9.6.1) declares no parameters, so it cannot supply the
+        // parameter type this looks for.
+        if (Resolver.resolve(methodCall) instanceof ResolvedMethodDeclaration methodDecl) {
           int argPos = methodCall.getArgumentPosition(methodCallParent);
 
           try {
