@@ -1434,14 +1434,12 @@ public class FullyQualifiedNameGenerator {
         return FullyQualifiedNameSet.UNBOUNDED_WILDCARD;
       }
     } else if (resolvedType.isConstraint()) {
-      FullyQualifiedNameSet erasedConstraint =
-          getFQNsForResolvedType(resolvedType.asConstraintType().getBound());
-
-      return new FullyQualifiedNameSet(
-          erasedConstraint.erasedFqns(),
-          erasedConstraint.typeArguments(),
-          "? super" // lambda constraints are always ? super
-          );
+      // A constraint type is how JavaParser reports the type of an implicitly-typed lambda (or
+      // method reference) parameter, and its bound is already that parameter's declared type: the
+      // producers unwrap a wildcard-parameterized functional interface's type argument to the
+      // wildcard's bound before wrapping, which is the non-wildcard parameterization (JLS 9.9) that
+      // JLS 15.27.3 makes the ground target type.
+      return getFQNsForResolvedType(resolvedType.asConstraintType().getBound());
     } else if (resolvedType.isUnionType()) {
       // A union type is the type of a multi-catch parameter, and JLS 14.20 declares that
       // parameter's type to be the lub of the alternatives. Specimin does not compute lubs,
