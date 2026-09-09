@@ -2355,10 +2355,7 @@ public class FullyQualifiedNameGenerator {
           return otherType;
         }
       }
-    }
-    // Every unary operator constrains its operand's type (see JavaLangUtils#getTypesForUnaryOp),
-    // so -- unlike a cast or a string concatenation -- this context always says something.
-    else if (parentNode instanceof UnaryExpr unary) {
+    } else if (parentNode instanceof UnaryExpr unary) {
       return toFQNSets(JavaLangUtils.getTypesForUnaryOp(unary.getOperator().asString()));
     } else if (parentNode instanceof ReturnStmt returnStmt) {
       Node methodOrLambda = JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt);
