@@ -349,6 +349,33 @@ public final class JavaLangUtils {
   }
 
   /**
+   * Given the string representation of a unary operator, what are the possible operand types? As in
+   * {@link #getTypesForOp(String)}, the first element of the result is assumed to be the default if
+   * no other information is available.
+   *
+   * <p>Unlike a binary operator, every unary operator constrains its operand, so this method never
+   * has to report "no information".
+   *
+   * @param unaryOp a string representation of a unary operator, such as "!"
+   * @return the array of compatible types, such as ["boolean", "Boolean"]
+   */
+  public static String[] getTypesForUnaryOp(String unaryOp) {
+    return switch (unaryOp) {
+      // JLS 15.15.6
+      case "!" -> BOOLEANS;
+
+      // JLS 15.15.5: unary numeric promotion (JLS 5.6.1) to an integral type
+      case "~" -> INTEGRAL_PRIMITIVES;
+
+      // JLS 15.15.3 and 15.15.4 (unary + and -), and JLS 15.14.2, 15.14.3, 15.15.1 and 15.15.2
+      // (the increment and decrement operators, whose operand must be a variable of numeric type)
+      case "+", "-", "++", "--" -> NUMERIC_PRIMITIVES;
+
+      default -> throw new IllegalArgumentException("unexpected unary operator: " + unaryOp);
+    };
+  }
+
+  /**
    * Is a type primitive (int, char, boolean, etc.)? This method returns false for boxed types
    * (Integer, Character, Boolean, etc.)
    *

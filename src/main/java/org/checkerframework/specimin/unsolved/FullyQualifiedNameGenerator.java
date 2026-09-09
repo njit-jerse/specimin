@@ -24,6 +24,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithCondition;
 import com.github.javaparser.ast.nodeTypes.NodeWithExtends;
@@ -739,15 +740,7 @@ public class FullyQualifiedNameGenerator {
           return rightType;
         }
 
-        Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
-        for (String validType : JavaLangUtils.getTypesForOp(operator.asString())) {
-          if (JavaParserUtil.isAClassName(validType)) {
-            validType = "java.lang." + validType;
-          }
-          result.add(new FullyQualifiedNameSet(validType));
-        }
-
-        return result;
+        return toFQNSets(JavaLangUtils.getTypesForOp(operator.asString()));
       }
     }
 
@@ -2308,6 +2301,16 @@ public class FullyQualifiedNameGenerator {
       // Boolean
       if (operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR) {
         return Set.of(new FullyQualifiedNameSet("boolean"));
+      } else if (!isExpressionNotInProgress(other)
+          && isExpressionNotInProgress(binary)
+          && operator != BinaryExpr.Operator.EQUALS
+          && operator != BinaryExpr.Operator.NOT_EQUALS) {
+        // The other operand is already being computed, which happens when it is structurally
+        // identical to this one (`x & x`). Asking for its type would not terminate, and since it
+        // *is* this expression it has nothing new to say anyway -- but the type of the whole
+        // expression still does. == and != are excluded because their result is boolean whatever
+        // their operands are (JLS 15.21), so it says nothing about them.
+        return getFQNsFromOperatorResultType(binary, operator);
       } else if (isExpressionNotInProgress(other) && isExpressionNotInProgress(binary)) {
         // Treat all other cases; type on one side is equal to the other
         Set<FullyQualifiedNameSet> otherType = getFQNsForExpressionType(other);
@@ -2347,19 +2350,16 @@ public class FullyQualifiedNameGenerator {
         otherType = getFQNsForExpressionType(binary);
 
         if (otherType.size() > 1 || otherType.iterator().next().erasedFqns().size() > 1) {
-          Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
-          for (String validType : JavaLangUtils.getTypesForOp(operator.asString())) {
-            if (JavaParserUtil.isAClassName(validType)) {
-              validType = "java.lang." + validType;
-            }
-            result.add(new FullyQualifiedNameSet(validType));
-          }
-
-          return result;
+          return toFQNSets(JavaLangUtils.getTypesForOp(operator.asString()));
         } else {
           return otherType;
         }
       }
+    }
+    // Every unary operator constrains its operand's type (see JavaLangUtils#getTypesForUnaryOp),
+    // so -- unlike a cast or a string concatenation -- this context always says something.
+    else if (parentNode instanceof UnaryExpr unary) {
+      return toFQNSets(JavaLangUtils.getTypesForUnaryOp(unary.getOperator().asString()));
     } else if (parentNode instanceof ReturnStmt returnStmt) {
       Node methodOrLambda = JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt);
 
@@ -2433,6 +2433,49 @@ public class FullyQualifiedNameGenerator {
       }
     }
     return null;
+  }
+
+  /**
+   * Returns the types the operands of the given binary expression may have, given the type of the
+   * expression as a whole. The result type of an operator is a legal operand type for it whenever
+   * the operands are subject to the same promotion as the result -- {@code int} for {@code &},
+   * {@code String} for a concatenating {@code +} -- and in that case the whole expression's type is
+   * the best evidence available about its operands. When it is not a legal operand type, as for the
+   * comparison operators (whose result is boolean but whose operands must be numeric, JLS 15.20.1),
+   * it is no evidence at all, and the operator's own permitted types are reported instead.
+   *
+   * @param binary a binary expression
+   * @param operator its operator
+   * @return the FQNs that an operand of the expression may have
+   */
+  private Set<FullyQualifiedNameSet> getFQNsFromOperatorResultType(
+      BinaryExpr binary, Operator operator) {
+    Set<FullyQualifiedNameSet> permitted =
+        toFQNSets(JavaLangUtils.getTypesForOp(operator.asString()));
+    Set<FullyQualifiedNameSet> resultType = getFQNsForExpressionType(binary);
+    String soleResultFqn = FullyQualifiedNameSet.getSoleErasedFqn(resultType);
+
+    return soleResultFqn != null && permitted.contains(new FullyQualifiedNameSet(soleResultFqn))
+        ? resultType
+        : permitted;
+  }
+
+  /**
+   * Converts the simple type names that {@link JavaLangUtils} reports for an operator into FQN
+   * sets, qualifying the boxed types (which it reports unqualified) with {@code java.lang}.
+   *
+   * @param types simple type names, such as those returned by {@link
+   *     JavaLangUtils#getTypesForOp(String)}
+   * @return one FQN set per type, in the same order
+   */
+  private static Set<FullyQualifiedNameSet> toFQNSets(String[] types) {
+    Set<FullyQualifiedNameSet> result = new LinkedHashSet<>();
+    for (String type : types) {
+      result.add(
+          new FullyQualifiedNameSet(
+              JavaParserUtil.isAClassName(type) ? "java.lang." + type : type));
+    }
+    return result;
   }
 
   /**
