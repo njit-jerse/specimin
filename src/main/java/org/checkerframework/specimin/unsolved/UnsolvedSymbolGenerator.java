@@ -3651,7 +3651,7 @@ public class UnsolvedSymbolGenerator {
         }
       }
     }
-    // If the node is a unary expression, its operand's type is constrained: !x means x is a
+    // The operand type of a unary expression is constrained: !x means x is a
     // boolean, -x that it is numeric, etc.
     else if (node instanceof UnaryExpr unaryExpr) {
       constrainOperandType(
