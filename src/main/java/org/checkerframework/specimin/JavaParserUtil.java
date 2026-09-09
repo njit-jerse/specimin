@@ -94,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
@@ -130,6 +131,13 @@ public class JavaParserUtil {
    * solver in {@link #getResolvablePlaceholderType(int)}.
    */
   private static final Set<String> generatedResolvedPlaceholderTypes = new HashSet<>();
+
+  /**
+   * Stands in for a parameter type that {@link #getApproximateSignature(ResolvedMethodDeclaration)}
+   * can neither resolve nor read out of an AST. It is not a legal Java type name, so it cannot
+   * collide with a real one.
+   */
+  private static final String UNKNOWN_PARAMETER_TYPE = "?unknown";
 
   /**
    * Set the SpeciminTypeSolvers instance to be used.
@@ -3506,6 +3514,53 @@ public class JavaParserUtil {
         typeDecl, methodsThatMustBeImplemented, fqnToCompilationUnits);
   }
 
+  /** How closely a candidate method matched a method that must be implemented. */
+  private enum MethodMatch {
+    /** The two signatures are equal, after substituting away the supertype's type variables. */
+    EXACT,
+    /** The signatures could not be computed, but the approximations of them are equal. */
+    APPROXIMATE,
+    /** The two are different methods. */
+    NONE
+  }
+
+  /**
+   * Decides whether {@code candidate} is a declaration of {@code mustImplement}, i.e. whether it
+   * declares or overrides it.
+   *
+   * <p>The exact comparison is by signature, but computing a signature resolves every parameter
+   * type, so it fails for a method with a parameter whose type is not on the source path. Falling
+   * back to {@link #getApproximateSignatureWithTypeVariablesMap} keeps such a method from being
+   * dropped, at the cost of not distinguishing overloads whose parameter types share a simple name.
+   * The result says which comparison succeeded, so that callers can decline to act on an
+   * approximate match where a wrong answer would cost them more than a missed one.
+   *
+   * @param candidate The method that might be a declaration of {@code mustImplement}
+   * @param mustImplement The method that must be implemented
+   * @param typeParametersMap The type variables map from {@code mustImplement}'s declaring type to
+   *     {@code candidate}'s
+   * @return how the two matched
+   */
+  private static MethodMatch matchAgainstMustImplementMethod(
+      ResolvedMethodDeclaration candidate,
+      ResolvedMethodDeclaration mustImplement,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap) {
+    try {
+      return candidate
+              .getSignature()
+              .equals(
+                  getSignatureFromResolvedMethodWithTypeVariablesMap(
+                      mustImplement, typeParametersMap))
+          ? MethodMatch.EXACT
+          : MethodMatch.NONE;
+    } catch (UnsolvedSymbolException ex) {
+      return getApproximateSignature(candidate)
+              .equals(getApproximateSignatureWithTypeVariablesMap(mustImplement, typeParametersMap))
+          ? MethodMatch.APPROXIMATE
+          : MethodMatch.NONE;
+    }
+  }
+
   /**
    * Helper method for getAllMustImplementMethods. Given a set of JDK methods that must be
    * implemented, find the closest method declaration to preserve (i.e., first check this class,
@@ -3567,42 +3622,44 @@ public class JavaParserUtil {
           }
 
           for (ResolvedMethodDeclaration resolvedMethod : declaration.getDeclaredMethods()) {
-            try {
-              if (resolvedMethod
-                  .getSignature()
-                  .equals(
-                      getSignatureFromResolvedMethodWithTypeVariablesMap(
-                          resolvedMethodDecl, typeParametersMap))) {
+            MethodMatch match =
+                matchAgainstMustImplementMethod(
+                    resolvedMethod, resolvedMethodDecl, typeParametersMap);
 
-                MethodDeclaration methodDecl =
-                    (MethodDeclaration) tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
+            if (match == MethodMatch.NONE) {
+              continue;
+            }
 
-                if (methodDecl != null) {
-                  if (!resolvedMethod.isAbstract()) {
-                    if (i > locationInPath) {
-                      earliestMethod = methodDecl;
-                      locationInPath = i;
-                    }
-                  }
-                } else {
-                  // We travel the path from the furthest ancestor to the closest ancestor, so if we
-                  // find an abstract definition, set hasJdkDefinition to false since the abstract
-                  // will override the concrete definition we may have found earlier in the path.
-                  hasJdkDefinition = !resolvedMethod.isAbstract();
+            MethodDeclaration methodDecl =
+                (MethodDeclaration) tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
+
+            if (methodDecl != null) {
+              if (!resolvedMethod.isAbstract()) {
+                if (i > locationInPath) {
+                  earliestMethod = methodDecl;
+                  locationInPath = i;
                 }
+              }
+            } else {
+              // We travel the path from the furthest ancestor to the closest ancestor, so if we
+              // find an abstract definition, set hasJdkDefinition to false since the abstract
+              // will override the concrete definition we may have found earlier in the path.
+              hasJdkDefinition = !resolvedMethod.isAbstract();
+            }
 
-                if (!resolvedMethod
+            // Only an exact match may discharge the obligation: an approximate match can conflate
+            // two overloads, and wrongly concluding that this method is already declared elsewhere
+            // costs a missing declaration in the output, while wrongly keeping the obligation
+            // costs only a redundant one. Both signatures are computable here, because an exact
+            // match means both were just computed.
+            if (match == MethodMatch.EXACT
+                && !resolvedMethod
                     .getQualifiedSignature()
                     .equals(resolvedMethodDecl.getQualifiedSignature())) {
-                  methodsThatMustBeImplemented.remove(resolvedMethodDecl);
-                }
-
-                break;
-              }
-            } catch (UnsolvedSymbolException ex) {
-              // It's possible that a method could reference an unsolved symbol; in this case, just
-              // skip it
+              methodsThatMustBeImplemented.remove(resolvedMethodDecl);
             }
+
+            break;
           }
         }
 
@@ -3659,39 +3716,43 @@ public class JavaParserUtil {
 
                 for (ResolvedMethodDeclaration resolvedMethod :
                     path.get(i).getTypeDeclaration().get().getDeclaredMethods()) {
-                  if (resolvedMethod
-                      .getSignature()
-                      .equals(
-                          getSignatureFromResolvedMethodWithTypeVariablesMap(
-                              resolvedMethodDecl, typeParametersMap))) {
+                  MethodMatch match =
+                      matchAgainstMustImplementMethod(
+                          resolvedMethod, resolvedMethodDecl, typeParametersMap);
 
-                    MethodDeclaration methodDecl =
-                        (MethodDeclaration)
-                            tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
-
-                    if (methodDecl != null) {
-                      if (i > locationInPath) {
-                        earliestMethod = methodDecl;
-                        locationInPath = i;
-                      }
-                    } else {
-                      // We travel the path from the furthest ancestor to the closest ancestor, so
-                      // if we find an abstract definition, set hasJdkDefinition to false since
-                      // the abstract will override the concrete definition we may have found
-                      // earlier in the path.
-                      hasJdkDefinition = !resolvedMethod.isAbstract();
-                    }
-
-                    if (resolvedMethod.isAbstract()
-                        && !resolvedMethod
-                            .getQualifiedSignature()
-                            .equals(resolvedMethodDecl.getQualifiedSignature())
-                        && resolvedMethodDecl.declaringType().isAssignableBy(ancestor)) {
-                      methodsThatMustBeImplemented.remove(resolvedMethodDecl);
-                    }
-
-                    break;
+                  if (match == MethodMatch.NONE) {
+                    continue;
                   }
+
+                  MethodDeclaration methodDecl =
+                      (MethodDeclaration)
+                          tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
+
+                  if (methodDecl != null) {
+                    if (i > locationInPath) {
+                      earliestMethod = methodDecl;
+                      locationInPath = i;
+                    }
+                  } else {
+                    // We travel the path from the furthest ancestor to the closest ancestor, so
+                    // if we find an abstract definition, set hasJdkDefinition to false since
+                    // the abstract will override the concrete definition we may have found
+                    // earlier in the path.
+                    hasJdkDefinition = !resolvedMethod.isAbstract();
+                  }
+
+                  // See the identical condition in the loop above for why an approximate match
+                  // may not discharge the obligation.
+                  if (match == MethodMatch.EXACT
+                      && resolvedMethod.isAbstract()
+                      && !resolvedMethod
+                          .getQualifiedSignature()
+                          .equals(resolvedMethodDecl.getQualifiedSignature())
+                      && resolvedMethodDecl.declaringType().isAssignableBy(ancestor)) {
+                    methodsThatMustBeImplemented.remove(resolvedMethodDecl);
+                  }
+
+                  break;
                 }
               }
             }
@@ -3799,6 +3860,137 @@ public class JavaParserUtil {
     }
 
     return result;
+  }
+
+  /**
+   * Returns an approximation of a method's signature that can always be computed, unlike {@link
+   * ResolvedMethodLikeDeclaration#getSignature()}, which resolves every parameter type and so
+   * throws an {@link UnsolvedSymbolException} for any method with a parameter whose type is not on
+   * the source path. Such a parameter is routine in Specimin: it names exactly the kind of type
+   * that Specimin synthesizes.
+   *
+   * <p>Each parameter type is reduced to its simple name with its type arguments stripped, so the
+   * result conflates overloads whose parameter types differ only in their package or in their type
+   * arguments. That is coarser than the override-equivalence of JLS 8.4.2, which compares erasures
+   * but not simple names, so use this only where the exact signature is unavailable.
+   *
+   * @param method The method
+   * @return an approximation of the method's signature, in the form {@code name(Simple1, Simple2)}
+   */
+  public static String getApproximateSignature(ResolvedMethodDeclaration method) {
+    return getApproximateSignatureWithTypeVariablesMap(method, List.of());
+  }
+
+  /**
+   * Stands to {@link #getSignatureFromResolvedMethodWithTypeVariablesMap(ResolvedMethodDeclaration,
+   * List)} as {@link #getApproximateSignature(ResolvedMethodDeclaration)} stands to {@link
+   * ResolvedMethodLikeDeclaration#getSignature()}: it substitutes away the type variables of a
+   * declaring type, and it never throws. Use it to compare a method against one declared in an
+   * ancestor of its declaring type.
+   *
+   * @param method The method
+   * @param typeVariablesMap The type variables map, which maps type variable declarations to their
+   *     resolved types
+   * @return an approximation of the method's signature after substitution
+   */
+  public static String getApproximateSignatureWithTypeVariablesMap(
+      ResolvedMethodDeclaration method,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeVariablesMap) {
+    MethodDeclaration ast =
+        method.toAst().orElse(null) instanceof MethodDeclaration methodDecl ? methodDecl : null;
+
+    StringJoiner parameters = new StringJoiner(", ", method.getName() + "(", ")");
+    for (int i = 0; i < method.getNumberOfParams(); i++) {
+      ResolvedParameterDeclaration parameter = method.getParam(i);
+      boolean variadic = parameter.isVariadic();
+      String described;
+      try {
+        ResolvedType type =
+            variadic ? parameter.getType().asArrayType().getComponentType() : parameter.getType();
+        described = getResolvedNameWithSubstitution(type, typeVariablesMap);
+      } catch (UnsolvedSymbolException ex) {
+        // Fall back to what the source says, which is available whenever the method came from a
+        // source file rather than from a jar or the JDK. A method that is neither resolvable nor
+        // attached to an AST is described as UNKNOWN_PARAMETER_TYPE, which matches nothing a
+        // caller could compare it against except another equally-unknown parameter.
+        described = ast == null ? UNKNOWN_PARAMETER_TYPE : ast.getParameter(i).getType().toString();
+      }
+      parameters.add(
+          getSimpleNameFromQualifiedName(eraseTypeArguments(described)) + (variadic ? "..." : ""));
+    }
+    return parameters.toString();
+  }
+
+  /**
+   * The AST equivalent of {@link #getApproximateSignature(ResolvedMethodDeclaration)}: the two
+   * agree whenever they are given the same method, so a resolved declaration and an AST node can be
+   * compared even though neither can be resolved into the other's world.
+   *
+   * @param method The method or constructor declaration
+   * @return an approximation of the method's signature, in the form {@code name(Simple1, Simple2)}
+   */
+  public static String getApproximateSignature(CallableDeclaration<?> method) {
+    StringJoiner parameters = new StringJoiner(", ", method.getNameAsString() + "(", ")");
+    for (Parameter parameter : method.getParameters()) {
+      parameters.add(
+          getSimpleNameFromQualifiedName(eraseTypeArguments(parameter.getType().toString()))
+              + (parameter.isVarArgs() ? "..." : ""));
+    }
+    return parameters.toString();
+  }
+
+  /**
+   * The {@link ResolvedMethodLikeDeclaration#getQualifiedSignature()} analogue of {@link
+   * #getApproximateSignature(ResolvedMethodDeclaration)}: it identifies a method across types, but
+   * never throws.
+   *
+   * @param method The method
+   * @return the qualified name of the method's declaring type, a dot, and the method's approximate
+   *     signature
+   */
+  public static String getApproximateQualifiedSignature(ResolvedMethodDeclaration method) {
+    return method.declaringType().getQualifiedName() + "." + getApproximateSignature(method);
+  }
+
+  /**
+   * Checks whether a resolved method declaration and a method declaration AST node are likely to be
+   * the same method. Use this only when the AST node is not resolvable and the two therefore cannot
+   * be compared by their exact signatures.
+   *
+   * @param resolved The resolved method declaration
+   * @param ast The method declaration AST node
+   * @return true if the two are likely to be the same method
+   */
+  public static boolean areMethodsLikelyEqual(
+      ResolvedMethodDeclaration resolved, MethodDeclaration ast) {
+    return getApproximateSignature(resolved).equals(getApproximateSignature(ast));
+  }
+
+  /**
+   * Removes every type argument list from a type's string form, which is most of what erasure (JLS
+   * 4.6) does to a parameterized type. Nested type arguments are removed with their enclosing list,
+   * and anything that follows the list, such as an array's brackets, is kept.
+   *
+   * @param type The string form of a type
+   * @return the same string with all {@code <...>} sections removed
+   */
+  private static String eraseTypeArguments(String type) {
+    if (type.indexOf('<') == -1) {
+      return type;
+    }
+    StringBuilder erased = new StringBuilder(type.length());
+    int depth = 0;
+    for (int i = 0; i < type.length(); i++) {
+      char c = type.charAt(i);
+      if (c == '<') {
+        depth++;
+      } else if (c == '>') {
+        depth--;
+      } else if (depth == 0) {
+        erased.append(c);
+      }
+    }
+    return erased.toString();
   }
 
   /**

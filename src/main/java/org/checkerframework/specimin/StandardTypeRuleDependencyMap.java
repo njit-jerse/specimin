@@ -58,11 +58,17 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
 
   /**
-   * A map of abstract super method qualified signatures to their concrete implementations. This
-   * addresses cases where an abstract method is preserved because it is directly called but its
-   * concrete implementations are not, but the types containing those concrete implementations are
-   * also included in the slice. If we encounter the abstract super method after encountering the
-   * concrete implementation, then we use this map.
+   * A map of abstract super methods to their concrete implementations. This addresses cases where
+   * an abstract method is preserved because it is directly called but its concrete implementations
+   * are not, but the types containing those concrete implementations are also included in the
+   * slice. If we encounter the abstract super method after encountering the concrete
+   * implementation, then we use this map.
+   *
+   * <p>Keys are {@link JavaParserUtil#getApproximateQualifiedSignature} rather than qualified
+   * signatures, because an abstract method may well have a parameter whose type is not on the
+   * source path, and computing a qualified signature for such a method throws. The approximation
+   * loses nothing here: the only methods this map is asked about are matched by name and arity
+   * anyway, when the map is populated below.
    */
   private final Map<String, Set<MethodDeclaration>> methodsWithAbstractSuperDefinitions =
       new HashMap<>();
@@ -129,10 +135,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         // Method declarations can always be resolved
         ResolvedMethodDeclaration resolvedMethod = Resolver.resolveGuaranteeNonNull(methodDecl);
         nonJDKMustImplementMethods.add(resolvedMethod);
-        if (methodsWithAbstractSuperDefinitions.containsKey(
-            resolvedMethod.getQualifiedSignature())) {
-          elements.addAll(
-              methodsWithAbstractSuperDefinitions.get(resolvedMethod.getQualifiedSignature()));
+        String key = JavaParserUtil.getApproximateQualifiedSignature(resolvedMethod);
+        if (methodsWithAbstractSuperDefinitions.containsKey(key)) {
+          elements.addAll(methodsWithAbstractSuperDefinitions.get(key));
         }
       }
     }
@@ -168,7 +173,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
                   && ancestorMethod.getNumberOfParams() == resolvedMethod.getNumberOfParams()
                   && ancestorMethod.isAbstract()) {
                 methodsWithAbstractSuperDefinitions
-                    .computeIfAbsent(ancestorMethod.getQualifiedSignature(), k -> new HashSet<>())
+                    .computeIfAbsent(
+                        JavaParserUtil.getApproximateQualifiedSignature(ancestorMethod),
+                        k -> new HashSet<>())
                     .add(method);
               }
             }
@@ -649,7 +656,7 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       } else {
         // At least one parameter type may not be solvable. In this case, try comparing
         // simple names.
-        if (areAstAndResolvedMethodLikelyEqual(original, method)) {
+        if (JavaParserUtil.areMethodsLikelyEqual(original, method)) {
           result.add(method);
 
           if (method.isAbstract()) {
@@ -660,50 +667,5 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
     }
 
     return result;
-  }
-
-  /**
-   * Checks to see if a resolved method declaration and a method declaration AST node are likely to
-   * be the same method, based on their names and the simple names of their parameters. Use this
-   * method only when {@code ast} is not resolvable and you can't compare with qualified parameter
-   * types.
-   *
-   * @param resolved The resolved method declaration
-   * @param ast The method declaration AST node
-   * @return true if the method and AST node are likely to be the same method, false otherwise
-   */
-  private boolean areAstAndResolvedMethodLikelyEqual(
-      ResolvedMethodDeclaration resolved, MethodDeclaration ast) {
-    if (!ast.getNameAsString().equals(resolved.getName())) {
-      return false;
-    }
-
-    if (ast.getParameters().size() != resolved.getNumberOfParams()) {
-      return false;
-    }
-
-    for (int i = 0; i < ast.getParameters().size(); i++) {
-      String resolvedParamType;
-      try {
-        resolvedParamType = resolved.getParam(i).getType().describe();
-      } catch (UnsolvedSymbolException ex) {
-        // See if the AST version exists, and use that simple name
-        if (resolved.toAst().orElse(null) instanceof MethodDeclaration methodDecl) {
-          resolvedParamType = methodDecl.getParameter(i).getType().toString();
-        } else {
-          // If we cannot compare, we'll return false
-          return false;
-        }
-      }
-
-      if (!JavaParserUtil.getSimpleNameFromQualifiedName(resolvedParamType)
-          .equals(
-              JavaParserUtil.getSimpleNameFromQualifiedName(
-                  ast.getParameter(i).getType().toString()))) {
-        return false;
-      }
-    }
-
-    return true;
   }
 }
