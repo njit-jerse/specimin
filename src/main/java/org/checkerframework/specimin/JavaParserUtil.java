@@ -85,6 +85,7 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -3536,6 +3537,12 @@ public class JavaParserUtil {
    * MethodMatch.APPROXIMATE} for the latter), so that callers can decline to act on an approximate
    * match where a wrong answer would introduce unsoundness.
    *
+   * <p>A caller must consider all of a type's declared methods and prefer an exact match, rather
+   * than stopping at the first match of either kind: a type may declare both an exact and an
+   * approximate match for the same method, as two overloads whose parameter types share a simple
+   * name when only one of the two is on the source path. {@link #findMustImplementMatches} does
+   * this; prefer it to calling this method in a loop of your own.
+   *
    * @param candidate The method that might be a declaration of {@code mustImplement}
    * @param mustImplement The method that must be implemented
    * @param typeParametersMap The type variables map from {@code mustImplement}'s declaring type to
@@ -3563,6 +3570,126 @@ public class JavaParserUtil {
   }
 
   /**
+   * The methods of one type that might be a declaration of some method that must be implemented,
+   * together with how they were matched.
+   *
+   * @param methods the matching methods; empty if nothing matched. An exact match is unique (JLS
+   *     8.4.2 forbids two methods of one type from sharing a signature), so this holds a single
+   *     method whenever {@code kind} is {@code EXACT}
+   * @param kind how the methods were matched
+   */
+  private record MustImplementMatches(List<ResolvedMethodDeclaration> methods, MethodMatch kind) {}
+
+  /**
+   * Finds the methods of {@code declaration} that could be a declaration of {@code mustImplement}.
+   *
+   * <p>If there is an exact match, it is the only thing returned. Failing that, every approximate
+   * match is returned: the approximation cannot tell two overloads apart (see {@link
+   * #matchAgainstMustImplementMethod}), and preserving all the candidates keeps whichever is the
+   * real implementation, at the (minimality) cost of preserving the others too.
+   *
+   * @param declaration The type whose declared methods to search
+   * @param mustImplement The method that must be implemented
+   * @param typeParametersMap The type variables map from {@code mustImplement}'s declaring type to
+   *     {@code declaration}
+   * @return the matching methods
+   */
+  private static MustImplementMatches findMustImplementMatches(
+      ResolvedReferenceTypeDeclaration declaration,
+      ResolvedMethodDeclaration mustImplement,
+      List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap) {
+    List<ResolvedMethodDeclaration> approximate = new ArrayList<>();
+
+    for (ResolvedMethodDeclaration candidate : getDeclaredMethodsInOrder(declaration)) {
+      switch (matchAgainstMustImplementMethod(candidate, mustImplement, typeParametersMap)) {
+        case EXACT -> {
+          return new MustImplementMatches(List.of(candidate), MethodMatch.EXACT);
+        }
+        case APPROXIMATE -> approximate.add(candidate);
+        case NONE -> {}
+      }
+    }
+
+    return new MustImplementMatches(
+        approximate, approximate.isEmpty() ? MethodMatch.NONE : MethodMatch.APPROXIMATE);
+  }
+
+  /**
+   * Returns a type's declared methods in a deterministic order. {@link
+   * ResolvedReferenceTypeDeclaration#getDeclaredMethods()} returns a set, and JavaParser rebuilds
+   * the declarations in it on each call, so its iteration order follows fresh identity hash codes
+   * and differs from one call to the next. Iterating it directly makes whatever the caller computes
+   * depend on that order.
+   *
+   * @param declaration The type
+   * @return the type's declared methods, ordered by {@link #getDeclaredMethodOrderKey}
+   */
+  public static List<ResolvedMethodDeclaration> getDeclaredMethodsInOrder(
+      ResolvedReferenceTypeDeclaration declaration) {
+    List<ResolvedMethodDeclaration> methods = new ArrayList<>(declaration.getDeclaredMethods());
+    methods.sort(Comparator.comparing(JavaParserUtil::getDeclaredMethodOrderKey));
+    return methods;
+  }
+
+  /**
+   * Returns a sort key that orders a type's declared methods reproducibly. The key is the most
+   * precise description of the method that can be obtained without resolving anything that might
+   * not be on the source path, so it distinguishes overloads that {@link #getApproximateSignature}
+   * alone would conflate.
+   *
+   * <p>Two methods can still share a key, if neither has a signature nor an AST and their
+   * approximations agree, but the sort is still stable because those two methods are
+   * indistinguishable to Specimin.
+   *
+   * @param method The method
+   * @return the method's sort key
+   */
+  private static String getDeclaredMethodOrderKey(ResolvedMethodDeclaration method) {
+    StringBuilder key =
+        new StringBuilder(method.getName()).append('/').append(method.getNumberOfParams());
+
+    try {
+      return key.append('/').append(method.getSignature()).toString();
+    } catch (UnsolvedSymbolException ex) {
+      // The signature is unavailable exactly when a parameter type is off the source path. Such a
+      // method is nearly always one Specimin parsed, so its source text is available and tells it
+      // apart from an overload whose parameters merely share their simple names.
+      return key.append('/')
+          .append(
+              method.toAst().orElse(null) instanceof MethodDeclaration ast
+                  ? ast.getDeclarationAsString(false, false, false)
+                  : getApproximateSignature(method))
+          .toString();
+    }
+  }
+
+  /**
+   * Checks whether a list already holds a particular declaration, by identity rather than by
+   * equality. {@link com.github.javaparser.ast.Node#equals} is structural, so two distinct
+   * declarations that happen to have the same shape compare equal and {@link List#contains} cannot
+   * tell them apart.
+   *
+   * @param methods The list to search
+   * @param method The method to look for
+   * @return true if {@code method} itself is already in {@code methods}
+   */
+  private static boolean containsIdentical(
+      List<MethodDeclaration> methods, MethodDeclaration method) {
+    for (MethodDeclaration existing : methods) {
+      // Reference equality is intentional: the same declaration can be reached along more than one
+      // inheritance path, and it should be preserved once. No interning is okay because this is a
+      // pointer-equality check.
+      // Extracted into a local variable to minimize suppression scope.
+      @SuppressWarnings({"ReferenceEquality", "not.interned"})
+      boolean isSameDeclaration = existing == method;
+      if (isSameDeclaration) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Helper method for getAllMustImplementMethods. Given a set of JDK methods that must be
    * implemented, find the closest method declaration to preserve (i.e., first check this class,
    * then check its parent, then its grandparent, and so on.)
@@ -3585,7 +3712,7 @@ public class JavaParserUtil {
       List<List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>>> typeParametersMaps =
           new ArrayList<>();
 
-      MethodDeclaration earliestMethod = null;
+      List<MethodDeclaration> earliestMethods = new ArrayList<>();
       int locationInPath = -1;
       boolean hasJdkDefinition = false;
       for (List<ResolvedReferenceType> path : typesInBetween) {
@@ -3622,30 +3749,36 @@ public class JavaParserUtil {
             continue;
           }
 
-          for (ResolvedMethodDeclaration resolvedMethod : declaration.getDeclaredMethods()) {
-            MethodMatch match =
-                matchAgainstMustImplementMethod(
-                    resolvedMethod, resolvedMethodDecl, typeParametersMap);
+          MustImplementMatches matches =
+              findMustImplementMatches(declaration, resolvedMethodDecl, typeParametersMap);
 
-            if (match == MethodMatch.NONE) {
-              continue;
-            }
+          // Set only once all of the matches have been considered, so that the result does not
+          // depend on order. A JDK definition satisfies the
+          // obligation only if every match is concrete, because such a match suppresses
+          // preservation entirely.
+          boolean matchedInJdk = false;
+          boolean everyJdkMatchIsConcrete = true;
 
+          for (ResolvedMethodDeclaration resolvedMethod : matches.methods()) {
             MethodDeclaration methodDecl =
                 (MethodDeclaration) tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
 
             if (methodDecl != null) {
               if (!resolvedMethod.isAbstract()) {
                 if (i > locationInPath) {
-                  earliestMethod = methodDecl;
+                  earliestMethods.clear();
                   locationInPath = i;
+                }
+                if (i == locationInPath && !containsIdentical(earliestMethods, methodDecl)) {
+                  earliestMethods.add(methodDecl);
                 }
               }
             } else {
               // We travel the path from the furthest ancestor to the closest ancestor, so if we
               // find an abstract definition, set hasJdkDefinition to false since the abstract
               // will override the concrete definition we may have found earlier in the path.
-              hasJdkDefinition = !resolvedMethod.isAbstract();
+              matchedInJdk = true;
+              everyJdkMatchIsConcrete &= !resolvedMethod.isAbstract();
             }
 
             // Only an exact match may discharge the obligation: an approximate match can conflate
@@ -3653,14 +3786,16 @@ public class JavaParserUtil {
             // costs a missing declaration in the output, while wrongly keeping the obligation
             // costs only a redundant one. Both signatures are computable here, because an exact
             // match means both were just computed.
-            if (match == MethodMatch.EXACT
+            if (matches.kind() == MethodMatch.EXACT
                 && !resolvedMethod
                     .getQualifiedSignature()
                     .equals(resolvedMethodDecl.getQualifiedSignature())) {
               methodsThatMustBeImplemented.remove(resolvedMethodDecl);
             }
+          }
 
-            break;
+          if (matchedInJdk) {
+            hasJdkDefinition = everyJdkMatchIsConcrete;
           }
         }
 
@@ -3715,36 +3850,41 @@ public class JavaParserUtil {
                 typeParametersMap =
                     composeTypeParameterMap(type.getTypeParametersMap(), typeParametersMap);
 
-                for (ResolvedMethodDeclaration resolvedMethod :
-                    path.get(i).getTypeDeclaration().get().getDeclaredMethods()) {
-                  MethodMatch match =
-                      matchAgainstMustImplementMethod(
-                          resolvedMethod, resolvedMethodDecl, typeParametersMap);
+                MustImplementMatches matches =
+                    findMustImplementMatches(
+                        path.get(i).getTypeDeclaration().get(),
+                        resolvedMethodDecl,
+                        typeParametersMap);
 
-                  if (match == MethodMatch.NONE) {
-                    continue;
-                  }
+                // Deferred until every match has been seen, as in the loop above.
+                boolean matchedInJdk = false;
+                boolean everyJdkMatchIsConcrete = true;
 
+                for (ResolvedMethodDeclaration resolvedMethod : matches.methods()) {
                   MethodDeclaration methodDecl =
                       (MethodDeclaration)
                           tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
 
                   if (methodDecl != null) {
                     if (i > locationInPath) {
-                      earliestMethod = methodDecl;
+                      earliestMethods.clear();
                       locationInPath = i;
+                    }
+                    if (i == locationInPath && !containsIdentical(earliestMethods, methodDecl)) {
+                      earliestMethods.add(methodDecl);
                     }
                   } else {
                     // We travel the path from the furthest ancestor to the closest ancestor, so
                     // if we find an abstract definition, set hasJdkDefinition to false since
                     // the abstract will override the concrete definition we may have found
                     // earlier in the path.
-                    hasJdkDefinition = !resolvedMethod.isAbstract();
+                    matchedInJdk = true;
+                    everyJdkMatchIsConcrete &= !resolvedMethod.isAbstract();
                   }
 
                   // See the identical condition in the loop above for why an approximate match
                   // may not discharge the obligation.
-                  if (match == MethodMatch.EXACT
+                  if (matches.kind() == MethodMatch.EXACT
                       && resolvedMethod.isAbstract()
                       && !resolvedMethod
                           .getQualifiedSignature()
@@ -3752,8 +3892,10 @@ public class JavaParserUtil {
                       && resolvedMethodDecl.declaringType().isAssignableBy(ancestor)) {
                     methodsThatMustBeImplemented.remove(resolvedMethodDecl);
                   }
+                }
 
-                  break;
+                if (matchedInJdk) {
+                  hasJdkDefinition = everyJdkMatchIsConcrete;
                 }
               }
             }
@@ -3762,9 +3904,7 @@ public class JavaParserUtil {
       }
 
       if (!hasJdkDefinition) {
-        if (earliestMethod != null) {
-          result.add(earliestMethod);
-        }
+        result.addAll(earliestMethods);
       }
     }
 

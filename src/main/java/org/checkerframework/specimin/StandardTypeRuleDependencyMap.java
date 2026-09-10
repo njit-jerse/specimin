@@ -167,8 +167,10 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
         try {
           for (ResolvedReferenceType ancestor : resolvedMethod.declaringType().getAllAncestors()) {
             // Approximate: check to see if name and arity matches.
+            // Ordered, because getDeclaredMethods() returns a set whose iteration order is not
+            // reproducible; see JavaParserUtil#getDeclaredMethodsInOrder.
             for (ResolvedMethodDeclaration ancestorMethod :
-                ancestor.getTypeDeclaration().get().getDeclaredMethods()) {
+                JavaParserUtil.getDeclaredMethodsInOrder(ancestor.getTypeDeclaration().get())) {
               if (ancestorMethod.getName().equals(resolvedMethod.getName())
                   && ancestorMethod.getNumberOfParams() == resolvedMethod.getNumberOfParams()
                   && ancestorMethod.isAbstract()) {
