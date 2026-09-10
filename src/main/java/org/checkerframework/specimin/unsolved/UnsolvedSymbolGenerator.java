@@ -4496,8 +4496,11 @@ public class UnsolvedSymbolGenerator {
         // cannot get the ResolvedMethodDeclarations from each type declaration since parameter
         // types could be unsolved
         if (refType.getTypeDeclaration().isPresent()) {
+          // Ordered, because the code below takes the first match as the least upper bound, and
+          // getDeclaredMethods() returns a set whose iteration order is not reproducible; see
+          // JavaParserUtil#getDeclaredMethodsInOrder.
           for (ResolvedMethodDeclaration methodDecl :
-              refType.getTypeDeclaration().get().getDeclaredMethods()) {
+              JavaParserUtil.getDeclaredMethodsInOrder(refType.getTypeDeclaration().get())) {
             MethodDeclaration methodDeclAst =
                 (MethodDeclaration)
                     JavaParserUtil.findAttachedNode(methodDecl, fqnsToCompilationUnits);

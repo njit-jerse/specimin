@@ -1323,8 +1323,12 @@ public class JavaParserUtil {
     int numArgs = methodCall.getArguments().size();
     String name = methodCall.getNameAsString();
 
+    // Sorted, because getAllMethods() returns a set whose iteration order is not reproducible and
+    // the caller collects these into an ordered collection; see #getDeclaredMethodsInOrder. These
+    // are all JDK methods, so their signatures are always computable.
     return typeDecl.getAllMethods().stream()
         .filter(m -> m.getName().equals(name) && m.getParamTypes().size() == numArgs)
+        .sorted(Comparator.comparing(m -> m.getDeclaration().getQualifiedSignature()))
         .collect(Collectors.toList());
   }
 
@@ -2782,42 +2786,134 @@ public class JavaParserUtil {
       ResolvedType type = typeVariableToTypesMap.get(bound);
 
       if (type instanceof ResolvedReferenceType declaringType
-          && declaringType.getTypeDeclaration().isPresent()) {
-        if (expression.isMethodCallExpr())
-          for (ResolvedMethodDeclaration potentialMethod :
-              declaringType.getTypeDeclaration().get().getDeclaredMethods()) {
-            if (!potentialMethod
-                .getName()
-                .equals(expression.asMethodCallExpr().getNameAsString())) {
-              continue;
-            }
+          && declaringType.getTypeDeclaration().isPresent()
+          && expression.isMethodCallExpr()) {
+        List<@Nullable ResolvedType> argumentTypes =
+            getArgumentTypesAsResolved(expression.asMethodCallExpr().getArguments());
+        List<ResolvedMethodDeclaration> applicable = new ArrayList<>();
 
-            List<@Nullable ResolvedType> argumentTypes =
-                getArgumentTypesAsResolved(expression.asMethodCallExpr().getArguments());
-
-            if (argumentTypes.size() != potentialMethod.getNumberOfParams()) {
-              continue;
-            }
-
-            boolean match = true;
-            for (int i = 0; i < argumentTypes.size(); i++) {
-              ResolvedType argType = argumentTypes.get(i);
-              ResolvedType paramType = potentialMethod.getParam(i).getType();
-
-              if (argType == null || !paramType.isAssignableBy(argType)) {
-                match = false;
-                break;
-              }
-            }
-
-            if (match) {
-              return potentialMethod;
-            }
+        for (ResolvedMethodDeclaration potentialMethod :
+            getDeclaredMethodsInOrder(declaringType.getTypeDeclaration().get())) {
+          if (!potentialMethod.getName().equals(expression.asMethodCallExpr().getNameAsString())) {
+            continue;
           }
+
+          if (argumentTypes.size() != potentialMethod.getNumberOfParams()) {
+            continue;
+          }
+
+          if (isApplicableTo(potentialMethod, argumentTypes)) {
+            applicable.add(potentialMethod);
+          }
+        }
+
+        return getMostSpecific(applicable);
       }
     }
 
     return null;
+  }
+
+  /**
+   * Checks whether a method is applicable to a call with the given argument types, i.e. whether
+   * every argument's type is assignable to the corresponding parameter's type (JLS 15.12.2.2).
+   * {@code method} must have exactly {@code argumentTypes.size()} parameters.
+   *
+   * <p>An argument whose type could not be resolved, or a parameter whose type is off the source
+   * path, is treated as a mismatch: applicability cannot be established without both types.
+   *
+   * @param method The candidate method
+   * @param argumentTypes The types of the call's arguments, in order; an element is null when that
+   *     argument's type could not be resolved
+   * @return true if the method is applicable to those arguments
+   */
+  private static boolean isApplicableTo(
+      ResolvedMethodDeclaration method, List<@Nullable ResolvedType> argumentTypes) {
+    for (int i = 0; i < argumentTypes.size(); i++) {
+      ResolvedType argType = argumentTypes.get(i);
+
+      if (argType == null) {
+        return false;
+      }
+
+      try {
+        if (!method.getParam(i).getType().isAssignableBy(argType)) {
+          return false;
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // getParam().getType() throws when the parameter's type is off the source path.
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Returns the most specific of a list of methods that are all applicable to the same call, per
+   * JLS 15.12.2.5: the one whose parameter types are all subtypes of every other candidate's.
+   *
+   * <p>Specificity is a partial order, so there need not be a maximal element (javac reports such a
+   * call as ambiguous, but Specimin's approximate argument types can also produce a set of
+   * candidates that javac never would). In that case this returns the first candidate, which is
+   * arbitrary but reproducible as long as the caller supplies the candidates in a deterministic
+   * order -- see {@link #getDeclaredMethodsInOrder}.
+   *
+   * @param applicable The applicable methods, all of the same arity, in a deterministic order
+   * @return the most specific of them, or null if there are none
+   */
+  private static @Nullable ResolvedMethodDeclaration getMostSpecific(
+      List<ResolvedMethodDeclaration> applicable) {
+    for (ResolvedMethodDeclaration candidate : applicable) {
+      boolean beatsAll = true;
+
+      for (ResolvedMethodDeclaration other : applicable) {
+        // Reference equality is intentional: a candidate is not compared against itself, but two
+        // distinct overloads must both be compared even if they happen to compare equal.
+        // Extracted into a local variable to minimize suppression scope.
+        @SuppressWarnings({"ReferenceEquality", "not.interned"})
+        boolean isSelf = candidate == other;
+
+        if (!isSelf && !isAtLeastAsSpecificAs(candidate, other)) {
+          beatsAll = false;
+          break;
+        }
+      }
+
+      if (beatsAll) {
+        return candidate;
+      }
+    }
+
+    return applicable.isEmpty() ? null : applicable.get(0);
+  }
+
+  /**
+   * Checks whether one method is at least as specific as another (JLS 15.12.2.5): each of {@code
+   * method}'s parameter types is assignable to the corresponding parameter type of {@code other}.
+   * Both methods must have the same number of parameters.
+   *
+   * <p>A parameter type that is unsolved makes the answer false, since specificity cannot be
+   * established without it.
+   *
+   * @param method The method that might be the more specific one
+   * @param other The method to compare against
+   * @return true if {@code method} is at least as specific as {@code other}
+   */
+  private static boolean isAtLeastAsSpecificAs(
+      ResolvedMethodDeclaration method, ResolvedMethodDeclaration other) {
+    for (int i = 0; i < method.getNumberOfParams(); i++) {
+      try {
+        if (!other.getParam(i).getType().isAssignableBy(method.getParam(i).getType())) {
+          return false;
+        }
+      } catch (UnsolvedSymbolException ex) {
+        // getParam().getType() throws when the parameter's type is unsolved.
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -3342,13 +3438,24 @@ public class JavaParserUtil {
 
     String methodName = methodReference.getIdentifier();
 
+    // Sorted, because callers collect these candidates into ordered collections, and both
+    // getConstructors() and getAllMethods() are derived from sets that JavaParser rebuilds on each
+    // call; see #getDeclaredMethodsInOrder.
     if (methodName.equals("new")) {
-      return methodDeclaringType.asReferenceType().getTypeDeclaration().get().getConstructors();
+      return methodDeclaringType
+          .asReferenceType()
+          .getTypeDeclaration()
+          .get()
+          .getConstructors()
+          .stream()
+          .sorted(Comparator.comparing(JavaParserUtil::getDeclaredMethodOrderKey))
+          .toList();
     }
 
     // Method references must be on reference types
     return methodDeclaringType.asReferenceType().getAllMethods().stream()
         .filter(method -> method.getName().equals(methodName))
+        .sorted(Comparator.comparing(JavaParserUtil::getDeclaredMethodOrderKey))
         .toList();
   }
 
@@ -3472,10 +3579,17 @@ public class JavaParserUtil {
    */
   public static Set<ResolvedMethodDeclaration> getAllMustImplementMethods(
       TypeDeclaration<?> typeDecl) {
-    Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented = new HashSet<>();
+    // Insertion-ordered, and filled in a reproducible order, because callers iterate the result:
+    // the order in which they see these methods decides the order of the declarations Specimin
+    // writes for them.
+    Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented = new LinkedHashSet<>();
 
-    for (ResolvedReferenceTypeDeclaration jdkAncestor : getAllJDKAncestors(typeDecl)) {
-      for (ResolvedMethodDeclaration resolvedMethod : jdkAncestor.getDeclaredMethods()) {
+    List<ResolvedReferenceTypeDeclaration> jdkAncestors =
+        new ArrayList<>(getAllJDKAncestors(typeDecl));
+    jdkAncestors.sort(Comparator.comparing(ResolvedReferenceTypeDeclaration::getQualifiedName));
+
+    for (ResolvedReferenceTypeDeclaration jdkAncestor : jdkAncestors) {
+      for (ResolvedMethodDeclaration resolvedMethod : getDeclaredMethodsInOrder(jdkAncestor)) {
         // Skip methods that are already defined in java.lang.Object
         if (JavaLangUtils.isJavaLangObjectMethod(resolvedMethod.getSignature())) {
           continue;
@@ -3662,7 +3776,7 @@ public class JavaParserUtil {
    * @param method The method
    * @return the method's sort key
    */
-  private static String getDeclaredMethodOrderKey(ResolvedMethodDeclaration method) {
+  public static String getDeclaredMethodOrderKey(ResolvedMethodLikeDeclaration method) {
     StringBuilder key =
         new StringBuilder(method.getName()).append('/').append(method.getNumberOfParams());
 
@@ -3672,12 +3786,18 @@ public class JavaParserUtil {
       // The signature is unavailable exactly when a parameter type is off the source path. Such a
       // method is nearly always one Specimin parsed, so its source text is available and tells it
       // apart from an overload whose parameters merely share their simple names.
-      return key.append('/')
-          .append(
-              method.toAst().orElse(null) instanceof MethodDeclaration ast
-                  ? ast.getDeclarationAsString(false, false, false)
-                  : getApproximateSignature(method))
-          .toString();
+      String fallback;
+
+      if (method.toAst().orElse(null) instanceof CallableDeclaration<?> ast) {
+        fallback = ast.getDeclarationAsString(false, false, false);
+      } else if (method instanceof ResolvedMethodDeclaration resolvedMethod) {
+        fallback = getApproximateSignature(resolvedMethod);
+      } else {
+        // A constructor with no AST and no signature: nothing else is available to describe it.
+        fallback = "";
+      }
+
+      return key.append('/').append(fallback).toString();
     }
   }
 
@@ -3722,7 +3842,10 @@ public class JavaParserUtil {
       Set<ResolvedMethodDeclaration> methodsThatMustBeImplemented,
       Map<String, CompilationUnit> fqnToCompilationUnits) {
     List<MethodDeclaration> result = new ArrayList<>();
-    for (ResolvedMethodDeclaration resolvedMethodDecl : Set.copyOf(methodsThatMustBeImplemented)) {
+    // A List rather than a Set copy: this is only a snapshot to allow the loop to remove from
+    // methodsThatMustBeImplemented, and Set.copyOf would discard the caller's order (the iteration
+    // order of an immutable Set is randomized per JVM run).
+    for (ResolvedMethodDeclaration resolvedMethodDecl : List.copyOf(methodsThatMustBeImplemented)) {
       List<List<ResolvedReferenceType>> typesInBetween =
           getTypesInBetween(typeDecl, resolvedMethodDecl.declaringType());
 
