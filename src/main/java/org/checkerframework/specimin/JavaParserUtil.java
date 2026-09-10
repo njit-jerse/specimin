@@ -1893,20 +1893,7 @@ public class JavaParserUtil {
           continue;
         }
 
-        if (!resolvedParameterType.isAssignableBy(typeInCall)) {
-          // If either is a type variable and the other is a reference type, it is likely valid
-          // Note that isAssignableBy will return false in those cases
-          if (typeInCall.isTypeVariable() && resolvedParameterType.isReference()) {
-            continue;
-          }
-          if (resolvedParameterType.isTypeVariable() && typeInCall.isReference()) {
-            continue;
-          }
-          // JavaParser can't handle constraint types well. This isn't perfect (i.e., doesn't
-          // properly match bounds), but it should work for most cases.
-          if (typeInCall.isConstraint() && resolvedParameterType.isReference()) {
-            continue;
-          }
+        if (!couldArgumentBeTypeCompatibleWithParameterType(resolvedParameterType, typeInCall)) {
           return false;
         }
       }
@@ -1917,6 +1904,43 @@ public class JavaParserUtil {
     }
 
     return true;
+  }
+
+  /**
+   * Checks whether an argument of a given type could be passed to a parameter of a given type, i.e.
+   * whether the parameter type is assignable by the argument type (JLS 5.3).
+   *
+   * <p>This is deliberately more permissive than {@link ResolvedType#isAssignableBy}, which answers
+   * false for a type variable or a lambda constraint type even where the assignment is legal.
+   * Specimin sees both routinely, and treating them as incompatible would discard the real
+   * candidate. The implementation here is conservative in the sense that it preserves compilability
+   * at the possible expense of minimality: it does not check bounds, so it can admit a candidate
+   * that is not truly applicable.
+   *
+   * @param parameterType The parameter's type
+   * @param argumentType The argument's type
+   * @return true if an argument of that type may be passed to a parameter of that type
+   */
+  public static boolean couldArgumentBeTypeCompatibleWithParameterType(
+      ResolvedType parameterType, ResolvedType argumentType) {
+    if (parameterType.isAssignableBy(argumentType)) {
+      return true;
+    }
+
+    // If either is a type variable and the other is a reference type, it is likely valid.
+    if (argumentType.isTypeVariable() && parameterType.isReference()) {
+      return true;
+    }
+    if (parameterType.isTypeVariable() && argumentType.isReference()) {
+      return true;
+    }
+    // JavaParser can't handle constraint types well. This isn't perfect (i.e., doesn't properly
+    // match bounds), but it should work for most cases.
+    if (argumentType.isConstraint() && parameterType.isReference()) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -2815,9 +2839,13 @@ public class JavaParserUtil {
   }
 
   /**
-   * Checks whether a method is applicable to a call with the given argument types, i.e. whether
-   * every argument's type is assignable to the corresponding parameter's type (JLS 15.12.2.2).
+   * Checks whether a method is applicable to a call with the given argument types (JLS 15.12.2.2).
    * {@code method} must have exactly {@code argumentTypes.size()} parameters.
+   *
+   * <p>This is the {@link ResolvedMethodDeclaration} counterpart of {@link
+   * #isNodeWithParametersACandidate}, which answers the same question about a candidate that
+   * Specimin has an AST for; both decide a single parameter with {@link
+   * #couldArgumentBeTypeCompatibleWithParameterType}.
    *
    * <p>An argument whose type could not be resolved, or a parameter whose type is off the source
    * path, is treated as a mismatch: applicability cannot be established without both types.
@@ -2837,7 +2865,8 @@ public class JavaParserUtil {
       }
 
       try {
-        if (!method.getParam(i).getType().isAssignableBy(argType)) {
+        if (!couldArgumentBeTypeCompatibleWithParameterType(
+            method.getParam(i).getType(), argType)) {
           return false;
         }
       } catch (UnsolvedSymbolException ex) {
