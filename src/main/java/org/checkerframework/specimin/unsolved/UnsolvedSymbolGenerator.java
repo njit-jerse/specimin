@@ -34,6 +34,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.PatternExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.TypeExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithParameters;
@@ -3650,14 +3651,17 @@ public class UnsolvedSymbolGenerator {
         }
       }
     }
+    // The operand type of a unary expression is constrained: !x means x is a
+    // boolean, -x that it is numeric, etc.
+    else if (node instanceof UnaryExpr unaryExpr) {
+      constrainOperandType(
+          unaryExpr.getExpression(),
+          toMemberTypes(JavaLangUtils.getTypesForUnaryOp(unaryExpr.getOperator().asString())));
+    }
     // If the node is a binary expression, sometimes we can get more type constraints
     // i.e., x < y means x and y must be numbers
     else if (node instanceof BinaryExpr binaryExpr) {
       BinaryExpr.Operator operator = binaryExpr.getOperator();
-      Expression left = binaryExpr.getLeft();
-      Expression right = binaryExpr.getRight();
-
-      Set<MemberType> typesToReplace = new LinkedHashSet<>();
 
       // == and != are inconclusive for types, and so is a + that is a string concatenation: JLS
       // 15.18.1 allows the other operand of a concatenation to have any type at all, so unlike
@@ -3668,40 +3672,63 @@ public class UnsolvedSymbolGenerator {
       if (operator != BinaryExpr.Operator.EQUALS
           && operator != BinaryExpr.Operator.NOT_EQUALS
           && !isDefinitelyStringConcatenation(binaryExpr)) {
-        for (String validType : JavaLangUtils.getTypesForOp(operator.asString())) {
-          if (JavaParserUtil.isAClassName(validType)) {
-            validType = "java.lang." + validType;
-          }
-          typesToReplace.add(new SolvedMemberType(validType));
-        }
-      }
-
-      if (!typesToReplace.isEmpty()) {
-        for (Expression side : Set.of(left, right)) {
-          if (side.isMethodCallExpr()) {
-            UnsolvedMethodAlternates methodAlternates =
-                findGeneratedMethodFromMethodCall(side.asMethodCallExpr());
-
-            if (methodAlternates != null
-                && methodAlternates.getReturnTypes().stream().noneMatch(typesToReplace::contains)) {
-              // Set all to same return type which removes duplicates; then we can add
-              // our whole set to make sure that all the old types are gone
-              methodAlternates.setReturnType(typesToReplace.iterator().next());
-              methodAlternates.addReturnTypes(typesToReplace);
-            }
-          } else if (side.isFieldAccessExpr() || side.isNameExpr()) {
-            UnsolvedFieldAlternates fieldAlternates = findGeneratedFieldFromUsage(side);
-
-            if (fieldAlternates != null
-                && fieldAlternates.getTypes().stream().noneMatch(typesToReplace::contains)) {
-              fieldAlternates.replaceAllOldFieldTypes(typesToReplace);
-            }
-          }
-        }
+        Set<MemberType> typesToReplace =
+            toMemberTypes(JavaLangUtils.getTypesForOp(operator.asString()));
+        constrainOperandType(binaryExpr.getLeft(), typesToReplace);
+        constrainOperandType(binaryExpr.getRight(), typesToReplace);
       }
     }
 
     return new UnsolvedGenerationResult(toAdd, toRemove);
+  }
+
+  /**
+   * Converts the simple type names that {@link JavaLangUtils} reports for an operator into member
+   * types, qualifying the boxed types (which it reports unqualified) with {@code java.lang}.
+   *
+   * @param types simple type names, such as those returned by {@link
+   *     JavaLangUtils#getTypesForOp(String)}
+   * @return one member type per type, in the same order
+   */
+  private static Set<MemberType> toMemberTypes(String[] types) {
+    Set<MemberType> result = new LinkedHashSet<>();
+    for (String type : types) {
+      result.add(
+          new SolvedMemberType(JavaParserUtil.isAClassName(type) ? "java.lang." + type : type));
+    }
+    return result;
+  }
+
+  /**
+   * If the given operand of an operator is a generated method call or field access whose type is
+   * not one that the operator permits, replaces that type with the permitted ones. Does nothing
+   * when the operand is not a generated symbol or already has a permitted type, so that a type
+   * established by the symbol's other use sites survives.
+   *
+   * @param operand an operand of an operator
+   * @param permittedTypes the types that the operator permits its operand to have; the first is
+   *     used as the default
+   */
+  private void constrainOperandType(Expression operand, Set<MemberType> permittedTypes) {
+    if (operand.isMethodCallExpr()) {
+      UnsolvedMethodAlternates methodAlternates =
+          findGeneratedMethodFromMethodCall(operand.asMethodCallExpr());
+
+      if (methodAlternates != null
+          && methodAlternates.getReturnTypes().stream().noneMatch(permittedTypes::contains)) {
+        // Set all to same return type which removes duplicates; then we can add
+        // our whole set to make sure that all the old types are gone
+        methodAlternates.setReturnType(permittedTypes.iterator().next());
+        methodAlternates.addReturnTypes(permittedTypes);
+      }
+    } else if (operand.isFieldAccessExpr() || operand.isNameExpr()) {
+      UnsolvedFieldAlternates fieldAlternates = findGeneratedFieldFromUsage(operand);
+
+      if (fieldAlternates != null
+          && fieldAlternates.getTypes().stream().noneMatch(permittedTypes::contains)) {
+        fieldAlternates.replaceAllOldFieldTypes(permittedTypes);
+      }
+    }
   }
 
   /**
@@ -5846,6 +5873,7 @@ public class UnsolvedSymbolGenerator {
         || node instanceof ReturnStmt
         || node instanceof VariableDeclarator
         || node instanceof BinaryExpr
+        || node instanceof UnaryExpr
         || node instanceof LambdaExpr
         || node instanceof ObjectCreationExpr
         || node instanceof ExplicitConstructorInvocationStmt
