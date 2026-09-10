@@ -3528,12 +3528,13 @@ public class JavaParserUtil {
    * Decides whether {@code candidate} is a declaration of {@code mustImplement}, i.e. whether it
    * declares or overrides it.
    *
-   * <p>The exact comparison is by signature, but computing a signature resolves every parameter
-   * type, so it fails for a method with a parameter whose type is not on the source path. Falling
-   * back to {@link #getApproximateSignatureWithTypeVariablesMap} keeps such a method from being
-   * dropped, at the cost of not distinguishing overloads whose parameter types share a simple name.
-   * The result says which comparison succeeded, so that callers can decline to act on an
-   * approximate match where a wrong answer would cost them more than a missed one.
+   * <p>First, it tries an exact comparison via signature, but computing a signature resolves every
+   * parameter type, which fails for a method with a parameter whose type is not on the source path.
+   * It falls back to {@link #getApproximateSignatureWithTypeVariablesMap}, which may not
+   * distinguish overloads whose parameter types share a simple name. The result is an enum
+   * indicating which comparison succeeded ({@code MethodMatch.EXACT} for the former, {@code
+   * MethodMatch.APPROXIMATE} for the latter), so that callers can decline to act on an approximate
+   * match where a wrong answer would introduce unsoundness.
    *
    * @param candidate The method that might be a declaration of {@code mustImplement}
    * @param mustImplement The method that must be implemented
@@ -3869,10 +3870,10 @@ public class JavaParserUtil {
    * the source path. Such a parameter is routine in Specimin: it names exactly the kind of type
    * that Specimin synthesizes.
    *
-   * <p>Each parameter type is reduced to its simple name with its type arguments stripped, so the
-   * result conflates overloads whose parameter types differ only in their package or in their type
-   * arguments. That is coarser than the override-equivalence of JLS 8.4.2, which compares erasures
-   * but not simple names, so use this only where the exact signature is unavailable.
+   * <p>Each parameter type is reduced by {@link #erase} to its simple name, so the result conflates
+   * overloads whose parameter types differ only in their package or in their type arguments. That
+   * is coarser than the override-equivalence of JLS 8.4.2, which compares erasures but not simple
+   * names, so use this only where the exact signature is unavailable.
    *
    * @param method The method
    * @return an approximation of the method's signature, in the form {@code name(Simple1, Simple2)}
@@ -3882,8 +3883,8 @@ public class JavaParserUtil {
   }
 
   /**
-   * Stands to {@link #getSignatureFromResolvedMethodWithTypeVariablesMap(ResolvedMethodDeclaration,
-   * List)} as {@link #getApproximateSignature(ResolvedMethodDeclaration)} stands to {@link
+   * Like {@link #getSignatureFromResolvedMethodWithTypeVariablesMap(ResolvedMethodDeclaration,
+   * List)} as {@link #getApproximateSignature(ResolvedMethodDeclaration)} is like {@link
    * ResolvedMethodLikeDeclaration#getSignature()}: it substitutes away the type variables of a
    * declaring type, and it never throws. Use it to compare a method against one declared in an
    * ancestor of its declaring type.
@@ -3915,8 +3916,7 @@ public class JavaParserUtil {
         // caller could compare it against except another equally-unknown parameter.
         described = ast == null ? UNKNOWN_PARAMETER_TYPE : ast.getParameter(i).getType().toString();
       }
-      parameters.add(
-          getSimpleNameFromQualifiedName(eraseTypeArguments(described)) + (variadic ? "..." : ""));
+      parameters.add(getSimpleNameFromQualifiedName(erase(described)) + (variadic ? "..." : ""));
     }
     return parameters.toString();
   }
@@ -3933,7 +3933,7 @@ public class JavaParserUtil {
     StringJoiner parameters = new StringJoiner(", ", method.getNameAsString() + "(", ")");
     for (Parameter parameter : method.getParameters()) {
       parameters.add(
-          getSimpleNameFromQualifiedName(eraseTypeArguments(parameter.getType().toString()))
+          getSimpleNameFromQualifiedName(erase(parameter.getType().toString()))
               + (parameter.isVarArgs() ? "..." : ""));
     }
     return parameters.toString();
@@ -3964,33 +3964,6 @@ public class JavaParserUtil {
   public static boolean areMethodsLikelyEqual(
       ResolvedMethodDeclaration resolved, MethodDeclaration ast) {
     return getApproximateSignature(resolved).equals(getApproximateSignature(ast));
-  }
-
-  /**
-   * Removes every type argument list from a type's string form, which is most of what erasure (JLS
-   * 4.6) does to a parameterized type. Nested type arguments are removed with their enclosing list,
-   * and anything that follows the list, such as an array's brackets, is kept.
-   *
-   * @param type The string form of a type
-   * @return the same string with all {@code <...>} sections removed
-   */
-  private static String eraseTypeArguments(String type) {
-    if (type.indexOf('<') == -1) {
-      return type;
-    }
-    StringBuilder erased = new StringBuilder(type.length());
-    int depth = 0;
-    for (int i = 0; i < type.length(); i++) {
-      char c = type.charAt(i);
-      if (c == '<') {
-        depth++;
-      } else if (c == '>') {
-        depth--;
-      } else if (depth == 0) {
-        erased.append(c);
-      }
-    }
-    return erased.toString();
   }
 
   /**
