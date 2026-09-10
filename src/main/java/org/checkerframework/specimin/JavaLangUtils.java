@@ -275,15 +275,29 @@ public final class JavaLangUtils {
     JavaLangUtils.javaLangThrowableMethods = Collections.unmodifiableMap(javaLangThrowableMethods);
   }
 
-  /** The integral primitives. */
+  /** The integral primitives (and their boxes). */
   private static final String[] INTEGRAL_PRIMITIVES =
-      new String[] {"int", "Integer", "long", "Long", "byte", "Byte", "short", "Short"};
+      new String[] {
+        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "char", "Character"
+      };
 
-  /** The numeric primitives. */
+  /** The numeric primitives (and their boxes): the integral ones plus the floating-point ones. */
   private static final String[] NUMERIC_PRIMITIVES =
       new String[] {
-        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
-        "double", "Double"
+        "int",
+        "Integer",
+        "long",
+        "Long",
+        "byte",
+        "Byte",
+        "short",
+        "Short",
+        "char",
+        "Character",
+        "float",
+        "Float",
+        "double",
+        "Double"
       };
 
   /**
@@ -292,8 +306,21 @@ public final class JavaLangUtils {
    */
   private static final String[] NUMERIC_PRIMITIVES_AND_STRING =
       new String[] {
-        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
-        "double", "Double", "String"
+        "int",
+        "Integer",
+        "long",
+        "Long",
+        "byte",
+        "Byte",
+        "short",
+        "Short",
+        "char",
+        "Character",
+        "float",
+        "Float",
+        "double",
+        "Double",
+        "String"
       };
 
   /** The booleans. */
@@ -302,8 +329,22 @@ public final class JavaLangUtils {
   /** The numeric primitives and booleans. */
   private static final String[] NUMERIC_PRIMITIVES_AND_BOOLEANS =
       new String[] {
-        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
-        "double", "Double", "boolean", "Boolean"
+        "int",
+        "Integer",
+        "long",
+        "Long",
+        "byte",
+        "Byte",
+        "short",
+        "Short",
+        "char",
+        "Character",
+        "float",
+        "Float",
+        "double",
+        "Double",
+        "boolean",
+        "Boolean"
       };
 
   /**

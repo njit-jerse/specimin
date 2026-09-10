@@ -2356,7 +2356,23 @@ public class FullyQualifiedNameGenerator {
         }
       }
     } else if (parentNode instanceof UnaryExpr unary) {
-      return toFQNSets(JavaLangUtils.getTypesForUnaryOp(unary.getOperator().asString()));
+      String unaryOp = unary.getOperator().asString();
+      Set<FullyQualifiedNameSet> permitted = toFQNSets(JavaLangUtils.getTypesForUnaryOp(unaryOp));
+
+      if (!unaryOp.equals("++") && !unaryOp.equals("--")) {
+        // Every other unary operator promotes its operand (JLS 5.6.1), so the type of the
+        // expression as a whole says nothing about the operand, and all we know is that the
+        // operand is one of the types the operator permits.
+        return permitted;
+      }
+
+      // The type of an increment or decrement expression is the type of its operand, not the
+      // promoted type: JLS 15.14.2, 15.14.3, 15.15.1 and 15.15.2 all undo the promotion with an
+      // implicit narrowing cast. Whatever the surrounding context requires of `++x` it therefore
+      // requires of `x` itself, which matters because the permitted set defaults to int and would
+      // otherwise turn `char c = ++x;` into an assignment that does not compile.
+      return restrictToPermittedTypes(
+          unary.hasParentNode() ? getFQNsFromSurroundingContextType(unary) : null, permitted);
     } else if (parentNode instanceof ReturnStmt returnStmt) {
       Node methodOrLambda = JavaParserUtil.findClosestMethodOrLambdaAncestor(returnStmt);
 
@@ -2447,14 +2463,32 @@ public class FullyQualifiedNameGenerator {
    */
   private Set<FullyQualifiedNameSet> getFQNsFromOperatorResultType(
       BinaryExpr binary, Operator operator) {
-    Set<FullyQualifiedNameSet> permitted =
-        toFQNSets(JavaLangUtils.getTypesForOp(operator.asString()));
-    Set<FullyQualifiedNameSet> resultType = getFQNsForExpressionType(binary);
-    String soleResultFqn = FullyQualifiedNameSet.getSoleErasedFqn(resultType);
+    return restrictToPermittedTypes(
+        getFQNsForExpressionType(binary),
+        toFQNSets(JavaLangUtils.getTypesForOp(operator.asString())));
+  }
 
-    return soleResultFqn != null && permitted.contains(new FullyQualifiedNameSet(soleResultFqn))
-        ? resultType
-        : permitted;
+  /**
+   * Returns the given candidate type if an operator permits it as an operand type, and the set of
+   * types that operator permits otherwise. A candidate that the operator does not permit is not
+   * evidence about the operand at all, since the operand could not have had that type.
+   *
+   * @param candidate the type suggested by an operator expression's own type or context, or null if
+   *     there is none
+   * @param permitted the types the operator permits its operand to have; the first is the default
+   * @return whichever of the two better describes the operand
+   */
+  private static Set<FullyQualifiedNameSet> restrictToPermittedTypes(
+      @Nullable Set<FullyQualifiedNameSet> candidate, Set<FullyQualifiedNameSet> permitted) {
+    if (candidate != null) {
+      String soleCandidateFqn = FullyQualifiedNameSet.getSoleErasedFqn(candidate);
+
+      if (soleCandidateFqn != null
+          && permitted.contains(new FullyQualifiedNameSet(soleCandidateFqn))) {
+        return candidate;
+      }
+    }
+    return permitted;
   }
 
   /**
