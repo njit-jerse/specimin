@@ -331,11 +331,29 @@ public class JavaParserUtil {
   /**
    * Erases type arguments from a method or type signature string.
    *
+   * <p>A string whose angle brackets do not balance is not a type or a signature, and is returned
+   * unchanged: it is most likely a fragment of a parameter list that was split at a comma which was
+   * really inside a type argument, and there is no erasure of such a fragment to compute.
+   *
    * @param signature the signature
    * @return the same signature without type arguments
    */
   public static String erase(String signature) {
-    return signature.replaceAll("<.*>", "");
+    StringBuilder erased = new StringBuilder(signature.length());
+    int depth = 0;
+    for (int i = 0; i < signature.length(); i++) {
+      char c = signature.charAt(i);
+      if (c == '<') {
+        depth++;
+      } else if (c == '>') {
+        if (--depth < 0) {
+          return signature;
+        }
+      } else if (depth == 0) {
+        erased.append(c);
+      }
+    }
+    return depth == 0 ? erased.toString() : signature;
   }
 
   /**
