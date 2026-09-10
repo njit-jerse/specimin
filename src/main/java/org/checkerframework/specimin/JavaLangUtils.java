@@ -275,15 +275,29 @@ public final class JavaLangUtils {
     JavaLangUtils.javaLangThrowableMethods = Collections.unmodifiableMap(javaLangThrowableMethods);
   }
 
-  /** The integral primitives. */
+  /** The integral primitives (and their boxes). */
   private static final String[] INTEGRAL_PRIMITIVES =
-      new String[] {"int", "Integer", "long", "Long", "byte", "Byte", "short", "Short"};
+      new String[] {
+        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "char", "Character"
+      };
 
-  /** The numeric primitives. */
+  /** The numeric primitives (and their boxes): the integral ones plus the floating-point ones. */
   private static final String[] NUMERIC_PRIMITIVES =
       new String[] {
-        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
-        "double", "Double"
+        "int",
+        "Integer",
+        "long",
+        "Long",
+        "byte",
+        "Byte",
+        "short",
+        "Short",
+        "char",
+        "Character",
+        "float",
+        "Float",
+        "double",
+        "Double"
       };
 
   /**
@@ -292,8 +306,21 @@ public final class JavaLangUtils {
    */
   private static final String[] NUMERIC_PRIMITIVES_AND_STRING =
       new String[] {
-        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
-        "double", "Double", "String"
+        "int",
+        "Integer",
+        "long",
+        "Long",
+        "byte",
+        "Byte",
+        "short",
+        "Short",
+        "char",
+        "Character",
+        "float",
+        "Float",
+        "double",
+        "Double",
+        "String"
       };
 
   /** The booleans. */
@@ -302,8 +329,22 @@ public final class JavaLangUtils {
   /** The numeric primitives and booleans. */
   private static final String[] NUMERIC_PRIMITIVES_AND_BOOLEANS =
       new String[] {
-        "int", "Integer", "long", "Long", "byte", "Byte", "short", "Short", "float", "Float",
-        "double", "Double", "boolean", "Boolean"
+        "int",
+        "Integer",
+        "long",
+        "Long",
+        "byte",
+        "Byte",
+        "short",
+        "Short",
+        "char",
+        "Character",
+        "float",
+        "Float",
+        "double",
+        "Double",
+        "boolean",
+        "Boolean"
       };
 
   /**
@@ -345,6 +386,33 @@ public final class JavaLangUtils {
       case "||", "&&" -> BOOLEANS;
 
       default -> throw new IllegalArgumentException("unexpected binary operator: " + binOp);
+    };
+  }
+
+  /**
+   * Given the string representation of a unary operator, what are the possible operand types? As in
+   * {@link #getTypesForOp(String)}, the first element of the result is assumed to be the default if
+   * no other information is available.
+   *
+   * <p>Unlike a binary operator, every unary operator constrains its operand, so this method never
+   * has to report "no information".
+   *
+   * @param unaryOp a string representation of a unary operator, such as "!"
+   * @return the array of compatible types, such as ["boolean", "Boolean"]
+   */
+  public static String[] getTypesForUnaryOp(String unaryOp) {
+    return switch (unaryOp) {
+      // JLS 15.15.6
+      case "!" -> BOOLEANS;
+
+      // JLS 15.15.5: unary numeric promotion (JLS 5.6.1) to an integral type
+      case "~" -> INTEGRAL_PRIMITIVES;
+
+      // JLS 15.15.3 and 15.15.4 (unary + and -), and JLS 15.14.2, 15.14.3, 15.15.1 and 15.15.2
+      // (the increment and decrement operators, whose operand must be a variable of numeric type)
+      case "+", "-", "++", "--" -> NUMERIC_PRIMITIVES;
+
+      default -> throw new IllegalArgumentException("unexpected unary operator: " + unaryOp);
     };
   }
 
