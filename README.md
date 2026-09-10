@@ -271,4 +271,4 @@ that you used to run Specimin and describe what went wrong, and we'll
 look into it as soon as we can.
 
 If you'd like to contribute to Specimin, we have a separate document
-with [developer documentation](https://github.com/njit-jerse/specimin/DEVELOPERS.md).
+with [developer documentation](DEVELOPERS.md).
