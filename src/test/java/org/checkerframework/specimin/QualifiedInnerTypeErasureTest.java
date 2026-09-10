@@ -5,16 +5,12 @@ import org.junit.jupiter.api.Test;
 
 /**
  * {@code Impl#apply} has one parameter whose type is not on the source path, so Specimin cannot
- * compute its signature and compares it against {@code Rule#apply} by {@link
- * JavaParserUtil#areMethodsLikelyEqual} instead. That comparison erases the type arguments of the
- * other parameter, whose type {@code Outer<String>.Inner<Integer>} carries two type argument lists:
- * one for the enclosing type and one for the member type (JLS 4.5).
+ * compute its signature and compares it against {@code Rule#apply} approximately. That comparison
+ * erases the type arguments of the other parameter, whose type {@code Outer<String>.Inner<Integer>}
+ * carries two type argument lists: one for the enclosing type and one for the member type.
  *
- * <p>Erasing everything between the first {@code <} and the last {@code >} deletes {@code Inner}
- * along with the arguments, so the two sides of the comparison disagree and {@code Rule#apply} is
- * not recognized as a method that {@code Impl#apply} overrides. Specimin then drops it, which
- * leaves {@code Rule} with no abstract method and the lambda in the target with nothing to
- * implement: "Rule is not a functional interface" (JLS 9.8).
+ * <p>The purpose of this test is to rule out an incorrect implementation of erasure in that comparison
+ * that greedily deletes everything between angle brackets (which Specimin used to have).
  */
 public class QualifiedInnerTypeErasureTest {
   @Test
