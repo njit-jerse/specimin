@@ -2994,8 +2994,8 @@ public class JavaParserUtil {
    * #isNodeWithParametersACandidate}, which answers the same question about a candidate that
    * Specimin has an AST for; both decide a single parameter with {@link
    * #couldArgumentBeTypeCompatibleWithParameterType}. This one additionally reports whether that
-   * accommodation was needed, so that a caller choosing a single overload can prefer a candidate
-   * that did not need it.
+   * method's answer was an approximation for any parameter, so that a caller choosing a single
+   * overload can prefer a candidate that did not need it.
    *
    * <p>An argument whose type could not be resolved, or a parameter whose type is off the source
    * path, makes the method inapplicable: applicability cannot be established without both types.
