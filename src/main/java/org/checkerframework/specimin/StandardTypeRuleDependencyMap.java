@@ -9,10 +9,12 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -36,6 +38,7 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
 import com.github.javaparser.resolution.types.ResolvedType;
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.DefaultConstructorDeclaration;
@@ -531,6 +534,45 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
           && !variableDeclarator.getType().isPrimitiveType()
           && JavaParserUtil.isInConstantContext(node)) {
         elements.add(variableDeclarator.getInitializer().get());
+      }
+
+      // If this static final field has no declaration-site initializer, it must be assigned
+      // somewhere else -- most commonly a static initializer block. Follow that assignment as a
+      // dependency, the same way any other reachable code is followed, instead of leaving it for
+      // Slicer's "empty final field" repair to invent a default value for. That repair still
+      // exists as a fallback for a field this loop can't find an assignment for.
+      if (variableDeclarator.getInitializer().isEmpty() && field.isStatic()) {
+        for (BodyDeclaration<?> member : type.getMembers()) {
+          if (!(member instanceof InitializerDeclaration initializer) || !initializer.isStatic()) {
+            continue;
+          }
+
+          boolean assignsThisField =
+              initializer.getBody().findAll(AssignExpr.class).stream()
+                  .anyMatch(
+                      assignExpr -> {
+                        ResolvedValueDeclaration target = null;
+                        if (assignExpr.getTarget().isFieldAccessExpr()) {
+                          target = Resolver.resolve(assignExpr.getTarget().asFieldAccessExpr());
+                        } else if (assignExpr.getTarget().isNameExpr()) {
+                          target = Resolver.resolve(assignExpr.getTarget().asNameExpr());
+                        }
+
+                        return target != null
+                            && target.isField()
+                            && target
+                                .asField()
+                                .declaringType()
+                                .getQualifiedName()
+                                .equals(resolvedFieldDeclaration.declaringType().getQualifiedName())
+                            && target.getName().equals(resolvedFieldDeclaration.getName());
+                      });
+
+          if (assignsThisField) {
+            elements.add(initializer);
+            break;
+          }
+        }
       }
     }
 
