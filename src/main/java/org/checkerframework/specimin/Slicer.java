@@ -18,6 +18,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -28,6 +29,7 @@ import com.github.javaparser.ast.type.UnknownType;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedFieldDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodLikeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
@@ -276,6 +278,7 @@ public class Slicer {
 
       if (resolved != null) {
         generateUnsolvedSymbol = handleResolvedObject(node, resolved);
+        preserveAmbiguousConstraintQualifiedCandidates(node);
       } else if (erasure != null) {
         // Deliberately leaves generateUnsolvedSymbol set: this only adds the declaration, and
         // generation for a type whose erasure is already known is a no-op, because
@@ -300,6 +303,42 @@ public class Slicer {
 
     if (unsolvedSymbolGenerator.needToPostProcess(node)) {
       postProcessingWorklist.add(node);
+    }
+  }
+
+  /**
+   * Preserves every declaration that a call whose scope's type is a lambda constraint type could be
+   * referring to, when Specimin could not tell them apart.
+   *
+   * <p>Unlike {@link #preserveAmbiguousMethodRefCandidates}, this runs on a node that <em>did</em>
+   * resolve: {@link JavaParserUtil#tryFindCorrespondingDeclarationForConstraintQualifiedExpression}
+   * must answer with a single declaration, so on an ambiguity it picks one arbitrarily and the rest
+   * would be dropped. If the arbitrary pick is not the overload the call really binds to, the
+   * output does not compile. Preserving all of the candidates is the safe, conservative choice.
+   *
+   * <p>This is a workaround for a larger problem: the typing judgment still comes from the
+   * arbitrary pick. TODO: fix the Resolver API so that it can return multiple candidates in cases
+   * like this one.
+   *
+   * @param node The node that was resolved
+   */
+  private void preserveAmbiguousConstraintQualifiedCandidates(Node node) {
+    if (!(node instanceof MethodCallExpr methodCall) || !methodCall.hasScope()) {
+      return;
+    }
+
+    List<ResolvedMethodDeclaration> candidates =
+        JavaParserUtil.getConstraintQualifiedCallCandidates(methodCall);
+
+    // One candidate is not an ambiguity: it was already preserved as the resolution result.
+    if (candidates.size() < 2) {
+      return;
+    }
+
+    for (ResolvedMethodDeclaration candidate : candidates) {
+      // The return value says whether an unsolved symbol must be generated for the node, which is
+      // decided by the node's own resolution, not by these extra candidates.
+      handleResolvedObject(methodCall, candidate);
     }
   }
 
