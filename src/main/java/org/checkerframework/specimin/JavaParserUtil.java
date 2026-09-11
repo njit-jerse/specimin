@@ -2874,9 +2874,8 @@ public class JavaParserUtil {
         }
 
         // An approximately-applicable candidate is one the argument is not actually assignable to.
-        // javac can only have
-        // selected a method the argument is assignable to, so whenever any candidate is strictly
-        // applicable the approximate ones are noise.
+        // javac can only have selected a method the argument is assignable to, so whenever any
+        // candidate is strictly applicable the approximate ones are noise.
         List<ResolvedMethodDeclaration> candidates =
             strictlyApplicable.isEmpty() ? approximatelyApplicable : strictlyApplicable;
 
