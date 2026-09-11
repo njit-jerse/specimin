@@ -2611,6 +2611,43 @@ public class JavaParserUtil {
    */
   public static @Nullable Object tryFindCorrespondingDeclarationForConstraintQualifiedExpression(
       Expression expression) {
+    return findCorrespondingDeclarationForConstraintQualifiedExpression(expression, null);
+  }
+
+  /**
+   * Returns every declaration that a call whose scope's type is a lambda constraint type could be
+   * referring to, or an empty list if the call does not take that resolution path.
+   *
+   * <p>More than one candidate means Specimin could not tell the overloads apart: a lambda
+   * constraint type carries no usable information (JavaParser reports its bound as a bare,
+   * unbounded type variable), so every same-arity overload is admitted and none is more specific.
+   * {@link #tryFindCorrespondingDeclarationForConstraintQualifiedExpression} still has to answer
+   * with one of them, and its choice is arbitrary; the caller is expected to preserve all of them
+   * so that whichever the call really binds to survives into the output. TODO: this is definitely
+   * a workaround for an API problem here: Resolver#resolve can only return a single answer, but
+   * in this case Specimin can't decide between these candidates! Refactor so that this workaround
+   * isn't necessary.
+   *
+   * @param expression The expression to find the candidates of
+   * @return the candidate declarations
+   */
+  public static List<ResolvedMethodDeclaration> getConstraintQualifiedCallCandidates(
+      Expression expression) {
+    List<ResolvedMethodDeclaration> candidates = new ArrayList<>();
+    findCorrespondingDeclarationForConstraintQualifiedExpression(expression, candidates);
+    return candidates;
+  }
+
+  /**
+   * Implementation of {@link #tryFindCorrespondingDeclarationForConstraintQualifiedExpression} and
+   * {@link #getConstraintQualifiedCallCandidates}.
+   *
+   * @param expression The expression to find the declaration of (method, field)
+   * @param candidatesOut If non-null, every candidate considered is added to this list
+   * @return The resolved object, if it exists; null otherwise
+   */
+  private static @Nullable Object findCorrespondingDeclarationForConstraintQualifiedExpression(
+      Expression expression, @Nullable List<ResolvedMethodDeclaration> candidatesOut) {
     if (!expression.hasScope()) {
       return null;
     }
@@ -2814,7 +2851,10 @@ public class JavaParserUtil {
           && expression.isMethodCallExpr()) {
         List<@Nullable ResolvedType> argumentTypes =
             getArgumentTypesAsResolved(expression.asMethodCallExpr().getArguments());
-        List<ResolvedMethodDeclaration> applicable = new ArrayList<>();
+        substituteArgumentsThatAliasTheScope(
+            expression.asMethodCallExpr(), scope, declaringType, argumentTypes);
+        List<ResolvedMethodDeclaration> strictlyApplicable = new ArrayList<>();
+        List<ResolvedMethodDeclaration> approximatelyApplicable = new ArrayList<>();
 
         for (ResolvedMethodDeclaration potentialMethod :
             getDeclaredMethodsInOrder(declaringType.getTypeDeclaration().get())) {
@@ -2826,12 +2866,33 @@ public class JavaParserUtil {
             continue;
           }
 
-          if (isApplicableTo(potentialMethod, argumentTypes)) {
-            applicable.add(potentialMethod);
+          switch (getApplicability(potentialMethod, argumentTypes)) {
+            case STRICT -> strictlyApplicable.add(potentialMethod);
+            case APPROXIMATE -> approximatelyApplicable.add(potentialMethod);
+            case NONE -> {}
           }
         }
 
-        return getMostSpecific(applicable);
+        // An approximately-applicable candidate is one the argument is not actually assignable to.
+          // javac can only have
+        // selected a method the argument is assignable to, so whenever any candidate is strictly
+        // applicable the approximate ones are noise.
+        List<ResolvedMethodDeclaration> candidates =
+            strictlyApplicable.isEmpty() ? approximatelyApplicable : strictlyApplicable;
+
+        ResolvedMethodDeclaration mostSpecific = getMaximallySpecific(candidates);
+
+        if (mostSpecific != null || candidates.isEmpty()) {
+          return mostSpecific;
+        }
+
+        // No candidate is more specific than every other, so the one chosen below is arbitrary.
+        // A caller that passes a non-null candidatesOut should preserve them all.
+        if (candidatesOut != null) {
+          candidatesOut.addAll(candidates);
+        }
+
+        return candidates.get(0);
       }
     }
 
@@ -2839,43 +2900,140 @@ public class JavaParserUtil {
   }
 
   /**
-   * Checks whether a method is applicable to a call with the given argument types (JLS 15.12.2.2).
-   * {@code method} must have exactly {@code argumentTypes.size()} parameters.
+   * Replaces the type of every argument of {@code methodCall} that denotes the same variable as
+   * {@code scope} with {@code scopeType}, the concrete type that the scope's lambda constraint type
+   * was just resolved to.
+   *
+   * <p>This matters because a lambda constraint type constrains nothing on its own: JavaParser
+   * reports its bound as a bare, unbounded type variable, so {@link
+   * #couldArgumentBeTypeCompatibleWithParameterType} has to accept every reference parameter for
+   * one. An argument that is the very expression whose type this method just worked out is a special
+   * case where a concrete type is available, and supplying it lets an overload whose parameter type
+   * is unrelated to that concrete type be ruled out. The bound itself is no help here: it names a
+   * type variable of the functional interface, which shares its simple name with unrelated type
+   * variables elsewhere in the call. TODO: this is a heuristic; it would be better for Specimin to
+   * model the bounds exactly, so that this special case isn't necessary.
+   *
+   * @param methodCall The call whose arguments to substitute
+   * @param scope The call's scope
+   * @param scopeType The concrete type of the scope
+   * @param argumentTypes The argument types, modified in place
+   */
+  private static void substituteArgumentsThatAliasTheScope(
+      MethodCallExpr methodCall,
+      Expression scope,
+      ResolvedType scopeType,
+      List<@Nullable ResolvedType> argumentTypes) {
+    Node scopeDeclaration = getDeclarationAsAst(scope);
+
+    if (scopeDeclaration == null) {
+      return;
+    }
+
+    for (int i = 0; i < argumentTypes.size(); i++) {
+      ResolvedType argumentType = argumentTypes.get(i);
+
+      // Only a constraint type is worth replacing: any other type is already as precise as
+      // anything this could supply.
+      if (argumentType == null || !argumentType.isConstraint()) {
+        continue;
+      }
+
+      Node argumentDeclaration = getDeclarationAsAst(methodCall.getArgument(i));
+
+      // Reference equality is intentional: two variables of the same name in different scopes have
+      // structurally equal declarations (Node#equals is structural) but are not the same variable.
+      // Extracted into a local variable to minimize suppression scope.
+      @SuppressWarnings({"ReferenceEquality", "not.interned"})
+      boolean isSameVariable = argumentDeclaration == scopeDeclaration;
+
+      if (isSameVariable) {
+        argumentTypes.set(i, scopeType);
+      }
+    }
+  }
+
+  /**
+   * Returns the AST node declaring the variable that an expression names, or null if the expression
+   * does not name a variable or the declaration could not be found.
+   *
+   * @param expression The expression
+   * @return the declaration's AST node, or null
+   */
+  private static @Nullable Node getDeclarationAsAst(Expression expression) {
+    ResolvedValueDeclaration resolved;
+
+    if (expression.isNameExpr()) {
+      resolved = Resolver.resolve(expression.asNameExpr());
+    } else if (expression.isFieldAccessExpr()) {
+      resolved = Resolver.resolve(expression.asFieldAccessExpr());
+    } else {
+      return null;
+    }
+
+    return resolved == null ? null : resolved.toAst().orElse(null);
+  }
+
+  /** How well a method's parameters accept a call's arguments. */
+  private enum Applicability {
+    /** Every argument's type is assignable to its parameter's type (JLS 15.12.2.2). */
+    STRICT,
+    /**
+     * Some argument is accepted only by {@link #couldArgumentBeTypeCompatibleWithParameterType}'s
+     * accommodation for type variables and lambda constraint types, which does not check bounds.
+     */
+    APPROXIMATE,
+    /** Some argument cannot be passed to its parameter at all. */
+    NONE
+  }
+
+  /**
+   * Decides how well a method accepts a call's arguments (JLS 15.12.2.2). {@code method} must have
+   * exactly {@code argumentTypes.size()} parameters.
    *
    * <p>This is the {@link ResolvedMethodDeclaration} counterpart of {@link
    * #isNodeWithParametersACandidate}, which answers the same question about a candidate that
    * Specimin has an AST for; both decide a single parameter with {@link
-   * #couldArgumentBeTypeCompatibleWithParameterType}.
+   * #couldArgumentBeTypeCompatibleWithParameterType}. This one additionally reports whether that
+   * accommodation was needed, so that a caller choosing a single overload can prefer a candidate
+   * that did not need it.
    *
    * <p>An argument whose type could not be resolved, or a parameter whose type is off the source
-   * path, is treated as a mismatch: applicability cannot be established without both types.
+   * path, makes the method inapplicable: applicability cannot be established without both types.
    *
    * @param method The candidate method
    * @param argumentTypes The types of the call's arguments, in order; an element is null when that
    *     argument's type could not be resolved
-   * @return true if the method is applicable to those arguments
+   * @return how well the method accepts those arguments
    */
-  private static boolean isApplicableTo(
+  private static Applicability getApplicability(
       ResolvedMethodDeclaration method, List<@Nullable ResolvedType> argumentTypes) {
+    boolean isStrict = true;
+
     for (int i = 0; i < argumentTypes.size(); i++) {
       ResolvedType argType = argumentTypes.get(i);
 
       if (argType == null) {
-        return false;
+        return Applicability.NONE;
       }
 
       try {
-        if (!couldArgumentBeTypeCompatibleWithParameterType(
-            method.getParam(i).getType(), argType)) {
-          return false;
+        ResolvedType paramType = method.getParam(i).getType();
+
+        if (!paramType.isAssignableBy(argType)) {
+          if (!couldArgumentBeTypeCompatibleWithParameterType(paramType, argType)) {
+            return Applicability.NONE;
+          }
+
+          isStrict = false;
         }
       } catch (UnsolvedSymbolException ex) {
         // getParam().getType() throws when the parameter's type is off the source path.
-        return false;
+        return Applicability.NONE;
       }
     }
 
-    return true;
+    return isStrict ? Applicability.STRICT : Applicability.APPROXIMATE;
   }
 
   /**
@@ -2884,14 +3042,13 @@ public class JavaParserUtil {
    *
    * <p>Specificity is a partial order, so there need not be a maximal element (javac reports such a
    * call as ambiguous, but Specimin's approximate argument types can also produce a set of
-   * candidates that javac never would). In that case this returns the first candidate, which is
-   * arbitrary but reproducible as long as the caller supplies the candidates in a deterministic
-   * order -- see {@link #getDeclaredMethodsInOrder}.
+   * candidates that javac never would). Answering null rather than guessing lets the caller tell
+   * that case apart from a genuine choice, which it cannot do from the returned method alone.
    *
    * @param applicable The applicable methods, all of the same arity, in a deterministic order
-   * @return the most specific of them, or null if there are none
+   * @return the most specific of them, or null if there are none or none is maximal
    */
-  private static @Nullable ResolvedMethodDeclaration getMostSpecific(
+  private static @Nullable ResolvedMethodDeclaration getMaximallySpecific(
       List<ResolvedMethodDeclaration> applicable) {
     for (ResolvedMethodDeclaration candidate : applicable) {
       boolean beatsAll = true;
@@ -2914,7 +3071,7 @@ public class JavaParserUtil {
       }
     }
 
-    return applicable.isEmpty() ? null : applicable.get(0);
+    return null;
   }
 
   /**
