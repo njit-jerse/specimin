@@ -4,16 +4,16 @@ import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
 /**
- * Checks that an overload admitted only by {@code
- * JavaParserUtil#couldArgumentBeTypeCompatibleWithParameterType}'s accommodation loses to one that
- * the argument is genuinely assignable to.
+ * Checks that an overload that Specimin only considers because of over-approximation does not have
+ * precedence over one that the argument is genuinely assignable to.
  *
- * <p>The argument's type here is the type variable {@code T}, so the accommodation admits {@code
- * combine(SqlNode)} even though {@code T} is not a {@code SqlNode}. That candidate then
- * <em>wins</em> on specificity, because {@code SqlNode} is a subtype of {@code Object}: JLS
+ * <p>The argument's type here is the type variable {@code T}, so Specimin's over-approximation
+ * (which accepts any type variable without considering bounds, due to JavaParser limitations)
+ * admits {@code combine(SqlNode)} even though {@code T} is not a {@code SqlNode}. That candidate
+ * then <em>wins</em> on specificity, because {@code SqlNode} is a subtype of {@code Object}: JLS
  * 15.12.2.5 is being applied to a candidate that JLS 15.12.2.2 should have excluded. javac selects
- * {@code combine(Object)}, and preserving {@code combine(SqlNode)} instead leaves the call unable
- * to compile.
+ * {@code combine(Object)}, and preserving {@code combine(SqlNode)} instead would leave the call
+ * unable to compile.
  */
 public class TypeVarArgOverloadTest {
   @Test

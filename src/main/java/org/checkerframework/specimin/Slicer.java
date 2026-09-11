@@ -316,8 +316,9 @@ public class Slicer {
    * would be dropped. If the arbitrary pick is not the overload the call really binds to, the
    * output does not compile. Preserving all of the candidates is the safe, conservative choice.
    *
-   * <p>This is a workaround for a larger problem: the typing judgment still comes from the arbitrary
-   * pick. TODO: fix the Resolver API so that it can return multiple candidates in cases like this one.
+   * <p>This is a workaround for a larger problem: the typing judgment still comes from the
+   * arbitrary pick. TODO: fix the Resolver API so that it can return multiple candidates in cases
+   * like this one.
    *
    * @param node The node that was resolved
    */

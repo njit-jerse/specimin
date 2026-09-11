@@ -7,12 +7,11 @@ import org.junit.jupiter.api.Test;
  * A variant of {@link ConstraintArgOverloadTest} in which the two overloads have <em>unrelated</em>
  * parameter types, so that only one of them is applicable at all.
  *
- * <p>{@code JavaParserUtil#couldArgumentBeTypeCompatibleWithParameterType} accepts any reference
- * parameter for a lambda constraint type, because JavaParser reports such a type's bound as a bare,
- * unbounded type variable that constrains nothing. Both overloads are therefore admitted as
- * applicable; neither is more specific than the other, since their parameter types are unrelated;
- * and the tie is broken by declaration order, which selects {@code combine(Unrelated)}. That drops
- * the only applicable overload from the output, so the call itself does not type-check.
+ * <p>JavaParser reports a lambda constraint's bound as a bare, unbounded type variable, so Specimin
+ * cannot tell which is the right one. So, it has to treat both overloads as applicable; neither is
+ * more specific than the other, since their parameter types are unrelated. This test's package
+ * names are chosen in such a way that an arbitrary choice will favor the unrelated option, leading
+ * to non-compiling output if Specimin doesn't have a fallback.
  */
 public class ConstraintArgUnrelatedOverloadTest {
   @Test

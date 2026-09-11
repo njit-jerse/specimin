@@ -2623,9 +2623,9 @@ public class JavaParserUtil {
    * unbounded type variable), so every same-arity overload is admitted and none is more specific.
    * {@link #tryFindCorrespondingDeclarationForConstraintQualifiedExpression} still has to answer
    * with one of them, and its choice is arbitrary; the caller is expected to preserve all of them
-   * so that whichever the call really binds to survives into the output. TODO: this is definitely
-   * a workaround for an API problem here: Resolver#resolve can only return a single answer, but
-   * in this case Specimin can't decide between these candidates! Refactor so that this workaround
+   * so that whichever the call really binds to survives into the output. TODO: this is definitely a
+   * workaround for an API problem here: Resolver#resolve can only return a single answer, but in
+   * this case Specimin can't decide between these candidates! Refactor so that this workaround
    * isn't necessary.
    *
    * @param expression The expression to find the candidates of
@@ -2874,7 +2874,7 @@ public class JavaParserUtil {
         }
 
         // An approximately-applicable candidate is one the argument is not actually assignable to.
-          // javac can only have
+        // javac can only have
         // selected a method the argument is assignable to, so whenever any candidate is strictly
         // applicable the approximate ones are noise.
         List<ResolvedMethodDeclaration> candidates =
@@ -2907,12 +2907,12 @@ public class JavaParserUtil {
    * <p>This matters because a lambda constraint type constrains nothing on its own: JavaParser
    * reports its bound as a bare, unbounded type variable, so {@link
    * #couldArgumentBeTypeCompatibleWithParameterType} has to accept every reference parameter for
-   * one. An argument that is the very expression whose type this method just worked out is a special
-   * case where a concrete type is available, and supplying it lets an overload whose parameter type
-   * is unrelated to that concrete type be ruled out. The bound itself is no help here: it names a
-   * type variable of the functional interface, which shares its simple name with unrelated type
-   * variables elsewhere in the call. TODO: this is a heuristic; it would be better for Specimin to
-   * model the bounds exactly, so that this special case isn't necessary.
+   * one. An argument that is the very expression whose type this method just worked out is a
+   * special case where a concrete type is available, and supplying it lets an overload whose
+   * parameter type is unrelated to that concrete type be ruled out. The bound itself is no help
+   * here: it names a type variable of the functional interface, which shares its simple name with
+   * unrelated type variables elsewhere in the call. TODO: this is a heuristic; it would be better
+   * for Specimin to model the bounds exactly, so that this special case isn't necessary.
    *
    * @param methodCall The call whose arguments to substitute
    * @param scope The call's scope
