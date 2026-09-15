@@ -40,4 +40,19 @@ public interface ModularityModel {
   default boolean preserveAllFieldsIfTargetIsConstructor() {
     return false;
   }
+
+  /**
+   * Should a blank final field's static initializer block be followed as a dependency, instead of
+   * letting the field fall through to Slicer's "empty final field" repair (which invents a default
+   * value)? The javac/Checker Framework baseline does not observe a difference either way, since
+   * neither one performs the kind of initialization-flow analysis that would notice a field's real
+   * assigned value is missing. NullAway does perform that analysis, so a repaired default can
+   * produce a spurious "field not initialized" warning that the original program never had.
+   *
+   * @return true if a blank final field's assigning static initializer block should be preserved;
+   *     false if the field should be left to Slicer's repair
+   */
+  default boolean preserveStaticInitializerAssignments() {
+    return false;
+  }
 }

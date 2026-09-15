@@ -6,4 +6,9 @@ public class NullAwayModularityModel implements ModularityModel {
   public boolean preserveAllFieldsIfTargetIsConstructor() {
     return true;
   }
+
+  @Override
+  public boolean preserveStaticInitializerAssignments() {
+    return true;
+  }
 }

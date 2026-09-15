@@ -50,6 +50,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.checkerframework.specimin.modularity.ModularityModel;
 
 /** The standard type rule dependency map */
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
@@ -59,6 +60,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    * properly attached to a compilation unit.
    */
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
+
+  /** The modularity model in use, which determines some of the rules below. */
+  private final ModularityModel modularityModel;
 
   /**
    * A map of abstract super methods to their concrete implementations. This addresses cases where
@@ -92,9 +96,12 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    * Creates a new StandardTypeRuleDependencyMap to be passed into Slicer.
    *
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units.
+   * @param modularityModel The modularity model to use.
    */
-  public StandardTypeRuleDependencyMap(Map<String, CompilationUnit> fqnToCompilationUnits) {
+  public StandardTypeRuleDependencyMap(
+      Map<String, CompilationUnit> fqnToCompilationUnits, ModularityModel modularityModel) {
     this.fqnToCompilationUnits = fqnToCompilationUnits;
+    this.modularityModel = modularityModel;
   }
 
   /**
@@ -541,7 +548,18 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       // dependency, the same way any other reachable code is followed, instead of leaving it for
       // Slicer's "empty final field" repair to invent a default value for. That repair still
       // exists as a fallback for a field this loop can't find an assignment for.
-      if (variableDeclarator.getInitializer().isEmpty() && field.isStatic()) {
+      //
+      // Only do this under modularity models that actually observe the difference (see
+      // ModularityModel#preserveStaticInitializerAssignments for why): the javac/Checker Framework
+      // baseline is unaffected either way, since a repaired default is just as compilable as the
+      // real assignment, and only NullAway's initialization-flow analysis can tell them apart.
+      // This is not gated on the field being a --targetField: any reachable read of the field --
+      // whether it's the target itself or just read from within a target method -- needs the same
+      // real value, for the same reason.
+      if (modularityModel.preserveStaticInitializerAssignments()
+          && variableDeclarator.getInitializer().isEmpty()
+          && field.isStatic()
+          && field.isFinal()) {
         for (BodyDeclaration<?> member : type.getMembers()) {
           if (!(member instanceof InitializerDeclaration initializer) || !initializer.isStatic()) {
             continue;
