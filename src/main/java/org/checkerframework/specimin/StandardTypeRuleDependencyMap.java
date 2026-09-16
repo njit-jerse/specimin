@@ -549,10 +549,6 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       // Slicer's "empty final field" repair to invent a default value for. That repair still
       // exists as a fallback for a field this loop can't find an assignment for.
       //
-      // Only do this under modularity models that actually observe the difference (see
-      // ModularityModel#preserveStaticInitializerAssignments for why): the javac/Checker Framework
-      // baseline is unaffected either way, since a repaired default is just as compilable as the
-      // real assignment, and only NullAway's initialization-flow analysis can tell them apart.
       // This is not gated on the field being a --targetField: any reachable read of the field --
       // whether it's the target itself or just read from within a target method -- needs the same
       // real value, for the same reason.
