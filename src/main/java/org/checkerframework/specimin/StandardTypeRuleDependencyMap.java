@@ -64,6 +64,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
   /** The modularity model in use, which determines some of the rules below. */
   private final ModularityModel modularityModel;
 
+  /** Fully-qualified target field names, each formatted as {@code Qualified.Class#fieldName}. */
+  private final Set<String> targetFieldNames;
+
   /**
    * A map of abstract super methods to their concrete implementations. This addresses cases where
    * an abstract method is preserved because it is directly called but its concrete implementations
@@ -97,11 +100,16 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    *
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units.
    * @param modularityModel The modularity model to use.
+   * @param targetFieldNames The fully-qualified names of the target fields, each formatted as
+   *     {@code Qualified.Class#fieldName}.
    */
   public StandardTypeRuleDependencyMap(
-      Map<String, CompilationUnit> fqnToCompilationUnits, ModularityModel modularityModel) {
+      Map<String, CompilationUnit> fqnToCompilationUnits,
+      ModularityModel modularityModel,
+      List<String> targetFieldNames) {
     this.fqnToCompilationUnits = fqnToCompilationUnits;
     this.modularityModel = modularityModel;
+    this.targetFieldNames = new HashSet<>(targetFieldNames);
   }
 
   /**
@@ -549,13 +557,19 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
       // Slicer's "empty final field" repair to invent a default value for. That repair still
       // exists as a fallback for a field this loop can't find an assignment for.
       //
-      // This is not gated on the field being a --targetField: any reachable read of the field --
-      // whether it's the target itself or just read from within a target method -- needs the same
-      // real value, for the same reason.
+      // Gated on the field being a --targetField: a modularity model like NullAway determines a
+      // dereference's nullness from the field's declared type, not its initializer, so a target
+      // method that merely reads this field sees the same result whether the real assignment is
+      // followed or the field falls through to the repair above. The field's own initialization
+      // only matters to Specimin's fidelity guarantee when the field itself is the target.
       if (modularityModel.preserveStaticInitializerAssignments()
           && variableDeclarator.getInitializer().isEmpty()
           && field.isStatic()
-          && field.isFinal()) {
+          && field.isFinal()
+          && targetFieldNames.contains(
+              resolvedFieldDeclaration.declaringType().getQualifiedName()
+                  + "#"
+                  + resolvedFieldDeclaration.getName())) {
         for (BodyDeclaration<?> member : type.getMembers()) {
           if (!(member instanceof InitializerDeclaration initializer) || !initializer.isStatic()) {
             continue;

@@ -300,7 +300,8 @@ public class SpeciminRunner {
         new UnsolvedSymbolGenerator(fqnToCompilationUnits);
     SliceResult sliceResult =
         Slicer.slice(
-            new StandardTypeRuleDependencyMap(fqnToCompilationUnits, modularityModel),
+            new StandardTypeRuleDependencyMap(
+                fqnToCompilationUnits, modularityModel, targetFieldNames),
             worklist,
             unsolvedSymbolGenerator,
             fqnToCompilationUnits,
