@@ -3260,11 +3260,8 @@ public class UnsolvedSymbolGenerator {
 
         Expression initializer = varDecl.getInitializer().get();
 
-        // A field initializer is normally not part of the slice (see
-        // StandardTypeRuleDependencyMap#getRelevantElements), so nothing has generated symbols for
-        // the types it mentions, and pruning is about to replace it with a default value anyway.
-        // Constraining the LHS by an expression that will not appear in the output is at best a
-        // no-op and at worst forces a supertype the output never needs.
+        // A field initializer is normally not part of the slice, so symbols for the types it
+        // mentions aren't generated and pruning is about to replace it with a default value anyway.
         if (!slice.contains(initializer)) {
           return UnsolvedGenerationResult.EMPTY;
         }
