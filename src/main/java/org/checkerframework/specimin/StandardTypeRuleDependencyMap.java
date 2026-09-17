@@ -47,7 +47,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.checkerframework.specimin.modularity.ModularityModel;
 
 /** The standard type rule dependency map */
 public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
@@ -57,9 +56,6 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    * properly attached to a compilation unit.
    */
   private final Map<String, CompilationUnit> fqnToCompilationUnits;
-
-  /** The modularity model in use, which determines some of the rules below. */
-  private final ModularityModel modularityModel;
 
   /**
    * A map of abstract super methods to their concrete implementations. This addresses cases where
@@ -93,12 +89,9 @@ public class StandardTypeRuleDependencyMap implements TypeRuleDependencyMap {
    * Creates a new StandardTypeRuleDependencyMap to be passed into Slicer.
    *
    * @param fqnToCompilationUnits The map of type FQNs to their compilation units.
-   * @param modularityModel The modularity model to use.
    */
-  public StandardTypeRuleDependencyMap(
-      Map<String, CompilationUnit> fqnToCompilationUnits, ModularityModel modularityModel) {
+  public StandardTypeRuleDependencyMap(Map<String, CompilationUnit> fqnToCompilationUnits) {
     this.fqnToCompilationUnits = fqnToCompilationUnits;
-    this.modularityModel = modularityModel;
   }
 
   /**
