@@ -3258,7 +3258,15 @@ public class UnsolvedSymbolGenerator {
           return UnsolvedGenerationResult.EMPTY;
         }
 
-        rhsExpressions = List.of(varDecl.getInitializer().get());
+        Expression initializer = varDecl.getInitializer().get();
+
+        // A field initializer is normally not part of the slice, so symbols for the types it
+        // mentions aren't generated and pruning is about to replace it with a default value anyway.
+        if (!slice.contains(initializer)) {
+          return UnsolvedGenerationResult.EMPTY;
+        }
+
+        rhsExpressions = List.of(initializer);
         MemberType lhsMemberType =
             getMemberTypeFromFQNs(fullyQualifiedNameGenerator.getFQNsFromType(lhs), false);
         lhsType = lhsMemberType == null ? Set.of() : Set.of(lhsMemberType);
