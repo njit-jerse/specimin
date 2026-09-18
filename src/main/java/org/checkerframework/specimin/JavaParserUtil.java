@@ -1893,7 +1893,8 @@ public class JavaParserUtil {
           continue;
         }
 
-        if (!couldArgumentBeTypeCompatibleWithParameterType(resolvedParameterType, typeInCall)) {
+        if (isArgumentTypeCompatibleWithParameterType(resolvedParameterType, typeInCall)
+            == TriBool.FALSE) {
           return false;
         }
       }
@@ -1907,40 +1908,79 @@ public class JavaParserUtil {
   }
 
   /**
-   * Checks whether an argument of a given type could be passed to a parameter of a given type, i.e.
+   * Checks whether an argument of a given type can be passed to a parameter of a given type, i.e.
    * whether the parameter type is assignable by the argument type (JLS 5.3).
    *
-   * <p>This is deliberately more permissive than {@link ResolvedType#isAssignableBy}, which answers
-   * false for a type variable or a lambda constraint type even where the assignment is legal.
-   * Specimin sees both routinely, and treating them as incompatible would discard the real
-   * candidate. The implementation here is conservative in the sense that it preserves compilability
-   * at the possible expense of minimality: it does not check bounds, so it can admit a candidate
-   * that is not truly applicable.
+   * <p>The answer is {@code MAYBE} where {@link ResolvedType#isAssignableBy} cannot be trusted. It
+   * answers false for a type variable or a lambda constraint type even where the assignment is
+   * legal, and Specimin sees both routinely; treating them as incompatible would discard the real
+   * candidate. No bounds are checked in those cases, so a {@code MAYBE} candidate may not truly be
+   * applicable. The answer is also {@code MAYBE} when the argument's type has a supertype that is
+   * not on the source path, unless the supertypes that are on it suffice; see {@link
+   * #isAssignableBy(ResolvedType, ResolvedType)}.
    *
    * @param parameterType The parameter's type
    * @param argumentType The argument's type
-   * @return true if an argument of that type may be passed to a parameter of that type
+   * @return whether an argument of that type can be passed to a parameter of that type
    */
-  public static boolean couldArgumentBeTypeCompatibleWithParameterType(
+  public static TriBool isArgumentTypeCompatibleWithParameterType(
       ResolvedType parameterType, ResolvedType argumentType) {
-    if (parameterType.isAssignableBy(argumentType)) {
-      return true;
+    TriBool assignable = isAssignableBy(parameterType, argumentType);
+
+    if (assignable == TriBool.TRUE) {
+      return TriBool.TRUE;
     }
 
-    // If either is a type variable and the other is a reference type, it is likely valid.
-    if (argumentType.isTypeVariable() && parameterType.isReference()) {
-      return true;
-    }
-    if (parameterType.isTypeVariable() && argumentType.isReference()) {
-      return true;
-    }
-    // JavaParser can't handle constraint types well. This isn't perfect (i.e., doesn't properly
-    // match bounds), but it should work for most cases.
-    if (argumentType.isConstraint() && parameterType.isReference()) {
-      return true;
+    if ((argumentType.isTypeVariable() && parameterType.isReference())
+        || (parameterType.isTypeVariable() && argumentType.isReference())
+        || (argumentType.isConstraint() && parameterType.isReference())) {
+      return TriBool.MAYBE;
     }
 
-    return false;
+    return assignable;
+  }
+
+  /**
+   * A version of {@link ResolvedType#isAssignableBy} that tolerates an incomplete type hierarchy.
+   * JavaParser's version enumerates every ancestor of {@code value}'s type, and so throws an {@link
+   * UnsolvedSymbolException} if any of them is not on the source path, even when a solvable one
+   * already shows that the assignment is legal.
+   *
+   * @param target The type being assigned to
+   * @param value The type of the value being assigned
+   * @return {@code TRUE} or {@code FALSE} if JavaParser can decide, {@code TRUE} if some solvable
+   *     ancestor of {@code value} is assignable to {@code target}, and {@code MAYBE} otherwise
+   */
+  public static TriBool isAssignableBy(ResolvedType target, ResolvedType value) {
+    try {
+      return TriBool.of(target.isAssignableBy(value));
+    } catch (UnsolvedSymbolException ex) {
+      // Some ancestor could not be resolved, so the answer can no longer be FALSE: that ancestor
+      // might be a subtype of target. It is still TRUE if an ancestor that can be resolved is.
+    }
+
+    if (!value.isReferenceType()) {
+      return TriBool.MAYBE;
+    }
+
+    ResolvedReferenceType valueType = value.asReferenceType();
+    ResolvedReferenceTypeDeclaration valueDecl = valueType.getTypeDeclaration().orElse(null);
+
+    if (valueDecl == null) {
+      return TriBool.MAYBE;
+    }
+
+    for (ResolvedReferenceType ancestor : valueDecl.getAncestors(true)) {
+      // Substitute value's type arguments into the ancestor, as ResolvedReferenceType's own
+      // ancestor enumeration does.
+      ResolvedType substituted = valueType.typeParametersMap().replaceAll(ancestor);
+
+      if (isAssignableBy(target, substituted) == TriBool.TRUE) {
+        return TriBool.TRUE;
+      }
+    }
+
+    return TriBool.MAYBE;
   }
 
   /**
@@ -2853,31 +2893,19 @@ public class JavaParserUtil {
             getArgumentTypesAsResolved(expression.asMethodCallExpr().getArguments());
         substituteArgumentsThatAliasTheScope(
             expression.asMethodCallExpr(), scope, declaringType, argumentTypes);
-        List<ResolvedMethodDeclaration> strictlyApplicable = new ArrayList<>();
-        List<ResolvedMethodDeclaration> approximatelyApplicable = new ArrayList<>();
+        List<ResolvedMethodDeclaration> sameNameAndArity =
+            getDeclaredMethodsInOrder(declaringType.getTypeDeclaration().get()).stream()
+                .filter(
+                    m ->
+                        m.getName().equals(expression.asMethodCallExpr().getNameAsString())
+                            && m.getNumberOfParams() == argumentTypes.size())
+                .toList();
 
-        for (ResolvedMethodDeclaration potentialMethod :
-            getDeclaredMethodsInOrder(declaringType.getTypeDeclaration().get())) {
-          if (!potentialMethod.getName().equals(expression.asMethodCallExpr().getNameAsString())) {
-            continue;
-          }
-
-          if (argumentTypes.size() != potentialMethod.getNumberOfParams()) {
-            continue;
-          }
-
-          switch (getApplicability(potentialMethod, argumentTypes)) {
-            case STRICT -> strictlyApplicable.add(potentialMethod);
-            case APPROXIMATE -> approximatelyApplicable.add(potentialMethod);
-            case NONE -> {}
-          }
-        }
-
-        // An approximately-applicable candidate is one the argument is not actually assignable to.
-        // javac can only have selected a method the argument is assignable to, so whenever any
-        // candidate is strictly applicable the approximate ones are noise.
+        // A candidate that is only possibly applicable is one the argument may not actually be
+        // assignable to. javac can only have selected a method the argument is assignable to, so
+        // whenever any candidate is definitely applicable the others are noise.
         List<ResolvedMethodDeclaration> candidates =
-            strictlyApplicable.isEmpty() ? approximatelyApplicable : strictlyApplicable;
+            TriBool.selectTruest(sameNameAndArity, m -> isApplicable(m, argumentTypes)).items();
 
         ResolvedMethodDeclaration mostSpecific = getMaximallySpecific(candidates);
 
@@ -2905,13 +2933,13 @@ public class JavaParserUtil {
    *
    * <p>This matters because a lambda constraint type constrains nothing on its own: JavaParser
    * reports its bound as a bare, unbounded type variable, so {@link
-   * #couldArgumentBeTypeCompatibleWithParameterType} has to accept every reference parameter for
-   * one. An argument that is the very expression whose type this method just worked out is a
-   * special case where a concrete type is available, and supplying it lets an overload whose
-   * parameter type is unrelated to that concrete type be ruled out. The bound itself is no help
-   * here: it names a type variable of the functional interface, which shares its simple name with
-   * unrelated type variables elsewhere in the call. TODO: this is a heuristic; it would be better
-   * for Specimin to model the bounds exactly, so that this special case isn't necessary.
+   * #isArgumentTypeCompatibleWithParameterType} can never rule out a reference parameter for one.
+   * An argument that is the very expression whose type this method just worked out is a special
+   * case where a concrete type is available, and supplying it lets an overload whose parameter type
+   * is unrelated to that concrete type be ruled out. The bound itself is no help here: it names a
+   * type variable of the functional interface, which shares its simple name with unrelated type
+   * variables elsewhere in the call. TODO: this is a heuristic; it would be better for Specimin to
+   * model the bounds exactly, so that this special case isn't necessary.
    *
    * @param methodCall The call whose arguments to substitute
    * @param scope The call's scope
@@ -2973,29 +3001,17 @@ public class JavaParserUtil {
     return resolved == null ? null : resolved.toAst().orElse(null);
   }
 
-  /** How well a method's parameters accept a call's arguments. */
-  private enum Applicability {
-    /** Every argument's type is assignable to its parameter's type (JLS 15.12.2.2). */
-    STRICT,
-    /**
-     * Some argument is accepted only by {@link #couldArgumentBeTypeCompatibleWithParameterType}'s
-     * accommodation for type variables and lambda constraint types, which does not check bounds.
-     */
-    APPROXIMATE,
-    /** Some argument cannot be passed to its parameter at all. */
-    NONE
-  }
-
   /**
-   * Decides how well a method accepts a call's arguments (JLS 15.12.2.2). {@code method} must have
-   * exactly {@code argumentTypes.size()} parameters.
+   * Decides whether a method is applicable to a call's arguments by strict or loose invocation (JLS
+   * 15.12.2.2, 15.12.2.3). {@code method} must have exactly {@code argumentTypes.size()}
+   * parameters.
    *
    * <p>This is the {@link ResolvedMethodDeclaration} counterpart of {@link
    * #isNodeWithParametersACandidate}, which answers the same question about a candidate that
    * Specimin has an AST for; both decide a single parameter with {@link
-   * #couldArgumentBeTypeCompatibleWithParameterType}. This one additionally reports whether that
-   * method's answer was an approximation for any parameter, so that a caller choosing a single
-   * overload can prefer a candidate that did not need it.
+   * #isArgumentTypeCompatibleWithParameterType}. This one additionally distinguishes {@code MAYBE}
+   * from {@code TRUE}, so that a caller choosing a single overload can prefer a candidate that is
+   * definitely applicable.
    *
    * <p>An argument whose type could not be resolved, or a parameter whose type is off the source
    * path, makes the method inapplicable: applicability cannot be established without both types.
@@ -3003,36 +3019,40 @@ public class JavaParserUtil {
    * @param method The candidate method
    * @param argumentTypes The types of the call's arguments, in order; an element is null when that
    *     argument's type could not be resolved
-   * @return how well the method accepts those arguments
+   * @return whether the method is applicable to those arguments
    */
-  private static Applicability getApplicability(
+  private static TriBool isApplicable(
       ResolvedMethodDeclaration method, List<@Nullable ResolvedType> argumentTypes) {
-    boolean isStrict = true;
+    TriBool result = TriBool.TRUE;
 
-    for (int i = 0; i < argumentTypes.size(); i++) {
+    for (int i = 0; i < argumentTypes.size() && result != TriBool.FALSE; i++) {
       ResolvedType argType = argumentTypes.get(i);
+      ResolvedType paramType = getParamTypeOrNull(method, i);
 
-      if (argType == null) {
-        return Applicability.NONE;
+      if (argType == null || paramType == null) {
+        return TriBool.FALSE;
       }
 
-      try {
-        ResolvedType paramType = method.getParam(i).getType();
-
-        if (!paramType.isAssignableBy(argType)) {
-          if (!couldArgumentBeTypeCompatibleWithParameterType(paramType, argType)) {
-            return Applicability.NONE;
-          }
-
-          isStrict = false;
-        }
-      } catch (UnsolvedSymbolException ex) {
-        // getParam().getType() throws when the parameter's type is off the source path.
-        return Applicability.NONE;
-      }
+      result = result.and(isArgumentTypeCompatibleWithParameterType(paramType, argType));
     }
 
-    return isStrict ? Applicability.STRICT : Applicability.APPROXIMATE;
+    return result;
+  }
+
+  /**
+   * Returns the type of a method's parameter, or null if it is off the source path.
+   *
+   * @param method The method
+   * @param i The index of the parameter
+   * @return the parameter's type, or null if it cannot be resolved
+   */
+  private static @Nullable ResolvedType getParamTypeOrNull(
+      ResolvedMethodDeclaration method, int i) {
+    try {
+      return method.getParam(i).getType();
+    } catch (UnsolvedSymbolException ex) {
+      return null;
+    }
   }
 
   /**
@@ -3078,8 +3098,8 @@ public class JavaParserUtil {
    * method}'s parameter types is assignable to the corresponding parameter type of {@code other}.
    * Both methods must have the same number of parameters.
    *
-   * <p>A parameter type that is unsolved makes the answer false, since specificity cannot be
-   * established without it.
+   * <p>The answer is false if JavaParser cannot establish specificity: that is, if a parameter type
+   * is unsolved, or if one of its supertypes is.
    *
    * @param method The method that might be the more specific one
    * @param other The method to compare against
@@ -3093,7 +3113,11 @@ public class JavaParserUtil {
           return false;
         }
       } catch (UnsolvedSymbolException ex) {
-        // getParam().getType() throws when the parameter's type is unsolved.
+        // Deliberately covers both getType() and isAssignableBy(), whose throws both mean that
+        // specificity cannot be established. Answering true on the strength of the solvable
+        // supertypes alone, as isAssignableBy(ResolvedType, ResolvedType) would, could pick one of
+        // several candidates that are only possibly applicable, where answering false makes the
+        // caller keep them all.
         return false;
       }
     }
@@ -3832,16 +3856,6 @@ public class JavaParserUtil {
         typeDecl, methodsThatMustBeImplemented, fqnToCompilationUnits);
   }
 
-  /** How closely a candidate method matched a method that must be implemented. */
-  private enum MethodMatch {
-    /** The two signatures are equal, after substituting away the supertype's type variables. */
-    EXACT,
-    /** The signatures could not be computed, but the approximations of them are equal. */
-    APPROXIMATE,
-    /** The two are different methods. */
-    NONE
-  }
-
   /**
    * Decides whether {@code candidate} is a declaration of {@code mustImplement}, i.e. whether it
    * declares or overrides it.
@@ -3849,10 +3863,10 @@ public class JavaParserUtil {
    * <p>First, it tries an exact comparison via signature, but computing a signature resolves every
    * parameter type, which fails for a method with a parameter whose type is not on the source path.
    * It falls back to {@link #getApproximateSignatureWithTypeVariablesMap}, which may not
-   * distinguish overloads whose parameter types share a simple name. The result is an enum
-   * indicating which comparison succeeded ({@code MethodMatch.EXACT} for the former, {@code
-   * MethodMatch.APPROXIMATE} for the latter), so that callers can decline to act on an approximate
-   * match where a wrong answer would introduce unsoundness.
+   * distinguish overloads whose parameter types share a simple name. The result is {@code TRUE} if
+   * the signatures are equal after substituting away the supertype's type variables, and {@code
+   * MAYBE} if they could not be computed but their approximations are equal, so that callers can
+   * decline to act on an approximate match where a wrong answer would introduce unsoundness.
    *
    * <p>A caller must consider all of a type's declared methods and prefer an exact match, rather
    * than stopping at the first match of either kind: a type may declare both an exact and an
@@ -3864,9 +3878,9 @@ public class JavaParserUtil {
    * @param mustImplement The method that must be implemented
    * @param typeParametersMap The type variables map from {@code mustImplement}'s declaring type to
    *     {@code candidate}'s
-   * @return how the two matched
+   * @return whether {@code candidate} is a declaration of {@code mustImplement}
    */
-  private static MethodMatch matchAgainstMustImplementMethod(
+  private static TriBool matchAgainstMustImplementMethod(
       ResolvedMethodDeclaration candidate,
       ResolvedMethodDeclaration mustImplement,
       List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap) {
@@ -3876,32 +3890,23 @@ public class JavaParserUtil {
               .equals(
                   getSignatureFromResolvedMethodWithTypeVariablesMap(
                       mustImplement, typeParametersMap))
-          ? MethodMatch.EXACT
-          : MethodMatch.NONE;
+          ? TriBool.TRUE
+          : TriBool.FALSE;
     } catch (UnsolvedSymbolException ex) {
       return getApproximateSignature(candidate)
               .equals(getApproximateSignatureWithTypeVariablesMap(mustImplement, typeParametersMap))
-          ? MethodMatch.APPROXIMATE
-          : MethodMatch.NONE;
+          ? TriBool.MAYBE
+          : TriBool.FALSE;
     }
   }
 
   /**
-   * The methods of one type that might be a declaration of some method that must be implemented,
-   * together with how they were matched.
-   *
-   * @param methods the matching methods; empty if nothing matched. An exact match is unique (JLS
-   *     8.4.2 forbids two methods of one type from sharing a signature), so this holds a single
-   *     method whenever {@code kind} is {@code EXACT}
-   * @param kind how the methods were matched
-   */
-  private record MustImplementMatches(List<ResolvedMethodDeclaration> methods, MethodMatch kind) {}
-
-  /**
    * Finds the methods of {@code declaration} that could be a declaration of {@code mustImplement}.
    *
-   * <p>If there is an exact match, it is the only thing returned. Failing that, every approximate
-   * match is returned: the approximation cannot tell two overloads apart (see {@link
+   * <p>This is {@link TriBool#selectTruest} over {@link #matchAgainstMustImplementMethod}, except
+   * that it stops at the first exact match. That is safe because an exact match is unique (JLS
+   * 8.4.2 forbids two methods of one type from sharing a signature). Failing an exact match, every
+   * approximate match is returned: the approximation cannot tell two overloads apart (see {@link
    * #matchAgainstMustImplementMethod}), and preserving all the candidates keeps whichever is the
    * real implementation, at the (minimality) cost of preserving the others too.
    *
@@ -3911,7 +3916,7 @@ public class JavaParserUtil {
    *     {@code declaration}
    * @return the matching methods
    */
-  private static MustImplementMatches findMustImplementMatches(
+  private static TriBool.Selection<ResolvedMethodDeclaration> findMustImplementMatches(
       ResolvedReferenceTypeDeclaration declaration,
       ResolvedMethodDeclaration mustImplement,
       List<Pair<ResolvedTypeParameterDeclaration, ResolvedType>> typeParametersMap) {
@@ -3919,16 +3924,17 @@ public class JavaParserUtil {
 
     for (ResolvedMethodDeclaration candidate : getDeclaredMethodsInOrder(declaration)) {
       switch (matchAgainstMustImplementMethod(candidate, mustImplement, typeParametersMap)) {
-        case EXACT -> {
-          return new MustImplementMatches(List.of(candidate), MethodMatch.EXACT);
+        case TRUE -> {
+          return new TriBool.Selection<>(List.of(candidate), TriBool.TRUE);
         }
-        case APPROXIMATE -> approximate.add(candidate);
-        case NONE -> {}
+        case MAYBE -> approximate.add(candidate);
+        case FALSE -> {}
       }
     }
 
-    return new MustImplementMatches(
-        approximate, approximate.isEmpty() ? MethodMatch.NONE : MethodMatch.APPROXIMATE);
+    return approximate.isEmpty()
+        ? TriBool.Selection.empty()
+        : new TriBool.Selection<>(approximate, TriBool.MAYBE);
   }
 
   /**
@@ -4075,7 +4081,7 @@ public class JavaParserUtil {
             continue;
           }
 
-          MustImplementMatches matches =
+          TriBool.Selection<ResolvedMethodDeclaration> matches =
               findMustImplementMatches(declaration, resolvedMethodDecl, typeParametersMap);
 
           // Set only once all of the matches have been considered, so that the result does not
@@ -4085,7 +4091,7 @@ public class JavaParserUtil {
           boolean matchedInJdk = false;
           boolean everyJdkMatchIsConcrete = true;
 
-          for (ResolvedMethodDeclaration resolvedMethod : matches.methods()) {
+          for (ResolvedMethodDeclaration resolvedMethod : matches.items()) {
             MethodDeclaration methodDecl =
                 (MethodDeclaration) tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
 
@@ -4112,7 +4118,7 @@ public class JavaParserUtil {
             // costs a missing declaration in the output, while wrongly keeping the obligation
             // costs only a redundant one. Both signatures are computable here, because an exact
             // match means both were just computed.
-            if (matches.kind() == MethodMatch.EXACT
+            if (matches.value() == TriBool.TRUE
                 && !resolvedMethod
                     .getQualifiedSignature()
                     .equals(resolvedMethodDecl.getQualifiedSignature())) {
@@ -4176,7 +4182,7 @@ public class JavaParserUtil {
                 typeParametersMap =
                     composeTypeParameterMap(type.getTypeParametersMap(), typeParametersMap);
 
-                MustImplementMatches matches =
+                TriBool.Selection<ResolvedMethodDeclaration> matches =
                     findMustImplementMatches(
                         path.get(i).getTypeDeclaration().get(),
                         resolvedMethodDecl,
@@ -4186,7 +4192,7 @@ public class JavaParserUtil {
                 boolean matchedInJdk = false;
                 boolean everyJdkMatchIsConcrete = true;
 
-                for (ResolvedMethodDeclaration resolvedMethod : matches.methods()) {
+                for (ResolvedMethodDeclaration resolvedMethod : matches.items()) {
                   MethodDeclaration methodDecl =
                       (MethodDeclaration)
                           tryFindAttachedNode(resolvedMethod, fqnToCompilationUnits);
@@ -4210,7 +4216,7 @@ public class JavaParserUtil {
 
                   // See the identical condition in the loop above for why an approximate match
                   // may not discharge the obligation.
-                  if (matches.kind() == MethodMatch.EXACT
+                  if (matches.value() == TriBool.TRUE
                       && resolvedMethod.isAbstract()
                       && !resolvedMethod
                           .getQualifiedSignature()
