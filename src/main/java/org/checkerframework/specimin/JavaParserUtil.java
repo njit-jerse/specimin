@@ -35,6 +35,7 @@ import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.expr.TypePatternExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.nodeTypes.NodeWithDeclaration;
@@ -595,6 +596,10 @@ public class JavaParserUtil {
       return param.getType();
     } else if (attached instanceof AnnotationMemberDeclaration annoMemberDecl) {
       return annoMemberDecl.getType();
+    } else if (attached instanceof TypePatternExpr pattern) {
+      // A pattern variable's declared type is the pattern's type (JLS 14.30.1).
+      // TODO: handle `var` in a record pattern here once Specimin can parse Java 21.
+      return pattern.getType();
     }
 
     return null;
