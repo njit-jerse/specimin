@@ -29,4 +29,23 @@ public class NoJavaParserResolveTest {
                         "}")
                 .doTest();
     }
+
+    // TypeDeclaration declares its own resolve() without implementing Resolvable; only its concrete
+    // subclasses do.
+    @Test
+    public void flagsResolveCallOnTypeDeclaration() {
+        compilationHelper
+                .addSourceLines(
+                        "Test.java",
+                        "import com.github.javaparser.ast.body.TypeDeclaration;",
+                        "class Test {",
+                        "  void foo(TypeDeclaration<?> type) {",
+                        "    // BUG: Diagnostic contains: NoJavaParserResolve",
+                        "    type.resolve();",
+                        "    // BUG: Diagnostic contains: NoJavaParserResolve",
+                        "    java.util.function.Supplier<?> f = type::resolve;",
+                        "  }",
+                        "}")
+                .doTest();
+    }
 }

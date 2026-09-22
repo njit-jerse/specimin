@@ -360,11 +360,13 @@ public class Slicer {
       for (String fqn : target.erasedFqns()) {
         TypeDeclaration<?> type =
             JavaParserUtil.getTypeFromQualifiedName(fqn, fqnToCompilationUnits);
-        if (type == null) {
+        if (type == null
+            || !(Resolver.resolve((Resolvable<?>) type)
+                instanceof ResolvedReferenceTypeDeclaration resolvedType)) {
           continue;
         }
         ResolvedMethodDeclaration functionalMethod =
-            JavaParserUtil.getFunctionalMethod(type.resolve());
+            JavaParserUtil.getFunctionalMethod(resolvedType);
         if (functionalMethod != null) {
           result.add(functionalMethod);
         }

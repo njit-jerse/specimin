@@ -3828,6 +3828,11 @@ public class JavaParserUtil {
    */
   public static @Nullable ResolvedMethodDeclaration getFunctionalMethod(
       ResolvedReferenceTypeDeclaration type) {
+    // FunctionalInterfaceLogic does not check this itself: given an abstract class with a single
+    // abstract method, it returns that method.
+    if (!type.isInterface()) {
+      return null;
+    }
     Optional<MethodUsage> functionalMethod;
     try {
       functionalMethod = FunctionalInterfaceLogic.getFunctionalMethod(type);
