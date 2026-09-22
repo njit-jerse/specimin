@@ -471,9 +471,43 @@ public class JavaParserUtil {
   }
 
   /**
+   * Returns the scope of the given field access or method call if that scope is a qualified type
+   * name, such as {@code Outer.Inner} in {@code Outer.Inner.FIELD}, or null otherwise. The scope is
+   * returned as written, which is not necessarily fully qualified: {@code Outer} may be a simple
+   * type name brought into scope by an import or by the enclosing package.
+   *
+   * @param expr the field access or method call
+   * @return the scope if it is a qualified type name, or null
+   */
+  public static @Nullable FieldAccessExpr getQualifiedTypeNameScope(Expression expr) {
+    Expression scope;
+    if (expr.isFieldAccessExpr()) {
+      scope = expr.asFieldAccessExpr().getScope();
+    } else if (expr.isMethodCallExpr() && expr.asMethodCallExpr().hasScope()) {
+      scope = expr.asMethodCallExpr().getScope().get();
+    } else {
+      return null;
+    }
+
+    if (!scope.isFieldAccessExpr()) {
+      return null;
+    }
+
+    FieldAccessExpr qualifiedScope = scope.asFieldAccessExpr();
+    return isAClassPath(qualifiedScope.toString()) || isAQualifiedTypeName(qualifiedScope)
+        ? qualifiedScope
+        : null;
+  }
+
+  /**
    * Returns the FQN if the expression is a reference to a static method or field or null if it
    * isn't one. This method is intended to be used with unsolvable expressions, with which it should
    * always return the correct result.
+   *
+   * <p>If the member's scope is a qualified type name (see {@link
+   * #getQualifiedTypeNameScope(Expression)}), the result is the name as written, and it is fully
+   * qualified only if the source wrote it that way. Callers that need the real FQN must resolve the
+   * scope themselves.
    *
    * @param expr The expression
    * @return The FQN if it is a static member, empty otherwise
@@ -512,7 +546,7 @@ public class JavaParserUtil {
         nameOfScope = scope.asNameExpr().getNameAsString();
       } else if (scope.isFieldAccessExpr()) {
         nameOfScope = scope.asFieldAccessExpr().toString();
-        if (isAClassPath(nameOfScope) || isAQualifiedTypeName(scope.asFieldAccessExpr())) {
+        if (getQualifiedTypeNameScope(expr) != null) {
           return nameOfScope + "." + nameOfExpr;
         }
       } else {
