@@ -70,6 +70,7 @@ import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclar
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration.Bound;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.logic.FunctionalInterfaceLogic;
 import com.github.javaparser.resolution.model.SymbolReference;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -3736,6 +3737,49 @@ public class JavaParserUtil {
     return variable == null
         ? null
         : getTypeFromResolvedValueDeclaration(variable, fqnToCompilationUnits);
+  }
+
+  /**
+   * Returns the declaration of the abstract method of the functional interface that a lambda or
+   * method reference targets, i.e. the method whose function type decides whether the lambda or
+   * reference is compatible with its context (JLS 15.27.3, 15.13.2).
+   *
+   * <p>JavaParser computes the target type of a method reference in any context, but that of a
+   * lambda only when the lambda is a variable initializer, the right-hand side of an assignment, or
+   * a method or constructor argument.
+   *
+   * @param expr A lambda or method reference
+   * @return The target's functional method, or null if the target type or its functional method
+   *     cannot be determined
+   */
+  public static @Nullable ResolvedMethodDeclaration getTargetFunctionalMethod(Expression expr) {
+    ResolvedType target = Resolver.calculateResolvedType(expr);
+    if (target == null
+        || !target.isReferenceType()
+        || target.asReferenceType().getTypeDeclaration().isEmpty()) {
+      return null;
+    }
+    return getFunctionalMethod(target.asReferenceType().getTypeDeclaration().get());
+  }
+
+  /**
+   * Returns the declaration of the single abstract method of a functional interface. The method may
+   * be declared in a superinterface (JLS 9.8).
+   *
+   * @param type A type declaration
+   * @return The functional method, or null if the type is not a functional interface or its
+   *     functional method cannot be determined
+   */
+  public static @Nullable ResolvedMethodDeclaration getFunctionalMethod(
+      ResolvedReferenceTypeDeclaration type) {
+    Optional<MethodUsage> functionalMethod;
+    try {
+      functionalMethod = FunctionalInterfaceLogic.getFunctionalMethod(type);
+    } catch (UnsolvedSymbolException ex) {
+      // Finding the functional method enumerates every method of every superinterface.
+      return null;
+    }
+    return functionalMethod.isPresent() ? functionalMethod.get().getDeclaration() : null;
   }
 
   /**

@@ -2088,7 +2088,7 @@ public class FullyQualifiedNameGenerator {
    * @param expr The expression
    * @return A set of FQNs, or null if unfound
    */
-  private @Nullable Set<FullyQualifiedNameSet> getFQNsFromSurroundingContextType(Expression expr) {
+  public @Nullable Set<FullyQualifiedNameSet> getFQNsFromSurroundingContextType(Expression expr) {
     // An annotation element value must be assignment-compatible with the element's declared type
     // (JLS 9.7.1). This is checked before the parent-kind dispatch below because the relevant
     // parent is one of three shapes -- a SingleMemberAnnotationExpr, a MemberValuePair, or an
