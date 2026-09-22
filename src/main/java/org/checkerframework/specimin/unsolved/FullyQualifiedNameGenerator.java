@@ -2280,6 +2280,16 @@ public class FullyQualifiedNameGenerator {
           other = conditionalExpr.getThenExpr();
         }
 
+        if (other.isNullLiteralExpr()) {
+          // The null type says nothing about this branch, but the conditional's own context does:
+          // in an assignment or invocation context each branch must be compatible with the target
+          // type (JLS 15.25.3), and otherwise the conditional's type is lub(this branch, null),
+          // i.e. this branch's own type.
+          return conditionalExpr.hasParentNode()
+              ? getFQNsFromSurroundingContextType(conditionalExpr)
+              : null;
+        }
+
         if (isExpressionNotInProgress(other)) {
           return getFQNsForExpressionType(other);
         }
