@@ -333,12 +333,12 @@ public class Slicer {
 
   /**
    * Returns the functional methods that the target type of a lambda or method reference could have,
-   * for {@link #preserveTargetFunctionalMethod}. JavaParser cannot type a lambda in every context,
-   * so this falls back to the target types that the surrounding context names. Only targets on the
-   * source path are considered: they are the only ones this method's caller preserves. More than
-   * one functional method is returned only when the context is ambiguous, and preserving all of
-   * them is a safe over-approximation, since each is an unmodified abstract method of an interface
-   * that is in the slice anyway.
+   * for {@link #preserveTargetFunctionalMethod}. JavaParser cannot compute that target type in
+   * every context, so this falls back to the target types that the surrounding context names. Only
+   * targets on the source path are considered: they are the only ones this method's caller
+   * preserves. More than one functional method is returned only when the context is ambiguous, and
+   * preserving all of them is a safe over-approximation, since each is an unmodified abstract
+   * method of an interface that is in the slice anyway.
    *
    * @param expr A lambda or method reference
    * @return The possible functional methods of the target type
