@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaLangUtils;
 import org.checkerframework.specimin.JavaParserUtil;
@@ -105,14 +106,18 @@ public class SpeciminGenerationUtils {
    * expression, so no typing judgment about the target can depend on which commensurate value is
    * chosen.
    *
-   * <p>A value is produced only for the element types that can be defaulted from the type alone:
-   * primitives, {@code String}, an unbounded or raw {@code Class}, and any array type. Null is
-   * returned otherwise.
+   * <p>The element types that can be defaulted from the type alone are handled here: primitives,
+   * {@code String}, an unbounded or raw {@code Class}, and any array type. Any other element type
+   * is deferred to {@code syntheticTypeDefaults}, since naming a value of it depends on the members
+   * of another generated type.
    *
    * @param elementType the element's type
+   * @param syntheticTypeDefaults returns a value commensurate with a generated type, or null if it
+   *     cannot name one
    * @return a value commensurate with that type, or null if none can be named
    */
-  public static @Nullable String getAnnotationElementDefaultValue(MemberType elementType) {
+  public static @Nullable String getAnnotationElementDefaultValue(
+      MemberType elementType, Function<MemberType, @Nullable String> syntheticTypeDefaults) {
     String asWritten = elementType.toString();
 
     if (asWritten.endsWith("[]")) {
@@ -137,10 +142,10 @@ public class SpeciminGenerationUtils {
       return "java.lang.Object.class";
     }
 
-    // TODO: handle bounded Class types (e.g., Class<? extends Number>), enums, and annotations.
-    // Right now, all three of these forms result in failed compilations.
+    // TODO: handle bounded Class types (e.g., Class<? extends Number>), annotation types, and
+    // solved enum types. Right now, all three of these forms result in failed compilations.
 
-    return null;
+    return syntheticTypeDefaults.apply(elementType);
   }
 
   /**

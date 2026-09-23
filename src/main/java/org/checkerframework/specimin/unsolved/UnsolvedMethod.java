@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 
@@ -171,8 +172,10 @@ public class UnsolvedMethod extends UnsolvedCallable {
   }
 
   @Override
-  protected @Nullable String annotationElementDefaultValue() {
-    return SpeciminGenerationUtils.getAnnotationElementDefaultValue(returnType);
+  protected @Nullable String annotationElementDefaultValue(
+      Function<MemberType, @Nullable String> syntheticTypeDefaults) {
+    return SpeciminGenerationUtils.getAnnotationElementDefaultValue(
+        returnType, syntheticTypeDefaults);
   }
 
   @Override
