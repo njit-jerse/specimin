@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
@@ -210,7 +211,11 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
   @Override
   public String toString() {
     return toString(
-        Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), false);
+        Collections.emptyList(),
+        Collections.emptyList(),
+        Collections.emptyList(),
+        false,
+        elementType -> null);
   }
 
   /**
@@ -220,13 +225,16 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
    * @param fields the fields of the class
    * @param innerClassDefinitions the inner classes of the class
    * @param isInnerClass whether this class is an inner class
+   * @param syntheticTypeDefaults returns a value commensurate with a generated type, or null if it
+   *     cannot name one; see {@link SpeciminGenerationUtils#getAnnotationElementDefaultValue}
    * @return the content of the class
    */
   public String toString(
       Collection<UnsolvedCallable> methods,
       Collection<UnsolvedField> fields,
       Collection<String> innerClassDefinitions,
-      boolean isInnerClass) {
+      boolean isInnerClass,
+      Function<MemberType, @Nullable String> syntheticTypeDefaults) {
     StringBuilder sb = new StringBuilder();
     if (!isInnerClass) {
       sb.append("package ").append(packageName).append(";\n");
@@ -327,7 +335,7 @@ public class UnsolvedClassOrInterface extends UnsolvedSymbolAlternate
       }
     }
     for (UnsolvedCallable method : methods) {
-      sb.append(method.toString(typeOfType, className));
+      sb.append(method.toString(typeOfType, className, syntheticTypeDefaults));
     }
     sb.append("}\n");
     return sb.toString();
