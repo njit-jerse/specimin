@@ -749,6 +749,27 @@ public class FullyQualifiedNameGenerator {
     // super. It could also be a static member, either statically imported, a static member
     // of an imported class, or a static member of a class in the same package.
     String fqnOfStaticMember = JavaParserUtil.getFQNIfStaticMember(expr);
+    FieldAccessExpr qualifiedTypeScope = JavaParserUtil.getQualifiedTypeNameScope(expr);
+    if (fqnOfStaticMember != null && qualifiedTypeScope != null) {
+      // The scope is written as it appears in the source, e.g. Outer.Inner with Outer imported, so
+      // qualify it the same way as when generating the scope's own class. Otherwise Outer would be
+      // mistaken for a package, and inside the generated class Outer that name denotes the class,
+      // not the package (JLS 6.4.2).
+      String scopeFQN =
+          getFQNsForExpressionType(qualifiedTypeScope)
+              .iterator()
+              .next()
+              .erasedFqns()
+              .iterator()
+              .next();
+      String memberName =
+          expr.isMethodCallExpr()
+              ? expr.asMethodCallExpr().getNameAsString()
+              : expr.asFieldAccessExpr().getNameAsString();
+      return Set.of(
+          generateFQNForTheTypeOfAStaticallyImportedMember(
+              scopeFQN + "." + memberName, expr.isMethodCallExpr()));
+    }
     if (fqnOfStaticMember != null) {
       return Set.of(
           generateFQNForTheTypeOfAStaticallyImportedMember(
@@ -2288,6 +2309,16 @@ public class FullyQualifiedNameGenerator {
           other = conditionalExpr.getElseExpr();
         } else {
           other = conditionalExpr.getThenExpr();
+        }
+
+        if (other.isNullLiteralExpr()) {
+          // The null type says nothing about this branch, but the conditional's own context does:
+          // in an assignment or invocation context each branch must be compatible with the target
+          // type (JLS 15.25.3), and otherwise the conditional's type is lub(this branch, null),
+          // i.e. this branch's own type.
+          return conditionalExpr.hasParentNode()
+              ? getFQNsFromSurroundingContextType(conditionalExpr)
+              : null;
         }
 
         if (isExpressionNotInProgress(other)) {

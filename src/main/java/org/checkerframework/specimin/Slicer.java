@@ -192,7 +192,7 @@ public class Slicer {
       handleElement(element);
     }
 
-    generatedSymbolSlice.addAll(unsolvedSymbolGenerator.clearMethodsWithNull());
+    generatedSymbolSlice.addAll(unsolvedSymbolGenerator.replaceNullTypesWithObject());
 
     if (!generatedSymbolSlice.isEmpty()) {
       // Step 2: Add more information to generated symbols based on context

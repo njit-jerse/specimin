@@ -2900,20 +2900,45 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
-   * Replaces all methods with null in their signature to use java.lang.Object instead, and returns
-   * the updated methods.
+   * Replaces the null type with {@code java.lang.Object} wherever it is still the type of a
+   * generated method's parameter or return value, or of a generated field, and returns the methods
+   * whose parameters changed.
    *
-   * @return The updated methods.
+   * <p>Specimin infers the null type for a member when its only use site is the {@code null}
+   * literal: passed as an argument, or compared with the member via {@code ==} or {@code !=}. The
+   * null type has no name (JLS 4.1), so it can never be written out, but it stays in place during
+   * generation because a later use site may still supply the real type; for parameters, {@link
+   * #methodsWithNullInSignature} is how a later call replaces the whole method. Every such use site
+   * is satisfied by any reference type (JLS 5.2, 15.21.3), and {@code java.lang.Object} is the one
+   * {@link #collapseMemberlessPlaceholderReturnTypes} would reduce a placeholder carrying no other
+   * requirement to.
+   *
+   * <p>Call this once every unsolved symbol has been generated, and before {@link #addInformation}:
+   * its method lookups compute signatures with {@code java.lang.Object} for a {@code null}
+   * argument, so they only find a method whose parameters have already been replaced.
+   *
+   * @return the methods whose parameter types changed, which have been re-keyed in the generated
+   *     symbols map because their signatures changed
    */
-  public Set<UnsolvedMethodAlternates> clearMethodsWithNull() {
+  public Set<UnsolvedMethodAlternates> replaceNullTypesWithObject() {
+    MemberType nullType = new SolvedMemberType("null");
+
     for (UnsolvedMethodAlternates unsolvedMethodAlternates : methodsWithNullInSignature) {
       for (UnsolvedMethod alternate : unsolvedMethodAlternates.getAlternates()) {
-        alternate.replaceParameterType(
-            new SolvedMemberType("null"), SolvedMemberType.JAVA_LANG_OBJECT);
+        alternate.replaceParameterType(nullType, SolvedMemberType.JAVA_LANG_OBJECT);
       }
 
       removeSymbolFromGeneratedSymbolsMap(unsolvedMethodAlternates);
       addNewSymbolToGeneratedSymbolsMap(unsolvedMethodAlternates);
+    }
+
+    // Return and field types are not part of a symbol's key, so no re-keying is needed for them.
+    for (UnsolvedSymbolAlternates<?> symbol : generatedSymbols.values()) {
+      if (symbol instanceof UnsolvedMethodAlternates method) {
+        method.replaceReturnType(nullType, SolvedMemberType.JAVA_LANG_OBJECT);
+      } else if (symbol instanceof UnsolvedFieldAlternates field) {
+        field.replaceFieldType(nullType, SolvedMemberType.JAVA_LANG_OBJECT);
+      }
     }
 
     Set<UnsolvedMethodAlternates> result = Set.copyOf(methodsWithNullInSignature);
