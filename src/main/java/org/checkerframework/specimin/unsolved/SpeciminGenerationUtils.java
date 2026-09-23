@@ -123,6 +123,11 @@ public class SpeciminGenerationUtils {
     if (asWritten.endsWith("[]")) {
       return "{}";
     }
+    
+    String syntheticDefault = syntheticTypeDefaults.apply(elementType);
+    if (syntheticDefault != null) {
+      return syntheticDefault;
+    }
 
     Set<String> fqns = elementType.getFullyQualifiedNames();
 
@@ -145,7 +150,7 @@ public class SpeciminGenerationUtils {
     // TODO: handle bounded Class types (e.g., Class<? extends Number>), annotation types, and
     // solved enum types. Right now, all three of these forms result in failed compilations.
 
-    return syntheticTypeDefaults.apply(elementType);
+    return null;
   }
 
   /**
