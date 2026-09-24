@@ -1623,8 +1623,6 @@ public class JavaParserUtil {
    */
   private static List<MethodDeclaration> tryResolveMethodCallWithUnresolvableArguments(
       MethodCallExpr methodCall, Map<String, CompilationUnit> fqnToCompilationUnits) {
-    boolean isSuperOnly = false;
-
     ObjectCreationExpr enclosingAnonymousClass = getEnclosingAnonymousClassIfExists(methodCall);
 
     List<TypeDeclaration<?>> enclosingClass = new ArrayList<>();
@@ -1644,10 +1642,9 @@ public class JavaParserUtil {
     if (methodCall.hasScope()) {
       Expression scope = methodCall.getScope().get();
 
-      if (scope.isSuperExpr()) {
-        isSuperOnly = true;
-      }
-
+      // For a super scope, this is already the type that JLS 15.12.1 says to search (e.g., the
+      // superclass), so unlike in the explicit constructor invocation case, the type itself must
+      // be searched along with its ancestors.
       ResolvedType scopeType = Resolver.calculateResolvedType(scope);
 
       if (scopeType != null) {
@@ -1705,14 +1702,12 @@ public class JavaParserUtil {
 
     List<MethodDeclaration> candidates = new ArrayList<>();
     for (TypeDeclaration<?> typeDecl : enclosingClass) {
-      if (!isSuperOnly) {
-        addAllMatchingCallablesToList(
-            typeDecl,
-            parameterTypes,
-            candidates,
-            methodCall.getNameAsString(),
-            MethodDeclaration.class);
-      }
+      addAllMatchingCallablesToList(
+          typeDecl,
+          parameterTypes,
+          candidates,
+          methodCall.getNameAsString(),
+          MethodDeclaration.class);
 
       for (TypeDeclaration<?> ancestor : getAllSolvableAncestors(typeDecl, fqnToCompilationUnits)) {
         addAllMatchingCallablesToList(
