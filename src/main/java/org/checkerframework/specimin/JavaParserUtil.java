@@ -1700,22 +1700,32 @@ public class JavaParserUtil {
     List<@Nullable ResolvedType> parameterTypes =
         getArgumentTypesAsResolved(methodCall.getArguments());
 
+    // The types in enclosingClass can overlap, e.g. an anonymous class's supertype is also the type
+    // of super inside it, as can their ancestors. Searching a type twice would list each of its
+    // methods twice, which tryFindSingleCallableForNodeWithUnresolvableArguments would mistake for
+    // an ambiguous overload. Identity suffices because every declaration here comes from
+    // fqnToCompilationUnits, and it avoids Node#equals, which is structural.
+    Set<TypeDeclaration<?>> searched = Collections.newSetFromMap(new IdentityHashMap<>());
     List<MethodDeclaration> candidates = new ArrayList<>();
     for (TypeDeclaration<?> typeDecl : enclosingClass) {
-      addAllMatchingCallablesToList(
-          typeDecl,
-          parameterTypes,
-          candidates,
-          methodCall.getNameAsString(),
-          MethodDeclaration.class);
-
-      for (TypeDeclaration<?> ancestor : getAllSolvableAncestors(typeDecl, fqnToCompilationUnits)) {
+      if (searched.add(typeDecl)) {
         addAllMatchingCallablesToList(
-            ancestor,
+            typeDecl,
             parameterTypes,
             candidates,
             methodCall.getNameAsString(),
             MethodDeclaration.class);
+      }
+
+      for (TypeDeclaration<?> ancestor : getAllSolvableAncestors(typeDecl, fqnToCompilationUnits)) {
+        if (searched.add(ancestor)) {
+          addAllMatchingCallablesToList(
+              ancestor,
+              parameterTypes,
+              candidates,
+              methodCall.getNameAsString(),
+              MethodDeclaration.class);
+        }
       }
     }
 
