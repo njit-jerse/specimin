@@ -1933,7 +1933,16 @@ public class JavaParserUtil {
           // getType() may throw an UnsolvedSymbolException
         }
 
-        if (typeInCall == null || isParamTypeUnsolved || resolvedParameterType == null) {
+        if (typeInCall == null) {
+          continue;
+        }
+
+        if (isParamTypeUnsolved || resolvedParameterType == null) {
+          if (isArgumentTypeCompatibleWithUnsolvableParameterType(
+                  candidate.getParameter(i).getType(), typeInCall)
+              == TriBool.FALSE) {
+            return false;
+          }
           continue;
         }
 
@@ -1948,6 +1957,95 @@ public class JavaParserUtil {
       }
     }
 
+    return true;
+  }
+
+  /**
+   * Checks whether an argument of a given type can be passed to a parameter whose type cannot be
+   * resolved. The answer is {@code FALSE} only when the parameter's type is a bare class or
+   * interface name and every supertype of the argument's type is known: subtyping between class and
+   * interface types is declared (JLS 4.10.2), so a type that is not among those supertypes is not a
+   * widening reference conversion target (JLS 5.3). A parameter type with type arguments does not
+   * qualify, because raw types (JLS 5.1.9) and wildcards (JLS 4.5.1) can make an argument
+   * compatible without naming the unresolvable type among its supertypes.
+   *
+   * @param parameterType The declared type of the parameter, which cannot be resolved
+   * @param argumentType The argument's type
+   * @return {@code FALSE} if the argument definitely cannot be passed, {@code MAYBE} otherwise
+   */
+  private static TriBool isArgumentTypeCompatibleWithUnsolvableParameterType(
+      Type parameterType, ResolvedType argumentType) {
+    if (!parameterType.isClassOrInterfaceType()
+        || parameterType
+            .findFirst(ClassOrInterfaceType.class, t -> t.getTypeArguments().isPresent())
+            .isPresent()) {
+      return TriBool.MAYBE;
+    }
+
+    return hasOnlySupertypesNotNamed(
+            argumentType, parameterType.asClassOrInterfaceType().getNameAsString())
+        ? TriBool.FALSE
+        : TriBool.MAYBE;
+  }
+
+  /**
+   * Returns true if every supertype of a type can be resolved and none has the given simple name.
+   * The name check guards against JavaParser failing to resolve a name that does denote one of
+   * those supertypes.
+   *
+   * @param type A type
+   * @param simpleName The simple name that no supertype may have
+   * @return true if all supertypes of {@code type} are known and none is named {@code simpleName}
+   */
+  private static boolean hasOnlySupertypesNotNamed(ResolvedType type, String simpleName) {
+    if (type.isTypeVariable()) {
+      // A type variable's direct supertypes are its bounds (JLS 4.10.2).
+      List<Bound> bounds;
+      try {
+        bounds = type.asTypeParameter().getBounds();
+      } catch (UnsolvedSymbolException ex) {
+        return false;
+      }
+      for (Bound bound : bounds) {
+        ResolvedType boundType;
+        try {
+          boundType = bound.getType();
+        } catch (UnsolvedSymbolException ex) {
+          return false;
+        }
+        if (!hasOnlySupertypesNotNamed(boundType, simpleName)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (!type.isReferenceType()) {
+      return false;
+    }
+
+    ResolvedReferenceTypeDeclaration decl =
+        type.asReferenceType().getTypeDeclaration().orElse(null);
+    if (decl == null) {
+      return false;
+    }
+
+    List<ResolvedReferenceType> ancestors;
+    try {
+      ancestors = decl.getAllAncestors();
+    } catch (UnsolvedSymbolException ex) {
+      return false;
+    }
+
+    if (decl.getName().equals(simpleName)) {
+      return false;
+    }
+    for (ResolvedReferenceType ancestor : ancestors) {
+      ResolvedReferenceTypeDeclaration ancestorDecl = ancestor.getTypeDeclaration().orElse(null);
+      if (ancestorDecl == null || ancestorDecl.getName().equals(simpleName)) {
+        return false;
+      }
+    }
     return true;
   }
 
