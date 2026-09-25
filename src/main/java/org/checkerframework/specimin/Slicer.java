@@ -18,6 +18,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
@@ -46,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.specimin.unsolved.FullyQualifiedNameSet;
 import org.checkerframework.specimin.unsolved.UnsolvedGenerationResult;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolAlternates;
 import org.checkerframework.specimin.unsolved.UnsolvedSymbolGenerator;
@@ -298,12 +300,79 @@ public class Slicer {
       }
     }
 
+    if (node instanceof LambdaExpr || node instanceof MethodReferenceExpr) {
+      preserveTargetFunctionalMethod((Expression) node);
+    }
+
     slice.add(node);
     worklist.addAll(typeRuleDependencyMap.getRelevantElements(node));
 
     if (unsolvedSymbolGenerator.needToPostProcess(node)) {
       postProcessingWorklist.add(node);
     }
+  }
+
+  /**
+   * Preserves the abstract method of the functional interface that a lambda or method reference
+   * targets. A lambda or method reference is compatible only with a functional interface type (JLS
+   * 15.27.3, 15.13.2), and an interface is functional only if it has exactly one abstract method
+   * (JLS 9.8), so that method must be kept even when nothing calls it by name. Resolving a method
+   * reference does not find it: that yields the method the reference refers to instead.
+   *
+   * <p>A target that is not on the source path is not handled here: {@link UnsolvedSymbolGenerator}
+   * synthesizes its functional method.
+   *
+   * @param expr A lambda or method reference
+   */
+  private void preserveTargetFunctionalMethod(Expression expr) {
+    for (ResolvedMethodDeclaration functionalMethod : getTargetFunctionalMethods(expr)) {
+      // The return value concerns generating a symbol for expr itself, which this does not affect.
+      handleResolvedObject(expr, functionalMethod);
+    }
+  }
+
+  /**
+   * Returns the functional methods that the target type of a lambda or method reference could have,
+   * for {@link #preserveTargetFunctionalMethod}. JavaParser cannot compute that target type in
+   * every context, so this falls back to the target types that the surrounding context names. Only
+   * targets on the source path are considered: they are the only ones this method's caller
+   * preserves. More than one functional method is returned only when the context is ambiguous, and
+   * preserving all of them is a safe over-approximation, since each is an unmodified abstract
+   * method of an interface that is in the slice anyway.
+   *
+   * @param expr A lambda or method reference
+   * @return The possible functional methods of the target type
+   */
+  private List<ResolvedMethodDeclaration> getTargetFunctionalMethods(Expression expr) {
+    ResolvedMethodDeclaration fromTargetType = JavaParserUtil.getTargetFunctionalMethod(expr);
+    if (fromTargetType != null) {
+      return List.of(fromTargetType);
+    }
+
+    Set<FullyQualifiedNameSet> targets =
+        unsolvedSymbolGenerator.getFQNsFromSurroundingContextType(expr);
+    if (targets == null) {
+      return List.of();
+    }
+
+    List<ResolvedMethodDeclaration> result = new ArrayList<>();
+    for (FullyQualifiedNameSet target : targets) {
+      for (String fqn : target.erasedFqns()) {
+        TypeDeclaration<?> type =
+            JavaParserUtil.getTypeFromQualifiedName(fqn, fqnToCompilationUnits);
+        if (type == null
+            || !(Resolver.resolve((Resolvable<?>) type)
+                instanceof ResolvedReferenceTypeDeclaration resolvedType)) {
+          continue;
+        }
+        ResolvedMethodDeclaration functionalMethod =
+            JavaParserUtil.getFunctionalMethod(resolvedType);
+        if (functionalMethod != null) {
+          result.add(functionalMethod);
+        }
+      }
+    }
+    return result;
   }
 
   /**

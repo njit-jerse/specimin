@@ -164,6 +164,17 @@ public class UnsolvedSymbolGenerator {
   }
 
   /**
+   * Returns the types that the surrounding context of an expression requires it to have. See {@link
+   * FullyQualifiedNameGenerator#getFQNsFromSurroundingContextType(Expression)}.
+   *
+   * @param expr The expression
+   * @return A set of FQNs, or null if the context does not constrain the expression's type
+   */
+  public @Nullable Set<FullyQualifiedNameSet> getFQNsFromSurroundingContextType(Expression expr) {
+    return fullyQualifiedNameGenerator.getFQNsFromSurroundingContextType(expr);
+  }
+
+  /**
    * Contains all methods that still have null as a parameter type. When encountering a new method
    * signature that replaces each null with a type, remove it from this list and also from
    * generatedSymbols. If one is never found, then replace all instances of null with

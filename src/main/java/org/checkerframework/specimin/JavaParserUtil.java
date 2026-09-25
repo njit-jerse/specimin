@@ -22,6 +22,7 @@ import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -71,6 +72,7 @@ import com.github.javaparser.resolution.declarations.ResolvedReferenceTypeDeclar
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedTypeParameterDeclaration.Bound;
 import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.resolution.logic.FunctionalInterfaceLogic;
 import com.github.javaparser.resolution.model.SymbolReference;
 import com.github.javaparser.resolution.types.ResolvedLambdaConstraintType;
 import com.github.javaparser.resolution.types.ResolvedReferenceType;
@@ -2599,6 +2601,56 @@ public class JavaParserUtil {
   }
 
   /**
+   * The component type of an array, as its element type (never itself an array type) and the number
+   * of array levels on top of it.
+   *
+   * @param elementType the element type, which is attached to the AST
+   * @param arrayLevel the number of array levels; 0 if the component type is the element type
+   */
+  public record ArrayComponentType(Type elementType, int arrayLevel) {}
+
+  /**
+   * Returns the component type of the array that an array initializer creates: the type every
+   * element of the initializer must be assignable to (JLS 10.6). The array type is written either
+   * on the variable the initializer initializes or in the array creation expression that contains
+   * it; a nested initializer creates an array one level shallower than the initializer that
+   * contains it.
+   *
+   * <p>The result is split into an element type and a level count, rather than returned as one
+   * {@link Type}, so that it can be made of nodes that are attached to the AST, which resolution
+   * requires. {@link ArrayCreationExpr#createdType()} does not provide one: it builds a new type,
+   * and in doing so re-parents the expression's element type.
+   *
+   * @param arrayInitializer the array initializer
+   * @return the component type, or null if the initializer is not in a variable declaration or an
+   *     array creation expression (it may be an annotation element value instead)
+   */
+  public static @Nullable ArrayComponentType getArrayInitializerComponentType(
+      ArrayInitializerExpr arrayInitializer) {
+    int depth = 1;
+    Node outermost = arrayInitializer;
+    while (outermost.getParentNode().orElse(null) instanceof ArrayInitializerExpr enclosing) {
+      depth++;
+      outermost = enclosing;
+    }
+
+    Node parent = outermost.getParentNode().orElse(null);
+    Type elementType;
+    int arrayLevel;
+    if (parent instanceof VariableDeclarator declarator) {
+      elementType = declarator.getType().getElementType();
+      arrayLevel = declarator.getType().getArrayLevel();
+    } else if (parent instanceof ArrayCreationExpr arrayCreation) {
+      elementType = arrayCreation.getElementType();
+      arrayLevel = arrayCreation.getLevels().size();
+    } else {
+      return null;
+    }
+
+    return arrayLevel < depth ? null : new ArrayComponentType(elementType, arrayLevel - depth);
+  }
+
+  /**
    * If the given expression supplies the value of an annotation element whose annotation type is
    * resolvable, returns the type that expression must have. That is the element's declared type,
    * except that an expression supplying a single component of an array-typed element gets the
@@ -3923,6 +3975,54 @@ public class JavaParserUtil {
     return variable == null
         ? null
         : getTypeFromResolvedValueDeclaration(variable, fqnToCompilationUnits);
+  }
+
+  /**
+   * Returns the declaration of the abstract method of the functional interface that a lambda or
+   * method reference targets, i.e. the method whose function type decides whether the lambda or
+   * reference is compatible with its context (JLS 15.27.3, 15.13.2).
+   *
+   * <p>JavaParser computes this target type only in some contexts: for example, not for a lambda in
+   * a {@code return} statement, nor for a lambda or method reference in a cast, a conditional
+   * expression, or an array initializer.
+   *
+   * @param expr A lambda or method reference
+   * @return The target's functional method, or null if the target type or its functional method
+   *     cannot be determined
+   */
+  public static @Nullable ResolvedMethodDeclaration getTargetFunctionalMethod(Expression expr) {
+    ResolvedType target = Resolver.calculateResolvedType(expr);
+    if (target == null
+        || !target.isReferenceType()
+        || target.asReferenceType().getTypeDeclaration().isEmpty()) {
+      return null;
+    }
+    return getFunctionalMethod(target.asReferenceType().getTypeDeclaration().get());
+  }
+
+  /**
+   * Returns the declaration of the single abstract method of a functional interface. The method may
+   * be declared in a superinterface (JLS 9.8).
+   *
+   * @param type A type declaration
+   * @return The functional method, or null if the type is not a functional interface or its
+   *     functional method cannot be determined
+   */
+  public static @Nullable ResolvedMethodDeclaration getFunctionalMethod(
+      ResolvedReferenceTypeDeclaration type) {
+    // FunctionalInterfaceLogic does not check this itself: given an abstract class with a single
+    // abstract method, it returns that method.
+    if (!type.isInterface()) {
+      return null;
+    }
+    Optional<MethodUsage> functionalMethod;
+    try {
+      functionalMethod = FunctionalInterfaceLogic.getFunctionalMethod(type);
+    } catch (UnsolvedSymbolException ex) {
+      // Finding the functional method enumerates every method of every superinterface.
+      return null;
+    }
+    return functionalMethod.isPresent() ? functionalMethod.get().getDeclaration() : null;
   }
 
   /**

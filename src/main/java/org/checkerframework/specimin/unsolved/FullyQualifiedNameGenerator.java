@@ -12,6 +12,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.BinaryExpr.Operator;
@@ -2109,7 +2110,7 @@ public class FullyQualifiedNameGenerator {
    * @param expr The expression
    * @return A set of FQNs, or null if unfound
    */
-  private @Nullable Set<FullyQualifiedNameSet> getFQNsFromSurroundingContextType(Expression expr) {
+  public @Nullable Set<FullyQualifiedNameSet> getFQNsFromSurroundingContextType(Expression expr) {
     // An annotation element value must be assignment-compatible with the element's declared type
     // (JLS 9.7.1). This is checked before the parent-kind dispatch below because the relevant
     // parent is one of three shapes -- a SingleMemberAnnotationExpr, a MemberValuePair, or an
@@ -2293,6 +2294,15 @@ public class FullyQualifiedNameGenerator {
       }
 
       if (withCondition instanceof ConditionalExpr conditionalExpr) {
+        if (expr.isLambdaExpr() || expr.isMethodReferenceExpr()) {
+          // A lambda or method reference operand makes this a poly reference conditional, whose
+          // operands take the conditional's own target type (JLS 15.25.3). The other operand says
+          // nothing about it: it may well be null.
+          return conditionalExpr.hasParentNode()
+              ? getFQNsFromSurroundingContextType(conditionalExpr)
+              : null;
+        }
+
         Expression other;
 
         if (conditionalExpr.getThenExpr().equals(expr)) {
@@ -2420,6 +2430,15 @@ public class FullyQualifiedNameGenerator {
       // as an ExpressionStmt, which getExpressionBody() unwraps, so the result expression's parent
       // is that statement rather than the lambda.
       return getFQNsForLambdaResultType(lambda);
+    } else if (parentNode instanceof ArrayInitializerExpr arrayInitializer) {
+      // Each element of an array initializer is in an assignment context whose target is the
+      // array's component type (JLS 10.6).
+      JavaParserUtil.ArrayComponentType componentType =
+          JavaParserUtil.getArrayInitializerComponentType(arrayInitializer);
+      if (componentType != null) {
+        return Set.of(
+            getFQNsFromArrayType(componentType.elementType(), componentType.arrayLevel()));
+      }
     } else if (parentNode instanceof ForEachStmt forEachStmt) {
 
       if (forEachStmt.getIterable().equals(expr)) {
@@ -2434,16 +2453,21 @@ public class FullyQualifiedNameGenerator {
       }
     } else if (parentNode instanceof CastExpr castExpr
         && castExpr.getExpression().equals(expr)
-        && !expr.isLambdaExpr()
-        && !expr.isMethodReferenceExpr()) {
+        && (expr.isLambdaExpr() || expr.isMethodReferenceExpr())) {
+      // Unlike any other operand, a lambda or method reference takes the cast's type as its target
+      // type (JLS 15.16).
+      if (castExpr.getType().isIntersectionType()) {
+        // The target is then the intersection's single functional interface member (JLS 9.8),
+        // which cannot be told apart from marker interfaces like Serializable by name alone.
+        return null;
+      }
+      return Set.of(getFQNsFromType(castExpr.getType()));
+    } else if (parentNode instanceof CastExpr castExpr && castExpr.getExpression().equals(expr)) {
       // A cast does not tell us the operand's type: it only tells us that the operand must be
       // cast-compatible with the target type. In fact the operand's type is usually *not* the
       // target type, since a cast is written precisely when the static type is broader than what
       // is needed. Guessing the target type would fail whenever the same expression is also cast
       // to an unrelated type somewhere else.
-      //
-      // Lambdas and method references are excluded because they are poly expressions with no type
-      // of their own; they are handled by the functional-interface logic instead.
       if (isCastCompatibleWithEveryInferrableType(castExpr.getType())) {
         // Every type Specimin could infer for the operand is already castable to this target, so
         // the cast imposes no constraint at all and we must report no information. Reporting
@@ -2603,14 +2627,8 @@ public class FullyQualifiedNameGenerator {
     }
 
     if (type.isArrayType()) {
-      Set<String> result = new LinkedHashSet<>();
-      int arrayLevel = type.asArrayType().getArrayLevel();
-      FullyQualifiedNameSet elementFQNs = getFQNsFromType(type.asArrayType().getElementType());
-      for (String fqn : elementFQNs.erasedFqns()) {
-        result.add(fqn + "[]".repeat(arrayLevel));
-      }
-
-      return new FullyQualifiedNameSet(result, elementFQNs.typeArguments());
+      return getFQNsFromArrayType(
+          type.asArrayType().getElementType(), type.asArrayType().getArrayLevel());
     }
 
     if (type.isWildcardType()) {
@@ -2642,6 +2660,26 @@ public class FullyQualifiedNameGenerator {
     }
 
     throw new RuntimeException("Unexpected type: " + type.getClass() + "; type value: " + type);
+  }
+
+  /**
+   * Returns the FQNs of an array type, given as its element type and number of levels.
+   *
+   * @param elementType The element type, which must not be an array type
+   * @param arrayLevel The number of array levels; if 0, the result is the element type's FQNs
+   * @return The FQNs of the array type
+   */
+  private FullyQualifiedNameSet getFQNsFromArrayType(Type elementType, int arrayLevel) {
+    FullyQualifiedNameSet elementFQNs = getFQNsFromType(elementType);
+    if (arrayLevel == 0) {
+      return elementFQNs;
+    }
+
+    Set<String> result = new LinkedHashSet<>();
+    for (String fqn : elementFQNs.erasedFqns()) {
+      result.add(fqn + "[]".repeat(arrayLevel));
+    }
+    return new FullyQualifiedNameSet(result, elementFQNs.typeArguments());
   }
 
   /**
