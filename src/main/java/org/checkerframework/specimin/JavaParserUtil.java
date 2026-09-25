@@ -2106,7 +2106,7 @@ public class JavaParserUtil {
    * JavaParser's version enumerates every ancestor of {@code value}'s type, and so throws an {@link
    * UnsolvedSymbolException} if any of them is not on the source path, even when a solvable one
    * already shows that the assignment is legal. For a type variable, the ancestors are its bounds
-   * and theirs (JLS 4.10.2).
+   * and theirs (JLS 4.10.2), except when {@code target} is itself a type variable.
    *
    * @param target The type being assigned to
    * @param value The type of the value being assigned
@@ -2121,7 +2121,10 @@ public class JavaParserUtil {
       // might be a subtype of target. It is still TRUE if an ancestor that can be resolved is.
     }
 
-    if (value.isTypeVariable()) {
+    // A type-variable target is not walked through value's bounds: JavaParser answers true for one
+    // without checking its own bounds, and the real answer depends on how it is instantiated or
+    // inferred (JLS 18).
+    if (value.isTypeVariable() && !target.isTypeVariable()) {
       List<Bound> bounds;
       try {
         bounds = value.asTypeParameter().getBounds();
