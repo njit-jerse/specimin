@@ -2073,13 +2073,12 @@ public class JavaParserUtil {
    * Checks whether an argument of a given type can be passed to a parameter of a given type, i.e.
    * whether the parameter type is assignable by the argument type (JLS 5.3).
    *
-   * <p>The answer is {@code MAYBE} where {@link ResolvedType#isAssignableBy} cannot be trusted. It
-   * answers false for a type variable or a lambda constraint type even where the assignment is
-   * legal, and Specimin sees both routinely; treating them as incompatible would discard the real
-   * candidate. No bounds are checked in those cases, so a {@code MAYBE} candidate may not truly be
-   * applicable. The answer is also {@code MAYBE} when the argument's type has a supertype that is
-   * not on the source path, unless the supertypes that are on it suffice; see {@link
-   * #isAssignableBy(ResolvedType, ResolvedType)}.
+   * <p>The answer is {@code MAYBE} where a {@code FALSE} from {@link #isAssignableBy(ResolvedType,
+   * ResolvedType)} cannot be trusted. That happens when either type is a type variable (its bounds
+   * can make an assignment legal that JavaParser rejects) or the argument is a lambda constraint
+   * type, and Specimin sees both routinely; treating them as incompatible would discard the real
+   * candidate. The answer is also {@code MAYBE} when the argument's type has a supertype that is
+   * not on the source path, unless the supertypes that are on it suffice.
    *
    * @param parameterType The parameter's type
    * @param argumentType The argument's type
@@ -2106,7 +2105,8 @@ public class JavaParserUtil {
    * A version of {@link ResolvedType#isAssignableBy} that tolerates an incomplete type hierarchy.
    * JavaParser's version enumerates every ancestor of {@code value}'s type, and so throws an {@link
    * UnsolvedSymbolException} if any of them is not on the source path, even when a solvable one
-   * already shows that the assignment is legal.
+   * already shows that the assignment is legal. For a type variable, the ancestors are its bounds
+   * and theirs (JLS 4.10.2), except when {@code target} is itself a type variable.
    *
    * @param target The type being assigned to
    * @param value The type of the value being assigned
@@ -2119,6 +2119,33 @@ public class JavaParserUtil {
     } catch (UnsolvedSymbolException ex) {
       // Some ancestor could not be resolved, so the answer can no longer be FALSE: that ancestor
       // might be a subtype of target. It is still TRUE if an ancestor that can be resolved is.
+    }
+
+    // A type-variable target is not walked through value's bounds: JavaParser answers true for one
+    // without checking its own bounds, and the real answer depends on how it is instantiated or
+    // inferred (JLS 18).
+    if (value.isTypeVariable() && !target.isTypeVariable()) {
+      List<Bound> bounds;
+      try {
+        bounds = value.asTypeParameter().getBounds();
+      } catch (UnsolvedSymbolException ex) {
+        return TriBool.MAYBE;
+      }
+
+      for (Bound bound : bounds) {
+        ResolvedType boundType;
+        try {
+          boundType = bound.getType();
+        } catch (UnsolvedSymbolException ex) {
+          continue;
+        }
+
+        if (isAssignableBy(target, boundType) == TriBool.TRUE) {
+          return TriBool.TRUE;
+        }
+      }
+
+      return TriBool.MAYBE;
     }
 
     if (!value.isReferenceType()) {
