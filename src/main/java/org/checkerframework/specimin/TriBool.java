@@ -77,7 +77,7 @@ public enum TriBool {
    * @return the selected items, and the value of {@code predicate} for them
    */
   public static <T> Selection<T> selectTruest(
-      List<T> items, Function<? super T, TriBool> predicate) {
+      List<? extends T> items, Function<? super T, TriBool> predicate) {
     List<T> definitely = new ArrayList<>();
     List<T> possibly = new ArrayList<>();
 

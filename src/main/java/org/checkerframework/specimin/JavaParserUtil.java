@@ -1471,7 +1471,9 @@ public class JavaParserUtil {
     // javac can only have selected a callable that the arguments are assignable to, so whenever any
     // candidate is definitely applicable, the ones that are only possibly applicable are noise.
     callables =
-        TriBool.selectTruest(callables, c -> isApplicable(c, resolvedArgumentTypes)).items();
+        TriBool.<NodeWithParameters<?>>selectTruest(
+                callables, c -> isApplicable(c, resolvedArgumentTypes))
+            .items();
 
     List<@Nullable Object> argumentTypes = new ArrayList<>(resolvedArgumentTypes);
 
@@ -1915,7 +1917,9 @@ public class JavaParserUtil {
    * #isApplicable(ResolvedMethodDeclaration, List)}.
    *
    * <p>An unresolvable argument type or parameter type makes the answer at most {@code MAYBE}, so
-   * {@code TRUE} means that every argument is definitely assignable to its parameter.
+   * {@code TRUE} means that every argument is definitely assignable to its parameter. The answer is
+   * {@code FALSE} when JavaParser cannot resolve a parameter at all, as opposed to only its type,
+   * and the corresponding argument's type is known.
    *
    * @param candidate The candidate callable
    * @param argumentTypes The types of the call's arguments, in order; an element is null when that
