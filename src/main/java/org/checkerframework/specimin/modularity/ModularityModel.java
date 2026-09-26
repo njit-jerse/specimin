@@ -24,9 +24,11 @@ public interface ModularityModel {
     return switch (Ascii.toLowerCase(modularityModel)) {
       case "cf", "javac" -> new CheckerFrameworkModularityModel();
       case "nullaway" -> new NullAwayModularityModel();
+      case "openjml" -> new OpenJMLModularityModel();
       default ->
           throw new RuntimeException(
-              "Unsupported modularity model. Options are: \"cf\", \"javac\", \"nullaway\"");
+              "Unsupported modularity model. Options are: \"cf\", \"javac\", \"nullaway\","
+                  + " \"openjml\"");
     };
   }
 
@@ -38,6 +40,16 @@ public interface ModularityModel {
    * @return true if all fields should be preserved; false if only used fields should be preserved
    */
   default boolean preserveAllFieldsIfTargetIsConstructor() {
+    return false;
+  }
+
+  /**
+   * If the modularity model requires comments (like OpenJML with JML annotations), the comments
+   * should be preserved.
+   *
+   * @return true if all comments should be preserved; false otherwise
+   */
+  default boolean preserveAllComments() {
     return false;
   }
 }

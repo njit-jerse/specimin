@@ -201,4 +201,22 @@ public class SpeciminTestExecutor {
       throws IOException {
     runTest(testName, targetFiles, targetMembers, "nullaway", new String[] {}, extraArgs);
   }
+
+  /**
+   * This method calls the method runTest without an array of jar paths. Runs with the OpenJML
+   * modularity model.
+   *
+   * @param testName the name of the test folder
+   * @param targetFiles the targeted files
+   * @param targetMembers the targeted methods or fields, each in the format
+   *     class.fully.qualified.Name#methodName(Param1Type, Param2Type, ...) for method and
+   *     class.fully.qualified.Name#fieldName for field.
+   * @param extraArgs additional arguments to Specimin
+   * @throws IOException if some operation fails
+   */
+  public static void runOpenJMLTestWithoutJarPaths(
+      String testName, String[] targetFiles, String[] targetMembers, String... extraArgs)
+      throws IOException {
+    runTest(testName, targetFiles, targetMembers, "openjml", new String[] {}, extraArgs);
+  }
 }

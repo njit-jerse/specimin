@@ -326,6 +326,7 @@ public class SpeciminRunner {
     handleUnsolvedSymbolEnumeratorResult(
         sliceResult,
         enumeratorResult,
+        modularityModel,
         existingClassesToFilePath,
         root,
         targetFilesAbsolutePaths,
@@ -340,6 +341,7 @@ public class SpeciminRunner {
    *
    * @param sliceResult The result of the slice
    * @param enumeratorResult The iteration of the UnsolvedSymbolEnumerator
+   * @param modularityModel The modularity model
    * @param existingClassesToFilePath A map of existing classes to their files paths
    * @param root The root directory
    * @param targetFilesAbsolutePaths The target files as absolute paths
@@ -350,6 +352,7 @@ public class SpeciminRunner {
   private static void handleUnsolvedSymbolEnumeratorResult(
       SliceResult sliceResult,
       UnsolvedSymbolEnumeratorResult enumeratorResult,
+      ModularityModel modularityModel,
       Map<String, Path> existingClassesToFilePath,
       String root,
       Set<String> targetFilesAbsolutePaths,
@@ -415,13 +418,21 @@ public class SpeciminRunner {
         Files.createDirectories(dirContainingOutputFile);
         createdDirectories.add(dirContainingOutputFile);
       }
+
+      // Keep comments from compilation unit only if modularity model requires it
+      CompilationUnit compilationUnitMaybeWithComments;
+      if (modularityModel.preserveAllComments()) {
+        compilationUnitMaybeWithComments = cu;
+      } else {
+        compilationUnitMaybeWithComments = getCompilationUnitWithCommentsTrimmed(cu);
+      }
       // Write the string representation of CompilationUnit to the file
       try (PrintWriter writer =
           new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8)) {
         writer.print(
             formatter.formatSourceAndFixImports(
                 getCompilationUnitWithUnusedWildcardImportsRemoved(
-                        getCompilationUnitWithCommentsTrimmed(cu), usedPackagesAndClasses)
+                        compilationUnitMaybeWithComments, usedPackagesAndClasses)
                     .toString()));
       } catch (IOException | FormatterException e) {
         System.out.println("failed to write output file " + targetOutputPath);
