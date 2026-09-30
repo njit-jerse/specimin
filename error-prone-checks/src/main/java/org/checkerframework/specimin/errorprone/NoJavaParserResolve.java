@@ -12,6 +12,7 @@ import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MethodInvocationTree;
 
+import static com.google.errorprone.matchers.Matchers.anyOf;
 import static com.google.errorprone.matchers.Matchers.instanceMethod;
 
 @AutoService(BugChecker.class)
@@ -26,11 +27,18 @@ import static com.google.errorprone.matchers.Matchers.instanceMethod;
 public final class NoJavaParserResolve extends BugChecker
         implements MethodInvocationTreeMatcher, MemberReferenceTreeMatcher {
 
+    // TypeDeclaration is listed separately because it declares its own resolve() without
+    // implementing Resolvable: only its concrete subclasses do.
     private static final Matcher<ExpressionTree> RESOLVE_MATCHER =
-            instanceMethod()
-                    .onDescendantOf("com.github.javaparser.resolution.Resolvable")
-                    .named("resolve")
-                    .withNoParameters();
+            anyOf(
+                    instanceMethod()
+                            .onDescendantOf("com.github.javaparser.resolution.Resolvable")
+                            .named("resolve")
+                            .withNoParameters(),
+                    instanceMethod()
+                            .onDescendantOf("com.github.javaparser.ast.body.TypeDeclaration")
+                            .named("resolve")
+                            .withNoParameters());
 
     @Override
     public Description matchMethodInvocation(MethodInvocationTree tree, VisitorState state) {
