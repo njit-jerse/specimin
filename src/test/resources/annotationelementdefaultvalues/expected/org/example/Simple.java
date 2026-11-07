@@ -8,7 +8,8 @@ public class Simple {
       theClass = String.class,
       theArray = {1, 2},
       theString = "str",
-      theInt = 5)
+      theInt = 5,
+      theColor = external.Color.RED)
   private int x;
 
   @Anno private int y;

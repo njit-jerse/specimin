@@ -9,4 +9,6 @@ public @interface Anno {
     public java.lang.String theString() default "";
 
     public int theInt() default 0;
+
+    public external.Color theColor() default external.Color.RED;
 }

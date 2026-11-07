@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.signature.qual.ClassGetSimpleName;
 import org.checkerframework.specimin.JavaParserUtil;
@@ -185,10 +186,14 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
    * @param type The type of the declaring type
    * @param declaringTypeName The simple name of the declaring type, which is the name a constructor
    *     is declared under (JLS 8.8.1)
+   * @param syntheticTypeDefaults returns a value commensurate with a generated type, or null if it
+   *     cannot name one; see {@link SpeciminGenerationUtils#getAnnotationElementDefaultValue}
    * @return the declaration with the body stubbed out
    */
   public String toString(
-      UnsolvedClassOrInterfaceType type, @ClassGetSimpleName String declaringTypeName) {
+      UnsolvedClassOrInterfaceType type,
+      @ClassGetSimpleName String declaringTypeName,
+      Function<MemberType, @Nullable String> syntheticTypeDefaults) {
     StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
       MemberType parameterType = parameterList.get(i);
@@ -232,7 +237,7 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
     signature.append(exceptions);
 
     if (type == UnsolvedClassOrInterfaceType.ANNOTATION) {
-      String defaultValue = annotationElementDefaultValue();
+      String defaultValue = annotationElementDefaultValue(syntheticTypeDefaults);
       if (defaultValue != null) {
         signature.append(" default ").append(defaultValue);
       }
@@ -251,9 +256,12 @@ public abstract class UnsolvedCallable extends UnsolvedSymbolAlternate
    * of a synthetic annotation type. Only a method can be such a member (JLS 9.6), so the default
    * implementation names no value.
    *
+   * @param syntheticTypeDefaults returns a value commensurate with a generated type, or null if it
+   *     cannot name one
    * @return a value commensurate with this member's type (JLS 9.7), or null if none can be named
    */
-  protected @Nullable String annotationElementDefaultValue() {
+  protected @Nullable String annotationElementDefaultValue(
+      Function<MemberType, @Nullable String> syntheticTypeDefaults) {
     return null;
   }
 

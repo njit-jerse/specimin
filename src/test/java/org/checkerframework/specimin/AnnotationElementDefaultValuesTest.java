@@ -5,12 +5,13 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Checks the default value that a synthetic annotation type's element gets for each of the element
- * types that Specimin can name a value for: a primitive, {@code String}, {@code Class}, and an
- * array. The marker use site is what makes all four defaults necessary (JLS 9.7.2).
+ * types that Specimin can name a value for: a primitive, {@code String}, {@code Class}, an array,
+ * and a synthetic enum. The marker use site is what makes all five defaults necessary (JLS 9.7.2).
+ * The enum-typed element defaults to a constant of its enum that is already in the output.
  *
- * <p>TODO: Other legal forms: an enum type, an annotation type, or a bounded Class type like
- * {@code Class<? extends Number>} are not tested, because Specimin does not currently support
- * them. Add them to this test when support for them is added.
+ * <p>TODO: Other legal forms: an annotation type, a solved enum type, or a bounded Class type like
+ * {@code Class<? extends Number>} are not tested, because Specimin does not currently support them.
+ * Add them to this test when support for them is added.
  */
 public class AnnotationElementDefaultValuesTest {
   @Test

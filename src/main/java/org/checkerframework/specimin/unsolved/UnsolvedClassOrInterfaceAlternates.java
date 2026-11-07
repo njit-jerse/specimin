@@ -143,8 +143,8 @@ public class UnsolvedClassOrInterfaceAlternates
 
     UnsolvedClassOrInterfaceAlternates generated;
 
-    if (generatedSymbolsMap.containsKey(qualifier)) {
-      return (UnsolvedClassOrInterfaceAlternates) generatedSymbolsMap.get(qualifier);
+    if (generatedSymbolsMap.containsKey(fqn)) {
+      return (UnsolvedClassOrInterfaceAlternates) generatedSymbolsMap.get(fqn);
     }
 
     if (qualifier.contains(".") && !JavaParserUtil.isProbablyAPackage(qualifier)) {

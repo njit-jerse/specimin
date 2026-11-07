@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.specimin.JavaParserUtil;
 import org.checkerframework.specimin.QualifiedTypeName;
@@ -127,11 +128,20 @@ public class UnsolvedSymbolEnumerator {
 
     Set<Node> ableToRemove = new HashSet<>(allDependentNodes);
 
+    Function<MemberType, @Nullable String> syntheticTypeDefaults =
+        elementType -> getSyntheticEnumConstant(elementType, typesToFields);
+
     for (UnsolvedClassOrInterface type : outerTypes) {
       result.put(
           type.getFullyQualifiedName(),
           getTypeDeclarationAsString(
-              type, typesToFields, typesToMethods, outerTypesToInnerTypes, ableToRemove, false));
+              type,
+              typesToFields,
+              typesToMethods,
+              outerTypesToInnerTypes,
+              ableToRemove,
+              false,
+              syntheticTypeDefaults));
     }
 
     return new UnsolvedSymbolEnumeratorResult(result, ableToRemove);
@@ -147,6 +157,8 @@ public class UnsolvedSymbolEnumerator {
    * @param outerTypesToInnerTypes A map of outer types to their inner types
    * @param ableToRemove The set of nodes that can be removed in this iteration
    * @param isInnerClass Whether the type is an inner class
+   * @param syntheticTypeDefaults returns a value commensurate with a generated type, or null if it
+   *     cannot name one; see {@link SpeciminGenerationUtils#getAnnotationElementDefaultValue}
    * @return The type declaration as a string
    */
   private String getTypeDeclarationAsString(
@@ -155,7 +167,8 @@ public class UnsolvedSymbolEnumerator {
       Map<UnsolvedClassOrInterface, Set<UnsolvedCallable>> typesToMethods,
       Map<UnsolvedClassOrInterface, Set<UnsolvedClassOrInterface>> outerTypesToInnerTypes,
       Set<Node> ableToRemove,
-      boolean isInnerClass) {
+      boolean isInnerClass,
+      Function<MemberType, @Nullable String> syntheticTypeDefaults) {
     Set<UnsolvedField> fields = typesToFields.get(type);
 
     if (fields == null) {
@@ -196,9 +209,43 @@ public class UnsolvedSymbolEnumerator {
                         typesToMethods,
                         outerTypesToInnerTypes,
                         ableToRemove,
-                        true))
+                        true,
+                        syntheticTypeDefaults))
             .toList(),
-        isInnerClass);
+        isInnerClass,
+        syntheticTypeDefaults);
+  }
+
+  /**
+   * Returns a constant of the given type, if that type is a synthetic enum, for use as the default
+   * of an annotation element of that type. Any constant of the element's enum type is commensurate
+   * with it (JLS 9.7.1).
+   *
+   * <p>The constant comes from the same fields that the enum's declaration is printed from, so it
+   * is guaranteed to be in the output.
+   *
+   * @param type the element's type
+   * @param typesToFields a map of types to their fields; an enum's fields are its constants
+   * @return a qualified reference to an enum constant of that type, or null if there is none
+   */
+  private static @Nullable String getSyntheticEnumConstant(
+      MemberType type, Map<UnsolvedClassOrInterface, Set<UnsolvedField>> typesToFields) {
+    if (!(type instanceof UnsolvedMemberType unsolvedType)) {
+      return null;
+    }
+
+    UnsolvedClassOrInterface enumType = unsolvedType.getUnsolvedType().getAlternates().get(0);
+    Set<UnsolvedField> constants = typesToFields.get(enumType);
+    String enumName = enumType.getFullyQualifiedName();
+
+    if (enumType.getType() != UnsolvedClassOrInterfaceType.ENUM
+        || constants == null
+        || constants.isEmpty()
+        || !type.toString().equals(enumName)) {
+      return null;
+    }
+
+    return enumName + "." + constants.iterator().next().getName();
   }
 
   /**

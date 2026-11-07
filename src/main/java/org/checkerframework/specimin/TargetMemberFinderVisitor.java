@@ -2,18 +2,22 @@ package org.checkerframework.specimin;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
+import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -290,7 +294,7 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(VariableDeclarator node, Void arg) {
     if (node.getParentNode().isPresent()
-        && node.getParentNode().get() instanceof FieldDeclaration) {
+        && node.getParentNode().get() instanceof FieldDeclaration field) {
       String fieldName = this.currentClassQualifiedName + "#" + node.getNameAsString();
       if (targetFields.contains(fieldName)) {
         unfoundFields.remove(fieldName);
@@ -298,11 +302,58 @@ public class TargetMemberFinderVisitor extends ModifierVisitor<Void> {
         worklist.add(node);
         if (node.getInitializer().isPresent()) {
           worklist.add(node.getInitializer().get());
+        } else if (modularityModel.preserveStaticInitializerAssignments()
+            && field.isStatic()
+            && field.isFinal()) {
+          // This target field has no declaration-site initializer, so it must be assigned
+          // somewhere else -- most commonly a static initializer block. Follow that assignment
+          // as a dependency, the same way its initializer would be followed if it had one,
+          // instead of leaving it for Slicer's "empty final field" repair to invent a default
+          // value for. That repair still exists as a fallback if no assignment is found here.
+          TypeDeclaration<?> enclosingType = JavaParserUtil.getEnclosingClassLike(field);
+          for (BodyDeclaration<?> member : enclosingType.getMembers()) {
+            if (!(member instanceof InitializerDeclaration initializer)
+                || !initializer.isStatic()) {
+              continue;
+            }
+
+            boolean assignsThisField =
+                initializer.getBody().findAll(AssignExpr.class).stream()
+                    .anyMatch(assignExpr -> assignExprTargetsField(assignExpr, fieldName));
+
+            if (assignsThisField) {
+              worklist.add(initializer);
+              break;
+            }
+          }
         }
       } else {
         updateUnfoundFields(fieldName);
       }
     }
     return super.visit(node, arg);
+  }
+
+  /**
+   * Determines whether an assignment expression's target resolves to the field with the given
+   * qualified name.
+   *
+   * @param assignExpr the assignment expression to check
+   * @param qualifiedFieldName the target field's qualified name, formatted as {@code
+   *     Qualified.Class#fieldName}
+   * @return true if assignExpr assigns to that field
+   */
+  private static boolean assignExprTargetsField(AssignExpr assignExpr, String qualifiedFieldName) {
+    ResolvedValueDeclaration target = null;
+    if (assignExpr.getTarget().isFieldAccessExpr()) {
+      target = Resolver.resolve(assignExpr.getTarget().asFieldAccessExpr());
+    } else if (assignExpr.getTarget().isNameExpr()) {
+      target = Resolver.resolve(assignExpr.getTarget().asNameExpr());
+    }
+
+    return target != null
+        && target.isField()
+        && (target.asField().declaringType().getQualifiedName() + "#" + target.getName())
+            .equals(qualifiedFieldName);
   }
 }
